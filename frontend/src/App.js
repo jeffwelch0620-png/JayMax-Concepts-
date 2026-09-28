@@ -288,7 +288,7 @@ export default function App() {
             {activeTab === "sales" && <SalesTrackingTab items={S.items} dishes={S.dishes} purchases={S.purchases} adjustments={S.adjustments} salesPeriod={S.salesPeriod} persist={persistSalesPeriod} reportingPeriods={S.reportingPeriods} persistReportingPeriods={persistReportingPeriods} showToast={showToast} />}
             {activeTab === "adjustments" && <AdjustmentsTab items={S.items} adjustments={S.adjustments} persist={persistAdjustments} showToast={showToast} />}
             {activeTab === "history" && <HistoryTab items={S.items} purchases={S.purchases} focusControlNumber={historyFocusCN} />}
-            {activeTab === "scheduling" && <SchedulingTab />}
+            {activeTab === "scheduling" && <SchedulingTab rid={loc} showToast={showToast} />}
           </>
         )}
       </main>

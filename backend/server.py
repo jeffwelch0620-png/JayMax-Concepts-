@@ -7,12 +7,18 @@ from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 from typing import Optional, List, Annotated, Any
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-import os, json, math, re, uuid, logging, ipaddress, io, base64, hashlib, hmac, secrets, time
+import os, json, math, re, uuid, logging, ipaddress, io, base64, hashlib, hmac, secrets, time, asyncio
 import httpx
 from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 from pymongo import UpdateOne
+try:
+    from pywebpush import webpush, WebPushException
+except ImportError:  # pragma: no cover - optional dependency, push notifications no-op without it
+    webpush = None
+    class WebPushException(Exception):
+        pass
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -37,6 +43,10 @@ OWNER_PATHS = ("/owner/",)
 STAFF_WRITE_PATHS = ("/prepcount/", "/preplists/", "/prep/")
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "60"))
 _rate_buckets = {}
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").strip()
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
+VAPID_CLAIM_EMAIL = os.environ.get("VAPID_CLAIM_EMAIL", "mailto:ops@jaymaxconcepts.example").strip()
+PUSH_ENABLED = bool(webpush and VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY)
 
 def _b64(value):
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode()
@@ -1223,6 +1233,210 @@ async def staff_complete(rid: str, body: StaffCompleteIn, request: Request):
         raise HTTPException(400, "Enter your name so the task is attributed")
     res = await _complete_task_core(rid, body.listId, body.taskId, body.batches, done_by, [])
     return {"ok": True, "log": res.get("log")}
+
+# ---------------- Staff counts (Enter Counts, PIN-gated employee portal) ----------------
+def _is_count_active(item):
+    if item.get("countActive") is not None:
+        return bool(item.get("countActive"))
+    return item.get("active") is not False
+
+@api_router.post("/staff/{rid}/counts")
+async def staff_counts(rid: str, body: dict, request: Request):
+    check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and str((body or {}).get("pin", "")) != await _get_pin(rid):
+        raise HTTPException(403, "Invalid PIN")
+    items = await db.items.find({"restaurantId": rid}, {"_id": 0}).to_list(5000)
+    counted = [it for it in items if _is_count_active(it)]
+    return {"date": _today(), "items": [{
+        "controlNumber": it.get("controlNumber", ""), "name": it.get("name", ""),
+        "storageArea": it.get("storageArea", ""), "unitUOM": it.get("unitUOM", ""),
+        "currentStock": f(it.get("currentStock")), "lastCounted": it.get("lastCounted", ""),
+        "lastCountedBy": it.get("lastCountedBy", ""),
+    } for it in counted]}
+
+class StaffCountEntryIn(BaseModel):
+    controlNumber: str
+    onHand: float
+
+class StaffCountsSaveIn(BaseModel):
+    pin: str = ""
+    doneBy: str = ""
+    counts: List[StaffCountEntryIn] = []
+
+@api_router.post("/staff/{rid}/counts/save")
+async def staff_counts_save(rid: str, body: StaffCountsSaveIn, request: Request):
+    check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and body.pin != await _get_pin(rid):
+        raise HTTPException(403, "Invalid PIN")
+    done_by = body.doneBy.strip() or (user or {}).get("email", "")
+    if not done_by:
+        raise HTTPException(400, "Enter your name so the count is attributed")
+    if not body.counts:
+        raise HTTPException(400, "No counts submitted")
+    ts, today, saved = _now_iso(), _today(), 0
+    for entry in body.counts:
+        res = await db.items.update_one({"restaurantId": rid, "controlNumber": entry.controlNumber},
+            {"$set": {"currentStock": entry.onHand, "lastCounted": today, "lastCountedBy": done_by, "lastCountedAt": ts}})
+        if res.matched_count:
+            saved += 1
+    return {"ok": True, "saved": saved}
+
+# ---------------- Employee task portal: scheduled/assigned tasks + web push ----------------
+def _require_manager(request: Request):
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user or user.get("role") not in ("owner", "manager"):
+        raise HTTPException(403, "Manager role required")
+    return user
+
+class StaffTaskIn(BaseModel):
+    taskType: str  # "count" | "prep"
+    title: str
+    dueDate: str  # YYYY-MM-DD
+    recurrence: str = "once"  # once | daily | weekly
+    assignedTo: str = ""
+    track: str = "daily"
+    note: str = ""
+
+@api_router.get("/staff-tasks/{rid}")
+async def list_staff_tasks(rid: str, request: Request):
+    check_rid(rid)
+    _require_manager(request)
+    return await db.staff_tasks.find({"restaurantId": rid}, {"_id": 0}).sort("dueDate", -1).to_list(500)
+
+async def _notify_new_staff_task(rid, task):
+    if not PUSH_ENABLED:
+        return
+    subs = await db.push_subscriptions.find({"restaurantId": rid}, {"_id": 0}).to_list(500)
+    if not subs:
+        return
+    label = "Count" if task.get("taskType") == "count" else "Prep"
+    payload = json.dumps({"title": f"New {label} task", "body": task.get("title", "A task is due"), "taskId": task.get("id")})
+    stale = []
+    for sub in subs:
+        try:
+            await asyncio.to_thread(webpush, subscription_info={"endpoint": sub["endpoint"], "keys": sub["keys"]},
+                                     data=payload, vapid_private_key=VAPID_PRIVATE_KEY,
+                                     vapid_claims={"sub": VAPID_CLAIM_EMAIL})
+        except WebPushException as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status in (404, 410):
+                stale.append(sub["endpoint"])
+            else:
+                logger.warning("web push delivery failed: %s", e)
+        except Exception:
+            logger.exception("web push delivery error")
+    for endpoint in stale:
+        await db.push_subscriptions.delete_one({"restaurantId": rid, "endpoint": endpoint})
+
+@api_router.post("/staff-tasks/{rid}")
+async def create_staff_task(rid: str, body: StaffTaskIn, request: Request):
+    check_rid(rid)
+    user = _require_manager(request)
+    if body.taskType not in ("count", "prep"):
+        raise HTTPException(400, "taskType must be count or prep")
+    if body.recurrence not in ("once", "daily", "weekly"):
+        raise HTTPException(400, "recurrence must be once, daily, or weekly")
+    doc = body.model_dump()
+    doc.update({"id": "stask_" + uuid.uuid4().hex[:8], "restaurantId": rid, "status": "pending",
+                "completedBy": "", "completedAt": None, "createdBy": user.get("email", ""), "createdAt": _now_iso()})
+    await db.staff_tasks.insert_one(dict(doc))
+    doc.pop("restaurantId", None)
+    await _notify_new_staff_task(rid, doc)
+    return doc
+
+@api_router.delete("/staff-tasks/{rid}/{task_id}")
+async def delete_staff_task(rid: str, task_id: str, request: Request):
+    check_rid(rid)
+    _require_manager(request)
+    await db.staff_tasks.delete_one({"restaurantId": rid, "id": task_id})
+    return {"ok": True}
+
+@api_router.post("/staff/{rid}/tasks")
+async def staff_task_inbox(rid: str, body: dict, request: Request):
+    check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and str((body or {}).get("pin", "")) != await _get_pin(rid):
+        raise HTTPException(403, "Invalid PIN")
+    today = _today()
+    tasks = await db.staff_tasks.find({"restaurantId": rid, "status": "pending", "dueDate": {"$lte": today}},
+                                       {"_id": 0}).sort("dueDate", 1).to_list(200)
+    return {"date": today, "tasks": tasks}
+
+class StaffTaskCompleteIn(BaseModel):
+    pin: str = ""
+    doneBy: str = ""
+
+@api_router.post("/staff/{rid}/tasks/{task_id}/complete")
+async def staff_task_complete(rid: str, task_id: str, body: StaffTaskCompleteIn, request: Request):
+    check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and body.pin != await _get_pin(rid):
+        raise HTTPException(403, "Invalid PIN")
+    done_by = body.doneBy.strip() or (user or {}).get("email", "")
+    if not done_by:
+        raise HTTPException(400, "Enter your name so the task is attributed")
+    task = await db.staff_tasks.find_one({"restaurantId": rid, "id": task_id})
+    if not task:
+        raise HTTPException(404, "task not found")
+    now = _now_iso()
+    next_due = None
+    if task.get("recurrence") == "daily":
+        next_due = (datetime.fromisoformat(_today()) + timedelta(days=1)).date().isoformat()
+    elif task.get("recurrence") == "weekly":
+        next_due = (datetime.fromisoformat(_today()) + timedelta(days=7)).date().isoformat()
+    await db.staff_tasks.update_one({"_id": task["_id"]},
+        {"$set": {"status": "done", "completedBy": done_by, "completedAt": now}})
+    if next_due:
+        new_doc = {k: v for k, v in task.items() if k != "_id"}
+        new_doc.update({"id": "stask_" + uuid.uuid4().hex[:8], "status": "pending", "dueDate": next_due,
+                        "completedBy": "", "completedAt": None, "createdAt": now})
+        await db.staff_tasks.insert_one(new_doc)
+    return {"ok": True}
+
+# ---------------- Web push subscriptions (VAPID) ----------------
+@api_router.get("/staff/{rid}/push/public-key")
+async def push_public_key(rid: str):
+    check_rid(rid)
+    return {"publicKey": VAPID_PUBLIC_KEY, "enabled": PUSH_ENABLED}
+
+class PushSubscriptionIn(BaseModel):
+    pin: str = ""
+    endpoint: str
+    keys: dict
+
+@api_router.post("/staff/{rid}/push/subscribe")
+async def push_subscribe(rid: str, body: PushSubscriptionIn, request: Request):
+    check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and body.pin != await _get_pin(rid):
+        raise HTTPException(403, "Invalid PIN")
+    if not body.endpoint or not body.keys.get("p256dh") or not body.keys.get("auth"):
+        raise HTTPException(400, "Invalid push subscription")
+    await db.push_subscriptions.update_one({"restaurantId": rid, "endpoint": body.endpoint},
+        {"$set": {"restaurantId": rid, "endpoint": body.endpoint, "keys": body.keys, "updatedAt": _now_iso()}}, upsert=True)
+    return {"ok": True}
+
+class PushUnsubscribeIn(BaseModel):
+    pin: str = ""
+    endpoint: str
+
+@api_router.post("/staff/{rid}/push/unsubscribe")
+async def push_unsubscribe(rid: str, body: PushUnsubscribeIn, request: Request):
+    check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and body.pin != await _get_pin(rid):
+        raise HTTPException(403, "Invalid PIN")
+    await db.push_subscriptions.delete_one({"restaurantId": rid, "endpoint": body.endpoint})
+    return {"ok": True}
 
 # ---------------- Prep reporting ----------------
 @api_router.get("/reports/{rid}/prep")
