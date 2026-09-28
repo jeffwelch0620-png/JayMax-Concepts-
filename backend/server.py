@@ -94,6 +94,22 @@ def _path_rid(path):
     parts = path.split("/")
     return next((p for p in parts if p in RIDS), None)
 
+def _is_pin_optional(path):
+    # Staff-facing routes whose OWN handler falls back to checking a shared PIN when
+    # there's no bearer token (staff_prepsheet, staff_complete, staff_counts,
+    # staff_counts_save, staff_task_inbox, staff_task_complete, verify_pin, and the
+    # push endpoints). Without this, the blanket 401 below would run first and that
+    # PIN fallback would never be reachable — silently breaking the entire PIN-only
+    # staff model (Prep Sheet, Enter Counts, task portal) whenever AUTH_REQUIRED=true.
+    # /api/staff/{rid}/pin (view/set the PIN itself) is intentionally excluded — that
+    # stays manager/owner-only, since it manages the secret the others fall back to.
+    if path == "/api/staff/verify":
+        return True
+    if not path.startswith("/api/staff/"):
+        return False
+    tail = path[len("/api/staff/"):].split("/")
+    return not (len(tail) >= 2 and tail[1] == "pin")
+
 async def _record_activity(request, user, status):
     if user and request.url.path not in ("/api/health",):
         await db.activity_log.insert_one({"id": "act_" + uuid.uuid4().hex[:12],
@@ -110,7 +126,7 @@ async def collaboration_security(request: Request, call_next):
         return JSONResponse({"detail": "AUTH_SECRET is not configured"}, status_code=503)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token) if token else None
-    if AUTH_REQUIRED and not user:
+    if AUTH_REQUIRED and not user and not _is_pin_optional(path):
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
     if not user:
         return await call_next(request)
