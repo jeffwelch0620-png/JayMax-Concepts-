@@ -14,27 +14,27 @@ RID = "rudds"
 
 # --- PO PDF endpoint ---
 class TestPoPdf:
-    def test_pdf_endpoint_returns_pdf(self):
+    def test_pdf_endpoint_returns_pdf(self, auth_headers):
         # Find any PO on rudds
-        orders = requests.get(f"{BASE_URL}/api/orders/{RID}", timeout=30).json()
+        orders = requests.get(f"{BASE_URL}/api/orders/{RID}", headers=auth_headers, timeout=30).json()
         assert isinstance(orders, list) and len(orders) > 0, "need at least one PO"
         oid = orders[0]["id"]
-        r = requests.get(f"{BASE_URL}/api/orders/{RID}/{oid}/pdf", timeout=30)
+        r = requests.get(f"{BASE_URL}/api/orders/{RID}/{oid}/pdf", headers=auth_headers, timeout=30)
         assert r.status_code == 200, r.text[:200]
         ct = r.headers.get("content-type", "")
         assert "application/pdf" in ct, f"content-type={ct}"
         assert len(r.content) > 500
         assert r.content[:4] == b"%PDF", "body must start with %PDF magic"
 
-    def test_pdf_unknown_order_404(self):
-        r = requests.get(f"{BASE_URL}/api/orders/{RID}/NO_SUCH_ORDER_ZZZ/pdf", timeout=30)
+    def test_pdf_unknown_order_404(self, auth_headers):
+        r = requests.get(f"{BASE_URL}/api/orders/{RID}/NO_SUCH_ORDER_ZZZ/pdf", headers=auth_headers, timeout=30)
         assert r.status_code == 404
 
 
 # --- Owner discrepancies ---
 class TestOwnerDiscrepancies:
-    def test_returns_list(self):
-        r = requests.get(f"{BASE_URL}/api/owner/discrepancies", timeout=30)
+    def test_returns_list(self, auth_headers):
+        r = requests.get(f"{BASE_URL}/api/owner/discrepancies", headers=auth_headers, timeout=30)
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
@@ -50,8 +50,8 @@ class TestOwnerDiscrepancies:
 
 # --- Vendor scorecard ---
 class TestVendorScorecard:
-    def test_returns_vendor_rows(self):
-        r = requests.get(f"{BASE_URL}/api/owner/vendor-scorecard", timeout=30)
+    def test_returns_vendor_rows(self, auth_headers):
+        r = requests.get(f"{BASE_URL}/api/owner/vendor-scorecard", headers=auth_headers, timeout=30)
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)

@@ -83,7 +83,7 @@ export default function App() {
     api.fetchState(loc)
       .then((data) => { if (locRef.current === requestedLoc) setS({ ...EMPTY_STATE, ...data }); })
       .catch(() => toast.error("Couldn't load location data — is the backend up?"));
-  }, [loc, isOwner]);
+  }, [loc, isOwner, session]);
 
   useEffect(() => {
     if (!session || isOwner) return undefined;
@@ -93,7 +93,7 @@ export default function App() {
       }).catch(() => {});
     }, 15000);
     return () => clearInterval(timer);
-  }, [loc, isOwner]);
+  }, [loc, isOwner, session]);
 
   const showToast = (msg) => toast.success(msg);
 

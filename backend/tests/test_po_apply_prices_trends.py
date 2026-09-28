@@ -13,9 +13,9 @@ RID = "rudds"
 
 
 @pytest.fixture(scope="module")
-def api():
+def api(auth_headers):
     s = requests.Session()
-    s.headers.update({"Content-Type": "application/json"})
+    s.headers.update({"Content-Type": "application/json", **auth_headers})
     return s
 
 

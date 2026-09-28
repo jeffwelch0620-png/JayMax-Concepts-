@@ -18,8 +18,10 @@ API = f"{BASE_URL}/api"
 
 
 @pytest.fixture(scope="module")
-def s():
-    return requests.Session()
+def s(auth_headers):
+    sess = requests.Session()
+    sess.headers.update(auth_headers)
+    return sess
 
 
 # Unique run-scoped future date offset so tests are idempotent across re-runs

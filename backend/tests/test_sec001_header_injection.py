@@ -15,9 +15,9 @@ EMAIL = "delivered@resend.dev"
 
 
 @pytest.fixture(scope="module")
-def api():
+def api(auth_headers):
     s = requests.Session()
-    s.headers.update({"Content-Type": "application/json"})
+    s.headers.update({"Content-Type": "application/json", **auth_headers})
     r = s.get(f"{BASE_URL}/api/state/{RID}", timeout=30)
     assert r.status_code == 200
     return s
