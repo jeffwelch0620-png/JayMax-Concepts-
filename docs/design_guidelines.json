@@ -1,0 +1,177 @@
+{
+  "project_identity": {
+    "name": "Bert's Restaurant Group Operations & Multi-Unit Management System",
+    "app_type": "hybrid_fullstack enterprise restaurant operations dashboard",
+    "scale": "$8,000,000 Annual Sales across 3 High-Volume Restaurant Locations",
+    "locations": [
+      {
+        "id": "berts_grill",
+        "name": "Bert's Hometown Grill and Pizzeria",
+        "concept": "American Grill, Stone Baked Pizza, Family Dining",
+        "theme_accent": "#F97316"
+      },
+      {
+        "id": "rudds_pies",
+        "name": "Rudd's Pies and Fries",
+        "concept": "Craft Pies, Gourmet Fries, Quick Casual Comfort",
+        "theme_accent": "#EAB308"
+      },
+      {
+        "id": "papa_leonis",
+        "name": "Papa Leoni's Pizza",
+        "concept": "Authentic Neapolitan & NY Slice Pizzeria",
+        "theme_accent": "#E11D48"
+      }
+    ]
+  },
+  "theme": {
+    "mode": "dark_default_with_light_toggle",
+    "primary_archetype": "ARCHETYPE 2 & 5: PERFORMANCE PRO + LUXURY GASTRONOMY",
+    "base_background": "Deep Obsidian `#0B0F17` & Slate Void `#111827`",
+    "card_surface": "Slate `#1E293B` with 1px border `#334155` and inner highlight `border-white/10`",
+    "hero_overlay": "bg-black/40 with backdrop-blur-md"
+  },
+  "typography": {
+    "heading_font": "Outfit, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "weights": {
+      "display": 800,
+      "heading": 700,
+      "subheading": 600,
+      "body": 400,
+      "numeric_data": 500
+    },
+    "hierarchy": {
+      "h1_hero": "text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight",
+      "h2_section": "text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight",
+      "h3_card": "text-xl sm:text-2xl font-semibold",
+      "h4_widget": "text-lg sm:text-xl font-medium",
+      "body_text": "text-sm sm:text-base leading-relaxed text-slate-300",
+      "caption_mono": "text-xs font-mono uppercase tracking-widest text-slate-400"
+    }
+  },
+  "colors": {
+    "background": {
+      "main": "#0B0F17",
+      "surface": "#161F30",
+      "surface_elevated": "#1E293B",
+      "surface_border": "#28354A",
+      "glass": "rgba(22, 31, 48, 0.85)"
+    },
+    "brand_accents": {
+      "amber_flame": "#F97316",
+      "gold_crust": "#EAB308",
+      "crimson_sauce": "#E11D48",
+      "emerald_prep": "#10B981",
+      "electric_blue": "#3B82F6",
+      "cyan_ai": "#06B6D4"
+    },
+    "functional": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "danger": "#EF4444",
+      "info": "#3B82F6",
+      "text_primary": "#F8FAFC",
+      "text_secondary": "#94A3B8",
+      "text_muted": "#64748B"
+    }
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "Tailwind standard p-4, p-6, p-8, p-12",
+    "container_padding": "px-4 sm:px-6 lg:px-8 py-6",
+    "bento_grid_modes": {
+      "dashboard_mode": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6",
+      "prep_list_mode": "grid-cols-1 lg:grid-cols-3 gap-6",
+      "recipe_costing_mode": "grid-cols-1 xl:grid-cols-12 gap-6"
+    },
+    "card_padding_rule": "Every bordered surface MUST have internal padding (p-5 or p-6) to avoid edge collision."
+  },
+  "key_modules_architecture": [
+    {
+      "module": "Multi-Restaurant Switcher & Ownership Dashboard",
+      "purpose": "Consolidated Executive View for $8M sales, store level breakdown, target food cost % (28-32%), actual food cost %, sales volume, profit margins, and inventory turn rate across Bert's, Rudd's, and Papa Leoni's.",
+      "components": ["ExecutiveKpiHeader", "MultiStoreComparisonChart", "FoodCostVarianceMatrix", "LocationSelectorDropdown"]
+    },
+    {
+      "module": "Prep Management System (Daily, Biweekly, Weekly)",
+      "purpose": "Automated prep list generation from separate prep inventory, prep-to-service container breakdown, and auto-deduction of raw ingredients based on recipe master formulas upon completing batch prep.",
+      "components": ["PrepScheduler", "PrepBatchCalculator", "ContainerBreakdownModal", "AutoDeductionLogs"]
+    },
+    {
+      "module": "Inventory & Food Costing Engine",
+      "purpose": "Master raw ingredient catalog, par level tracking, unit conversion (oz, lbs, gal, case, portion), cost per unit, stock audit logs, and automatic low-stock notifications.",
+      "components": ["InventoryTable", "StockAuditModal", "UnitConversionCalculator", "FoodCostMarginBadge"]
+    },
+    {
+      "module": "Recipe Management & Batch Breakdown",
+      "purpose": "Detailed recipe builder, sub-recipe nesting, yield percentages, portion cost breakdown, suggested menu pricing, target margin analysis.",
+      "components": ["RecipeCostingBuilder", "SubRecipeLinker", "YieldPercentCalculator"]
+    },
+    {
+      "module": "ChatGPT AI Restaurant Assistant",
+      "purpose": "AI assistant for inventory cost alerts, recipe optimization, margin troubleshooting, food safety SOPs, and quick query generation for kitchen management.",
+      "components": ["AiAssistantDrawer", "PromptSuggestions", "CostOptimizationTips"]
+    },
+    {
+      "module": "Scheduling & Operational SOPs (Priority Module)",
+      "purpose": "Shift planner, labor cost percentage tracking against sales, daily opening/closing checklists, kitchen compliance SOPs.",
+      "components": ["ShiftPlannerGrid", "LaborCostVsSalesWidget", "ComplianceChecklistCard"]
+    }
+  ],
+  "image_urls": {
+    "kitchen_prep_1": {
+      "url": "https://images.unsplash.com/photo-1600565193348-f74bd3c7ccdf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHwzfHxyZXN0YXVyYW50JTIwa2l0Y2hlbiUyMGZvb2QlMjBwcmVwJTIwaW52ZW50b3J5JTIwY2hlZiUyMGNvb2tpbmd8ZW58MHx8fHwxNzg5MjY5MzgwfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Executive chef cooking on high-flame line",
+      "category": "Hero & Kitchen Operations"
+    },
+    "kitchen_prep_2": {
+      "url": "https://images.unsplash.com/photo-1622021142947-da7dedc7c39a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHwyfHxyZXN0YXVyYW50JTIwa2l0Y2hlbiUyMGZvb2QlMjBwcmVwJTIwaW52ZW50b3J5JTIwY2hlZiUyMGNvb2tpbmd8ZW58MHx8fHwxNzg5MjY5MzgwfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Chef chopping fresh vegetables for daily prep",
+      "category": "Prep Inventory Module"
+    },
+    "pizza_papa_leoni": {
+      "url": "https://images.unsplash.com/photo-1571066811602-716837d681de?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODF8MHwxfHNlYXJjaHwyfHxnb3VybWV0JTIwcGl6emElMjByZXN0YXVyYW50JTIwZGlzaHxlbnwwfHx8fDE3ODkyNjkzODh8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Artisan baked Neapolitan pizza for Papa Leoni's",
+      "category": "Papa Leoni's Pizza Location"
+    },
+    "burger_rudds": {
+      "url": "https://images.unsplash.com/photo-1551782450-17144efb9c50?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTF8MHwxfHNlYXJjaHw0fHxidXJnZXIlMjBmcmllcyUyMGdyaWxsJTIwcmVzdGF1cmFudCUyMGZvb2R8ZW58MHx8fHwxNzg5MjY5Mzg4fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Gourmet burger with golden fries for Rudd's Pies and Fries",
+      "category": "Rudd's Pies and Fries Location"
+    },
+    "grill_berts": {
+      "url": "https://images.unsplash.com/photo-1572715376701-98568319fd0b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHwxfHxyZXN0YXVyYW50JTIwa2l0Y2hlbiUyMGZvb2QlMjBwcmVwJTIwaW52ZW50b3J5JTIwY2hlZiUyMGNvb2tpbmd8ZW58MHx8fHwxNzg5MjY5MzgwfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Chef plating gourmet grill entree for Bert's Hometown Grill",
+      "category": "Bert's Hometown Grill Location"
+    }
+  },
+  "testing_and_data_attributes": {
+    "required": true,
+    "format": "kebab-case data-testid attribute on all interactive elements, tabs, forms, buttons, inputs, metrics, and modals",
+    "examples": [
+      "data-testid=\"location-selector-dropdown\"",
+      "data-testid=\"prep-list-frequency-tabs\"",
+      "data-testid=\"complete-prep-batch-button\"",
+      "data-testid=\"food-cost-variance-card\"",
+      "data-testid=\"ai-assistant-input-field\""
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Build a production-grade React .js application with comprehensive state management supporting 3 distinct restaurant locations plus a consolidated Ownership View.",
+    "Implement the Prep Inventory & Daily/Biweekly/Weekly Prep List builder with full auto-deduction logic, sub-container breakdown, and recipe calculation.",
+    "Build the Food Costing engine: allow setting target food cost % vs actual food cost %, calculating unit margins, and updating raw ingredient prices dynamically.",
+    "Ensure rich visual polish with custom dark slate surfaces, subtle glassmorphism headers, high-contrast visual badges, motion via framer-motion, and interactive data charts with recharts.",
+    "Include the AI Chat Assistant panel with pre-configured operational prompts (e.g. 'How to lower pizza dough food cost by 3%?', 'Calculate prep needs for $25k weekend sales').",
+    "Include interactive tabs for Future Modules: Scheduling (Shift planner with labor % calculation), Compliance & SOP Checklists, and Staff Training.",
+    "Use data-testid on every interactive button, input, select, card, and tab."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Do NOT use dark colors as heavy flat gradients. Use crisp slate dark surfaces with clean 1px borders (#334155) and inner strokes.",
+    "Do NOT center align main layout text. Maintain structured left-aligned grid alignment.",
+    "Headers and floating overlays must NOT have transparent backgrounds. Use backdrop-blur with bg-slate-900/90.",
+    "All interactive elements MUST include explicit hover/active states with defined text colors.",
+    "Use micro-animations with Framer Motion for modal popups, tab switches, list additions, and toast notifications with Sonner.",
+    "Ensure every page element uses standard React .js file conventions (JSX syntax in .js files)."
+  ]
+}

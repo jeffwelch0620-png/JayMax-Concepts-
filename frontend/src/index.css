@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+    --card: 217 38% 14%;
+    --card-foreground: 210 40% 98%;
+    --popover: 217 38% 14%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 24 95% 53%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 216 28% 24%;
+    --input: 216 28% 24%;
+    --ring: 24 95% 53%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+.font-display { font-family: 'Outfit', sans-serif; }
+.num { font-family: 'JetBrains Mono', monospace; }
+
+.ops-table { width: 100%; border-collapse: collapse; }
+.ops-table th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #94A3B8; border-bottom: 1px solid #334155; padding: 8px 10px;
+  background: #1A2438; font-weight: 700; white-space: nowrap;
+}
+.ops-table td { padding: 9px 10px; border-bottom: 1px solid #22304A; font-size: 13.5px; color: #CBD5E1; }
+.ops-table tbody tr:hover td { background: rgba(148, 163, 184, 0.05); }
+.ops-table tbody tr { transition: background 0.12s ease; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0B0F17; }
+::-webkit-scrollbar-thumb { background: #28354A; border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-slide-in { animation: fadeSlideIn 0.3s ease both; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.pulse-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  .recipe-print-card, .recipe-print-card * { visibility: visible !important; }
+  .recipe-print-card { position: absolute !important; left: 0; top: 0; width: 100% !important; border: none !important; box-shadow: none !important; background: #fff !important; color: #111 !important; }
+  .recipe-print-card td, .recipe-print-card th { color: #222 !important; border-color: #ddd !important; }
+  .recipe-print-card .print-muted { color: #555 !important; background: #f5f5f5 !important; }
+  .recipe-cost-col, .recipe-card-controls, header, .no-print { display: none !important; }
+  @page { margin: 0.45in; }
+}
+
+@layer base {
+  [data-debug-wrapper="true"] { display: contents !important; }
+}
