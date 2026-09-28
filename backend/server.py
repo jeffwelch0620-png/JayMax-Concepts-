@@ -61,7 +61,7 @@ def _token(user):
                "locations": user.get("locations", []),
                "exp": int(datetime.now(timezone.utc).timestamp()) + SESSION_TTL}
     raw = _b64(json.dumps(payload, separators=(",", ":")).encode())
-    key = AUTH_SECRET or BOOTSTRAP_TOKEN
+    key = AUTH_SECRET
     if not key:
         raise HTTPException(503, "AUTH_SECRET is not configured")
     return f"{raw}.{_b64(hmac.new(key.encode(), raw.encode(), hashlib.sha256).digest())}"
@@ -69,7 +69,7 @@ def _token(user):
 def _decode_token(token):
     try:
         raw, sig = token.split(".", 1)
-        key = AUTH_SECRET or BOOTSTRAP_TOKEN
+        key = AUTH_SECRET
         expected = _b64(hmac.new(key.encode(), raw.encode(), hashlib.sha256).digest())
         if not hmac.compare_digest(sig, expected):
             return None
@@ -96,7 +96,7 @@ async def collaboration_security(request: Request, call_next):
     path = request.url.path
     if not path.startswith("/api") or path in ("/api/health", "/api/auth/login", "/api/auth/bootstrap"):
         return await call_next(request)
-    if AUTH_REQUIRED and not (AUTH_SECRET or BOOTSTRAP_TOKEN):
+    if AUTH_REQUIRED and not AUTH_SECRET:
         return JSONResponse({"detail": "AUTH_SECRET is not configured"}, status_code=503)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token) if token else None
@@ -1150,8 +1150,12 @@ async def get_pin(rid: str):
     return {"staffPin": (cfg or {}).get("staffPin") or DEFAULT_STAFF_PIN, "custom": bool((cfg or {}).get("staffPin"))}
 
 @api_router.post("/staff/{rid}/pin")
-async def set_pin(rid: str, body: dict):
+async def set_pin(rid: str, body: dict, request: Request):
     check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user or user.get("role") not in ("owner", "manager"):
+        raise HTTPException(403, "Manager role required")
     pin = str(body.get("staffPin", "")).strip()
     if not (pin.isdigit() and 4 <= len(pin) <= 8):
         raise HTTPException(400, "PIN must be 4-8 digits")
@@ -1160,17 +1164,23 @@ async def set_pin(rid: str, body: dict):
     return {"ok": True}
 
 @api_router.post("/staff/verify")
-async def verify_pin(body: dict):
+async def verify_pin(body: dict, request: Request):
     rid = body.get("restaurantId", "")
     check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if user and user.get("role") == "owner":
+        return {"ok": True}
+    if user and rid in user.get("locations", []) and user.get("role") in ("manager", "staff"):
+        return {"ok": True}
     return {"ok": str(body.get("pin", "")) == await _get_pin(rid)}
 
 @api_router.post("/staff/{rid}/prepsheet")
-async def staff_prepsheet(rid: str, body: dict):
+async def staff_prepsheet(rid: str, body: dict, request: Request):
     check_rid(rid)
-    # PIN travels in the POST body, not a GET query string — query strings land in
-    # server/proxy access logs and browser history.
-    if str((body or {}).get("pin", "")) != await _get_pin(rid):
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and str((body or {}).get("pin", "")) != await _get_pin(rid):
         raise HTTPException(403, "Invalid PIN")
     track = body.get("track") or "daily"
     plist = await db.prep_lists.find_one({"restaurantId": rid, "date": _today(), "status": "released", **_track_filter(track)}, {"_id": 0})
@@ -1195,20 +1205,23 @@ async def staff_prepsheet(rid: str, body: dict):
     return {"listId": plist["id"], "date": plist["date"], "tasks": tasks}
 
 class StaffCompleteIn(BaseModel):
-    pin: str
+    pin: str = ""
     listId: str
     taskId: str
     batches: float
     doneBy: str = ""
 
 @api_router.post("/staff/{rid}/prepsheet/complete")
-async def staff_complete(rid: str, body: StaffCompleteIn):
+async def staff_complete(rid: str, body: StaffCompleteIn, request: Request):
     check_rid(rid)
-    if body.pin != await _get_pin(rid):
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and body.pin != await _get_pin(rid):
         raise HTTPException(403, "Invalid PIN")
-    if not body.doneBy.strip():
+    done_by = body.doneBy.strip() or (user or {}).get("email", "")
+    if not done_by:
         raise HTTPException(400, "Enter your name so the task is attributed")
-    res = await _complete_task_core(rid, body.listId, body.taskId, body.batches, body.doneBy.strip(), [])
+    res = await _complete_task_core(rid, body.listId, body.taskId, body.batches, done_by, [])
     return {"ok": True, "log": res.get("log")}
 
 # ---------------- Prep reporting ----------------
@@ -1438,8 +1451,12 @@ class ChatIn(BaseModel):
     message: str
 
 @api_router.post("/ai/chat")
-async def ai_chat(body: ChatIn):
+async def ai_chat(body: ChatIn, request: Request):
     check_rid(body.restaurantId)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if user and user.get("role") != "owner" and body.restaurantId not in user.get("locations", []):
+        raise HTTPException(403, "Location access denied")
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise HTTPException(500, "AI key not configured")
