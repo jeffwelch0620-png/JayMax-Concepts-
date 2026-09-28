@@ -75,6 +75,19 @@ export const verifyStaffPin = (rid, pin) => axios.post(`${API}/staff/verify`, { 
 export const staffPrepsheet = (rid, pin, track = "daily") => axios.post(`${API}/staff/${rid}/prepsheet`, { pin, track }).then((r) => r.data);
 export const staffCompleteTask = (rid, body) => axios.post(`${API}/staff/${rid}/prepsheet/complete`, body).then((r) => r.data);
 
+export const staffCounts = (rid, pin) => axios.post(`${API}/staff/${rid}/counts`, { pin }).then((r) => r.data);
+export const staffSaveCounts = (rid, body) => axios.post(`${API}/staff/${rid}/counts/save`, body).then((r) => r.data);
+
+export const staffTaskInbox = (rid, pin) => axios.post(`${API}/staff/${rid}/tasks`, { pin }).then((r) => r.data);
+export const staffCompleteStaffTask = (rid, taskId, body) => axios.post(`${API}/staff/${rid}/tasks/${taskId}/complete`, body).then((r) => r.data);
+export const listStaffTasks = (rid) => axios.get(`${API}/staff-tasks/${rid}`).then((r) => r.data);
+export const createStaffTask = (rid, body) => axios.post(`${API}/staff-tasks/${rid}`, body).then((r) => r.data);
+export const deleteStaffTask = (rid, taskId) => axios.delete(`${API}/staff-tasks/${rid}/${taskId}`).then((r) => r.data);
+
+export const pushPublicKey = (rid) => axios.get(`${API}/staff/${rid}/push/public-key`).then((r) => r.data);
+export const pushSubscribe = (rid, body) => axios.post(`${API}/staff/${rid}/push/subscribe`, body).then((r) => r.data);
+export const pushUnsubscribe = (rid, body) => axios.post(`${API}/staff/${rid}/push/unsubscribe`, body).then((r) => r.data);
+
 export const runParAdvisor = (rid) => axios.post(`${API}/ai/par-advisor/${rid}`).then((r) => r.data);
 export const getParRecs = (rid) => axios.get(`${API}/ai/par-advisor/${rid}`).then((r) => r.data);
 export const applyParRec = (rid, recId) => axios.post(`${API}/ai/par-advisor/${rid}/${recId}/apply`).then((r) => r.data);

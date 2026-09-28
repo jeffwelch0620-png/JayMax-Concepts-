@@ -1,0 +1,12 @@
+{
+  "short_name": "JayMax Tasks",
+  "name": "JayMax Concepts — Employee Tasks",
+  "icons": [
+    { "src": "favicon.ico", "sizes": "64x64 32x32 24x24 16x16", "type": "image/x-icon" }
+  ],
+  "start_url": "./?source=pwa",
+  "display": "standalone",
+  "theme_color": "#0B0F17",
+  "background_color": "#0B0F17",
+  "description": "PIN-only employee portal for prep tasks and inventory counts."
+}

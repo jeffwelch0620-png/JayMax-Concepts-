@@ -2,8 +2,9 @@ import React, { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { buildPeriodReport, isCountActive, isOrderEnabled, statusOf, preferredSku, fmtMoney, fmtDate, num } from "../lib/calc";
 import { MetricCard, PageTitle, EmptyState, Field, SectionLabel, cardCls, inpCls } from "./common";
+import { DashboardPrepWindow } from "./DashboardPrepWindow";
 
-export function DashboardTab({ items, purchases, dishes, adjustments, salesPeriod, reportingPeriods, onOpenHistory, flaggedOnly, setFlaggedOnly }) {
+export function DashboardTab({ rid, items, purchases, dishes, adjustments, salesPeriod, reportingPeriods, onOpenHistory, flaggedOnly, setFlaggedOnly }) {
   const [selectedPeriodId, setSelectedPeriodId] = useState("current");
   const [search, setSearch] = useState("");
   const [areaFilter, setAreaFilter] = useState("All");
@@ -51,6 +52,8 @@ export function DashboardTab({ items, purchases, dishes, adjustments, salesPerio
         <MetricCard testId="metric-inv-value" label="Live Inventory Value" value={fmtMoney(report.liveInventoryValue)} sub="current stock × preferred price" />
         <MetricCard testId="metric-order-exposure" label="Next Order Exposure" value={fmtMoney(report.orderExposure)} sub="preferred-vendor estimate" />
       </div>
+
+      <DashboardPrepWindow items={items} dishes={dishes} rid={rid} />
 
       {report.usableRows.length === 0 && (
         <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg px-3.5 py-2.5 text-amber-300 text-xs mb-5" data-testid="counts-incomplete-banner">

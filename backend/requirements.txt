@@ -8,8 +8,10 @@ ast_serialize==0.11.1
 attrs==26.1.0
 black==26.5.1
 certifi==2026.7.22
+cffi==2.1.1
 charset-normalizer==3.5.1
 click==8.5.0
+cryptography==50.0.1
 distro==1.9.0
 dnspython==2.8.0
 email-validator==2.3.0
@@ -56,12 +58,16 @@ platformdirs==4.11.8
 pluggy==1.6.0
 propcache==0.5.2
 pycodestyle==2.14.0
+pycparser==3.0
 pydantic==2.13.5
 pydantic_core==2.46.5
 pyflakes==3.4.0
 Pygments==2.21.0
 pymongo==4.6.3
 pyparsing==3.3.2
+py-vapid==1.9.4
+pywebpush==2.5.0
+http-ece==1.2.1
 pytest==9.1.1
 pytest-xdist==3.8.0
 python-dateutil==2.9.0.post0

@@ -275,7 +275,7 @@ export default function App() {
           <div className="text-slate-500 text-sm p-10 text-center" data-testid="loading-state">Loading {current.name}…</div>
         ) : (
           <>
-            {activeTab === "dashboard" && <DashboardTab items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />}
+            {activeTab === "dashboard" && <DashboardTab rid={loc} items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />}
             {activeTab === "prep" && <PrepTab rid={loc} items={S.items} dishes={S.dishes} persistDishes={persistDishes} prepStock={S.prepStock} prepLogs={S.prepLogs} applyPrepResult={applyPrepResult} salesPeriod={S.salesPeriod} showToast={showToast} />}
             {activeTab === "counts" && <CountsTab items={S.items} persist={persistItems} showToast={showToast} />}
             {activeTab === "setup" && <SetupTab items={S.items} persistItems={persistItems} areas={S.areas} persistAreas={persistAreas} showToast={showToast} rid={loc} />}
@@ -288,7 +288,7 @@ export default function App() {
             {activeTab === "sales" && <SalesTrackingTab items={S.items} dishes={S.dishes} purchases={S.purchases} adjustments={S.adjustments} salesPeriod={S.salesPeriod} persist={persistSalesPeriod} reportingPeriods={S.reportingPeriods} persistReportingPeriods={persistReportingPeriods} showToast={showToast} />}
             {activeTab === "adjustments" && <AdjustmentsTab items={S.items} adjustments={S.adjustments} persist={persistAdjustments} showToast={showToast} />}
             {activeTab === "history" && <HistoryTab items={S.items} purchases={S.purchases} focusControlNumber={historyFocusCN} />}
-            {activeTab === "scheduling" && <SchedulingTab />}
+            {activeTab === "scheduling" && <SchedulingTab rid={loc} showToast={showToast} />}
           </>
         )}
       </main>
