@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 from typing import Optional, List, Annotated, Any
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-import os, json, math, re, uuid, logging, ipaddress, io
+import os, json, math, re, uuid, logging, ipaddress, io, base64, hashlib, hmac, secrets, time
 import httpx
 from html import escape
 from html.parser import HTMLParser
@@ -25,6 +25,113 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+AUTH_SECRET = os.environ.get("AUTH_SECRET", "").strip()
+AUTH_REQUIRED = os.environ.get("AUTH_REQUIRED", "true").lower() not in ("0", "false", "no")
+BOOTSTRAP_TOKEN = os.environ.get("BOOTSTRAP_TOKEN", "").strip()
+SESSION_TTL = int(os.environ.get("SESSION_TTL_SECONDS", "28800"))
+READ_ONLY_PATHS = ("/owner/summary", "/owner/prep-summary", "/owner/orders",
+                   "/owner/discrepancies", "/owner/vendor-scorecard", "/reports/")
+STAFF_PATHS = ("/prepcount/", "/preplists/", "/prep/", "/staff/", "/prep-items/")
+OWNER_PATHS = ("/owner/",)
+STAFF_WRITE_PATHS = ("/prepcount/", "/preplists/", "/prep/")
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "60"))
+_rate_buckets = {}
+
+def _b64(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode()
+
+def _unb64(value):
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+def _password_hash(password, salt=None):
+    salt = salt or secrets.token_bytes(16)
+    return f"pbkdf2${_b64(salt)}${hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 240000).hex()}"
+
+def _password_ok(password, stored):
+    try:
+        _, salt, digest = stored.split("$", 2)
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), _unb64(salt), 240000).hex()
+        return hmac.compare_digest(actual, digest)
+    except (ValueError, TypeError):
+        return False
+
+def _token(user):
+    payload = {"sub": user["id"], "email": user["email"], "role": user["role"],
+               "locations": user.get("locations", []),
+               "exp": int(datetime.now(timezone.utc).timestamp()) + SESSION_TTL}
+    raw = _b64(json.dumps(payload, separators=(",", ":")).encode())
+    key = AUTH_SECRET
+    if not key:
+        raise HTTPException(503, "AUTH_SECRET is not configured")
+    return f"{raw}.{_b64(hmac.new(key.encode(), raw.encode(), hashlib.sha256).digest())}"
+
+def _decode_token(token):
+    try:
+        raw, sig = token.split(".", 1)
+        key = AUTH_SECRET
+        expected = _b64(hmac.new(key.encode(), raw.encode(), hashlib.sha256).digest())
+        if not hmac.compare_digest(sig, expected):
+            return None
+        payload = json.loads(_unb64(raw))
+        if int(payload.get("exp", 0)) < int(datetime.now(timezone.utc).timestamp()):
+            return None
+        return payload
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+def _path_rid(path):
+    parts = path.split("/")
+    return next((p for p in parts if p in RIDS), None)
+
+async def _record_activity(request, user, status):
+    if user and request.url.path not in ("/api/health",):
+        await db.activity_log.insert_one({"id": "act_" + uuid.uuid4().hex[:12],
+            "userId": user.get("sub"), "email": user.get("email"), "role": user.get("role"),
+            "method": request.method, "path": request.url.path, "status": status,
+            "restaurantId": _path_rid(request.url.path), "createdAt": _now_iso()})
+
+@app.middleware("http")
+async def collaboration_security(request: Request, call_next):
+    path = request.url.path
+    if not path.startswith("/api") or path in ("/api/health", "/api/auth/login", "/api/auth/bootstrap"):
+        return await call_next(request)
+    if AUTH_REQUIRED and not AUTH_SECRET:
+        return JSONResponse({"detail": "AUTH_SECRET is not configured"}, status_code=503)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token) if token else None
+    if AUTH_REQUIRED and not user:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    if not user:
+        return await call_next(request)
+    if path.startswith(("/api/ai/chat", "/api/orders/")):
+        now = time.monotonic()
+        key = (request.client.host if request.client else "unknown", path.split("/")[3] if path.startswith("/api/") else path)
+        bucket = [stamp for stamp in _rate_buckets.get(key, []) if now - stamp < 60]
+        if len(bucket) >= RATE_LIMIT:
+            return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
+        bucket.append(now)
+        _rate_buckets[key] = bucket
+    rid = _path_rid(path)
+    allowed = set(user.get("locations", []))
+    if rid and user.get("role") != "owner" and rid not in allowed:
+        return JSONResponse({"detail": "Location access denied"}, status_code=403)
+    role = user.get("role")
+    if path.startswith(OWNER_PATHS) and role != "owner":
+        return JSONResponse({"detail": "Owner role required"}, status_code=403)
+    if request.method != "GET":
+        if role == "readonly":
+            return JSONResponse({"detail": "Read-only access"}, status_code=403)
+        if role == "staff" and not path.startswith(STAFF_WRITE_PATHS):
+            return JSONResponse({"detail": "Staff access is limited to prep workflow"}, status_code=403)
+        if path.startswith(STAFF_PATHS) and role not in ("owner", "manager", "staff"):
+            return JSONResponse({"detail": "Insufficient role"}, status_code=403)
+    response = await call_next(request)
+    try:
+        await _record_activity(request, user, response.status_code)
+    except Exception:
+        logger.exception("Unable to write activity log")
+    return response
 
 PyObjectId = Annotated[str, BeforeValidator(str)]
 
@@ -296,10 +403,91 @@ async def ensure_seed(rid):
         {"$setOnInsert": {"restaurantId": rid, "periodStart": ws, "periodEnd": we, "dishSales": {}, "itemCounts": {}}}, upsert=True)
     await db.areas.update_one({"restaurantId": rid}, {"$setOnInsert": {"restaurantId": rid, "list": DEFAULT_AREAS}}, upsert=True)
 
+async def _check_and_bump_revision(rid, request: Request):
+    raw = request.headers.get("if-match")
+    current = await db.state_versions.find_one({"restaurantId": rid}, {"_id": 0, "revision": 1})
+    revision = (current or {}).get("revision", 0)
+    if raw and raw.strip('"') != str(revision):
+        raise HTTPException(409, f"State changed by another collaborator; reload before saving (revision {revision})")
+    new_revision = revision + 1
+    await db.state_versions.update_one({"restaurantId": rid},
+        {"$set": {"revision": new_revision, "updatedAt": _now_iso()}}, upsert=True)
+    return new_revision
+
 # ---------------- Routes ----------------
 @api_router.get("/health")
 async def health():
     return {"status": "ok"}
+
+class LoginIn(BaseModel):
+    email: str
+    password: str
+
+class BootstrapIn(BaseModel):
+    bootstrapToken: str
+    email: str
+    password: str
+    role: str = "owner"
+    locations: List[str] = []
+
+class UserIn(BaseModel):
+    email: str
+    password: str
+    role: str = "staff"
+    locations: List[str] = []
+
+def _clean_user(doc):
+    return {"id": doc["id"], "email": doc["email"], "role": doc["role"],
+            "locations": doc.get("locations", [])}
+
+@api_router.post("/auth/bootstrap")
+async def auth_bootstrap(body: BootstrapIn):
+    if not BOOTSTRAP_TOKEN or not hmac.compare_digest(body.bootstrapToken, BOOTSTRAP_TOKEN):
+        raise HTTPException(403, "Invalid bootstrap token")
+    if await db.users.count_documents({}):
+        raise HTTPException(409, "Bootstrap has already been completed")
+    if body.role != "owner" or not body.email.strip() or len(body.password) < 12:
+        raise HTTPException(400, "The first account must be an owner with a 12-character password")
+    user = {"id": "usr_" + uuid.uuid4().hex[:12], "email": body.email.strip().lower(),
+            "passwordHash": _password_hash(body.password), "role": "owner",
+            "locations": sorted(RIDS), "createdAt": _now_iso()}
+    await db.users.insert_one(user)
+    return {"user": _clean_user(user), "token": _token(user)}
+
+@api_router.post("/auth/login")
+async def auth_login(body: LoginIn):
+    user = await db.users.find_one({"email": body.email.strip().lower()})
+    if not user or not _password_ok(body.password, user.get("passwordHash", "")):
+        raise HTTPException(401, "Invalid email or password")
+    return {"user": _clean_user(user), "token": _token(user)}
+
+@api_router.get("/auth/me")
+async def auth_me(request: Request):
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user:
+        raise HTTPException(401, "Authentication required")
+    return user
+
+@api_router.post("/auth/users")
+async def auth_create_user(body: UserIn, request: Request):
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    actor = _decode_token(token)
+    if not actor or actor.get("role") != "owner":
+        raise HTTPException(403, "Owner role required")
+    if body.role not in ("owner", "manager", "staff", "readonly") or len(body.password) < 12:
+        raise HTTPException(400, "Invalid role or password")
+    locations = sorted(set(body.locations) & RIDS)
+    if body.role == "owner":
+        locations = sorted(RIDS)
+    user = {"id": "usr_" + uuid.uuid4().hex[:12], "email": body.email.strip().lower(),
+            "passwordHash": _password_hash(body.password), "role": body.role,
+            "locations": locations, "createdAt": _now_iso()}
+    try:
+        await db.users.insert_one(user)
+    except Exception:
+        raise HTTPException(409, "A user with that email already exists")
+    return _clean_user(user)
 
 @api_router.get("/restaurants")
 async def restaurants():
@@ -318,27 +506,32 @@ async def get_state(rid: str):
     state["salesPeriod"].pop("restaurantId", None)
     areas = await db.areas.find_one({"restaurantId": rid}, {"_id": 0})
     state["areas"] = (areas or {}).get("list", DEFAULT_AREAS)
+    version = await db.state_versions.find_one({"restaurantId": rid}, {"_id": 0, "revision": 1})
+    state["revision"] = (version or {}).get("revision", 0)
     return state
 
 @api_router.put("/state/{rid}/salesPeriod")
-async def put_sales_period(rid: str, payload: dict):
+async def put_sales_period(rid: str, payload: dict, request: Request):
     check_rid(rid)
+    revision = await _check_and_bump_revision(rid, request)
     payload = dict(payload)
     payload["restaurantId"] = rid
     await db.sales_periods.replace_one({"restaurantId": rid}, payload, upsert=True)
-    return {"ok": True}
+    return {"ok": True, "revision": revision}
 
 @api_router.put("/state/{rid}/areas")
-async def put_areas(rid: str, payload: List[Any]):
+async def put_areas(rid: str, payload: List[Any], request: Request):
     check_rid(rid)
+    revision = await _check_and_bump_revision(rid, request)
     await db.areas.update_one({"restaurantId": rid}, {"$set": {"restaurantId": rid, "list": payload}}, upsert=True)
-    return {"ok": True}
+    return {"ok": True, "revision": revision}
 
 @api_router.put("/state/{rid}/{collection}")
-async def put_collection(rid: str, collection: str, payload: List[Any]):
+async def put_collection(rid: str, collection: str, payload: List[Any], request: Request):
     check_rid(rid)
     if collection not in WRITABLE:
         raise HTTPException(400, "collection not writable")
+    revision = await _check_and_bump_revision(rid, request)
     coll = COLL_MAP[collection]
     # Insert the new snapshot FIRST (tagged with a one-off batch marker), then delete
     # only the old docs that aren't part of this batch. A delete-then-insert here would
@@ -351,7 +544,7 @@ async def put_collection(rid: str, collection: str, payload: List[Any]):
     await db[coll].delete_many({"restaurantId": rid, "_batch": {"$ne": batch}})
     if docs:
         await db[coll].update_many({"restaurantId": rid, "_batch": batch}, {"$unset": {"_batch": ""}})
-    return {"ok": True, "count": len(docs)}
+    return {"ok": True, "count": len(docs), "revision": revision}
 
 # ---------------- Prep module ----------------
 class ContainerIn(BaseModel):
@@ -957,8 +1150,12 @@ async def get_pin(rid: str):
     return {"staffPin": (cfg or {}).get("staffPin") or DEFAULT_STAFF_PIN, "custom": bool((cfg or {}).get("staffPin"))}
 
 @api_router.post("/staff/{rid}/pin")
-async def set_pin(rid: str, body: dict):
+async def set_pin(rid: str, body: dict, request: Request):
     check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user or user.get("role") not in ("owner", "manager"):
+        raise HTTPException(403, "Manager role required")
     pin = str(body.get("staffPin", "")).strip()
     if not (pin.isdigit() and 4 <= len(pin) <= 8):
         raise HTTPException(400, "PIN must be 4-8 digits")
@@ -967,17 +1164,23 @@ async def set_pin(rid: str, body: dict):
     return {"ok": True}
 
 @api_router.post("/staff/verify")
-async def verify_pin(body: dict):
+async def verify_pin(body: dict, request: Request):
     rid = body.get("restaurantId", "")
     check_rid(rid)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if user and user.get("role") == "owner":
+        return {"ok": True}
+    if user and rid in user.get("locations", []) and user.get("role") in ("manager", "staff"):
+        return {"ok": True}
     return {"ok": str(body.get("pin", "")) == await _get_pin(rid)}
 
 @api_router.post("/staff/{rid}/prepsheet")
-async def staff_prepsheet(rid: str, body: dict):
+async def staff_prepsheet(rid: str, body: dict, request: Request):
     check_rid(rid)
-    # PIN travels in the POST body, not a GET query string — query strings land in
-    # server/proxy access logs and browser history.
-    if str((body or {}).get("pin", "")) != await _get_pin(rid):
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and str((body or {}).get("pin", "")) != await _get_pin(rid):
         raise HTTPException(403, "Invalid PIN")
     track = body.get("track") or "daily"
     plist = await db.prep_lists.find_one({"restaurantId": rid, "date": _today(), "status": "released", **_track_filter(track)}, {"_id": 0})
@@ -1002,20 +1205,23 @@ async def staff_prepsheet(rid: str, body: dict):
     return {"listId": plist["id"], "date": plist["date"], "tasks": tasks}
 
 class StaffCompleteIn(BaseModel):
-    pin: str
+    pin: str = ""
     listId: str
     taskId: str
     batches: float
     doneBy: str = ""
 
 @api_router.post("/staff/{rid}/prepsheet/complete")
-async def staff_complete(rid: str, body: StaffCompleteIn):
+async def staff_complete(rid: str, body: StaffCompleteIn, request: Request):
     check_rid(rid)
-    if body.pin != await _get_pin(rid):
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if not user and body.pin != await _get_pin(rid):
         raise HTTPException(403, "Invalid PIN")
-    if not body.doneBy.strip():
+    done_by = body.doneBy.strip() or (user or {}).get("email", "")
+    if not done_by:
         raise HTTPException(400, "Enter your name so the task is attributed")
-    res = await _complete_task_core(rid, body.listId, body.taskId, body.batches, body.doneBy.strip(), [])
+    res = await _complete_task_core(rid, body.listId, body.taskId, body.batches, done_by, [])
     return {"ok": True, "log": res.get("log")}
 
 # ---------------- Prep reporting ----------------
@@ -1245,8 +1451,12 @@ class ChatIn(BaseModel):
     message: str
 
 @api_router.post("/ai/chat")
-async def ai_chat(body: ChatIn):
+async def ai_chat(body: ChatIn, request: Request):
     check_rid(body.restaurantId)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    if user and user.get("role") != "owner" and body.restaurantId not in user.get("locations", []):
+        raise HTTPException(403, "Location access denied")
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise HTTPException(500, "AI key not configured")

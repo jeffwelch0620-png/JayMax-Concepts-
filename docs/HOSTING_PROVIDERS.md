@@ -28,3 +28,15 @@
     swap for the provider SDK or an OpenAI-compatible endpoint).
   - Email: use a direct Resend (or other provider) API key instead of the managed proxy.
 - Set `PUBLIC_APP_URL` to the backend's public https origin so PO-PDF email links resolve.
+
+## Collaboration deployment checklist
+1. Use one production MongoDB database for the shared backend, with automated daily backups
+   and a tested restore procedure. Keep demo data in a separate database.
+2. Set `AUTH_REQUIRED=true`, a unique random `AUTH_SECRET`, and a one-time
+   `BOOTSTRAP_TOKEN`; remove the bootstrap token after creating the first owner.
+3. Set `CORS_ORIGINS` to exact HTTPS frontend origin(s), never `*` in production.
+4. Bootstrap the owner, then create named manager, staff, and read-only users with only the
+   locations they need. The frontend filters locations, while the backend enforces policy.
+5. Put both origins behind HTTPS and keep `RATE_LIMIT_PER_MINUTE` enabled for AI/email.
+6. Send the `If-Match` revision returned by `GET /api/state/{rid}` on state saves; a `409`
+   means the user must reload before retrying.
