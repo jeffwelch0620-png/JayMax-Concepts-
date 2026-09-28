@@ -23,6 +23,7 @@ import { SchedulingTab } from "./components/SchedulingTab";
 import { OwnerDashboard } from "./components/OwnerDashboard";
 import { AiAssistant } from "./components/AiAssistant";
 import { StaffSheet } from "./components/StaffSheet";
+import { Login } from "./components/Login";
 
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -45,7 +46,8 @@ const DEFAULT_PERIOD = (() => { const w = workweekRange(); return { periodStart:
 const EMPTY_STATE = { items: [], purchases: [], dishes: [], adjustments: [], reportingPeriods: [], prepStock: [], prepLogs: [], salesPeriod: DEFAULT_PERIOD, areas: [] };
 
 export default function App() {
-  const [loc, setLoc] = useState("berts");
+  const [session, setSession] = useState(() => api.currentSession());
+  const [loc, setLoc] = useState(() => api.currentSession()?.user?.role === "owner" ? "owner" : (api.currentSession()?.user?.locations || [])[0] || "berts");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [S, setS] = useState(null);
   const [historyFocusCN, setHistoryFocusCN] = useState(null);
@@ -63,11 +65,17 @@ export default function App() {
   const locRef = useRef(loc);
   locRef.current = loc;
 
-  const isOwner = loc === "owner";
+  const isOwner = !!session && loc === "owner" && session.user.role === "owner";
   const current = isOwner ? OWNER : RESTAURANTS.find((r) => r.id === loc) || RESTAURANTS[0];
+  const accessibleRestaurants = RESTAURANTS.filter((r) => session?.user?.role === "owner" || session?.user?.locations?.includes(r.id));
+  const visibleTabs = session?.user?.role === "readonly"
+    ? TABS.filter((t) => ["dashboard", "history"].includes(t.id))
+    : session?.user?.role === "staff"
+      ? TABS.filter((t) => ["dashboard", "prep", "counts"].includes(t.id))
+      : TABS;
 
   useEffect(() => {
-    if (isOwner) return;
+    if (!session || isOwner) return;
     setS(null);
     setActiveTab(pendingTabRef.current || "dashboard");
     pendingTabRef.current = null;
@@ -77,11 +85,27 @@ export default function App() {
       .catch(() => toast.error("Couldn't load location data — is the backend up?"));
   }, [loc, isOwner]);
 
+  useEffect(() => {
+    if (!session || isOwner) return undefined;
+    const timer = setInterval(() => {
+      api.fetchState(loc).then((data) => {
+        if (locRef.current === loc) setS((previous) => ({ ...previous, ...data }));
+      }).catch(() => {});
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [loc, isOwner]);
+
   const showToast = (msg) => toast.success(msg);
 
   function persistCollection(name, next) {
     setS((p) => ({ ...p, [name]: next }));
-    return api.putCollection(loc, name, next).catch(() => toast.error(`Couldn't save ${name} — check your connection`));
+    return api.putCollection(loc, name, next, S?.revision).then((result) => {
+      setS((p) => ({ ...p, revision: result.revision ?? p.revision }));
+      return result;
+    }).catch((err) => {
+      toast.error(err?.response?.status === 409 ? "This data changed elsewhere — reload before saving" : `Couldn't save ${name} — check your connection`);
+      return null;
+    });
   }
   const persistItems = (next) => persistCollection("items", next);
   const persistPurchases = (next) => persistCollection("purchases", next);
@@ -91,7 +115,13 @@ export default function App() {
   const persistAreas = (next) => persistCollection("areas", next);
   function persistSalesPeriod(next) {
     setS((p) => ({ ...p, salesPeriod: next }));
-    return api.putSalesPeriod(loc, next).catch(() => toast.error("Couldn't save the sales period"));
+    return api.putSalesPeriod(loc, next, S?.revision).then((result) => {
+      setS((p) => ({ ...p, revision: result.revision ?? p.revision }));
+      return result;
+    }).catch((err) => {
+      toast.error(err?.response?.status === 409 ? "This data changed elsewhere — reload before saving" : "Couldn't save the sales period");
+      return null;
+    });
   }
   function applyPrepResult(res) {
     setS((p) => ({ ...p, items: res.items ?? p.items, prepStock: res.prepStock ?? p.prepStock, prepLogs: res.log ? [res.log, ...(p.prepLogs || [])] : p.prepLogs }));
@@ -146,6 +176,7 @@ export default function App() {
     if (backupRef.current) backupRef.current.value = "";
   }
 
+  if (!session) return <Login onLogin={setSession} />;
   return (
     <div className="min-h-screen bg-[#0B0F17] text-slate-100" style={{ "--acc": current.accent }}>
       <Toaster position="bottom-center" theme="dark" toastOptions={{ style: { background: "#161F30", border: "1px solid #28354A", color: "#F8FAFC" } }} />
@@ -200,7 +231,7 @@ export default function App() {
           </div>
 
           <div className="flex gap-1.5 mt-4 overflow-x-auto pb-1" data-testid="location-selector">
-            {[OWNER, ...RESTAURANTS].map((r) => (
+            {(session.user.role === "owner" ? [OWNER, ...RESTAURANTS] : accessibleRestaurants).map((r) => (
               <button
                 key={r.id}
                 onClick={() => setLoc(r.id)}
@@ -213,10 +244,11 @@ export default function App() {
               </button>
             ))}
           </div>
+          <button onClick={() => { api.authLogout(); setSession(null); }} className="mt-2 text-xs text-slate-500 hover:text-white">Sign out ({session.user.email})</button>
 
           {!isOwner && (
             <nav className="flex gap-0.5 mt-2 overflow-x-auto" data-testid="main-nav">
-              {TABS.map((t) => {
+              {visibleTabs.map((t) => {
                 const Icon = t.icon;
                 const active = activeTab === t.id;
                 return (

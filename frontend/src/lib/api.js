@@ -1,11 +1,26 @@
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const TOKEN_KEY = "jaymax_session";
+const session = () => { try { return JSON.parse(localStorage.getItem(TOKEN_KEY) || "null"); } catch { return null; } };
+axios.interceptors.request.use((config) => {
+  const token = session()?.token;
+  if (token) config.headers.Authorization = ["Bearer", token].join(" ");
+  return config;
+});
+
+export const authLogin = (email, password) => axios.post(`${API}/auth/login`, { email, password }).then((r) => {
+  localStorage.setItem(TOKEN_KEY, JSON.stringify(r.data));
+  return r.data;
+});
+export const authLogout = () => localStorage.removeItem(TOKEN_KEY);
+export const currentSession = () => session();
 
 export const fetchState = (rid) => axios.get(`${API}/state/${rid}`).then((r) => r.data);
-export const putCollection = (rid, name, arr) => axios.put(`${API}/state/${rid}/${name}`, arr).then((r) => r.data);
-export const putSalesPeriod = (rid, sp) => axios.put(`${API}/state/${rid}/salesPeriod`, sp).then((r) => r.data);
-export const putAreas = (rid, areas) => axios.put(`${API}/state/${rid}/areas`, areas).then((r) => r.data);
+const revisionHeaders = (revision) => revision == null ? {} : { "If-Match": `"${revision}"` };
+export const putCollection = (rid, name, arr, revision) => axios.put(`${API}/state/${rid}/${name}`, arr, { headers: revisionHeaders(revision) }).then((r) => r.data);
+export const putSalesPeriod = (rid, sp, revision) => axios.put(`${API}/state/${rid}/salesPeriod`, sp, { headers: revisionHeaders(revision) }).then((r) => r.data);
+export const putAreas = (rid, areas, revision) => axios.put(`${API}/state/${rid}/areas`, areas, { headers: revisionHeaders(revision) }).then((r) => r.data);
 export const completePrep = (rid, body) => axios.post(`${API}/prep/${rid}/complete`, body).then((r) => r.data);
 export const applyPrepSales = (rid, dishSales) => axios.post(`${API}/prep/${rid}/apply-sales`, { dishSales }).then((r) => r.data);
 export const useContainer = (rid, body) => axios.post(`${API}/prep/${rid}/use-container`, body).then((r) => r.data);
@@ -74,7 +89,7 @@ export const addItemToList = (rid, listId, body) => axios.post(`${API}/preplists
 export async function streamChat(rid, message, { onDelta, onError, onDone }) {
   const res = await fetch(`${API}/ai/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(session()?.token ? { Authorization: ["Bearer", session().token].join(" ") } : {}) },
     body: JSON.stringify({ restaurantId: rid, message }),
   });
   if (!res.ok || !res.body) {
