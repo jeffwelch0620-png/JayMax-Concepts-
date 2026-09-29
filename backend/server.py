@@ -13,6 +13,7 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 from pymongo import UpdateOne
+import db_pg
 try:
     from pywebpush import webpush, WebPushException
 except ImportError:  # pragma: no cover - optional dependency, push notifications no-op without it
@@ -2474,7 +2475,234 @@ async def apply_prices(rid: str, oid: str, body: ApplyPricesIn):
         updated += 1
     return {"ok": True, "updated": updated}
 
+# ==================== Postgres (Supabase) migration: Vendors / Items / Invoices ====================
+# See docs/SUPABASE_MIGRATION_PLAN.md. Lives under /api/pg while the migration is in
+# progress so the existing Mongo-backed /api/... endpoints keep working untouched;
+# nothing on the frontend points here yet. Store ids come from the `stores` table
+# (berts, rudds, papa, comm) -- note "papa", not "papa_leonis" like the Mongo side,
+# and the commissary is its own store here rather than a track field.
+pg_router = APIRouter(prefix="/api/pg")
+PG_STORE_IDS = {"berts", "rudds", "papa", "comm"}
+
+def check_store_id(store_id):
+    if store_id not in PG_STORE_IDS:
+        raise HTTPException(404, f"Unknown store '{store_id}'")
+
+# ---------------- Vendors (global, not store-scoped) ----------------
+class VendorIn(BaseModel):
+    id: str
+    name: str
+    order_email: Optional[str] = None
+    rep_name: Optional[str] = None
+    rep_phone: Optional[str] = None
+    active: bool = True
+
+@pg_router.get("/vendors")
+async def pg_list_vendors():
+    rows = await db_pg.pool().fetch("SELECT * FROM vendors ORDER BY name")
+    return [dict(r) for r in rows]
+
+@pg_router.post("/vendors")
+async def pg_create_vendor(body: VendorIn):
+    row = await db_pg.pool().fetchrow(
+        """INSERT INTO vendors (id, name, order_email, rep_name, rep_phone, active)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *""",
+        body.id, body.name, body.order_email, body.rep_name, body.rep_phone, body.active)
+    return dict(row)
+
+@pg_router.put("/vendors/{vendor_id}")
+async def pg_update_vendor(vendor_id: str, body: VendorIn):
+    row = await db_pg.pool().fetchrow(
+        """UPDATE vendors SET name=$2, order_email=$3, rep_name=$4, rep_phone=$5,
+           active=$6, updated_at=now() WHERE id=$1 RETURNING *""",
+        vendor_id, body.name, body.order_email, body.rep_name, body.rep_phone, body.active)
+    if not row:
+        raise HTTPException(404, "Vendor not found")
+    return dict(row)
+
+# ---------------- Items (global catalog + per-store tracking + per-vendor SKUs) ----------------
+class VendorSkuIn(BaseModel):
+    vendor_id: str
+    vendor_sku: str
+    vendor_description: Optional[str] = None
+    purchase_unit: str = "case"
+    base_per_purchase_unit: Optional[float] = None
+    price: Optional[float] = None
+    preferred: bool = False
+    available: bool = True
+
+class ItemIn(BaseModel):
+    code: str
+    name: str
+    category: Optional[str] = None
+    base_unit: str = "each"
+    item_type: str = "raw"
+    is_high_value: bool = False
+    notes: Optional[str] = None
+    # store_items fields
+    count_unit: str = "case"
+    base_per_count_unit: float = 1
+    storage_area: Optional[str] = None
+    counted_nightly: bool = False
+    par: float = 0
+    vendor_skus: List[VendorSkuIn] = []
+
+async def _item_row_to_api(conn, store_id, item_row, store_item_row):
+    skus = await conn.fetch(
+        """SELECT vi.*, v.name AS vendor_name FROM vendor_items vi
+           JOIN vendors v ON v.id = vi.vendor_id WHERE vi.item_code = $1""", item_row["code"])
+    return {
+        "code": item_row["code"], "name": item_row["name"], "category": item_row["category"],
+        "baseUnit": item_row["base_unit"], "itemType": item_row["item_type"],
+        "isHighValue": item_row["is_high_value"], "notes": item_row["notes"],
+        "countUnit": store_item_row["count_unit"] if store_item_row else None,
+        "basePerCountUnit": float(store_item_row["base_per_count_unit"]) if store_item_row else None,
+        "storageArea": store_item_row["storage_area"] if store_item_row else None,
+        "countedNightly": store_item_row["counted_nightly"] if store_item_row else False,
+        "currentStock": float(store_item_row["current_stock"]) if store_item_row else 0,
+        "par": float(store_item_row["par"]) if store_item_row else 0,
+        "lastCounted": store_item_row["last_counted"].isoformat() if store_item_row and store_item_row["last_counted"] else None,
+        "lastCountedBy": store_item_row["last_counted_by"] if store_item_row else None,
+        "vendorSkus": [{
+            "id": str(s["id"]), "vendor": s["vendor_id"], "vendorName": s["vendor_name"],
+            "vendorSku": s["vendor_sku"], "vendorDescription": s["vendor_description"],
+            "purchaseUnit": s["purchase_unit"],
+            "basePerPurchaseUnit": float(s["base_per_purchase_unit"]) if s["base_per_purchase_unit"] is not None else None,
+            "price": float(s["price"]) if s["price"] is not None else None,
+            "priceUpdatedAt": s["price_updated_at"].isoformat() if s["price_updated_at"] else None,
+            "priceSource": s["price_source"], "preferred": s["preferred"], "available": s["available"],
+        } for s in skus],
+    }
+
+@pg_router.get("/items/{store_id}")
+async def pg_list_items(store_id: str):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        rows = await conn.fetch(
+            """SELECT i.*, si.count_unit, si.base_per_count_unit, si.storage_area, si.counted_nightly,
+                      si.current_stock, si.par, si.last_counted, si.last_counted_by
+               FROM items i JOIN store_items si ON si.item_code = i.code
+               WHERE si.store_id = $1 ORDER BY i.name""", store_id)
+        return [await _item_row_to_api(conn, store_id, r, r) for r in rows]
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/items/{store_id}")
+async def pg_create_item(store_id: str, body: ItemIn):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            await conn.execute(
+                """INSERT INTO items (code, name, category, base_unit, item_type, is_high_value, notes)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7)
+                   ON CONFLICT (code) DO UPDATE SET name=$2, category=$3, base_unit=$4,
+                       item_type=$5, is_high_value=$6, notes=$7, updated_at=now()""",
+                body.code, body.name, body.category, body.base_unit, body.item_type, body.is_high_value, body.notes)
+            si = await conn.fetchrow(
+                """INSERT INTO store_items (store_id, item_code, count_unit, base_per_count_unit,
+                       storage_area, counted_nightly, par)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7)
+                   ON CONFLICT (store_id, item_code) DO UPDATE SET count_unit=$3,
+                       base_per_count_unit=$4, storage_area=$5, counted_nightly=$6, par=$7
+                   RETURNING *""",
+                store_id, body.code, body.count_unit, body.base_per_count_unit, body.storage_area,
+                body.counted_nightly, body.par)
+            for sk in body.vendor_skus:
+                await conn.execute(
+                    """INSERT INTO vendor_items (vendor_id, vendor_sku, vendor_description, item_code,
+                           purchase_unit, base_per_purchase_unit, price, price_updated_at, price_source, preferred, available)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7, CASE WHEN $7 IS NOT NULL THEN now() END, 'manual', $8, $9)""",
+                    sk.vendor_id, sk.vendor_sku, sk.vendor_description, body.code, sk.purchase_unit,
+                    sk.base_per_purchase_unit, sk.price, sk.preferred, sk.available)
+            item_row = await conn.fetchrow("SELECT * FROM items WHERE code=$1", body.code)
+            return await _item_row_to_api(conn, store_id, item_row, si)
+    finally:
+        await db_pg.pool().release(conn)
+
+# ---------------- Invoices ----------------
+class InvoiceLineIn(BaseModel):
+    vendor_item_id: Optional[str] = None
+    description: Optional[str] = None
+    qty: float
+    purchase_unit: Optional[str] = None
+    unit_price: Optional[float] = None
+
+class InvoiceIn(BaseModel):
+    vendor_id: str
+    invoice_number: Optional[str] = None
+    invoice_date: str
+    delivered_to: Optional[str] = None
+    source: Optional[str] = None
+    created_by: Optional[str] = None
+    lines: List[InvoiceLineIn] = []
+
+@pg_router.get("/invoices/{store_id}")
+async def pg_list_invoices(store_id: str, date_from: str = Query(None, alias="from"), date_to: str = Query(None, alias="to")):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        q = "SELECT * FROM invoices WHERE store_id = $1"
+        params = [store_id]
+        if date_from:
+            params.append(date_from); q += f" AND invoice_date >= ${len(params)}"
+        if date_to:
+            params.append(date_to); q += f" AND invoice_date <= ${len(params)}"
+        q += " ORDER BY invoice_date DESC"
+        invoices = await conn.fetch(q, *params)
+        out = []
+        for inv in invoices:
+            lines = await conn.fetch(
+                """SELECT il.*, vi.vendor_sku, i.name AS item_name, i.code AS item_code
+                   FROM invoice_lines il
+                   LEFT JOIN vendor_items vi ON vi.id = il.vendor_item_id
+                   LEFT JOIN items i ON i.code = vi.item_code
+                   WHERE il.invoice_id = $1""", inv["id"])
+            out.append({
+                "id": str(inv["id"]), "vendorId": inv["vendor_id"], "invoiceNumber": inv["invoice_number"],
+                "invoiceDate": inv["invoice_date"].isoformat(), "total": float(inv["total"]) if inv["total"] is not None else 0,
+                "source": inv["source"], "lines": [{
+                    "id": str(l["id"]), "itemCode": l["item_code"], "itemName": l["item_name"],
+                    "description": l["description"], "qty": float(l["qty"]),
+                    "unit": l["purchase_unit"], "unitPrice": float(l["unit_price"]) if l["unit_price"] is not None else 0,
+                    "extended": float(l["extended"]) if l["extended"] is not None else 0,
+                } for l in lines],
+            })
+        return out
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/invoices/{store_id}")
+async def pg_create_invoice(store_id: str, body: InvoiceIn):
+    check_store_id(store_id)
+    if not body.lines:
+        raise HTTPException(400, "Invoice needs at least one line")
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            total = sum((ln.qty or 0) * (ln.unit_price or 0) for ln in body.lines)
+            inv = await conn.fetchrow(
+                """INSERT INTO invoices (store_id, delivered_to, vendor_id, invoice_number, invoice_date, total, source, created_by)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *""",
+                store_id, body.delivered_to or store_id, body.vendor_id, body.invoice_number,
+                body.invoice_date, total, body.source or "manual", body.created_by)
+            for ln in body.lines:
+                extended = (ln.qty or 0) * (ln.unit_price or 0)
+                await conn.execute(
+                    """INSERT INTO invoice_lines (invoice_id, vendor_item_id, description, qty, purchase_unit, unit_price, extended)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7)""",
+                    inv["id"], ln.vendor_item_id, ln.description, ln.qty, ln.purchase_unit, ln.unit_price, extended)
+                if ln.vendor_item_id and ln.unit_price:
+                    await conn.execute(
+                        """UPDATE vendor_items SET price=$2, price_updated_at=now(), price_source='invoice'
+                           WHERE id=$1""", ln.vendor_item_id, ln.unit_price)
+            return {"ok": True, "id": str(inv["id"]), "total": float(total)}
+    finally:
+        await db_pg.pool().release(conn)
+
 app.include_router(api_router)
+app.include_router(pg_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -2484,6 +2712,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_pg_pool():
+    await db_pg.init_pool()
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+    await db_pg.close_pool()
