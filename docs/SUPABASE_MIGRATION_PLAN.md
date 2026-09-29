@@ -113,6 +113,23 @@ tables with no data and no dependents yet:
 - **`prep_overrides`**: rebuilt with `type` (add/remove, constrained), `custom_name`,
   `par`, `batches`, `note`, `created_by` replacing the step-1 sketch's `name`/`qty`.
 
+Also found while transforming the real data: `dishes` was missing `description`,
+`photo_url`, `portion_note`, `frequency` — real fields the current app uses on every
+menu item / prep recipe. Added via migration `dishes_missing_columns`.
+
+### Applied — dishes + dish_lines data (via `scripts/migrate_dishes.py`)
+
+13 dishes (8 menu, 5 prep) + 29 dish_lines (22 item-sourced, 7 prep-sourced) migrated
+and verified — 0 unresolved references (every `item_code`/`prep_dish_id` FK resolved
+cleanly). Recipe-to-recipe references (`sourceType: "prep"` lines, e.g. a pizza
+recipe pointing at its dough-batch prep recipe) were resolved by looking the target
+dish up by `(store_id, name)` after insertion — names are unique within each
+restaurant in the current data, so this needed no fabricated ids.
+
+**Next**: `prep_stock` → `prep_recipe_stock` and `prep_logs` (direct fits, small — 1
+and 24 rows), then the harder pieces: `prep_count_sessions` →
+`count_sessions`/`count_lines` and `prep_lists`+tasks → `prep_lists`/`prep_list_lines`.
+
 Verified via `information_schema.columns` — all three tables match this shape
 exactly.
 
