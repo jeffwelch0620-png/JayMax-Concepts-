@@ -1,10 +1,10 @@
 # MongoDB → Supabase (Postgres) Migration Plan
 
-Status: **step 2 in progress** — schema done (step 1), backend data-access code and
-real data for Vendors/Items/Invoices done; still needs local end-to-end verification
-and frontend wiring. `server.py`'s existing `/api/...` routes still run entirely on
-MongoDB and are untouched — nothing has cut over yet. This doc is the reference for
-that work as it continues across sessions.
+Status: **step 2 in progress, step 3 scoped** — schema and real data done for
+Vendors/Items/Invoices; step 3 (Prep) is scoped below but not built yet.
+`server.py`'s existing `/api/...` routes still run entirely on MongoDB and are
+untouched — nothing has cut over yet. This doc is the reference for that work as it
+continues across sessions.
 
 ## Applied migrations (step 1 — schema only)
 
@@ -64,6 +64,48 @@ Two real judgment calls made during this transform, worth knowing about:
   `DATABASE_URL` password).
 - Frontend wiring (Invoice Master / Item Setup / Vendors still read/write the
   Mongo-backed `/api/state/{rid}` and `/api/vendor-contacts/{rid}`).
+
+## Step 3 scope — Prep (not built yet)
+
+Mongo source collections: `dishes` (13 docs — both menu items and prep recipes,
+distinguished by `recipeType`), `prep_count_sessions` (7), `prep_lists` (5),
+`prep_logs` (24), `prep_overrides` (5), `prep_stock` (1). No `prep_items` Mongo
+collection exists at all — the Daily/Bulk "standing Prep Item" catalog feature is
+built in the app's code but nobody has ever actually created one in this database, so
+there's zero data to migrate for it, only behavior to support going forward.
+
+### Mapping
+
+| Mongo | Postgres | Notes |
+|---|---|---|
+| `dishes` (recipeType=menu/prep) | `dishes` + `dish_lines` | Same restaurant-scoped `controlNumber` problem as Items — recipe lines reference item control numbers, need the same `{restaurant}_{controlNumber}` remap. Prep-sourced lines (`sourceType: "prep"`) map to `dish_lines.prep_dish_id`. |
+| `prep_count_sessions` | `count_sessions` + `count_lines` | **Good native fit** — `count_sessions.count_type` already has `'nightly_prep'` and `'commissary'` values in its check constraint, which line up exactly with today's Daily/Bulk evening-count split. No `track` column needed; the type *is* the track. |
+| `prep_lists` (+ embedded `tasks[]`) | `prep_lists` + `prep_list_lines` | Existing `prep_list_lines` doesn't carry everything a Mongo task does (`yieldQty`, `neededUnits`, `uncounted`, `vesselName`) — needs a few more columns, or those get derived at read-time instead of stored. |
+| `prep_stock` | `prep_recipe_stock` (added in step 1) | Direct fit. |
+| `prep_logs` | `prep_logs` (added in step 1) | Direct fit — `usage[]`/`containers[]` map straight onto the existing `jsonb` columns. |
+| `prep_overrides` | `prep_overrides` (added in step 1) | Needs `custom_name`, `type` (add/remove?), `batches` columns added — the version from step 1 only sketched name/qty. |
+| *(nothing — feature unused)* | `prep_items` (already existed, part of the original 16) | **Schema gap**: only has `item_code`, no way to reference a *recipe*-sourced prep item (today's app supports both `sourceType: "item"` and `sourceType: "prep"`). Needs a nullable `recipe_id uuid REFERENCES dishes(id)` added alongside `item_code`. |
+
+### Two decisions worth making before building
+
+1. **`prep_items.made_at`** is a foreign key to `stores`, separate from `store_id` — meaning a prep item can be tracked at one store but *produced* at another. That's a more flexible mechanism than today's flat `track: daily|bulk` field, and maps naturally onto the commissary (`comm`) store already in `stores`. Two ways to use it:
+   - **Faithful port**: keep behavior identical to today — `store_id = made_at` always for "daily" items, and for "bulk" items `store_id` = the consuming restaurant while `made_at = 'comm'`. No new capability, just relocates the existing track concept.
+   - **Use the extra flexibility**: allow any store to be a `made_at` target for any other store (e.g. Rudd's making something for Bert's directly, not just via the commissary) — a real capability the current app doesn't have at all.
+   Recommend the faithful port for this pass — new cross-store production flows are a feature request of their own, not something to introduce silently as a side effect of a database migration.
+2. **`prep_overrides.type`**: Mongo's sample data only shows `"type": "add"` — need to confirm whether `"remove"` (or others) are real, used values before locking down a CHECK constraint, or leave it as a plain `text` column without a constraint for this pass.
+
+### Suggested build order within step 3
+
+1. Extend schema: `prep_items` gets `recipe_id`; `prep_list_lines` gets the missing task
+   fields; `prep_overrides` gets its real columns (superseding the step-1 sketch).
+2. Migrate `dishes` (both menu and prep recipes) + `dish_lines` — needed first since
+   everything else in Prep references a recipe.
+3. Migrate `prep_stock` → `prep_recipe_stock`, `prep_logs` (direct fits).
+4. Migrate `prep_count_sessions` → `count_sessions`/`count_lines`,
+   `prep_lists`+tasks → `prep_lists`/`prep_list_lines`, `prep_overrides`.
+5. Backend endpoints under `/api/pg/`: recipes/dishes CRUD (Menu Costing), Prep Items
+   catalog CRUD, Evening Count session flow, Prep List generate/release/complete-task,
+   prep stock deduction on task completion, prep logs, prep overrides.
 
 ## Decisions made so far
 
