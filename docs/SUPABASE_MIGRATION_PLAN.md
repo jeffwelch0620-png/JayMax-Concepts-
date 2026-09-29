@@ -86,13 +86,35 @@ there's zero data to migrate for it, only behavior to support going forward.
 | `prep_overrides` | `prep_overrides` (added in step 1) | Needs `custom_name`, `type` (add/remove?), `batches` columns added — the version from step 1 only sketched name/qty. |
 | *(nothing — feature unused)* | `prep_items` (already existed, part of the original 16) | **Schema gap**: only has `item_code`, no way to reference a *recipe*-sourced prep item (today's app supports both `sourceType: "item"` and `sourceType: "prep"`). Needs a nullable `recipe_id uuid REFERENCES dishes(id)` added alongside `item_code`. |
 
-### Two decisions worth making before building
+### Decisions (confirmed)
 
-1. **`prep_items.made_at`** is a foreign key to `stores`, separate from `store_id` — meaning a prep item can be tracked at one store but *produced* at another. That's a more flexible mechanism than today's flat `track: daily|bulk` field, and maps naturally onto the commissary (`comm`) store already in `stores`. Two ways to use it:
-   - **Faithful port**: keep behavior identical to today — `store_id = made_at` always for "daily" items, and for "bulk" items `store_id` = the consuming restaurant while `made_at = 'comm'`. No new capability, just relocates the existing track concept.
-   - **Use the extra flexibility**: allow any store to be a `made_at` target for any other store (e.g. Rudd's making something for Bert's directly, not just via the commissary) — a real capability the current app doesn't have at all.
-   Recommend the faithful port for this pass — new cross-store production flows are a feature request of their own, not something to introduce silently as a side effect of a database migration.
-2. **`prep_overrides.type`**: Mongo's sample data only shows `"type": "add"` — need to confirm whether `"remove"` (or others) are real, used values before locking down a CHECK constraint, or leave it as a plain `text` column without a constraint for this pass.
+1. **`prep_items.made_at`**: faithful port of today's behavior — `store_id = made_at`
+   for daily items, `made_at = 'comm'` for bulk items. The extra cross-store
+   flexibility the column technically allows is not used in this pass.
+2. **`prep_overrides.type`**: `CHECK (type IN ('add', 'remove'))` — both are real,
+   confirmed values.
+
+### Applied — schema extensions (migration `prep_schema_extensions`)
+
+All three of `prep_items`, `prep_list_lines`, `prep_overrides` were empty (verified
+before altering), so `prep_list_lines`/`prep_overrides` were dropped and recreated
+rather than patched with ALTERs — cleaner than accumulating ALTER statements for
+tables with no data and no dependents yet:
+
+- **`prep_items`**: added `recipe_id uuid REFERENCES dishes(id)`, plus
+  `CHECK (num_nonnulls(item_code, recipe_id) = 1)` — a prep item is sourced from
+  exactly one of an inventory item or a recipe, never both, never neither.
+- **`prep_list_lines`**: rebuilt with a surrogate `id` primary key (the old
+  `(list_id, prep_item_id)` composite couldn't hold once a task might have no
+  `prep_item_id` — recipe-direct or freeform override-added tasks). Added
+  `recipe_id`, `task_type`, `name`, `yield_uom`, `yield_qty`, `uncounted`,
+  `needed_units`, `batches_planned`, `batches_done`, `vessel_name`, `note`, `removed`
+  — matching the real Mongo task shape.
+- **`prep_overrides`**: rebuilt with `type` (add/remove, constrained), `custom_name`,
+  `par`, `batches`, `note`, `created_by` replacing the step-1 sketch's `name`/`qty`.
+
+Verified via `information_schema.columns` — all three tables match this shape
+exactly.
 
 ### Suggested build order within step 3
 
