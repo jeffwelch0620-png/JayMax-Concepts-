@@ -1,7 +1,15 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Save, Upload } from "lucide-react";
+import { Plus, Trash2, Save, Upload, ChevronDown, ChevronRight } from "lucide-react";
 import { VENDORS, PURCHASE_UNITS, todayISO, fmtDate, fmtMoney, uid, parseCSV, detectVendorFormat, rowsToObjects, normalizePFGRows, normalizeUSFoodsRows, matchRowToItem, suggestMatch } from "../lib/calc";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost } from "./common";
+
+function isoOf(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+const DATE_FILTERS = [
+  { id: "all", label: "All Time" },
+  { id: "week", label: "This Week" },
+  { id: "month", label: "This Month" },
+  { id: "custom", label: "Custom Range" },
+];
 
 export function InvoicesTab({ items, persistItems, purchases, persistPurchases, showToast, restaurantName }) {
   const [mode, setMode] = useState("auto");
@@ -156,6 +164,47 @@ export function InvoicesTab({ items, persistItems, purchases, persistPurchases, 
     showToast(`Imported ${newPurchases.length} line item${newPurchases.length !== 1 ? "s" : ""} across ${Object.keys(invoiceIdByGroup).length} invoice${Object.keys(invoiceIdByGroup).length !== 1 ? "s" : ""}`);
     setAutoRows([]); setSkippedFiles([]); setOverrides({});
   }
+
+  // ---------------- Recent Purchases: search/filter + invoice grouping ----------------
+  const [dateMode, setDateMode] = useState("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("all");
+  const [expandedInvoice, setExpandedInvoice] = useState(null);
+
+  const dateRange = useMemo(() => {
+    const now = new Date();
+    if (dateMode === "week") {
+      const start = new Date(now); start.setDate(now.getDate() - now.getDay());
+      const end = new Date(start); end.setDate(start.getDate() + 6);
+      return { from: isoOf(start), to: isoOf(end) };
+    }
+    if (dateMode === "month") {
+      return { from: isoOf(new Date(now.getFullYear(), now.getMonth(), 1)), to: isoOf(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
+    }
+    if (dateMode === "custom") return { from: customFrom || null, to: customTo || null };
+    return { from: null, to: null };
+  }, [dateMode, customFrom, customTo]);
+
+  const filteredPurchases = useMemo(() => purchases.filter((p) => {
+    if (vendorFilter !== "all" && p.vendor !== vendorFilter) return false;
+    if (dateRange.from && p.invoiceDate < dateRange.from) return false;
+    if (dateRange.to && p.invoiceDate > dateRange.to) return false;
+    return true;
+  }), [purchases, vendorFilter, dateRange]);
+
+  function groupByInvoice(list) {
+    const map = {};
+    list.forEach((p) => {
+      const key = p.invoiceId || `${p.vendor}|${p.invoiceNumber}|${p.invoiceDate}`;
+      if (!map[key]) map[key] = { key, invoiceNumber: p.invoiceNumber, vendor: p.vendor, invoiceDate: p.invoiceDate, lines: [], total: 0 };
+      map[key].lines.push(p);
+      map[key].total += Number(p.extendedCost) || 0;
+    });
+    return Object.values(map).sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
+  }
+  const invoiceGroups = useMemo(() => groupByInvoice(filteredPurchases), [filteredPurchases]);
+  const allInvoiceCount = useMemo(() => groupByInvoice(purchases).length, [purchases]);
 
   const [csvRows, setCsvRows] = useState(null);
   const [csvHeaders, setCsvHeaders] = useState([]);
@@ -370,20 +419,69 @@ export function InvoicesTab({ items, persistItems, purchases, persistPurchases, 
         </div>
       )}
 
-      <SectionLabel>Recent Purchases ({purchases.length} total)</SectionLabel>
+      <SectionLabel>Invoices ({invoiceGroups.length} of {allInvoiceCount} total)</SectionLabel>
       {purchases.length === 0 ? <EmptyState text="No purchases logged yet." /> : (
-        <div className={`${cardCls} overflow-hidden`}>
-          <div className="overflow-x-auto">
-            <table className="ops-table">
-              <thead><tr><th>Date</th><th>Invoice #</th><th>Vendor</th><th>Item</th><th>Qty</th><th>Ext. Cost</th></tr></thead>
-              <tbody>
-                {[...purchases].sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate)).slice(0, 25).map((p) => (
-                  <tr key={p.id}><td>{fmtDate(p.invoiceDate)}</td><td>{p.invoiceNumber}</td><td>{p.vendor}</td><td>{p.controlNumber} — {p.itemName}</td><td className="num">{p.qty} {p.unit}</td><td className="num">{fmtMoney(p.extendedCost)}</td></tr>
-                ))}
-              </tbody>
-            </table>
+        <>
+          <div className={`${cardCls} p-4 mb-3 flex flex-wrap gap-3 items-end`} data-testid="invoice-filters">
+            <div className="flex gap-2 flex-wrap">
+              {DATE_FILTERS.map((f) => (
+                <button key={f.id} className={dateMode === f.id ? btnAcc : btnGhost} onClick={() => setDateMode(f.id)} data-testid={`invoice-date-filter-${f.id}`}>{f.label}</button>
+              ))}
+            </div>
+            {dateMode === "custom" && (
+              <div className="flex gap-2 items-end">
+                <Field label="From"><input type="date" className={inpCls} value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} data-testid="invoice-date-from" /></Field>
+                <Field label="To"><input type="date" className={inpCls} value={customTo} onChange={(e) => setCustomTo(e.target.value)} data-testid="invoice-date-to" /></Field>
+              </div>
+            )}
+            <Field label="Vendor">
+              <select className={inpCls} value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)} data-testid="invoice-vendor-filter">
+                <option value="all">All Vendors</option>
+                {VENDORS.map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </Field>
           </div>
-        </div>
+          {invoiceGroups.length === 0 ? <EmptyState text="No invoices match those filters." /> : (
+            <div className={`${cardCls} overflow-hidden`}>
+              <div className="overflow-x-auto">
+                <table className="ops-table" data-testid="invoice-list-table">
+                  <thead><tr><th></th><th>Date</th><th>Invoice #</th><th>Vendor</th><th>Line Items</th><th>Total</th></tr></thead>
+                  <tbody>
+                    {invoiceGroups.map((g) => {
+                      const open = expandedInvoice === g.key;
+                      return (
+                        <React.Fragment key={g.key}>
+                          <tr onClick={() => setExpandedInvoice(open ? null : g.key)} className="cursor-pointer hover:bg-white/[0.03]" data-testid={`invoice-row-${g.key}`}>
+                            <td>{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
+                            <td>{fmtDate(g.invoiceDate)}</td>
+                            <td>{g.invoiceNumber}</td>
+                            <td>{g.vendor}</td>
+                            <td className="num">{g.lines.length}</td>
+                            <td className="num">{fmtMoney(g.total)}</td>
+                          </tr>
+                          {open && (
+                            <tr>
+                              <td colSpan={6} style={{ background: "rgba(255,255,255,0.02)" }}>
+                                <table className="ops-table" data-testid={`invoice-lines-${g.key}`}>
+                                  <thead><tr><th>Item</th><th>Qty</th><th>Unit Cost</th><th>Ext. Cost</th></tr></thead>
+                                  <tbody>
+                                    {g.lines.map((l) => (
+                                      <tr key={l.id}><td>{l.controlNumber} — {l.itemName}</td><td className="num">{l.qty} {l.unit}</td><td className="num">{fmtMoney(l.unitCost)}</td><td className="num">{fmtMoney(l.extendedCost)}</td></tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
