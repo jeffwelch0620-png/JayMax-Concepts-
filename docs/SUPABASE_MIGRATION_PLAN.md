@@ -1,8 +1,9 @@
 # MongoDB → Supabase (Postgres) Migration Plan
 
-Status: **step 1 done** — all 14 new tables + the `store_items`/`vendor_items` column
-additions are live in Supabase (8 tracked migrations, see below). No application code
-changed yet; `server.py` still runs entirely on MongoDB. This doc is the reference for
+Status: **step 2 in progress** — schema done (step 1), backend data-access code and
+real data for Vendors/Items/Invoices done; still needs local end-to-end verification
+and frontend wiring. `server.py`'s existing `/api/...` routes still run entirely on
+MongoDB and are untouched — nothing has cut over yet. This doc is the reference for
 that work as it continues across sessions.
 
 ## Applied migrations (step 1 — schema only)
@@ -26,8 +27,43 @@ already existed — consistent with the "backend connects via service role, RLS
 deferred" decision below. Verified via `list_tables`: 30 tables total in `public`,
 `stores` still has its original 4 rows untouched.
 
-**Next**: step 2, Vendors → Items → Invoices — build the FastAPI/Postgres data-access
-code and migrate real data for that slice first.
+## Step 2 progress — Vendors / Items / Invoices
+
+**Backend code** (`backend/db_pg.py`, new `/api/pg/*` routes in `server.py`): done,
+committed. Connection fails open — if Postgres is unreachable (e.g. `DATABASE_URL`'s
+password placeholder isn't filled in), the app still boots and every existing
+Mongo-backed route keeps working; only `/api/pg/*` 503s. Verified locally: server
+starts clean, `/api/health` still 200, `/api/pg/vendors` 503s cleanly rather than
+crashing, full pytest suite unchanged.
+
+**Real data migrated** (via `scripts/migrate_items_and_invoices.py`, applied through
+the Supabase MCP connection — doesn't need `DATABASE_URL`): 20 items, 20 store_items,
+22 vendor_items, 9 invoices, 16 invoice_lines. Verified: `sum(invoice_lines.extended)`
+equals `sum(invoices.total)` exactly ($1,607.98), confirming no lines were dropped or
+double-counted.
+
+Two real judgment calls made during this transform, worth knowing about:
+
+- **`items.code` is generated as `{mongoRestaurantId}_{controlNumber}`** (e.g.
+  `berts_WI-001`), not the bare `controlNumber`. Mongo's `controlNumber` is only
+  unique *within* a restaurant — the same code ("WI-001") refers to three completely
+  different real products across the three restaurants in the current data. This
+  migration treats every (restaurant, controlNumber) pair as its own item rather than
+  guessing which items are "actually the same product" across locations.
+  **Recognizing genuine cross-location duplicates and consolidating them is a real
+  data-quality decision for later, not something this pass did.**
+- **One purchase (`INV-100902`, Paper Napkins at berts) was recorded against a
+  different vendor (US Foods) than the item's only known SKU (Webstaurant)** — a real
+  inconsistency already present in the source Mongo data, not introduced by the
+  transform. Preserved as-recorded: a second `vendor_items` row was added
+  (`us_foods`/`berts_OF-001`, marked non-preferred, no real SKU number on file) rather
+  than silently reassigning that purchase to Webstaurant.
+
+**Not done yet**:
+- Local end-to-end verification of the `/api/pg/*` endpoints (blocked on the real
+  `DATABASE_URL` password).
+- Frontend wiring (Invoice Master / Item Setup / Vendors still read/write the
+  Mongo-backed `/api/state/{rid}` and `/api/vendor-contacts/{rid}`).
 
 ## Decisions made so far
 
