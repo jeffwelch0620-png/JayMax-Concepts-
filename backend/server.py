@@ -4376,6 +4376,8 @@ async def pg_staff_task_complete(store_id: str, task_id: str, body: PgStaffTaskC
             task = await conn.fetchrow("SELECT * FROM staff_tasks WHERE id=$1 AND store_id=$2 FOR UPDATE", task_id, store_id)
             if not task:
                 raise HTTPException(404, "task not found")
+            if task["status"] != "pending":
+                raise HTTPException(409, "Task is already complete")
             next_due = None
             if task["recurrence"] == "daily":
                 next_due = (datetime.fromisoformat(_pg_today()) + timedelta(days=1)).date()
