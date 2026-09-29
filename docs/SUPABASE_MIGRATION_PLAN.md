@@ -1,12 +1,155 @@
 # MongoDB → Supabase (Postgres) Migration Plan
 
-Status: **step 3 backend endpoints done (not live-verified), step 2 frontend wiring
-still pending**. All real MongoDB data (Vendors/Items/Invoices from step 2, all of
-Prep from step 3) is in Supabase. `/api/pg/*` backend code now exists for both areas.
-`server.py`'s existing `/api/...` routes still run entirely on MongoDB and are
-untouched — nothing has cut over yet, and no `/api/pg/*` endpoint has been exercised
-against a live connection (still needs the real `DATABASE_URL` password). This doc is
-the reference for that work as it continues across sessions.
+Status: **frontend wiring chunks 1-4 done (Prep, Items/Purchases, Dishes/Recipes),
+all gated behind `USE_PG` (default off); chunks 5-6 remain**. All real MongoDB data is
+in Supabase, `/api/pg/*` has full backend coverage for Vendors/Items/Invoices/Dishes/
+Prep, and the frontend (`frontend/src/lib/api.js`) can route through it end-to-end via
+`REACT_APP_USE_PG=true`. `server.py`'s existing `/api/...` routes still run entirely on
+MongoDB and are untouched — nothing has cut over for real users yet, and no `/api/pg/*`
+endpoint has been exercised against a live connection (still needs the real
+`DATABASE_URL` password — that's chunk 6). This doc is the reference for that work as
+it continues across sessions.
+
+## Frontend wiring plan
+
+The two backend areas have genuinely different API shapes on the frontend today,
+which is what actually determines how this splits into chunks — not the backend's
+Vendors/Items/Invoices vs. Prep split:
+
+- **Prep is already granular.** `lib/api.js`'s prep functions
+  (`getCountSession`, `saveCountEntry`, `generatePrepList`, `completeTask`,
+  `listPrepItems`, etc.) each call one specific action endpoint, and the new
+  `/api/pg/prepcount`/`/api/pg/preplists`/`/api/pg/prep-items`/`/api/pg/prep-overrides`
+  endpoints were deliberately built to return the same field shapes. Wiring this is
+  mostly swapping which base path these functions hit, component code barely changes.
+- **Items/Purchases/Invoices/Vendors are not.** They all flow through one generic
+  blob: `fetchState(rid)` returns `{items, purchases, dishes, adjustments, prepStock,
+  prepLogs, salesPeriod, areas, reportingPeriods}` in one call, and `putCollection`
+  replaces an entire array at once. The new endpoints are proper granular REST
+  (`GET/POST /api/pg/items/{store}`, `GET/POST /api/pg/invoices/{store}`, etc.). There
+  is no direct swap here — something has to reshape one into the other.
+
+Chunks, in order:
+
+1. **API client additions** (`lib/api.js`) — add every new `/api/pg/*` call as its own
+   function, no component changes yet. Safe, mechanical, needed regardless of what
+   comes after. ✅ Done — ~26 `pg*`-prefixed functions added, dev server compiled clean.
+2. **Prep frontend wiring** — ✅ Done, gated behind a flag. `DATABASE_URL` still has a
+   placeholder password, so `/api/pg/*` 503s locally — cutting `PrepTab.js` straight
+   over to `pg*` calls would have broken the live Prep tab until that password lands.
+   Instead, the *existing* exported function names in `lib/api.js`
+   (`getCountSession`, `saveCountEntry`, `submitCount`, `countHistory`, `getPrepList`,
+   `generatePrepList`, `updatePrepList`, `releasePrepList`, `completeTask`,
+   `addItemToList`, `listPrepItems`, `createPrepItem`, `updatePrepItem`,
+   `deletePrepItem`, `listOverrides`, `addOverride`, `deleteOverride`,
+   `applyPrepSales`, `useContainer`) now dispatch to either the Mongo route or the
+   matching `pg*` function based on `const USE_PG = process.env.REACT_APP_USE_PG ===
+   "true"` — default `false`, so nothing changes for the running app today.
+   `PrepTab.js` itself was **not touched** — it still calls plain `api.getCountSession`
+   etc., unaware of the flag. When `USE_PG` is on, `pgStoreId(rid)` remaps the
+   Mongo-side restaurant id to the Postgres store id (`papa_leonis` → `papa`; `berts`/
+   `rudds` unchanged) before calling the `pg*` function. `prepReport`,
+   `getProjections`/`putProjection`, `getStaffPin`/`verifyStaffPin`, and
+   `getParRecs`/`applyParRec`/`dismissParRec` (Planning tab's projections, PIN, AI par
+   advisor, and the Inventory Log's date-range report) have **no pg backend yet** and
+   are untouched — they stay on Mongo regardless of the flag until that backend work
+   happens. To exercise the pg path once `DATABASE_URL` is real: set
+   `REACT_APP_USE_PG=true` in `frontend/.env` and restart the dev server.
+3. **State-blob adapter for Items/Purchases/Invoices/Vendors** — ✅ Done, also gated
+   behind `USE_PG`.
+   - **Schema gap found and fixed first**: the frontend's `itemDerived()` (`calc.js`)
+     computes `portionsPerUnit`/`costPerPortion` from an item's `packCount`/`unitQty`/
+     `unitUOM`/`portionSize`/`portionUOM` (and per-vendor-SKU overrides of the same), plus
+     a Mongo `itemType` field (`"portion"`/`"usage"`, a costing-granularity flag —
+     unrelated to Postgres's same-named `item_type` classification column). None of that
+     existed in the pg schema; it only stored the pre-collapsed `base_per_count_unit`/
+     `base_per_purchase_unit`, which can't be reverse-engineered into pack/unit
+     components. Building the adapter on top of that would have silently produced wrong
+     cost-per-portion numbers. Fixed via migration `add_item_costing_fields`: added
+     `costing_type`/`pack_count`/`unit_qty`/`unit_uom`/`portion_size`/`portion_uom` to
+     `items`, `order_enabled`/`sales_tracked`/`needs_review` to `store_items` (and started
+     using the table's pre-existing, previously-unused `active` column), and
+     `pack_count`/`unit_qty`/`unit_uom` to `vendor_items`. Backfilled all 20
+     already-migrated items from the original Mongo export
+     (`scripts/backfill_item_costing_fields.py`) rather than guessing — verified 0 items
+     missing pack data after.
+   - **Backend fixes made alongside** (`backend/server.py`): `ItemIn`/`VendorSkuIn`/
+     `_item_row_to_api` extended for the new fields; `pg_create_item`'s vendor-SKU insert
+     was append-only (no upsert) — editing an item and re-saving would have duplicated
+     every SKU row on each save, so it now deletes and re-inserts the item's vendor_items
+     on every save (a save always carries the item's complete list, same "whole document"
+     semantics as Mongo); added `DELETE /api/pg/items/{store_id}/{code}` (didn't exist —
+     needed so `putCollection("items", ...)` can express a real deletion), which also
+     drops the global `items`/`vendor_items` rows once no store references them.
+   - **The adapter** (`frontend/src/lib/api.js`): `fetchState`/`putCollection` now branch
+     on `USE_PG` for exactly `name === "items"`/`"purchases"` — dishes/adjustments/
+     prepStock/salesPeriod/areas/reportingPeriods still always come from Mongo (chunk 4
+     territory). `pgItemToMongoItem`/`mongoItemToPgBody` translate item shape both ways,
+     `pgFetchItemsAndPurchases` flattens pg's grouped `invoices[].lines[]` into Mongo's
+     flat one-record-per-line `purchases` shape, `pgPutItems`/`pgPutPurchases` diff the
+     incoming array against a fresh pg fetch to turn "whole array replace" into
+     create/update/delete calls against the granular endpoints. `VENDOR_NAME_TO_ID`
+     mirrors the same 5-vendor map `scripts/migrate_items_and_invoices.py` used for the
+     original data migration. Every existing component (Dashboard, Setup, Invoices,
+     Purchase Orders, Adjustments, History, Costing) keeps reading `items`/`purchases`
+     exactly as before — untouched.
+   - **Known limitations** (documented, not blocking since `USE_PG` defaults off):
+     an invoice line's vendor must be one of those same 5 canonical vendors — a
+     free-text vendor name from CSV auto-import falls back to `"other"`; purchases/
+     invoices are only ever appended by the adapter, never edited or deleted (matches
+     what `InvoicesTab.js` actually does today — nothing edits purchase history); a
+     vendor SKU's free-text `packDescription` (e.g. "50lb bag") isn't stored in Postgres
+     at all, so the adapter reconstructs a generic one from pack/unit numbers instead of
+     round-tripping the original text.
+4. **Dishes/Recipes** (Menu, Costing, Recipe Cards) — ✅ Done, gated behind `USE_PG`.
+   - **No pg endpoints existed at all** — `dishes`/`dish_lines` had real migrated data
+     (13 dishes) and Prep's own backend already read them internally for its own math
+     (`_pg_raw_portions` etc.), but nothing exposed a list/create/update/delete REST
+     surface for the frontend. Added `GET/POST /api/pg/dishes/{store_id}` and
+     `DELETE /api/pg/dishes/{store_id}/{dish_id}` (`backend/server.py`), mirroring the
+     Items pattern: POST upserts (an `id` in the body updates that dish, no `id` creates
+     one), and a save fully replaces that dish's `dish_lines` (delete-then-reinsert,
+     same "whole document" semantics as items' vendor_skus). Delete relies on the
+     schema's existing FK constraints (`dish_lines.prep_dish_id`, `prep_logs`,
+     `prep_items`, `prep_list_lines`, `prep_overrides`, `count_lines` all reference
+     `dishes.id` without `ON DELETE CASCADE`) and translates the resulting
+     `ForeignKeyViolationError` into a clean 400 instead of a 500 — verified against the
+     real database (deleting a prep recipe still referenced by another recipe's lines
+     correctly raises `23503`, caught as expected).
+   - **A real id-shape difference, not glossed over**: pg dish ids are actual Postgres
+     uuids; the Mongo side uses client-generated strings (`uid()` in `calc.js`, e.g.
+     `"dish_m1x2y3_ab12c"`). Prep's chunk-2 endpoints already return pg uuids as
+     `recipeId` everywhere (prep stock, prep list tasks, overrides). So the adapter
+     presents `dish.id` as the real pg uuid (not a translated/preserved Mongo id) —
+     the only choice consistent with what chunk 2 already shipped — and
+     `mongoDishToPgBody` (`frontend/src/lib/api.js`) detects a non-uuid `id` (a
+     brand-new dish from `CostingTab`'s `emptyDish()`) and omits it so the backend
+     inserts a fresh row rather than trying to `UPDATE ... WHERE id = 'dish_xxx'`.
+   - **Known limitation, real and unresolved**: `reportingPeriods.dishSales` (Sales
+     Tracking, `SalesTrackingTab.js`) is keyed by the OLD Mongo dish id and is not
+     migrated or remapped by this chunk. Under `USE_PG`, Sales Tracking's per-dish
+     sales lookups will not resolve against the new uuids — that tab needs its own
+     migration pass (out of this chunk's scope: Menu/Costing/Recipe Cards) before a
+     real cutover. Also unhandled: creating a brand-new prep recipe and a brand-new
+     menu item referencing it in the *same* save isn't dependency-ordered (dish_lines'
+     FK needs the prep dish saved first) — the adapter saves sequentially in array
+     order rather than in parallel specifically so normal one-dish-at-a-time edits
+     stay safe, but a batch of new cross-referencing dishes in one save could still hit
+     the FK before its target exists. Matches how `CostingTab.js` is actually used
+     (one dish edited and saved at a time) — not a live risk today.
+   - Legacy `qtyPortions` alias on dish lines (some old records use it instead of
+     `qty`) is read as a fallback on write; the adapter always emits `qty` on read.
+5. **Staff PIN portal (PWA)** — not started on the backend at all yet. The
+   manager-facing prep/count endpoints wired in chunk 2 are separate from the
+   PIN-portal ones (`/api/staff/{rid}/prepsheet`, `/api/staff/{rid}/counts`, etc.) —
+   those need their own `/api/pg/staff/*` backend work before this can be wired.
+6. **Live verification** — once the real `DATABASE_URL` password is available,
+   actually exercise all of the above against a running local backend + browser,
+   the same way every other piece of this migration has been verified so far.
+
+Given none of this is live-tested yet (still blocked on the password), each chunk
+gets built and reviewed the same way the backend was — logically verified, committed,
+documented — with actual browser verification deferred to chunk 6.
 
 ## Applied migrations (step 1 — schema only)
 

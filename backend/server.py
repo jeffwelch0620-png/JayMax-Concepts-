@@ -13,6 +13,7 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 from pymongo import UpdateOne
+import asyncpg
 import db_pg
 try:
     from pywebpush import webpush, WebPushException
@@ -2527,6 +2528,9 @@ class VendorSkuIn(BaseModel):
     vendor_description: Optional[str] = None
     purchase_unit: str = "case"
     base_per_purchase_unit: Optional[float] = None
+    pack_count: Optional[float] = None
+    unit_qty: Optional[float] = None
+    unit_uom: Optional[str] = None
     price: Optional[float] = None
     preferred: bool = False
     available: bool = True
@@ -2539,12 +2543,25 @@ class ItemIn(BaseModel):
     item_type: str = "raw"
     is_high_value: bool = False
     notes: Optional[str] = None
+    # costing fields (Chunk 3 addition -- mirrors the Mongo item's itemType/pack*/portion*,
+    # which the frontend's itemDerived() needs to compute portionsPerUnit/costPerPortion the
+    # same way it does today; see docs/SUPABASE_MIGRATION_PLAN.md)
+    costing_type: str = "portion"  # "portion" | "usage" -- unrelated to item_type above
+    pack_count: Optional[float] = None
+    unit_qty: Optional[float] = None
+    unit_uom: Optional[str] = None
+    portion_size: Optional[float] = None
+    portion_uom: Optional[str] = None
     # store_items fields
     count_unit: str = "case"
     base_per_count_unit: float = 1
     storage_area: Optional[str] = None
     counted_nightly: bool = False
     par: float = 0
+    active: bool = True
+    order_enabled: bool = True
+    sales_tracked: bool = True
+    needs_review: bool = False
     vendor_skus: List[VendorSkuIn] = []
 
 async def _item_row_to_api(conn, store_id, item_row, store_item_row):
@@ -2555,10 +2572,21 @@ async def _item_row_to_api(conn, store_id, item_row, store_item_row):
         "code": item_row["code"], "name": item_row["name"], "category": item_row["category"],
         "baseUnit": item_row["base_unit"], "itemType": item_row["item_type"],
         "isHighValue": item_row["is_high_value"], "notes": item_row["notes"],
+        "costingType": item_row["costing_type"],
+        "packCount": float(item_row["pack_count"]) if item_row["pack_count"] is not None else None,
+        "unitQty": float(item_row["unit_qty"]) if item_row["unit_qty"] is not None else None,
+        "unitUOM": item_row["unit_uom"],
+        "portionSize": float(item_row["portion_size"]) if item_row["portion_size"] is not None else None,
+        "portionUOM": item_row["portion_uom"],
         "countUnit": store_item_row["count_unit"] if store_item_row else None,
         "basePerCountUnit": float(store_item_row["base_per_count_unit"]) if store_item_row else None,
         "storageArea": store_item_row["storage_area"] if store_item_row else None,
         "countedNightly": store_item_row["counted_nightly"] if store_item_row else False,
+        "active": store_item_row["store_active"] if store_item_row else True,
+        "countActive": store_item_row["store_active"] if store_item_row else True,
+        "orderEnabled": store_item_row["order_enabled"] if store_item_row else True,
+        "salesTracked": store_item_row["sales_tracked"] if store_item_row else True,
+        "needsReview": store_item_row["needs_review"] if store_item_row else False,
         "currentStock": float(store_item_row["current_stock"]) if store_item_row else 0,
         "par": float(store_item_row["par"]) if store_item_row else 0,
         "lastCounted": store_item_row["last_counted"].isoformat() if store_item_row and store_item_row["last_counted"] else None,
@@ -2568,6 +2596,9 @@ async def _item_row_to_api(conn, store_id, item_row, store_item_row):
             "vendorSku": s["vendor_sku"], "vendorDescription": s["vendor_description"],
             "purchaseUnit": s["purchase_unit"],
             "basePerPurchaseUnit": float(s["base_per_purchase_unit"]) if s["base_per_purchase_unit"] is not None else None,
+            "packCount": float(s["pack_count"]) if s["pack_count"] is not None else None,
+            "unitQty": float(s["unit_qty"]) if s["unit_qty"] is not None else None,
+            "unitUOM": s["unit_uom"],
             "price": float(s["price"]) if s["price"] is not None else None,
             "priceUpdatedAt": s["price_updated_at"].isoformat() if s["price_updated_at"] else None,
             "priceSource": s["price_source"], "preferred": s["preferred"], "available": s["available"],
@@ -2581,7 +2612,8 @@ async def pg_list_items(store_id: str):
     try:
         rows = await conn.fetch(
             """SELECT i.*, si.count_unit, si.base_per_count_unit, si.storage_area, si.counted_nightly,
-                      si.current_stock, si.par, si.last_counted, si.last_counted_by
+                      si.current_stock, si.par, si.last_counted, si.last_counted_by,
+                      si.active AS store_active, si.order_enabled, si.sales_tracked, si.needs_review
                FROM items i JOIN store_items si ON si.item_code = i.code
                WHERE si.store_id = $1 ORDER BY i.name""", store_id)
         return [await _item_row_to_api(conn, store_id, r, r) for r in rows]
@@ -2595,29 +2627,53 @@ async def pg_create_item(store_id: str, body: ItemIn):
     try:
         async with conn.transaction():
             await conn.execute(
-                """INSERT INTO items (code, name, category, base_unit, item_type, is_high_value, notes)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7)
+                """INSERT INTO items (code, name, category, base_unit, item_type, is_high_value, notes,
+                       costing_type, pack_count, unit_qty, unit_uom, portion_size, portion_uom)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                    ON CONFLICT (code) DO UPDATE SET name=$2, category=$3, base_unit=$4,
-                       item_type=$5, is_high_value=$6, notes=$7, updated_at=now()""",
-                body.code, body.name, body.category, body.base_unit, body.item_type, body.is_high_value, body.notes)
+                       item_type=$5, is_high_value=$6, notes=$7, costing_type=$8, pack_count=$9,
+                       unit_qty=$10, unit_uom=$11, portion_size=$12, portion_uom=$13, updated_at=now()""",
+                body.code, body.name, body.category, body.base_unit, body.item_type, body.is_high_value, body.notes,
+                body.costing_type, body.pack_count, body.unit_qty, body.unit_uom, body.portion_size, body.portion_uom)
             si = await conn.fetchrow(
                 """INSERT INTO store_items (store_id, item_code, count_unit, base_per_count_unit,
-                       storage_area, counted_nightly, par)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7)
+                       storage_area, counted_nightly, par, active, order_enabled, sales_tracked, needs_review)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                    ON CONFLICT (store_id, item_code) DO UPDATE SET count_unit=$3,
-                       base_per_count_unit=$4, storage_area=$5, counted_nightly=$6, par=$7
-                   RETURNING *""",
+                       base_per_count_unit=$4, storage_area=$5, counted_nightly=$6, par=$7,
+                       active=$8, order_enabled=$9, sales_tracked=$10, needs_review=$11
+                   RETURNING *, active AS store_active""",
                 store_id, body.code, body.count_unit, body.base_per_count_unit, body.storage_area,
-                body.counted_nightly, body.par)
+                body.counted_nightly, body.par, body.active, body.order_enabled, body.sales_tracked, body.needs_review)
+            # Full replace, not append -- a save always carries the item's complete vendor_skus
+            # list (same "whole document" semantics as the Mongo side's putCollection), and SKUs
+            # have no stable id from the frontend to upsert against.
+            await conn.execute("DELETE FROM vendor_items WHERE item_code = $1", body.code)
             for sk in body.vendor_skus:
                 await conn.execute(
                     """INSERT INTO vendor_items (vendor_id, vendor_sku, vendor_description, item_code,
-                           purchase_unit, base_per_purchase_unit, price, price_updated_at, price_source, preferred, available)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7, CASE WHEN $7 IS NOT NULL THEN now() END, 'manual', $8, $9)""",
+                           purchase_unit, base_per_purchase_unit, pack_count, unit_qty, unit_uom,
+                           price, price_updated_at, price_source, preferred, available)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, CASE WHEN $10 IS NOT NULL THEN now() END, 'manual', $11, $12)""",
                     sk.vendor_id, sk.vendor_sku, sk.vendor_description, body.code, sk.purchase_unit,
-                    sk.base_per_purchase_unit, sk.price, sk.preferred, sk.available)
+                    sk.base_per_purchase_unit, sk.pack_count, sk.unit_qty, sk.unit_uom, sk.price, sk.preferred, sk.available)
             item_row = await conn.fetchrow("SELECT * FROM items WHERE code=$1", body.code)
             return await _item_row_to_api(conn, store_id, item_row, si)
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.delete("/items/{store_id}/{code}")
+async def pg_delete_item(store_id: str, code: str):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            deleted = await conn.execute("DELETE FROM store_items WHERE store_id=$1 AND item_code=$2", store_id, code)
+            other_stores = await conn.fetchval("SELECT count(*) FROM store_items WHERE item_code=$1", code)
+            if other_stores == 0:
+                await conn.execute("DELETE FROM vendor_items WHERE item_code=$1", code)
+                await conn.execute("DELETE FROM items WHERE code=$1", code)
+            return {"ok": True, "deleted": deleted != "DELETE 0"}
     finally:
         await db_pg.pool().release(conn)
 
@@ -2698,6 +2754,125 @@ async def pg_create_invoice(store_id: str, body: InvoiceIn):
                         """UPDATE vendor_items SET price=$2, price_updated_at=now(), price_source='invoice'
                            WHERE id=$1""", ln.vendor_item_id, ln.unit_price)
             return {"ok": True, "id": str(inv["id"]), "total": float(total)}
+    finally:
+        await db_pg.pool().release(conn)
+
+# ---------------- Dishes (menu items + prep recipes) ----------------
+# Dish ids here are real Postgres uuids -- unlike the Mongo side's client-generated
+# "dish_xxx"/"prep_xxx" strings. Prep's own endpoints above (prep_recipe_stock,
+# prep_logs, prep_overrides) already key everything by this same uuid, so once the
+# frontend adapter is wired to /api/pg/dishes those stay consistent with each other.
+# reportingPeriods.dishSales (still Mongo-only, not migrated) is keyed by the OLD
+# Mongo dish id and is NOT remapped here -- see the Chunk 4 note in
+# docs/SUPABASE_MIGRATION_PLAN.md.
+class DishLineIn(BaseModel):
+    source_type: str  # "item" | "prep"
+    item_code: Optional[str] = None
+    prep_dish_id: Optional[str] = None
+    qty: float = 0
+
+class DishIn(BaseModel):
+    id: Optional[str] = None  # set -> update that dish; absent -> create
+    name: str
+    menu_code: Optional[str] = None
+    recipe_type: str = "menu"
+    price: Optional[float] = None
+    target_pct: Optional[float] = None
+    yield_qty: Optional[float] = None
+    yield_uom: Optional[str] = None
+    prep_par: Optional[float] = None
+    procedure: Optional[str] = None
+    equipment: Optional[str] = None
+    shelf_life: Optional[str] = None
+    menu_category: Optional[str] = None
+    description: Optional[str] = None
+    photo_url: Optional[str] = None
+    portion_note: Optional[str] = None
+    frequency: Optional[str] = None
+    lines: List[DishLineIn] = []
+
+def _dish_row_to_api(row, lines):
+    return {
+        "id": str(row["id"]), "name": row["name"], "menuCode": row["menu_code"], "recipeType": row["recipe_type"],
+        "price": float(row["price"]) if row["price"] is not None else None,
+        "targetPct": float(row["target_pct"]) if row["target_pct"] is not None else None,
+        "yieldQty": float(row["yield_qty"]) if row["yield_qty"] is not None else None,
+        "yieldUOM": row["yield_uom"], "prepPar": float(row["prep_par"]) if row["prep_par"] is not None else None,
+        "procedure": row["procedure"], "equipment": row["equipment"], "shelfLife": row["shelf_life"],
+        "menuCategory": row["menu_category"], "description": row["description"], "photoUrl": row["photo_url"],
+        "portionNote": row["portion_note"], "frequency": row["frequency"],
+        "lines": [{
+            "sourceType": l["source_type"], "itemCode": l["item_code"],
+            "prepDishId": str(l["prep_dish_id"]) if l["prep_dish_id"] else None, "qty": float(l["qty"] or 0),
+        } for l in lines],
+    }
+
+@pg_router.get("/dishes/{store_id}")
+async def pg_list_dishes(store_id: str):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        rows = await conn.fetch("SELECT * FROM dishes WHERE store_id=$1 ORDER BY name", store_id)
+        out = []
+        for r in rows:
+            lines = await conn.fetch("SELECT * FROM dish_lines WHERE dish_id=$1", r["id"])
+            out.append(_dish_row_to_api(r, lines))
+        return out
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/dishes/{store_id}")
+async def pg_create_dish(store_id: str, body: DishIn):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            if body.id:
+                row = await conn.fetchrow(
+                    """UPDATE dishes SET name=$1, menu_code=$2, recipe_type=$3, price=$4, target_pct=$5,
+                           yield_qty=$6, yield_uom=$7, prep_par=$8, procedure=$9, equipment=$10, shelf_life=$11,
+                           menu_category=$12, description=$13, photo_url=$14, portion_note=$15, frequency=$16,
+                           updated_at=now()
+                       WHERE id=$17 AND store_id=$18 RETURNING *""",
+                    body.name, body.menu_code, body.recipe_type, body.price, body.target_pct, body.yield_qty,
+                    body.yield_uom, body.prep_par, body.procedure, body.equipment, body.shelf_life,
+                    body.menu_category, body.description, body.photo_url, body.portion_note, body.frequency,
+                    body.id, store_id)
+                if not row:
+                    raise HTTPException(404, "Dish not found")
+            else:
+                row = await conn.fetchrow(
+                    """INSERT INTO dishes (store_id, name, menu_code, recipe_type, price, target_pct, yield_qty,
+                           yield_uom, prep_par, procedure, equipment, shelf_life, menu_category, description,
+                           photo_url, portion_note, frequency)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *""",
+                    store_id, body.name, body.menu_code, body.recipe_type, body.price, body.target_pct,
+                    body.yield_qty, body.yield_uom, body.prep_par, body.procedure, body.equipment, body.shelf_life,
+                    body.menu_category, body.description, body.photo_url, body.portion_note, body.frequency)
+            # Full replace, not append -- same "whole document" semantics as items' vendor_skus.
+            await conn.execute("DELETE FROM dish_lines WHERE dish_id=$1", row["id"])
+            for ln in body.lines:
+                await conn.execute(
+                    """INSERT INTO dish_lines (dish_id, source_type, item_code, prep_dish_id, qty)
+                       VALUES ($1,$2,$3,$4,$5)""",
+                    row["id"], ln.source_type, ln.item_code, ln.prep_dish_id, ln.qty)
+            lines = await conn.fetch("SELECT * FROM dish_lines WHERE dish_id=$1", row["id"])
+            return _dish_row_to_api(row, lines)
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.delete("/dishes/{store_id}/{dish_id}")
+async def pg_delete_dish(store_id: str, dish_id: str):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            try:
+                deleted = await conn.execute("DELETE FROM dishes WHERE id=$1 AND store_id=$2", dish_id, store_id)
+            except asyncpg.exceptions.ForeignKeyViolationError:
+                raise HTTPException(400, "This recipe is referenced elsewhere (another recipe's ingredients, prep history, "
+                                          "or a count) -- remove those references first")
+            return {"ok": True, "deleted": deleted != "DELETE 0"}
     finally:
         await db_pg.pool().release(conn)
 
