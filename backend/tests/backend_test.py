@@ -107,9 +107,14 @@ def test_prep_flow_rudds(s):
     assert prep_recipe, "no prep recipe seeded for rudds"
     recipe_id = prep_recipe["id"]
 
-    # capture beef stock before
-    item_wi002 = next(i for i in state["items"] if i["controlNumber"] == "WI-002")
-    beef_before = float(item_wi002["currentStock"])
+    # Seed a known-good baseline for WI-002 first — repeated runs against this same
+    # long-lived dev DB otherwise deplete it to 0, making "stock went down" unprovable.
+    items = copy.deepcopy(state["items"])
+    item_wi002 = next(i for i in items if i["controlNumber"] == "WI-002")
+    item_wi002["currentStock"] = 100.0
+    r0 = s.put(f"{API}/state/rudds/items", json=items, timeout=30)
+    assert r0.status_code == 200
+    beef_before = 100.0
 
     # 1) complete
     body = {"recipeId": recipe_id, "batches": 1,

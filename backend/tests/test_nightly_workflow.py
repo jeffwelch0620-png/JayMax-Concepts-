@@ -223,28 +223,35 @@ def test_projections_roundtrip(s):
 
 
 # ---------- Staff PIN + prep sheet ----------
+# These use a plain unauthenticated session, not the module's `s` fixture — `s` carries
+# an owner bearer token on every request, and the owner role short-circuits the PIN
+# check entirely (by design, so a logged-in owner never needs the PIN too). Testing the
+# PIN path itself means testing it with no token, the way an actual staff device calls it.
 def test_staff_pin_default_and_verify(s):
     r = s.get(f"{API}/staff/rudds/pin", timeout=30)
     assert r.status_code == 200
     body = r.json()
     assert body["staffPin"] == "1234"
 
-    r = s.post(f"{API}/staff/verify", json={"restaurantId": "rudds", "pin": "0000"}, timeout=30)
+    anon = requests.Session()
+    r = anon.post(f"{API}/staff/verify", json={"restaurantId": "rudds", "pin": "0000"}, timeout=30)
     assert r.status_code == 200
     assert r.json()["ok"] is False
 
-    r = s.post(f"{API}/staff/verify", json={"restaurantId": "rudds", "pin": "1234"}, timeout=30)
+    r = anon.post(f"{API}/staff/verify", json={"restaurantId": "rudds", "pin": "1234"}, timeout=30)
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
 
-def test_staff_prepsheet_wrong_pin(s):
-    r = s.get(f"{API}/staff/rudds/prepsheet", params={"pin": "9999"}, timeout=30)
+def test_staff_prepsheet_wrong_pin():
+    anon = requests.Session()
+    r = anon.post(f"{API}/staff/rudds/prepsheet", json={"pin": "9999"}, timeout=30)
     assert r.status_code == 403
 
 
-def test_staff_prepsheet_correct_pin_hides_costs(s):
-    r = s.get(f"{API}/staff/rudds/prepsheet", params={"pin": "1234"}, timeout=30)
+def test_staff_prepsheet_correct_pin_hides_costs():
+    anon = requests.Session()
+    r = anon.post(f"{API}/staff/rudds/prepsheet", json={"pin": "1234"}, timeout=30)
     assert r.status_code == 200
     body = r.json()
     # tasks list (possibly empty). Verify no cost/par/currentStock fields anywhere
@@ -253,15 +260,16 @@ def test_staff_prepsheet_correct_pin_hides_costs(s):
         assert banned not in dumped, f"prepsheet response leaks '{banned}': {dumped[:400]}"
 
 
-def test_staff_complete_requires_doneby(s):
+def test_staff_complete_requires_doneby():
     # get released list for rudds (from earlier test)
     # use today's date via prep sheet
-    ps = s.get(f"{API}/staff/rudds/prepsheet", params={"pin": "1234"}, timeout=30).json()
+    anon = requests.Session()
+    ps = anon.post(f"{API}/staff/rudds/prepsheet", json={"pin": "1234"}, timeout=30).json()
     if not ps.get("tasks"):
         pytest.skip("no released list for staff complete test")
     list_id = ps["listId"]
     tid = ps["tasks"][0]["id"]
-    r = s.post(f"{API}/staff/rudds/prepsheet/complete",
+    r = anon.post(f"{API}/staff/rudds/prepsheet/complete",
                json={"pin": "1234", "listId": list_id, "taskId": tid, "batches": 1, "doneBy": ""}, timeout=30)
     assert r.status_code == 400
 
