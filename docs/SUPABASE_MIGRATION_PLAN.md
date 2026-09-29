@@ -126,9 +126,20 @@ recipe pointing at its dough-batch prep recipe) were resolved by looking the tar
 dish up by `(store_id, name)` after insertion — names are unique within each
 restaurant in the current data, so this needed no fabricated ids.
 
-**Next**: `prep_stock` → `prep_recipe_stock` and `prep_logs` (direct fits, small — 1
-and 24 rows), then the harder pieces: `prep_count_sessions` →
-`count_sessions`/`count_lines` and `prep_lists`+tasks → `prep_lists`/`prep_list_lines`.
+### Applied — prep_recipe_stock + prep_logs data (via `scripts/migrate_prep_stock_and_logs.py`)
+
+1 prep_recipe_stock row + 24 prep_logs migrated and verified (14 `batch`, 5
+`container_use`, 5 `sales_usage` — every non-`sales_usage` log correctly resolved a
+`dish_id`; `sales_usage` rows are legitimately dish-less at the top level since their
+recipe reference lives inside the `usage` jsonb blob instead).
+
+Found one more schema gap along the way: `prep_logs.kind` only allowed
+`('batch','sales_usage')`, but the real data also uses `'container_use'` (moving
+stock from a prep batch into a service container) — widened via migration
+`prep_logs_kind_container_use`.
+
+**Next**: the harder pieces — `prep_count_sessions` → `count_sessions`/`count_lines`
+and `prep_lists`+tasks → `prep_lists`/`prep_list_lines`.
 
 Verified via `information_schema.columns` — all three tables match this shape
 exactly.
