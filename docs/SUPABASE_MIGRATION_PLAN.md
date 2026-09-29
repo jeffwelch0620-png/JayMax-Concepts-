@@ -200,9 +200,9 @@ Two real judgment calls made during this transform, worth knowing about:
 - **One purchase (`INV-100902`, Paper Napkins at berts) was recorded against a
   different vendor (US Foods) than the item's only known SKU (Webstaurant)** — a real
   inconsistency already present in the source Mongo data, not introduced by the
-  transform. Preserved as-recorded: a second `vendor_items` row was added
-  (`us_foods`/`berts_OF-001`, marked non-preferred, no real SKU number on file) rather
-  than silently reassigning that purchase to Webstaurant.
+  transform. The migration script now generates a deterministic, unavailable
+  placeholder `vendor_items` row for this vendor/item pair so the historical invoice
+  line is retained rather than silently reassigned or dropped.
 
 **Not done yet**:
 - Local end-to-end verification of the `/api/pg/*` endpoints (blocked on the real

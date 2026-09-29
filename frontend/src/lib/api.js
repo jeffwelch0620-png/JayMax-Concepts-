@@ -31,7 +31,8 @@ export const currentSession = () => session();
 export const storeSession = (data) => { localStorage.setItem(TOKEN_KEY, JSON.stringify(data)); return data; };
 
 export const fetchState = (rid) => axios.get(`${API}/state/${rid}`).then((r) => USE_PG
-  ? Promise.all([pgFetchItemsAndPurchases(rid), pgFetchDishes(rid)]).then(([pg, dishes]) => ({ ...r.data, ...pg, dishes }))
+  ? Promise.all([pgFetchItemsAndPurchases(rid), pgFetchDishes(rid), pgFetchPrepState(rid)])
+    .then(([pg, dishes, prep]) => ({ ...r.data, ...pg, ...prep, dishes }))
   : r.data);
 const revisionHeaders = (revision) => revision == null ? {} : { "If-Match": `"${revision}"` };
 export const putCollection = (rid, name, arr, revision) => {
@@ -125,8 +126,11 @@ export const applyParRec = (rid, recId) => axios.post(`${API}/ai/par-advisor/${r
 export const dismissParRec = (rid, recId) => axios.post(`${API}/ai/par-advisor/${rid}/${recId}/dismiss`).then((r) => r.data);
 
 export const listPrepItems = (rid, track = "daily") => USE_PG ? pgListPrepItems(pgStoreId(rid), track) : axios.get(`${API}/prep-items/${rid}`, { params: { track } }).then((r) => r.data);
-export const createPrepItem = (rid, body) => USE_PG ? pgCreatePrepItem(pgStoreId(rid), body) : axios.post(`${API}/prep-items/${rid}`, body).then((r) => r.data);
-export const updatePrepItem = (rid, pid, body) => USE_PG ? pgUpdatePrepItem(pgStoreId(rid), pid, body) : axios.put(`${API}/prep-items/${rid}/${pid}`, body).then((r) => r.data);
+const pgPrepItemBody = (rid, body) => ({
+  ...body, itemCode: body.sourceType === "item" ? `${rid}_${body.controlNumber}` : null,
+});
+export const createPrepItem = (rid, body) => USE_PG ? pgCreatePrepItem(pgStoreId(rid), pgPrepItemBody(rid, body)) : axios.post(`${API}/prep-items/${rid}`, body).then((r) => r.data);
+export const updatePrepItem = (rid, pid, body) => USE_PG ? pgUpdatePrepItem(pgStoreId(rid), pid, pgPrepItemBody(rid, body)) : axios.put(`${API}/prep-items/${rid}/${pid}`, body).then((r) => r.data);
 export const deletePrepItem = (rid, pid) => USE_PG ? pgDeletePrepItem(pgStoreId(rid), pid) : axios.delete(`${API}/prep-items/${rid}/${pid}`).then((r) => r.data);
 export const addItemToList = (rid, listId, body) => USE_PG ? pgAddItemToList(pgStoreId(rid), listId, body) : axios.post(`${API}/preplists/${rid}/${listId}/add-item`, body).then((r) => r.data);
 
@@ -153,12 +157,14 @@ export const pgCreateInvoice = (storeId, body) => axios.post(`${PG_API}/invoices
 // Mongo-side "dish_xxx"/"prep_xxx" strings. ----
 export const pgListDishes = (storeId) => axios.get(`${PG_API}/dishes/${storeId}`).then((r) => r.data);
 export const pgSaveDish = (storeId, body) => axios.post(`${PG_API}/dishes/${storeId}`, body).then((r) => r.data);
+export const pgReplaceDishes = (storeId, body, revision) => axios.put(`${PG_API}/dishes/${storeId}`, body, { headers: revisionHeaders(revision) }).then((r) => r.data);
 export const pgDeleteDish = (storeId, dishId) => axios.delete(`${PG_API}/dishes/${storeId}/${dishId}`).then((r) => r.data);
 
 // ---- Prep: direct recipe batch / sales usage / containers ----
 export const pgCompletePrep = (storeId, body) => axios.post(`${PG_API}/prep/${storeId}/complete`, body).then((r) => r.data);
 export const pgApplyPrepSales = (storeId, dishSales) => axios.post(`${PG_API}/prep/${storeId}/apply-sales`, { dishSales }).then((r) => r.data);
 export const pgUseContainer = (storeId, body) => axios.post(`${PG_API}/prep/${storeId}/use-container`, body).then((r) => r.data);
+export const pgFetchPrepState = (rid) => axios.get(`${PG_API}/prep/${pgStoreId(rid)}/state`).then((r) => r.data);
 
 // ---- Prep: evening count sessions ----
 export const pgGetCountSession = (storeId, date, track = "daily") => axios.get(`${PG_API}/prepcount/${storeId}/session`, { params: { date, track } }).then((r) => r.data);
@@ -217,6 +223,8 @@ function pgItemToMongoItem(pgItem, rid) {
     active: pgItem.active, countActive: pgItem.active,
     orderEnabled: pgItem.orderEnabled, salesTracked: pgItem.salesTracked,
     itemType: pgItem.costingType,
+    category: pgItem.category, classification: pgItem.itemType,
+    isHighValue: pgItem.isHighValue, notes: pgItem.notes,
     purchaseUnit: preferred?.purchaseUnit || "case",
     packCount: pgItem.packCount ?? "", unitQty: pgItem.unitQty ?? "", unitUOM: pgItem.unitUOM || "",
     portionSize: pgItem.portionSize ?? "", portionUOM: pgItem.portionUOM || "",
@@ -241,6 +249,8 @@ function mongoItemToPgBody(item, rid) {
   const countActive = !!(item.countActive ?? item.active);
   return {
     code: `${rid}_${item.controlNumber}`, name: item.name, base_unit: item.portionUOM || "each",
+    category: item.category, item_type: item.classification,
+    is_high_value: item.isHighValue, notes: item.notes,
     costing_type: item.itemType || "portion",
     pack_count: numOrNull(item.packCount), unit_qty: numOrNull(item.unitQty), unit_uom: item.unitUOM || null,
     portion_size: numOrNull(item.portionSize), portion_uom: item.portionUOM || null,
@@ -288,14 +298,8 @@ async function pgFetchItemsAndPurchases(rid) {
 
 async function pgPutItems(rid, arr, revision) {
   const storeId = pgStoreId(rid);
-  const existing = await pgListItems(storeId);
-  const nextCodes = new Set(arr.map((it) => `${rid}_${it.controlNumber}`));
-  const toDelete = existing.filter((it) => !nextCodes.has(it.code));
-  await Promise.all([
-    ...arr.map((it) => pgCreateItem(storeId, mongoItemToPgBody(it, rid))),
-    ...toDelete.map((it) => pgDeleteItem(storeId, it.code)),
-  ]);
-  return { revision };
+  return axios.put(`${PG_API}/items/${storeId}`, arr.map((it) => mongoItemToPgBody(it, rid)),
+    { headers: revisionHeaders(revision) }).then((r) => r.data);
 }
 
 async function pgPutPurchases(rid, arr, revision) {
@@ -318,7 +322,7 @@ async function pgPutPurchases(rid, arr, revision) {
       vendor_id: vendorId, invoice_number: first.invoiceNumber, invoice_date: first.invoiceDate, source: "manual",
       lines: lines.map((l) => {
         const item = itemsByCode.get(`${rid}_${l.controlNumber}`);
-        const sku = item?.vendorSkus.find((s) => s.vendor === first.vendor);
+        const sku = item?.vendorSkus.find((s) => s.vendor === (VENDOR_NAME_TO_ID[first.vendor] || first.vendor));
         return { vendor_item_id: sku?.id || null, description: l.itemName, qty: Number(l.qty) || 0, purchase_unit: l.unit, unit_price: Number(l.unitCost) || 0 };
       }),
     }));
@@ -394,17 +398,10 @@ async function pgFetchDishes(rid) {
 }
 
 async function pgPutDishes(rid, arr, revision) {
-  const storeId = pgStoreId(rid);
-  const existing = await pgListDishes(storeId);
-  const nextIds = new Set(arr.filter((d) => isUuid(d.id)).map((d) => d.id));
-  const toDelete = existing.filter((d) => !nextIds.has(d.id));
-  // Sequential, not Promise.all -- dish_lines.prep_dish_id is a real FK, so a prep
-  // recipe must be saved (and get its real uuid) before a dish that references it.
-  for (const d of arr) {
-    await pgSaveDish(storeId, mongoDishToPgBody(d, rid));
-  }
-  await Promise.all(toDelete.map((d) => pgDeleteDish(storeId, d.id)));
-  return { revision };
+  const saved = await pgReplaceDishes(pgStoreId(rid), arr.map((dish) => ({
+    ...mongoDishToPgBody(dish, rid), client_id: isUuid(dish.id) ? null : dish.id,
+  })), revision);
+  return { revision: saved.revision, dishes: saved.dishes.map((dish) => pgDishToMongoDish(dish, rid)) };
 }
 
 export async function streamChat(rid, message, { onDelta, onError, onDone }) {
