@@ -102,7 +102,8 @@ export default function App() {
   function persistCollection(name, next) {
     setS((p) => ({ ...p, [name]: next }));
     return api.putCollection(loc, name, next, S?.revision).then((result) => {
-      setS((p) => ({ ...p, revision: result.revision ?? p.revision }));
+      setS((p) => ({ ...p, ...(result.dishes ? { dishes: result.dishes } : {}),
+        revision: result.revision ?? p.revision }));
       return result;
     }).catch((err) => {
       toast.error(err?.response?.status === 409 ? "This data changed elsewhere — reload before saving" : `Couldn't save ${name} — check your connection`);
