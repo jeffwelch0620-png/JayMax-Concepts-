@@ -1,13 +1,14 @@
 # MongoDB → Supabase (Postgres) Migration Plan
 
-Status: **frontend wiring chunks 1-4 done (Prep, Items/Purchases, Dishes/Recipes),
-all gated behind `USE_PG` (default off); chunks 5-6 remain**. All real MongoDB data is
-in Supabase, `/api/pg/*` has full backend coverage for Vendors/Items/Invoices/Dishes/
-Prep, and the frontend (`frontend/src/lib/api.js`) can route through it end-to-end via
-`REACT_APP_USE_PG=true`. `server.py`'s existing `/api/...` routes still run entirely on
-MongoDB and are untouched — nothing has cut over for real users yet, and no `/api/pg/*`
-endpoint has been exercised against a live connection (still needs the real
-`DATABASE_URL` password — that's chunk 6). This doc is the reference for that work as
+Status: **frontend wiring chunks 1-5 done (Prep, Items/Purchases, Dishes/Recipes,
+Staff PIN portal), all gated behind `USE_PG` (default off); only chunk 6 remains**.
+All real MongoDB data is in Supabase, `/api/pg/*` has full backend coverage for
+Vendors/Items/Invoices/Dishes/Prep/Staff, and the frontend (`frontend/src/lib/api.js`)
+can route through it end-to-end via `REACT_APP_USE_PG=true`. `server.py`'s existing
+`/api/...` routes still run entirely on MongoDB and are untouched — nothing has cut
+over for real users yet, and no `/api/pg/*` endpoint has been exercised against a live
+connection (still needs the real `DATABASE_URL` password — that's chunk 6). This doc
+is the reference for that work as
 it continues across sessions.
 
 ## Frontend wiring plan
@@ -139,10 +140,41 @@ Chunks, in order:
      (one dish edited and saved at a time) — not a live risk today.
    - Legacy `qtyPortions` alias on dish lines (some old records use it instead of
      `qty`) is read as a fallback on write; the adapter always emits `qty` on read.
-5. **Staff PIN portal (PWA)** — not started on the backend at all yet. The
-   manager-facing prep/count endpoints wired in chunk 2 are separate from the
-   PIN-portal ones (`/api/staff/{rid}/prepsheet`, `/api/staff/{rid}/counts`, etc.) —
-   those need their own `/api/pg/staff/*` backend work before this can be wired.
+5. **Staff PIN portal (PWA)** — ✅ Done, gated behind `USE_PG`.
+   - No new schema needed for most of it: `staff_pins`/`staff_members`/`staff_tasks`/
+     `push_subscriptions` were already in the pre-existing schema, just unused until
+     now. One real gap found: Mongo's staff item-counting feature
+     (`inventory_count_submissions` — the PIN portal's "Enter Counts", a *different*
+     feature from Prep's evening count) allows unlimited independent submissions per
+     day, each its own Count History entry. `count_sessions`/`count_lines` couldn't
+     represent that — they have a `UNIQUE(store_id, count_date, count_type)` built for
+     Prep's one-session-per-day evening count; reusing them would have silently
+     collapsed multiple same-day submissions into one, losing real history. Added a
+     dedicated `inventory_count_submissions` table instead (migration
+     `add_inventory_count_submissions`), storing each submission's item snapshot as
+     jsonb, matching Mongo's denormalized document shape directly.
+   - **Second bug found and fixed proactively** (not by Copilot's review this time —
+     found while building): `_is_pin_optional()` in the auth middleware only ever
+     checked the raw `/api/staff/...` path. Every new `/api/pg/staff/*` route would
+     have hit the blanket 401 *before* its own PIN-fallback logic ever ran, silently
+     breaking the entire PIN-only staff model (Prep Sheet, Enter Counts, task portal)
+     under `USE_PG` whenever `AUTH_REQUIRED=true` — the same class of bug the
+     `route_path`-stripping fix (from the earlier Copilot review round) already fixed
+     for `OWNER_PATHS`/`STAFF_PATHS`/`STAFF_WRITE_PATHS`, just in the one place that
+     fix didn't reach. Fixed the same way: strip `/api/pg` before matching.
+   - **Scope boundary, deliberate**: covers exactly what `StaffSheet.js`/`StaffTab.js`/
+     `SchedulingTab.js`/`push.js` call — PIN get/set, roster CRUD, verify, identify,
+     prep sheet view + complete (reuses chunk 2's `_pg_complete_task_core` directly),
+     staff item-counts view + save, task inbox + manager CRUD, web push. The separate
+     manager-facing `/counts/{rid}/submit` + `/counts/{rid}/history`
+     (`CountsTab.js`'s own "Enter Counts" tab — a different feature that happens to
+     share the same audit table) is **not** covered — intentionally out of this
+     chunk's stated scope (Staff PIN portal), left on Mongo. `submitCounts`/
+     `itemCountSubmissionHistory` in `lib/api.js` are explicitly not gated.
+   - All 19 endpoints verified: SQL dry-run tested directly against real Supabase data
+     via rollback transactions (PIN upsert, staff member insert, the item-counts join
+     query, task insert with recurrence, push subscription upsert, and the jsonb
+     count-submission insert all confirmed working).
 6. **Live verification** — once the real `DATABASE_URL` password is available,
    actually exercise all of the above against a running local backend + browser,
    the same way every other piece of this migration has been verified so far.

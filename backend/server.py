@@ -106,11 +106,16 @@ def _is_pin_optional(path):
     # staff model (Prep Sheet, Enter Counts, task portal) whenever AUTH_REQUIRED=true.
     # /api/staff/{rid}/pin (view/set the PIN itself) is intentionally excluded — that
     # stays manager/owner-only, since it manages the secret the others fall back to.
-    if path == "/api/staff/verify":
+    # Stripping "/api/pg" too (like collaboration_security's route_path does) so the
+    # Postgres-backed staff routes get the exact same PIN-optional treatment --
+    # otherwise the blanket 401 below would fire before /api/pg/staff/* handlers ever
+    # got a chance to check the PIN themselves.
+    route_path = path.removeprefix("/api/pg").removeprefix("/api")
+    if route_path == "/staff/verify":
         return True
-    if not path.startswith("/api/staff/"):
+    if not route_path.startswith("/staff/"):
         return False
-    tail = path[len("/api/staff/"):].split("/")
+    tail = route_path[len("/staff/"):].split("/")
     return not (len(tail) >= 2 and tail[1] in ("pin", "members"))
 
 async def _record_activity(request, user, status):
@@ -3775,6 +3780,481 @@ async def pg_delete_override(store_id: str, oid: str):
     check_store_id(store_id)
     await db_pg.pool().execute("DELETE FROM prep_overrides WHERE id=$1 AND store_id=$2", oid, store_id)
     return {"ok": True}
+
+# ==================== Postgres (Supabase) migration: Staff PIN portal ====================
+# See docs/SUPABASE_MIGRATION_PLAN.md (chunk 5). Reuses staff_pins/staff_members/
+# staff_tasks/push_subscriptions -- all already in the schema, unused until now -- plus
+# a new inventory_count_submissions table (migration add_inventory_count_submissions).
+# count_sessions/count_lines couldn't represent staff item-counting: they have a
+# UNIQUE(store_id, count_date, count_type) built for Prep's one-session-per-day
+# evening count, but Mongo's staff item-counting feature allows unlimited independent
+# submissions per day, each its own Count History entry.
+#
+# Scope boundary: this covers exactly what StaffSheet.js/StaffTab.js/SchedulingTab.js/
+# push.js call -- the PIN portal itself (verify/identify/prepsheet/counts/tasks/push)
+# and its manager-side roster/PIN/task management. The separate manager-facing
+# /counts/{rid}/submit + /counts/{rid}/history (CountsTab.js's own "Enter Counts" tab,
+# a different feature that happens to share the same audit table) is NOT covered here
+# -- out of this chunk's stated scope, left on Mongo for now.
+DEFAULT_STAFF_PIN_PG = "1234"
+
+async def _pg_get_staff_pin(conn, store_id):
+    row = await conn.fetchrow("SELECT pin FROM staff_pins WHERE store_id=$1", store_id)
+    return (row["pin"] if row else None) or DEFAULT_STAFF_PIN_PG
+
+@pg_router.get("/staff/{store_id}/pin")
+async def pg_get_staff_pin(store_id: str):
+    check_store_id(store_id)
+    row = await db_pg.pool().fetchrow("SELECT pin FROM staff_pins WHERE store_id=$1", store_id)
+    return {"staffPin": (row["pin"] if row else None) or DEFAULT_STAFF_PIN_PG, "custom": bool(row)}
+
+class PgStaffPinIn(BaseModel):
+    staffPin: str
+
+@pg_router.post("/staff/{store_id}/pin")
+async def pg_set_staff_pin(store_id: str, body: PgStaffPinIn):
+    check_store_id(store_id)
+    pin = body.staffPin.strip()
+    if not (pin.isdigit() and 4 <= len(pin) <= 8):
+        raise HTTPException(400, "PIN must be 4-8 digits")
+    await db_pg.pool().execute(
+        "INSERT INTO staff_pins (store_id, pin) VALUES ($1,$2) ON CONFLICT (store_id) DO UPDATE SET pin=$2",
+        store_id, pin)
+    return {"ok": True}
+
+# ---------------- Staff roster ----------------
+class PgStaffMemberIn(BaseModel):
+    name: str
+    role: str = "cook"
+    active: bool = True
+
+def _pg_staff_member_to_api(row):
+    return {"id": str(row["id"]), "name": row["name"], "role": row["role"], "active": row["active"]}
+
+@pg_router.get("/staff/{store_id}/members")
+async def pg_list_staff_members(store_id: str):
+    check_store_id(store_id)
+    rows = await db_pg.pool().fetch("SELECT * FROM staff_members WHERE store_id=$1 ORDER BY name", store_id)
+    return [_pg_staff_member_to_api(r) for r in rows]
+
+def _pg_validate_staff_member(body):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Name is required")
+    if body.role not in ("owner_admin", "cook"):
+        raise HTTPException(400, "Role must be owner_admin or cook")
+    return name
+
+@pg_router.post("/staff/{store_id}/members")
+async def pg_create_staff_member(store_id: str, body: PgStaffMemberIn):
+    check_store_id(store_id)
+    name = _pg_validate_staff_member(body)
+    row = await db_pg.pool().fetchrow(
+        "INSERT INTO staff_members (store_id, name, role, active) VALUES ($1,$2,$3,TRUE) RETURNING *",
+        store_id, name, body.role)
+    return _pg_staff_member_to_api(row)
+
+@pg_router.put("/staff/{store_id}/members/{staff_id}")
+async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemberIn):
+    check_store_id(store_id)
+    name = _pg_validate_staff_member(body)
+    row = await db_pg.pool().fetchrow(
+        "UPDATE staff_members SET name=$3, role=$4, active=$5 WHERE id=$1 AND store_id=$2 RETURNING *",
+        staff_id, store_id, name, body.role, body.active)
+    if not row:
+        raise HTTPException(404, "Staff member not found")
+    return _pg_staff_member_to_api(row)
+
+@pg_router.delete("/staff/{store_id}/members/{staff_id}")
+async def pg_delete_staff_member(store_id: str, staff_id: str):
+    check_store_id(store_id)
+    await db_pg.pool().execute("DELETE FROM staff_members WHERE id=$1 AND store_id=$2", staff_id, store_id)
+    return {"ok": True}
+
+# ---------------- PIN verify / identify ----------------
+class PgPinBodyIn(BaseModel):
+    pin: str = ""
+
+@pg_router.post("/staff/{store_id}/verify")
+async def pg_verify_pin(store_id: str, body: PgPinBodyIn, request: Request):
+    check_store_id(store_id)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    rid = PG_STORE_TO_RESTAURANT[store_id]
+    conn = await db_pg.pool().acquire()
+    try:
+        ok = False
+        if user and user.get("role") == "owner":
+            ok = True
+        elif user and rid in user.get("locations", []) and user.get("role") in ("manager", "staff"):
+            ok = True
+        else:
+            ok = body.pin == await _pg_get_staff_pin(conn, store_id)
+        if not ok:
+            return {"ok": False}
+        roster = await conn.fetch("SELECT * FROM staff_members WHERE store_id=$1 AND active=TRUE ORDER BY name", store_id)
+        return {"ok": True, "staff": [_pg_staff_member_to_api(r) for r in roster]}
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/staff/{store_id}/identify")
+async def pg_staff_identify(store_id: str, body: dict):
+    check_store_id(store_id)
+    try:
+        staff_uuid = uuid.UUID(str(body.get("staffId", "")))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(404, "Staff member not found")
+    conn = await db_pg.pool().acquire()
+    try:
+        if str(body.get("pin", "")) != await _pg_get_staff_pin(conn, store_id):
+            raise HTTPException(403, "Invalid PIN")
+        member = await conn.fetchrow(
+            "SELECT * FROM staff_members WHERE id=$1 AND store_id=$2 AND active=TRUE", staff_uuid, store_id)
+    finally:
+        await db_pg.pool().release(conn)
+    if not member:
+        raise HTTPException(404, "Staff member not found")
+    if member["role"] != "owner_admin":
+        return {"ok": True, "name": member["name"], "role": "cook"}
+    # Owner/Admin identified via the shared staff PIN: mint a real session token, scoped
+    # to this one restaurant (manager-equivalent), same as the Mongo-backed version.
+    rid = PG_STORE_TO_RESTAURANT[store_id]
+    synth_user = {"id": str(member["id"]), "email": f"staff:{member['id']}", "role": "manager", "locations": [rid]}
+    return {"ok": True, "name": member["name"], "role": "owner_admin",
+            "session": {"user": _clean_user(synth_user), "token": _token(synth_user)}}
+
+# ---------------- Staff prep sheet (read-only view + completion, reuses Prep's own logic) ----------------
+async def _pg_staff_prepsheet(conn, store_id, track):
+    count_type = TRACK_TO_COUNT_TYPE.get(track, "nightly_prep")
+    today = _pg_today()
+    plist = await conn.fetchrow(
+        "SELECT * FROM prep_lists WHERE store_id=$1 AND prep_date=$2 AND status='released' AND count_type=$3",
+        store_id, today, count_type)
+    if not plist:
+        plist = await conn.fetchrow(
+            "SELECT * FROM prep_lists WHERE store_id=$1 AND status='released' AND count_type=$2 ORDER BY prep_date DESC LIMIT 1",
+            store_id, count_type)
+    if not plist:
+        return {"listId": None, "date": today, "tasks": []}
+    lines = await conn.fetch(
+        """SELECT pll.*, d.procedure, d.equipment, d.shelf_life, d.yield_qty AS dish_yield_qty, d.yield_uom AS dish_yield_uom
+           FROM prep_list_lines pll LEFT JOIN dishes d ON d.id = pll.recipe_id
+           WHERE pll.list_id=$1""", plist["id"])
+    tasks = []
+    for l in lines:
+        if l["removed"]:
+            continue
+        tasks.append({
+            "id": str(l["id"]), "name": l["name"] or "", "yieldUOM": l["yield_uom"] or "",
+            "batchesPlanned": float(l["batches_planned"] or 0), "batchesDone": float(l["batches_done"] or 0),
+            "remaining": max(0, float(l["batches_planned"] or 0) - float(l["batches_done"] or 0)),
+            "note": l["note"] or "", "doneBy": l["done_by_name"] or "",
+            "card": {"procedure": l["procedure"] or "", "equipment": l["equipment"] or "",
+                     "shelfLife": l["shelf_life"] or "", "yieldQty": float(l["dish_yield_qty"] or 1),
+                     "yieldUOM": l["dish_yield_uom"] or l["yield_uom"] or ""},
+        })
+    return {"listId": str(plist["id"]), "date": plist["prep_date"].isoformat(), "tasks": tasks}
+
+class PgStaffPrepsheetIn(BaseModel):
+    pin: str = ""
+    track: str = "daily"
+
+@pg_router.post("/staff/{store_id}/prepsheet")
+async def pg_staff_prepsheet(store_id: str, body: PgStaffPrepsheetIn, request: Request):
+    check_store_id(store_id)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    conn = await db_pg.pool().acquire()
+    try:
+        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+            raise HTTPException(403, "Invalid PIN")
+        return await _pg_staff_prepsheet(conn, store_id, body.track)
+    finally:
+        await db_pg.pool().release(conn)
+
+class PgStaffCompleteIn(BaseModel):
+    pin: str = ""
+    listId: str
+    taskId: str
+    batches: float
+    doneBy: str = ""
+
+@pg_router.post("/staff/{store_id}/prepsheet/complete")
+async def pg_staff_complete(store_id: str, body: PgStaffCompleteIn, request: Request):
+    check_store_id(store_id)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    done_by = body.doneBy.strip() or (user or {}).get("email", "")
+    if not done_by:
+        raise HTTPException(400, "Enter your name so the task is attributed")
+    conn = await db_pg.pool().acquire()
+    try:
+        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+            raise HTTPException(403, "Invalid PIN")
+        async with conn.transaction():
+            res = await _pg_complete_task_core(conn, store_id, body.listId, body.taskId, body.batches, done_by, [])
+        return {"ok": True, "log": res.get("log")}
+    finally:
+        await db_pg.pool().release(conn)
+
+# ---------------- Staff item counts (PIN-gated Enter Counts portal) ----------------
+@pg_router.post("/staff/{store_id}/counts")
+async def pg_staff_counts(store_id: str, body: PgPinBodyIn, request: Request):
+    check_store_id(store_id)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    conn = await db_pg.pool().acquire()
+    try:
+        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+            raise HTTPException(403, "Invalid PIN")
+        rows = await conn.fetch(
+            """SELECT i.code, i.name, i.unit_uom, si.storage_area, si.current_stock, si.last_counted,
+                      si.last_counted_by, si.active
+               FROM store_items si JOIN items i ON i.code = si.item_code
+               WHERE si.store_id=$1""", store_id)
+        prefix = PG_STORE_TO_RESTAURANT[store_id] + "_"
+        counted = [r for r in rows if r["active"]]
+        return {"date": _pg_today(), "items": [{
+            "controlNumber": r["code"][len(prefix):] if r["code"].startswith(prefix) else r["code"],
+            "name": r["name"], "storageArea": r["storage_area"] or "", "unitUOM": r["unit_uom"] or "",
+            "currentStock": float(r["current_stock"] or 0),
+            "lastCounted": r["last_counted"].isoformat() if r["last_counted"] else "",
+            "lastCountedBy": r["last_counted_by"] or "",
+        } for r in counted]}
+    finally:
+        await db_pg.pool().release(conn)
+
+class PgStaffCountEntryIn(BaseModel):
+    controlNumber: str
+    onHand: float
+
+class PgStaffCountsSaveIn(BaseModel):
+    pin: str = ""
+    doneBy: str = ""
+    counts: List[PgStaffCountEntryIn] = []
+
+async def _pg_apply_and_record_counts(conn, store_id, submitted_by, counts, source):
+    prefix = PG_STORE_TO_RESTAURANT[store_id] + "_"
+    today = _pg_today()
+    entries = []
+    for entry in counts:
+        code = f"{prefix}{entry.controlNumber}"
+        row = await conn.fetchrow(
+            """SELECT i.name, si.storage_area, si.count_unit, si.current_stock FROM store_items si
+               JOIN items i ON i.code = si.item_code WHERE si.store_id=$1 AND si.item_code=$2 FOR UPDATE""",
+            store_id, code)
+        if not row:
+            continue
+        prev = float(row["current_stock"] or 0)
+        await conn.execute(
+            """UPDATE store_items SET current_stock=$1, last_counted=$2, last_counted_by=$3, last_counted_at=now()
+               WHERE store_id=$4 AND item_code=$5""",
+            entry.onHand, today, submitted_by, store_id, code)
+        entries.append({"controlNumber": entry.controlNumber, "name": row["name"],
+                         "storageArea": row["storage_area"] or "", "purchaseUnit": row["count_unit"] or "",
+                         "previousStock": prev, "newStock": float(entry.onHand)})
+    if entries:
+        await conn.execute(
+            "INSERT INTO inventory_count_submissions (store_id, submitted_by, source, items) VALUES ($1,$2,$3,$4)",
+            store_id, submitted_by, source, entries)
+    return len(entries)
+
+@pg_router.post("/staff/{store_id}/counts/save")
+async def pg_staff_counts_save(store_id: str, body: PgStaffCountsSaveIn, request: Request):
+    check_store_id(store_id)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    done_by = body.doneBy.strip() or (user or {}).get("email", "")
+    if not done_by:
+        raise HTTPException(400, "Enter your name so the count is attributed")
+    if not body.counts:
+        raise HTTPException(400, "No counts submitted")
+    conn = await db_pg.pool().acquire()
+    try:
+        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+            raise HTTPException(403, "Invalid PIN")
+        async with conn.transaction():
+            saved = await _pg_apply_and_record_counts(conn, store_id, done_by, body.counts, "staff_pwa")
+        return {"ok": True, "saved": saved}
+    finally:
+        await db_pg.pool().release(conn)
+
+# ---------------- Employee task portal (manager-managed, PIN-gated inbox) ----------------
+class PgStaffTaskIn(BaseModel):
+    taskType: str
+    title: str
+    dueDate: str
+    recurrence: str = "once"
+    assignedTo: str = ""
+    track: str = "daily"
+    note: str = ""
+
+def _pg_staff_task_to_api(row):
+    return {"id": str(row["id"]), "taskType": row["task_type"], "title": row["title"],
+            "dueDate": row["due_date"].isoformat(), "recurrence": row["recurrence"],
+            "assignedTo": row["assigned_to"] or "", "track": row["track"], "note": row["note"] or "",
+            "status": row["status"], "completedBy": row["completed_by"] or "",
+            "completedAt": row["completed_at"].isoformat() if row["completed_at"] else None,
+            "createdBy": row["created_by"] or "", "createdAt": row["created_at"].isoformat()}
+
+async def _pg_notify_new_staff_task(store_id, task):
+    if not PUSH_ENABLED:
+        return
+    subs = await db_pg.pool().fetch("SELECT endpoint, keys FROM push_subscriptions WHERE store_id=$1", store_id)
+    if not subs:
+        return
+    label = "Count" if task.get("taskType") == "count" else "Prep"
+    payload = json.dumps({"title": f"New {label} task", "body": task.get("title", "A task is due"), "taskId": task.get("id")})
+    stale = []
+    for sub in subs:
+        try:
+            await asyncio.to_thread(webpush, subscription_info={"endpoint": sub["endpoint"], "keys": sub["keys"]},
+                                     data=payload, vapid_private_key=VAPID_PRIVATE_KEY,
+                                     vapid_claims={"sub": VAPID_CLAIM_EMAIL})
+        except WebPushException as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status in (404, 410):
+                stale.append(sub["endpoint"])
+            else:
+                logger.warning("web push delivery failed: %s", e)
+        except Exception:
+            logger.exception("web push delivery error")
+    for endpoint in stale:
+        await db_pg.pool().execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, endpoint)
+
+@pg_router.get("/staff-tasks/{store_id}")
+async def pg_list_staff_tasks(store_id: str):
+    check_store_id(store_id)
+    rows = await db_pg.pool().fetch("SELECT * FROM staff_tasks WHERE store_id=$1 ORDER BY due_date DESC", store_id)
+    return [_pg_staff_task_to_api(r) for r in rows]
+
+@pg_router.post("/staff-tasks/{store_id}")
+async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Request):
+    check_store_id(store_id)
+    if body.taskType not in ("count", "prep"):
+        raise HTTPException(400, "taskType must be count or prep")
+    if body.recurrence not in ("once", "daily", "weekly"):
+        raise HTTPException(400, "recurrence must be once, daily, or weekly")
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    row = await db_pg.pool().fetchrow(
+        """INSERT INTO staff_tasks (store_id, task_type, title, due_date, recurrence, assigned_to, track, note, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
+        store_id, body.taskType, body.title, body.dueDate, body.recurrence, body.assignedTo, body.track, body.note,
+        (user or {}).get("email", ""))
+    task = _pg_staff_task_to_api(row)
+    await _pg_notify_new_staff_task(store_id, task)
+    return task
+
+@pg_router.delete("/staff-tasks/{store_id}/{task_id}")
+async def pg_delete_staff_task(store_id: str, task_id: str):
+    check_store_id(store_id)
+    await db_pg.pool().execute("DELETE FROM staff_tasks WHERE id=$1 AND store_id=$2", task_id, store_id)
+    return {"ok": True}
+
+@pg_router.post("/staff/{store_id}/tasks")
+async def pg_staff_task_inbox(store_id: str, body: PgPinBodyIn, request: Request):
+    check_store_id(store_id)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    conn = await db_pg.pool().acquire()
+    try:
+        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+            raise HTTPException(403, "Invalid PIN")
+        today = _pg_today()
+        rows = await conn.fetch(
+            "SELECT * FROM staff_tasks WHERE store_id=$1 AND status='pending' AND due_date<=$2 ORDER BY due_date",
+            store_id, today)
+        return {"date": today, "tasks": [_pg_staff_task_to_api(r) for r in rows]}
+    finally:
+        await db_pg.pool().release(conn)
+
+class PgStaffTaskCompleteIn(BaseModel):
+    pin: str = ""
+    doneBy: str = ""
+
+@pg_router.post("/staff/{store_id}/tasks/{task_id}/complete")
+async def pg_staff_task_complete(store_id: str, task_id: str, body: PgStaffTaskCompleteIn, request: Request):
+    check_store_id(store_id)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    done_by = body.doneBy.strip() or (user or {}).get("email", "")
+    if not done_by:
+        raise HTTPException(400, "Enter your name so the task is attributed")
+    conn = await db_pg.pool().acquire()
+    try:
+        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+            raise HTTPException(403, "Invalid PIN")
+        async with conn.transaction():
+            task = await conn.fetchrow("SELECT * FROM staff_tasks WHERE id=$1 AND store_id=$2 FOR UPDATE", task_id, store_id)
+            if not task:
+                raise HTTPException(404, "task not found")
+            next_due = None
+            if task["recurrence"] == "daily":
+                next_due = (datetime.fromisoformat(_pg_today()) + timedelta(days=1)).date().isoformat()
+            elif task["recurrence"] == "weekly":
+                next_due = (datetime.fromisoformat(_pg_today()) + timedelta(days=7)).date().isoformat()
+            await conn.execute(
+                "UPDATE staff_tasks SET status='done', completed_by=$2, completed_at=now() WHERE id=$1",
+                task_id, done_by)
+            if next_due:
+                await conn.execute(
+                    """INSERT INTO staff_tasks (store_id, task_type, title, due_date, recurrence, assigned_to,
+                           track, note, created_by)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)""",
+                    store_id, task["task_type"], task["title"], next_due, task["recurrence"],
+                    task["assigned_to"], task["track"], task["note"], task["created_by"])
+        return {"ok": True}
+    finally:
+        await db_pg.pool().release(conn)
+
+# ---------------- Web push subscriptions (VAPID) ----------------
+@pg_router.get("/staff/{store_id}/push/public-key")
+async def pg_push_public_key(store_id: str):
+    check_store_id(store_id)
+    return {"publicKey": VAPID_PUBLIC_KEY, "enabled": PUSH_ENABLED}
+
+class PgPushSubscriptionIn(BaseModel):
+    pin: str = ""
+    endpoint: str
+    keys: dict
+
+@pg_router.post("/staff/{store_id}/push/subscribe")
+async def pg_push_subscribe(store_id: str, body: PgPushSubscriptionIn, request: Request):
+    check_store_id(store_id)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    conn = await db_pg.pool().acquire()
+    try:
+        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+            raise HTTPException(403, "Invalid PIN")
+        if not body.endpoint or not body.keys.get("p256dh") or not body.keys.get("auth"):
+            raise HTTPException(400, "Invalid push subscription")
+        await conn.execute(
+            """INSERT INTO push_subscriptions (store_id, endpoint, keys) VALUES ($1,$2,$3)
+               ON CONFLICT (endpoint) DO UPDATE SET store_id=$1, keys=$3""",
+            store_id, body.endpoint, body.keys)
+        return {"ok": True}
+    finally:
+        await db_pg.pool().release(conn)
+
+class PgPushUnsubscribeIn(BaseModel):
+    pin: str = ""
+    endpoint: str
+
+@pg_router.post("/staff/{store_id}/push/unsubscribe")
+async def pg_push_unsubscribe(store_id: str, body: PgPushUnsubscribeIn, request: Request):
+    check_store_id(store_id)
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token)
+    conn = await db_pg.pool().acquire()
+    try:
+        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+            raise HTTPException(403, "Invalid PIN")
+        await conn.execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, body.endpoint)
+        return {"ok": True}
+    finally:
+        await db_pg.pool().release(conn)
 
 app.include_router(api_router)
 app.include_router(pg_router)
