@@ -1,16 +1,38 @@
 import React, { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, CalendarRange, X } from "lucide-react";
 import { buildPeriodReport, isCountActive, isOrderEnabled, statusOf, preferredSku, fmtMoney, fmtDate, num } from "../lib/calc";
-import { MetricCard, PageTitle, EmptyState, Field, SectionLabel, cardCls, inpCls } from "./common";
+import { MetricCard, PageTitle, EmptyState, Field, SectionLabel, cardCls, inpCls, btnGhost } from "./common";
 import { DashboardPrepWindow } from "./DashboardPrepWindow";
 
 export function DashboardTab({ rid, items, purchases, dishes, adjustments, salesPeriod, reportingPeriods, onOpenHistory, flaggedOnly, setFlaggedOnly }) {
   const [selectedPeriodId, setSelectedPeriodId] = useState("current");
+  const [customMode, setCustomMode] = useState(false);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [search, setSearch] = useState("");
   const [areaFilter, setAreaFilter] = useState("All");
   const [showInactive, setShowInactive] = useState(false);
-  const selectedPeriod = selectedPeriodId === "current" ? salesPeriod : (reportingPeriods.find((p) => p.id === selectedPeriodId) || salesPeriod);
+
+  // A custom range can only pull real Actual/Theoretical COGS if it exactly matches a
+  // period someone has already closed in Sales Tracking — beginning/ending counts and
+  // dish-sales totals are recorded once per saved period, not day-by-day, so there's no
+  // way to compute COGS for an arbitrary slice of dates that isn't one of those snapshots.
+  const matchedCustomPeriod = customMode && customFrom && customTo
+    ? [salesPeriod, ...reportingPeriods].find((p) => p.periodStart === customFrom && p.periodEnd === customTo)
+    : null;
+  const noMatchForCustom = customMode && customFrom && customTo && !matchedCustomPeriod;
+
+  const selectedPeriod = useMemo(() => customMode
+    ? (matchedCustomPeriod || { periodStart: customFrom, periodEnd: customTo, dishSales: {}, itemCounts: {} })
+    : (selectedPeriodId === "current" ? salesPeriod : (reportingPeriods.find((p) => p.id === selectedPeriodId) || salesPeriod)),
+    [customMode, matchedCustomPeriod, customFrom, customTo, selectedPeriodId, salesPeriod, reportingPeriods]);
   const report = useMemo(() => buildPeriodReport(selectedPeriod, items, purchases, dishes, adjustments), [selectedPeriod, items, purchases, dishes, adjustments]);
+
+  function openCustomRange() {
+    setCustomFrom(salesPeriod.periodStart || "");
+    setCustomTo(salesPeriod.periodEnd || "");
+    setCustomMode(true);
+  }
 
   const filtered = useMemo(() => items.filter((it) => {
     const q = search.toLowerCase();
@@ -34,28 +56,46 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
           <PageTitle>Management Dashboard</PageTitle>
           <div className="text-slate-500 text-xs -mt-4">Period reporting uses saved beginning/ending counts, purchases, recipe-driven theoretical usage, and logged adjustments.</div>
         </div>
-        <Field label="Reporting Period">
-          <select data-testid="period-select" className={inpCls} value={selectedPeriodId} onChange={(e) => setSelectedPeriodId(e.target.value)}>
-            <option value="current">Current Working Period — {fmtDate(salesPeriod.periodStart)} to {fmtDate(salesPeriod.periodEnd)}</option>
-            {[...reportingPeriods].sort((a, b) => (b.periodEnd || "").localeCompare(a.periodEnd || "")).map((p) => (
-              <option key={p.id} value={p.id}>{p.name || `${fmtDate(p.periodStart)} – ${fmtDate(p.periodEnd)}`}</option>
-            ))}
-          </select>
-        </Field>
+        {!customMode ? (
+          <div className="flex gap-2 items-end">
+            <Field label="Reporting Period">
+              <select data-testid="period-select" className={inpCls} value={selectedPeriodId} onChange={(e) => setSelectedPeriodId(e.target.value)}>
+                <option value="current">Current Working Period — {fmtDate(salesPeriod.periodStart)} to {fmtDate(salesPeriod.periodEnd)}</option>
+                {[...reportingPeriods].sort((a, b) => (b.periodEnd || "").localeCompare(a.periodEnd || "")).map((p) => (
+                  <option key={p.id} value={p.id}>{p.name || `${fmtDate(p.periodStart)} – ${fmtDate(p.periodEnd)}`}</option>
+                ))}
+              </select>
+            </Field>
+            <button className={btnGhost} onClick={openCustomRange} data-testid="custom-range-button"><CalendarRange size={14} /> Custom Range</button>
+          </div>
+        ) : (
+          <div className="flex gap-2 items-end flex-wrap">
+            <Field label="From"><input type="date" className={inpCls} data-testid="custom-range-from" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} /></Field>
+            <Field label="To"><input type="date" className={inpCls} data-testid="custom-range-to" value={customTo} onChange={(e) => setCustomTo(e.target.value)} /></Field>
+            <button className={btnGhost} onClick={() => setCustomMode(false)} data-testid="custom-range-close"><X size={14} /> Back to Periods</button>
+          </div>
+        )}
       </div>
+
+      {noMatchForCustom && (
+        <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg px-3.5 py-2.5 text-amber-300 text-xs mb-4" data-testid="custom-range-no-match-banner">
+          <b>No saved period matches {fmtDate(customFrom)}–{fmtDate(customTo)}.</b> Purchases and Waste/Adjustments below reflect this exact range (real transaction dates),
+          but Actual COGS, Theoretical COGS, and Variance need a period closed in Sales Tracking with these same start/end dates — close one there to see them for this range.
+        </div>
+      )}
 
       <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))" }}>
         <MetricCard testId="metric-purchases" label="Purchases" value={fmtMoney(report.purchaseSpend)} sub={`${report.periodPurchases.length} invoice lines`} />
-        <MetricCard testId="metric-actual-cogs" label="Actual COGS" value={report.usableRows.length ? fmtMoney(report.actualCogs) : "Needs counts"} sub={`${countCoverage}% tracked-count coverage`} tone={report.usableRows.length ? "normal" : "warn"} />
-        <MetricCard testId="metric-theo-cogs" label="Theoretical COGS" value={fmtMoney(report.theoreticalCogs)} sub="from menu sales + recipes" />
-        <MetricCard testId="metric-variance" label="Unexplained Variance" value={report.usableRows.length ? fmtMoney(report.unexplainedCost) : "Needs counts"} sub="after known adjustments" tone={Math.abs(report.unexplainedCost) > 0 ? "warn" : "good"} />
+        <MetricCard testId="metric-actual-cogs" label="Actual COGS" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtMoney(report.actualCogs) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : `${countCoverage}% tracked-count coverage`} tone={noMatchForCustom || !report.usableRows.length ? "warn" : "normal"} />
+        <MetricCard testId="metric-theo-cogs" label="Theoretical COGS" value={noMatchForCustom ? "No saved period" : fmtMoney(report.theoreticalCogs)} sub={noMatchForCustom ? "for this custom range" : "from menu sales + recipes"} tone={noMatchForCustom ? "warn" : "normal"} />
+        <MetricCard testId="metric-variance" label="Unexplained Variance" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtMoney(report.unexplainedCost) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : "after known adjustments"} tone={noMatchForCustom ? "warn" : (!report.usableRows.length ? "warn" : (Math.abs(report.unexplainedCost) > 0 ? "warn" : "good"))} />
         <MetricCard testId="metric-inv-value" label="Live Inventory Value" value={fmtMoney(report.liveInventoryValue)} sub="current stock × preferred price" />
         <MetricCard testId="metric-order-exposure" label="Next Order Exposure" value={fmtMoney(report.orderExposure)} sub="preferred-vendor estimate" />
       </div>
 
       <DashboardPrepWindow items={items} dishes={dishes} rid={rid} />
 
-      {report.usableRows.length === 0 && (
+      {report.usableRows.length === 0 && !noMatchForCustom && (
         <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg px-3.5 py-2.5 text-amber-300 text-xs mb-5" data-testid="counts-incomplete-banner">
           <b>Period counts are incomplete.</b> Purchases, theoretical usage, waste and live inventory can still be shown, but Actual COGS and variance require beginning + ending counts in Sales Tracking.
         </div>
