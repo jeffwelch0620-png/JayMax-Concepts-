@@ -1,10 +1,12 @@
 # MongoDB → Supabase (Postgres) Migration Plan
 
-Status: **step 2 in progress, step 3 scoped** — schema and real data done for
-Vendors/Items/Invoices; step 3 (Prep) is scoped below but not built yet.
+Status: **step 2 in progress (schema+data done, backend/frontend wiring pending),
+step 3 data migration done**. All real MongoDB data for both Vendors/Items/Invoices
+and Prep (dishes, prep stock/logs, evening counts, prep lists) is now in Supabase.
 `server.py`'s existing `/api/...` routes still run entirely on MongoDB and are
-untouched — nothing has cut over yet. This doc is the reference for that work as it
-continues across sessions.
+untouched — nothing has cut over yet; no `/api/pg/*` backend endpoints exist yet for
+the Prep area. This doc is the reference for that work as it continues across
+sessions.
 
 ## Applied migrations (step 1 — schema only)
 
@@ -138,11 +140,41 @@ Found one more schema gap along the way: `prep_logs.kind` only allowed
 stock from a prep batch into a service container) — widened via migration
 `prep_logs_kind_container_use`.
 
-**Next**: the harder pieces — `prep_count_sessions` → `count_sessions`/`count_lines`
-and `prep_lists`+tasks → `prep_lists`/`prep_list_lines`.
-
 Verified via `information_schema.columns` — all three tables match this shape
 exactly.
+
+### Applied — count_sessions/count_lines + prep_lists/prep_list_lines data (via `scripts/migrate_counts_and_prep_lists.py`)
+
+Found the same gap here as with `prep_list_lines`: `count_lines.item_code` was
+`NOT NULL` as part of the `(session_id, item_code)` primary key, but the Prep evening
+count (`count_type = 'nightly_prep'/'commissary'`) counts on-hand *recipe* quantities,
+not inventory items — there was no way to reference a `dishes` row at all. Rebuilt
+(table was empty) with a surrogate `id` PK and added `dish_id`, `prep_item_id`,
+`saved_by`. Also added `status`/`released_at`/`released_by` to `prep_lists`, which had
+no release-tracking columns at all in the original design.
+
+7 count_sessions + 7 count_lines + 5 prep_lists + 5 prep_list_lines migrated and
+verified — 0 unresolved references anywhere (every `dish_id`/`from_count`/`recipe_id`
+FK resolved cleanly, including `prep_lists.from_count` resolving to the
+just-migrated `count_sessions` rows by natural key).
+
+**Known, deliberate gap**: Mongo's per-session `revisions[]` (archived snapshots from
+earlier submit/reopen cycles) was **not** migrated — only each session's current/
+latest state came over. In the actual data this is redundant anyway (every revision
+duplicates the final submitted state, an artifact of the submit flow, not real
+divergent history), but a session with genuinely different revision history would
+lose it under this migration. No table exists yet to hold it if this needs revisiting.
+
+## Step 3 status: data migration complete
+
+All real Prep data (dishes/dish_lines, prep_recipe_stock, prep_logs, count_sessions/
+count_lines, prep_lists/prep_list_lines) is now in Supabase, matching the Vendors/
+Items/Invoices data from step 2. **Not done**: `/api/pg/*` backend endpoints for any
+of the Prep area (recipes/dishes CRUD, Prep Items catalog CRUD, evening count flow,
+prep list generate/release/complete-task, prep stock deduction) — step 2's backend
+code only covers Vendors/Items/Invoices so far. Also still pending from step 2: local
+end-to-end verification (needs the real `DATABASE_URL` password) and all frontend
+wiring — the app's UI doesn't talk to Postgres anywhere yet.
 
 ### Suggested build order within step 3
 
