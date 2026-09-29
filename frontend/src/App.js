@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
 import {
   LayoutDashboard, ClipboardList, ClipboardCheck, Settings, FileText, ShoppingCart, BookOpen, ChefHat,
-  Printer, Activity, AlertTriangle, TrendingUp, Building2, Download, Upload, Sparkles, Boxes, CalendarClock,
+  Printer, Activity, AlertTriangle, TrendingUp, Building2, Download, Upload, Sparkles, Boxes, CalendarClock, Users,
 } from "lucide-react";
 import { RESTAURANTS, OWNER, isOrderEnabled, statusOf, downloadJSON, todayISO, workweekRange } from "./lib/calc";
 import * as api from "./lib/api";
@@ -20,6 +20,7 @@ import { AdjustmentsTab } from "./components/AdjustmentsTab";
 import { HistoryTab } from "./components/HistoryTab";
 import { PrepTab } from "./components/PrepTab";
 import { SchedulingTab } from "./components/SchedulingTab";
+import { StaffTab } from "./components/StaffTab";
 import { OwnerDashboard } from "./components/OwnerDashboard";
 import { AiAssistant } from "./components/AiAssistant";
 import { StaffSheet } from "./components/StaffSheet";
@@ -40,6 +41,7 @@ const TABS = [
   { id: "adjustments", label: "Waste / Adjustments", icon: AlertTriangle },
   { id: "history", label: "Price History", icon: TrendingUp },
   { id: "scheduling", label: "Operations", icon: CalendarClock },
+  { id: "team", label: "Staff", icon: Users },
 ];
 
 const DEFAULT_PERIOD = (() => { const w = workweekRange(); return { periodStart: w.start, periodEnd: w.end, dishSales: {}, itemCounts: {} }; })();
@@ -176,7 +178,11 @@ export default function App() {
     if (backupRef.current) backupRef.current.value = "";
   }
 
-  if (!session) return <Login onLogin={setSession} />;
+  if (!session) {
+    return staffOpen
+      ? <StaffSheet onClose={() => setStaffOpen(false)} onElevate={(sess) => { api.storeSession(sess); setSession(sess); setStaffOpen(false); }} />
+      : <Login onLogin={setSession} onOpenStaff={() => setStaffOpen(true)} />;
+  }
   return (
     <div className="min-h-screen bg-[#0B0F17] text-slate-100" style={{ "--acc": current.accent }}>
       <Toaster position="bottom-center" theme="dark" toastOptions={{ style: { background: "#161F30", border: "1px solid #28354A", color: "#F8FAFC" } }} />
@@ -289,11 +295,12 @@ export default function App() {
             {activeTab === "adjustments" && <AdjustmentsTab items={S.items} adjustments={S.adjustments} persist={persistAdjustments} showToast={showToast} />}
             {activeTab === "history" && <HistoryTab items={S.items} purchases={S.purchases} focusControlNumber={historyFocusCN} />}
             {activeTab === "scheduling" && <SchedulingTab rid={loc} showToast={showToast} />}
+            {activeTab === "team" && <StaffTab rid={loc} showToast={showToast} />}
           </>
         )}
       </main>
 
-      {staffOpen && <StaffSheet onClose={() => setStaffOpen(false)} />}
+      {staffOpen && <StaffSheet onClose={() => setStaffOpen(false)} onElevate={(sess) => { api.storeSession(sess); setSession(sess); setStaffOpen(false); }} />}
       <AiAssistant rid={aiRid || (isOwner ? "berts" : loc)} setRid={setAiRid} open={aiOpen} onClose={() => setAiOpen(false)} />
     </div>
   );

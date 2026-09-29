@@ -15,6 +15,7 @@ export const authLogin = (email, password) => axios.post(`${API}/auth/login`, { 
 });
 export const authLogout = () => localStorage.removeItem(TOKEN_KEY);
 export const currentSession = () => session();
+export const storeSession = (data) => { localStorage.setItem(TOKEN_KEY, JSON.stringify(data)); return data; };
 
 export const fetchState = (rid) => axios.get(`${API}/state/${rid}`).then((r) => r.data);
 const revisionHeaders = (revision) => revision == null ? {} : { "If-Match": `"${revision}"` };
@@ -72,6 +73,13 @@ export const prepReport = (rid, from, to) => axios.get(`${API}/reports/${rid}/pr
 export const getStaffPin = (rid) => axios.get(`${API}/staff/${rid}/pin`).then((r) => r.data);
 export const setStaffPin = (rid, staffPin) => axios.post(`${API}/staff/${rid}/pin`, { staffPin }).then((r) => r.data);
 export const verifyStaffPin = (rid, pin) => axios.post(`${API}/staff/verify`, { restaurantId: rid, pin }).then((r) => r.data);
+export const identifyStaffMember = (rid, pin, staffId) => axios.post(`${API}/staff/${rid}/identify`, { pin, staffId }).then((r) => r.data);
+
+export const listStaffMembers = (rid) => axios.get(`${API}/staff/${rid}/members`).then((r) => r.data);
+export const createStaffMember = (rid, body) => axios.post(`${API}/staff/${rid}/members`, body).then((r) => r.data);
+export const updateStaffMember = (rid, staffId, body) => axios.put(`${API}/staff/${rid}/members/${staffId}`, body).then((r) => r.data);
+export const deleteStaffMember = (rid, staffId) => axios.delete(`${API}/staff/${rid}/members/${staffId}`).then((r) => r.data);
+
 export const staffPrepsheet = (rid, pin, track = "daily") => axios.post(`${API}/staff/${rid}/prepsheet`, { pin, track }).then((r) => r.data);
 export const staffCompleteTask = (rid, body) => axios.post(`${API}/staff/${rid}/prepsheet/complete`, body).then((r) => r.data);
 

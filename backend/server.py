@@ -108,7 +108,7 @@ def _is_pin_optional(path):
     if not path.startswith("/api/staff/"):
         return False
     tail = path[len("/api/staff/"):].split("/")
-    return not (len(tail) >= 2 and tail[1] == "pin")
+    return not (len(tail) >= 2 and tail[1] in ("pin", "members"))
 
 async def _record_activity(request, user, status):
     if user and request.url.path not in ("/api/health",):
@@ -1189,17 +1189,97 @@ async def set_pin(rid: str, body: dict, request: Request):
         {"$set": {"restaurantId": rid, "key": "staff", "staffPin": pin}}, upsert=True)
     return {"ok": True}
 
+# ---------------- Staff roster (named staff + role, for PIN-flow identification) ----------------
+STAFF_ROLES = ("owner_admin", "cook")
+
+class StaffMemberIn(BaseModel):
+    name: str
+    role: str = "cook"
+    active: bool = True
+
+def _clean_staff_member(doc):
+    return {"id": doc["id"], "name": doc.get("name", ""), "role": doc.get("role", "cook"),
+            "active": doc.get("active", True)}
+
+def _validate_staff_member(body):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Name is required")
+    if body.role not in STAFF_ROLES:
+        raise HTTPException(400, "Role must be owner_admin or cook")
+    return name
+
+@api_router.get("/staff/{rid}/members")
+async def list_staff_members(rid: str, request: Request):
+    check_rid(rid)
+    _require_manager(request)
+    docs = await db.staff_members.find({"restaurantId": rid}, {"_id": 0}).sort("name", 1).to_list(500)
+    return [_clean_staff_member(d) for d in docs]
+
+@api_router.post("/staff/{rid}/members")
+async def create_staff_member(rid: str, body: StaffMemberIn, request: Request):
+    check_rid(rid)
+    _require_manager(request)
+    name = _validate_staff_member(body)
+    doc = {"id": "stf_" + uuid.uuid4().hex[:10], "restaurantId": rid, "name": name,
+           "role": body.role, "active": True, "createdAt": _now_iso()}
+    await db.staff_members.insert_one(dict(doc))
+    return _clean_staff_member(doc)
+
+@api_router.put("/staff/{rid}/members/{staff_id}")
+async def update_staff_member(rid: str, staff_id: str, body: StaffMemberIn, request: Request):
+    check_rid(rid)
+    _require_manager(request)
+    name = _validate_staff_member(body)
+    res = await db.staff_members.update_one({"restaurantId": rid, "id": staff_id},
+        {"$set": {"name": name, "role": body.role, "active": bool(body.active)}})
+    if not res.matched_count:
+        raise HTTPException(404, "Staff member not found")
+    doc = await db.staff_members.find_one({"restaurantId": rid, "id": staff_id}, {"_id": 0})
+    return _clean_staff_member(doc)
+
+@api_router.delete("/staff/{rid}/members/{staff_id}")
+async def delete_staff_member(rid: str, staff_id: str, request: Request):
+    check_rid(rid)
+    _require_manager(request)
+    await db.staff_members.delete_one({"restaurantId": rid, "id": staff_id})
+    return {"ok": True}
+
 @api_router.post("/staff/verify")
 async def verify_pin(body: dict, request: Request):
     rid = body.get("restaurantId", "")
     check_rid(rid)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
+    ok = False
     if user and user.get("role") == "owner":
-        return {"ok": True}
-    if user and rid in user.get("locations", []) and user.get("role") in ("manager", "staff"):
-        return {"ok": True}
-    return {"ok": str(body.get("pin", "")) == await _get_pin(rid)}
+        ok = True
+    elif user and rid in user.get("locations", []) and user.get("role") in ("manager", "staff"):
+        ok = True
+    else:
+        ok = str(body.get("pin", "")) == await _get_pin(rid)
+    if not ok:
+        return {"ok": False}
+    roster = await db.staff_members.find({"restaurantId": rid, "active": True}, {"_id": 0}).sort("name", 1).to_list(500)
+    return {"ok": True, "staff": [_clean_staff_member(d) for d in roster]}
+
+@api_router.post("/staff/{rid}/identify")
+async def staff_identify(rid: str, body: dict, request: Request):
+    check_rid(rid)
+    if str(body.get("pin", "")) != await _get_pin(rid):
+        raise HTTPException(403, "Invalid PIN")
+    member = await db.staff_members.find_one(
+        {"restaurantId": rid, "id": body.get("staffId", ""), "active": True}, {"_id": 0})
+    if not member:
+        raise HTTPException(404, "Staff member not found")
+    if member.get("role") != "owner_admin":
+        return {"ok": True, "name": member["name"], "role": "cook"}
+    # Owner/Admin identified via the shared staff PIN: mint a real session token so this
+    # device gets full app access, scoped to this one restaurant (manager-equivalent —
+    # not a global "owner" token, which would also unlock the other restaurants).
+    synth_user = {"id": member["id"], "email": f"staff:{member['id']}", "role": "manager", "locations": [rid]}
+    return {"ok": True, "name": member["name"], "role": "owner_admin",
+            "session": {"user": _clean_user(synth_user), "token": _token(synth_user)}}
 
 @api_router.post("/staff/{rid}/prepsheet")
 async def staff_prepsheet(rid: str, body: dict, request: Request):

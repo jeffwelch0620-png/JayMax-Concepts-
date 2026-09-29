@@ -19,7 +19,7 @@ const VIEWS = [
   { id: "counts", label: "Counts", icon: ClipboardList },
 ];
 
-export function StaffSheet({ onClose }) {
+export function StaffSheet({ onClose, onElevate }) {
   const [rid, setRid] = useState("");
   const [track, setTrack] = useState("daily");
   const [pin, setPin] = useState("");
@@ -27,6 +27,13 @@ export function StaffSheet({ onClose }) {
   const [unlocked, setUnlocked] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [view, setView] = useState("tasks");
+
+  // Roster picker — shown between PIN entry and the main portal when this
+  // restaurant has named staff set up (Staff tab); identifies who is tapping
+  // in so tasks/counts get attributed and Owner/Admin can be elevated.
+  const [roster, setRoster] = useState(null);
+  const [identifying, setIdentifying] = useState(false);
+  const [staffName, setStaffName] = useState("");
 
   // Prep view state
   const [sheet, setSheet] = useState(null);
@@ -69,6 +76,7 @@ export function StaffSheet({ onClose }) {
     try {
       const v = await api.verifyStaffPin(rid, pin);
       if (!v.ok) { setErr("Wrong PIN — check with your manager"); return; }
+      if (v.staff && v.staff.length > 0) { setRoster(v.staff); return; }
       setUnlocked(true);
       setView("tasks");
       await refreshTasks();
@@ -76,9 +84,28 @@ export function StaffSheet({ onClose }) {
     finally { setUnlocking(false); }
   }
 
+  async function identify(staffId) {
+    setErr("");
+    setIdentifying(true);
+    try {
+      const r = await api.identifyStaffMember(rid, pin, staffId);
+      if (r.role === "owner_admin" && r.session) { onElevate?.(r.session); return; }
+      setStaffName(r.name || "");
+      setTaskName(r.name || "");
+      setCountsName(r.name || "");
+      setRoster(null);
+      setUnlocked(true);
+      setView("tasks");
+      await refreshTasks();
+    } catch (e) { setErr(e?.response?.data?.detail || "Couldn't identify — try again"); }
+    finally { setIdentifying(false); }
+  }
+
   function lock() {
     setUnlocked(false);
     setPin("");
+    setRoster(null);
+    setStaffName("");
     setSheet(null);
     setTasks(null);
     setCounts(null);
@@ -173,7 +200,21 @@ export function StaffSheet({ onClose }) {
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-white transition" data-testid="staff-sheet-close"><X size={20} /></button>
         </div>
 
-        {!unlocked ? (
+        {!unlocked && roster ? (
+          <div className={`${cardCls} p-6`} data-testid="staff-roster-picker">
+            <div className="flex items-center gap-2 mb-4"><Lock size={16} style={{ color: "#F97316" }} /><span className="font-display font-bold text-slate-100">Who are you?</span></div>
+            <div className="flex flex-col gap-2">
+              {roster.map((m) => (
+                <button key={m.id} onClick={() => identify(m.id)} disabled={identifying} data-testid={`staff-roster-pick-${m.id}`}
+                  className={`${cardCls} p-3 text-left font-bold text-slate-100 hover:border-[var(--acc,#F97316)] transition`}>
+                  {m.name}
+                </button>
+              ))}
+            </div>
+            <button className={`${btnGhost} mt-4`} onClick={() => setRoster(null)} data-testid="staff-roster-back">Back</button>
+            {err && <div className="text-red-400 text-xs mt-3" data-testid="staff-error">{err}</div>}
+          </div>
+        ) : !unlocked ? (
           <div className={`${cardCls} p-6`} data-testid="staff-pin-gate">
             <div className="flex items-center gap-2 mb-4"><Lock size={16} style={{ color: "#F97316" }} /><span className="font-display font-bold text-slate-100">Enter your store's staff PIN</span></div>
             <div className="flex gap-2 mb-4 flex-wrap">
@@ -208,6 +249,7 @@ export function StaffSheet({ onClose }) {
                 })}
               </div>
               <div className="flex gap-2">
+                {staffName && <span className="text-xs text-slate-500 self-center" data-testid="staff-identified-as">Signed in as {staffName}</span>}
                 {pushSupported() && (
                   <button className={btnGhost} onClick={togglePush} disabled={pushBusy} data-testid="staff-push-toggle">
                     {pushOn ? <Bell size={13} /> : <BellOff size={13} />} {pushOn ? "Notifications On" : "Enable Notifications"}
@@ -222,13 +264,13 @@ export function StaffSheet({ onClose }) {
             {view === "tasks" && (
               <TasksView restaurant={restaurant} tasks={tasks} onRefresh={refreshTasks}
                 onOpenPrep={() => setView("prep")} onOpenCounts={() => setView("counts")}
-                onComplete={(t) => { setCompletingTask(t); setTaskName(""); setErr(""); }} />
+                onComplete={(t) => { setCompletingTask(t); setTaskName(staffName); setErr(""); }} />
             )}
 
             {view === "prep" && (
               <PrepView restaurant={restaurant} track={track} setTrack={setTrack} sheet={sheet} onRefresh={loadPrep}
                 expanded={expanded} setExpanded={setExpanded}
-                onComplete={(t) => { setCompleting(t); setBatches(t.remaining); setErr(""); }} />
+                onComplete={(t) => { setCompleting(t); setBatches(t.remaining); setName(staffName); setErr(""); }} />
             )}
 
             {view === "counts" && (
