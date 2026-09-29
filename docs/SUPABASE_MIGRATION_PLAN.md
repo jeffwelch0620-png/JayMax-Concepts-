@@ -168,13 +168,56 @@ Chunks, in order:
      staff item-counts view + save, task inbox + manager CRUD, web push. The separate
      manager-facing `/counts/{rid}/submit` + `/counts/{rid}/history`
      (`CountsTab.js`'s own "Enter Counts" tab — a different feature that happens to
-     share the same audit table) is **not** covered — intentionally out of this
-     chunk's stated scope (Staff PIN portal), left on Mongo. `submitCounts`/
-     `itemCountSubmissionHistory` in `lib/api.js` are explicitly not gated.
+     share the same audit table) was left un-gated on the frontend on purpose (out of
+     this chunk's stated scope) — **but see chunk 5.5 below**, which made the backend
+     itself pg-aware for exactly this endpoint, since it turned out to matter.
    - All 19 endpoints verified: SQL dry-run tested directly against real Supabase data
      via rollback transactions (PIN upsert, staff member insert, the item-counts join
      query, task insert with recurrence, push subscription upsert, and the jsonb
      count-submission insert all confirmed working).
+5.5. **Backend integration gap, found and fixed before live verification** — asked
+   proactively ("any other schema gaps to check before chunk 6?") and traced every
+   backend code path touching `items`/`purchases`/`dishes`/`adjustments`/Prep
+   collections directly, rather than through the gated `/api/pg/*` routes. This isn't
+   a schema gap (no missing columns) — it's that chunks 1-5 only gated the
+   *frontend's own* calls. Several Mongo-native backend features never got told about
+   the cutover, so flipping `USE_PG` on for a restaurant would have left them silently
+   reading or writing the wrong database:
+   - **Write-side (data would go to the wrong place)**: manager "Enter Counts" submit
+     (`/api/counts/{rid}/submit`, `CountsTab.js`) wrote `currentStock` to Mongo `items`
+     even though the app would display Postgres's; PO receiving
+     (`/api/orders/{rid}/{oid}/receive`) did the same for received quantities; PO →
+     invoice price sync (`apply_prices`) wrote vendor SKU prices to Mongo `items`. PO
+     receiving's invoice-matching (`_match_invoice`) also read Mongo `purchases`, so
+     it would report "invoice not found" for every invoice entered after cutover.
+   - **Read-side (dashboards/AI would show stale numbers)**: Owner Dashboard
+     (`/api/owner/summary`, `/api/owner/prep-summary`) and the AI Assistant
+     (`/api/ai/chat`) both compute their rollups straight from Mongo `items`/
+     `purchases`/`dishes`/`adjustments`/Prep collections.
+   - Adjustments and Purchase Orders themselves turned out fine: Adjustments never
+     touches `items` (pure append-only waste log), and POs are internally consistent
+     since they're entirely unmigrated (PO data only ever lives in Mongo either way —
+     just not started, not desynced).
+   - **Fix**: added a backend-side `USE_PG` flag (`backend/.env`, separate from but
+     meant to be set alongside the frontend's `REACT_APP_USE_PG`), since the frontend
+     flag alone has no way to reach server-side aggregation code. Each of the 6 paths
+     above now branches on it: `submit_count`/`count_history` reuse chunk 5's
+     `_pg_apply_and_record_counts`/`inventory_count_submissions` directly (so manager
+     and staff submissions land in the same place once both are on Postgres);
+     `receive_order`'s stock bump became an atomic `current_stock + $1` update (a
+     small correctness improvement over the old fetch-then-set, which could race);
+     `_match_invoice` and `apply_prices` got pg-native equivalents
+     (`_pg_invoice_lines_by_number`, `_pg_apply_prices`); Owner Dashboard and the AI
+     Assistant share a new `_pg_owner_view(rid)` helper that reads items/purchases/
+     dishes/prep_stock from Postgres and reshapes them into the exact Mongo shape
+     `item_derived`/`recipe_cost`/`raw_portions` already expect, so those pure-Python
+     costing functions work completely unchanged.
+   - Verified: all new SQL dry-run tested against real Supabase data; ran the full
+     pytest suite with `USE_PG=true` while `DATABASE_URL` still has the placeholder
+     password — every one of these paths now correctly 503s (fail-open, no crashes)
+     instead of silently touching the wrong database; re-ran with `USE_PG=false`
+     (the real default) and confirmed the baseline is unchanged (57 passing, same 6
+     pre-existing environmental failures).
 6. **Live verification** — once the real `DATABASE_URL` password is available,
    actually exercise all of the above against a running local backend + browser,
    the same way every other piece of this migration has been verified so far.

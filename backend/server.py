@@ -37,6 +37,14 @@ logger = logging.getLogger(__name__)
 
 AUTH_SECRET = os.environ.get("AUTH_SECRET", "").strip()
 AUTH_REQUIRED = os.environ.get("AUTH_REQUIRED", "true").lower() not in ("0", "false", "no")
+# Backend-side counterpart to the frontend's REACT_APP_USE_PG. The frontend flag alone
+# only redirects the BROWSER's own calls to /api/pg/*; it can't make server-side code
+# (Owner Dashboard rollups, the AI Assistant's context, PO receiving, manager Enter
+# Counts) read/write Postgres too -- those go straight at Mongo's db.* collections no
+# matter what the frontend does. This flag is what lets that backend-side code follow
+# along. Set both flags together in their respective .env files before testing the
+# Postgres path end to end (see docs/SUPABASE_MIGRATION_PLAN.md, chunk 5.5).
+USE_PG = os.environ.get("USE_PG", "false").strip().lower() == "true"
 BOOTSTRAP_TOKEN = os.environ.get("BOOTSTRAP_TOKEN", "").strip()
 SESSION_TTL = int(os.environ.get("SESSION_TTL_SECONDS", "28800"))
 READ_ONLY_PATHS = ("/owner/summary", "/owner/prep-summary", "/owner/orders",
@@ -1430,13 +1438,45 @@ async def submit_count(rid: str, body: CountSubmitIn, request: Request):
         raise HTTPException(400, "Enter your name so the count is attributed")
     if not body.counts:
         raise HTTPException(400, "No counts submitted")
-    saved = await _apply_and_record_counts(rid, submitted_by, body.counts, "manager")
+    # Chunk 5.5: this is the one manager-facing surface that was never gated on the
+    # frontend (CountsTab.js always calls this same URL) -- so the backend itself has
+    # to know whether this restaurant is on Postgres, or a manager's count would apply
+    # to Mongo's items.currentStock while the app displays Postgres's.
+    if USE_PG:
+        store_id = RESTAURANT_TO_PG_STORE[rid]
+        conn = await db_pg.pool().acquire()
+        try:
+            async with conn.transaction():
+                saved = await _pg_apply_and_record_counts(conn, store_id, submitted_by, body.counts, "manager")
+        finally:
+            await db_pg.pool().release(conn)
+    else:
+        saved = await _apply_and_record_counts(rid, submitted_by, body.counts, "manager")
     return {"ok": True, "saved": saved}
 
 @api_router.get("/counts/{rid}/history")
 async def count_history(rid: str, request: Request, date_from: str = Query(None, alias="from"), date_to: str = Query(None, alias="to")):
     check_rid(rid)
     _require_manager(request)
+    if USE_PG:
+        store_id = RESTAURANT_TO_PG_STORE[rid]
+        conn = await db_pg.pool().acquire()
+        try:
+            q = "SELECT * FROM inventory_count_submissions WHERE store_id=$1"
+            params = [store_id]
+            if date_from:
+                params.append(date_from)
+                q += f" AND submitted_at >= ${len(params)}"
+            if date_to:
+                params.append((datetime.fromisoformat(date_to) + timedelta(days=2)).date().isoformat())
+                q += f" AND submitted_at < ${len(params)}"
+            q += " ORDER BY submitted_at DESC LIMIT 500"
+            rows = await conn.fetch(q, *params)
+            return [{"id": str(r["id"]), "restaurantId": rid, "submittedAt": r["submitted_at"].isoformat(),
+                     "submittedBy": r["submitted_by"] or "", "source": r["source"],
+                     "itemCount": len(r["items"] or []), "items": r["items"] or []} for r in rows]
+        finally:
+            await db_pg.pool().release(conn)
     q = {"restaurantId": rid}
     if date_from or date_to:
         q["submittedAt"] = {}
@@ -1742,14 +1782,74 @@ async def dismiss_par_rec(rid: str, rec_id: str):
     return {"ok": True}
 
 # ---------------- Ownership rollup ----------------
+async def _pg_owner_view(rid):
+    # Read-only Mongo-shaped view of items/purchases/dishes/prep_stock from Postgres,
+    # for server-side reporting (Owner Dashboard, AI Assistant) that can't go through
+    # the frontend's own /api/pg/* adapter. Mirrors frontend/src/lib/api.js's
+    # pgItemToMongoItem/pgDishToMongoDish closely enough for item_derived/recipe_cost/
+    # raw_portions (all written against the Mongo shape) to work unchanged. See
+    # docs/SUPABASE_MIGRATION_PLAN.md, chunk 5.5.
+    store_id = RESTAURANT_TO_PG_STORE[rid]
+    prefix = rid + "_"
+    conn = await db_pg.pool().acquire()
+    try:
+        item_rows = await conn.fetch(
+            """SELECT i.*, si.count_unit, si.base_per_count_unit, si.storage_area, si.counted_nightly,
+                      si.current_stock, si.par, si.last_counted, si.last_counted_by, si.active AS store_active,
+                      si.order_enabled, si.sales_tracked, si.needs_review
+               FROM items i JOIN store_items si ON si.item_code = i.code
+               WHERE si.store_id = $1""", store_id)
+        items = []
+        for r2 in item_rows:
+            it = await _item_row_to_api(conn, store_id, r2, r2)
+            code = it["code"]
+            it["controlNumber"] = code[len(prefix):] if code.startswith(prefix) else code
+            it["purchaseUnit"] = (next((s["purchaseUnit"] for s in it["vendorSkus"] if s["preferred"]), None)
+                                   or (it["vendorSkus"][0]["purchaseUnit"] if it["vendorSkus"] else "case"))
+            items.append(it)
+
+        inv_rows = await conn.fetch("SELECT id, invoice_date FROM invoices WHERE store_id=$1", store_id)
+        purchases = []
+        for inv in inv_rows:
+            lines = await conn.fetch("SELECT extended FROM invoice_lines WHERE invoice_id=$1", inv["id"])
+            for l in lines:
+                purchases.append({"extendedCost": float(l["extended"] or 0), "invoiceDate": inv["invoice_date"].isoformat()})
+
+        dish_rows = await conn.fetch("SELECT * FROM dishes WHERE store_id=$1", store_id)
+        dishes = []
+        for d in dish_rows:
+            dish_lines = await conn.fetch("SELECT * FROM dish_lines WHERE dish_id=$1", d["id"])
+            lines = []
+            for l in dish_lines:
+                cn = None
+                if l["item_code"]:
+                    cn = l["item_code"][len(prefix):] if l["item_code"].startswith(prefix) else l["item_code"]
+                lines.append({"sourceType": l["source_type"], "controlNumber": cn,
+                              "recipeId": str(l["prep_dish_id"]) if l["prep_dish_id"] else None,
+                              "qty": float(l["qty"] or 0)})
+            dishes.append({"id": str(d["id"]), "name": d["name"], "menuCode": d["menu_code"] or "",
+                           "recipeType": d["recipe_type"],
+                           "price": float(d["price"]) if d["price"] is not None else 0,
+                           "targetPct": float(d["target_pct"]) if d["target_pct"] is not None else None,
+                           "prepPar": float(d["prep_par"] or 0), "yieldQty": float(d["yield_qty"] or 1),
+                           "yieldUOM": d["yield_uom"] or "each", "lines": lines})
+
+        prep_stock = await _pg_prep_stock_list(conn, store_id)
+        return items, purchases, dishes, prep_stock
+    finally:
+        await db_pg.pool().release(conn)
+
 async def store_summary(r):
     rid = r["id"]
     await ensure_seed(rid)
-    items = await db.items.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
-    purchases = await db.purchases.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
-    dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+    if USE_PG:
+        items, purchases, dishes, prep_stock = await _pg_owner_view(rid)
+    else:
+        items = await db.items.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+        purchases = await db.purchases.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+        dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+        prep_stock = await _prep_stock_list(rid)
     adjustments = await db.adjustments.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
-    prep_stock = await _prep_stock_list(rid)
     items_by_cn = {i["controlNumber"]: i for i in items}
     by_id = {d["id"]: d for d in dishes}
     inv_value = sum(f(i.get("currentStock")) * item_derived(i)["price"] for i in items)
@@ -1842,11 +1942,14 @@ async def ai_chat(body: ChatIn, request: Request):
     from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
     rid = body.restaurantId
     await ensure_seed(rid)
-    items = await db.items.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
-    purchases = await db.purchases.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
-    dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+    if USE_PG:
+        items, purchases, dishes, prep_stock = await _pg_owner_view(rid)
+    else:
+        items = await db.items.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+        purchases = await db.purchases.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+        dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+        prep_stock = await _prep_stock_list(rid)
     adjustments = await db.adjustments.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
-    prep_stock = await _prep_stock_list(rid)
     context = build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock)
     history = await db.chat_messages.find({"restaurantId": rid}, {"_id": 0}).sort("ts", -1).limit(10).to_list(10)
     history.reverse()
@@ -2064,14 +2167,26 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
         l["receivedQty"] = rq
         if rq > 0:
             updates.append((cn, rq))
-    # add received quantities to inventory on-hand (single bulk write)
+    # add received quantities to inventory on-hand
     if updates:
-        items = await db.items.find({"restaurantId": rid, "controlNumber": {"$in": [cn for cn, _ in updates]}}, {"_id": 0}).to_list(20000)
-        stock = {it["controlNumber"]: f(it.get("currentStock")) for it in items}
-        ops = [UpdateOne({"restaurantId": rid, "controlNumber": cn},
-                         {"$set": {"currentStock": round(stock.get(cn, 0) + rq, 3)}}) for cn, rq in updates if cn in stock]
-        if ops:
-            await db.items.bulk_write(ops)
+        if USE_PG:
+            store_id = RESTAURANT_TO_PG_STORE[rid]
+            conn = await db_pg.pool().acquire()
+            try:
+                async with conn.transaction():
+                    for cn, rq in updates:
+                        await conn.execute(
+                            "UPDATE store_items SET current_stock = current_stock + $1 WHERE store_id=$2 AND item_code=$3",
+                            rq, store_id, f"{rid}_{cn}")
+            finally:
+                await db_pg.pool().release(conn)
+        else:
+            items = await db.items.find({"restaurantId": rid, "controlNumber": {"$in": [cn for cn, _ in updates]}}, {"_id": 0}).to_list(20000)
+            stock = {it["controlNumber"]: f(it.get("currentStock")) for it in items}
+            ops = [UpdateOne({"restaurantId": rid, "controlNumber": cn},
+                             {"$set": {"currentStock": round(stock.get(cn, 0) + rq, 3)}}) for cn, rq in updates if cn in stock]
+            if ops:
+                await db.items.bulk_write(ops)
     receipt_match = await _match_invoice(rid, invoice_number, lines) if invoice_number else None
     now = datetime.now(timezone.utc).isoformat()
     set_fields = {"status": "received", "receivedAt": now, "lines": lines, "invoiceNumber": invoice_number or None, "receiptMatch": receipt_match}
@@ -2247,8 +2362,32 @@ def _days_between(a, b):
     except (AttributeError, ValueError, TypeError):
         return None
 
+async def _pg_invoice_lines_by_number(rid, invoice_number):
+    store_id = RESTAURANT_TO_PG_STORE[rid]
+    prefix = rid + "_"
+    conn = await db_pg.pool().acquire()
+    try:
+        rows = await conn.fetch(
+            """SELECT il.qty, il.unit_price, i.code AS item_code
+               FROM invoice_lines il
+               JOIN invoices inv ON inv.id = il.invoice_id
+               LEFT JOIN vendor_items vi ON vi.id = il.vendor_item_id
+               LEFT JOIN items i ON i.code = vi.item_code
+               WHERE inv.store_id=$1 AND inv.invoice_number=$2""", store_id, str(invoice_number))
+    finally:
+        await db_pg.pool().release(conn)
+    out = []
+    for r in rows:
+        code = r["item_code"]
+        cn = (code[len(prefix):] if code.startswith(prefix) else code) if code else None
+        out.append({"controlNumber": cn, "qty": float(r["qty"] or 0), "unitCost": float(r["unit_price"] or 0)})
+    return out
+
 async def _match_invoice(rid, invoice_number, po_lines):
-    plines = await db.purchases.find({"restaurantId": rid, "invoiceNumber": str(invoice_number)}, {"_id": 0}).to_list(5000)
+    if USE_PG:
+        plines = await _pg_invoice_lines_by_number(rid, invoice_number)
+    else:
+        plines = await db.purchases.find({"restaurantId": rid, "invoiceNumber": str(invoice_number)}, {"_id": 0}).to_list(5000)
     inv_by_cn = {}
     for p in plines:
         cn = p.get("controlNumber")
@@ -2467,11 +2606,45 @@ async def owner_vendor_scorecard():
 class ApplyPricesIn(BaseModel):
     lines: List[dict] = []  # [{controlNumber, unitCost}]
 
+async def _pg_apply_prices(rid, vendor_name, lines):
+    store_id = RESTAURANT_TO_PG_STORE[rid]
+    prefix = rid + "_"
+    conn = await db_pg.pool().acquire()
+    updated = 0
+    try:
+        async with conn.transaction():
+            vendor_row = await conn.fetchrow("SELECT id FROM vendors WHERE name=$1", vendor_name)
+            for ln in lines:
+                cn = ln.get("controlNumber")
+                cost = f(ln.get("unitCost"))
+                if not cn or cost <= 0:
+                    continue
+                code = f"{prefix}{cn}"
+                target = None
+                if vendor_row:
+                    target = await conn.fetchrow(
+                        "SELECT id FROM vendor_items WHERE item_code=$1 AND vendor_id=$2", code, vendor_row["id"])
+                if not target:
+                    target = await conn.fetchrow(
+                        "SELECT id FROM vendor_items WHERE item_code=$1 ORDER BY preferred DESC LIMIT 1", code)
+                if not target:
+                    continue
+                await conn.execute(
+                    "UPDATE vendor_items SET price=$2, price_updated_at=now(), price_source='invoice' WHERE id=$1",
+                    target["id"], round(cost, 4))
+                updated += 1
+    finally:
+        await db_pg.pool().release(conn)
+    return updated
+
 @api_router.post("/orders/{rid}/{oid}/apply-prices")
 async def apply_prices(rid: str, oid: str, body: ApplyPricesIn):
     check_rid(rid)
     po = await _get_po(rid, oid)
     vendor = po.get("vendor", "")
+    if USE_PG:
+        updated = await _pg_apply_prices(rid, vendor, body.lines)
+        return {"ok": True, "updated": updated}
     today = datetime.now(timezone.utc).date().isoformat()
     updated = 0
     for ln in body.lines:
@@ -2502,6 +2675,7 @@ async def apply_prices(rid: str, oid: str, body: ApplyPricesIn):
 pg_router = APIRouter(prefix="/api/pg")
 PG_STORE_IDS = {"berts", "rudds", "papa", "comm"}
 PG_STORE_TO_RESTAURANT = {"berts": "berts", "rudds": "rudds", "papa": "papa_leonis", "comm": "comm"}
+RESTAURANT_TO_PG_STORE = {v: k for k, v in PG_STORE_TO_RESTAURANT.items()}
 
 def check_store_id(store_id):
     if store_id not in PG_STORE_IDS:
