@@ -2701,6 +2701,767 @@ async def pg_create_invoice(store_id: str, body: InvoiceIn):
     finally:
         await db_pg.pool().release(conn)
 
+# ==================== Postgres (Supabase) migration: Prep ====================
+# See docs/SUPABASE_MIGRATION_PLAN.md (step 3). Same /api/pg prefix and
+# fails-open-if-unreachable pattern as the Vendors/Items/Invoices section above.
+# NOT live-verified end to end yet (needs the real DATABASE_URL password) -- built and
+# reviewed against the real, already-migrated data's shape, same caveat as that
+# earlier section.
+#
+# Track (daily/bulk) maps directly to count_sessions.count_type (nightly_prep/
+# commissary) and to prep_lists.count_type (added specifically so a list is
+# filterable without joining through from_count). prep_items has no track column at
+# all -- it's derived from made_at vs store_id (made_at == store_id -> daily, made_at
+# != store_id -> bulk/commissary), matching the "faithful port" decision in the plan:
+# store_id is always the CONSUMING restaurant, made_at is where it's actually produced.
+TRACK_TO_COUNT_TYPE = {"daily": "nightly_prep", "bulk": "commissary"}
+COUNT_TYPE_TO_TRACK = {v: k for k, v in TRACK_TO_COUNT_TYPE.items()}
+
+def _pg_now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+def _pg_today():
+    return datetime.now(timezone.utc).date().isoformat()
+
+def _pg_prep_items_track_where(track):
+    return "made_at IS NOT NULL AND made_at != store_id" if track == "bulk" else "(made_at IS NULL OR made_at = store_id)"
+
+async def _pg_item_derived(conn, item_code):
+    # Mirrors item_derived(): cost/portions come from the item's PREFERRED vendor_item
+    # (falling back to any vendor_item), not from store_items.base_per_count_unit --
+    # purchase_unit and count_unit can differ even though they're equal for every item
+    # in the currently-migrated data.
+    sku = await conn.fetchrow(
+        "SELECT price, base_per_purchase_unit FROM vendor_items WHERE item_code = $1 ORDER BY preferred DESC, price NULLS LAST LIMIT 1",
+        item_code)
+    if not sku or not sku["base_per_purchase_unit"]:
+        return {"portionsPerUnit": 0.0, "costPerPortion": 0.0, "price": float(sku["price"]) if sku and sku["price"] else 0.0}
+    ppu = float(sku["base_per_purchase_unit"])
+    price = float(sku["price"] or 0)
+    return {"portionsPerUnit": ppu, "costPerPortion": (price / ppu) if ppu > 0 else 0.0, "price": price}
+
+async def _pg_raw_portions(conn, dish_id, target_item_code, stack=()):
+    # Mirrors raw_portions(): recursively resolves how many portions of an item a
+    # recipe consumes, walking prep-within-prep lines (e.g. a pizza's dough-batch
+    # sub-recipe, which itself consumes flour).
+    if not dish_id or dish_id in stack:
+        return 0.0
+    stack = stack + (dish_id,)
+    lines = await conn.fetch("SELECT source_type, item_code, prep_dish_id, qty FROM dish_lines WHERE dish_id = $1", dish_id)
+    total = 0.0
+    for l in lines:
+        qty = float(l["qty"] or 0)
+        if l["source_type"] == "prep" and l["prep_dish_id"]:
+            sub = await conn.fetchrow("SELECT yield_qty FROM dishes WHERE id = $1", l["prep_dish_id"])
+            sy = float((sub["yield_qty"] if sub else None) or 1) or 1
+            total += await _pg_raw_portions(conn, l["prep_dish_id"], target_item_code, stack) * (qty / sy)
+        elif l["source_type"] == "item" and l["item_code"] == target_item_code:
+            total += qty
+    return total
+
+def _pg_log_to_api(row):
+    return {"id": str(row["id"]), "kind": row["kind"], "recipeId": str(row["dish_id"]) if row["dish_id"] else None,
+            "name": row["name"], "batches": float(row["batches"] or 0), "produced": float(row["produced"] or 0),
+            "yieldUOM": row["yield_uom"], "usage": row["usage"] or [], "containers": row["containers"] or [],
+            "totalCost": float(row["total_cost"] or 0), "date": row["date"].isoformat() if row["date"] else None,
+            "createdAt": row["created_at"].isoformat() if row["created_at"] else None}
+
+async def _pg_prep_stock_list(conn, store_id):
+    rows = await conn.fetch(
+        """SELECT prs.dish_id, prs.prep_item_id, prs.on_hand, prs.containers,
+                  COALESCE(d.name, pi.name) AS name, COALESCE(d.yield_uom, pi.container) AS yield_uom
+           FROM prep_recipe_stock prs
+           LEFT JOIN dishes d ON d.id = prs.dish_id
+           LEFT JOIN prep_items pi ON pi.id = prs.prep_item_id
+           WHERE prs.store_id = $1""", store_id)
+    return [{"recipeId": str(r["dish_id"]) if r["dish_id"] else None,
+             "prepItemId": str(r["prep_item_id"]) if r["prep_item_id"] else None,
+             "name": r["name"], "onHand": float(r["on_hand"] or 0),
+             "yieldUOM": r["yield_uom"], "containers": r["containers"] or []} for r in rows]
+
+async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind, name):
+    store_items = await conn.fetch("SELECT item_code, current_stock, count_unit FROM store_items WHERE store_id = $1", store_id)
+    yield_qty = float(recipe["yield_qty"] or 1) or 1
+    usage = []
+    for si in store_items:
+        portions = await _pg_raw_portions(conn, recipe["id"], si["item_code"]) * batches
+        if portions <= 0:
+            continue
+        item = await conn.fetchrow("SELECT name FROM items WHERE code = $1", si["item_code"])
+        derived = await _pg_item_derived(conn, si["item_code"])
+        ppu = derived["portionsPerUnit"]
+        units = portions / ppu if ppu > 0 else 0
+        new_stock = max(0, round(float(si["current_stock"] or 0) - units, 3))
+        await conn.execute("UPDATE store_items SET current_stock=$1 WHERE store_id=$2 AND item_code=$3",
+                            new_stock, store_id, si["item_code"])
+        usage.append({"controlNumber": si["item_code"], "name": (item["name"] if item else ""), "portions": round(portions, 2),
+                      "units": round(units, 3), "purchaseUnit": si["count_unit"], "cost": round(portions * derived["costPerPortion"], 2)})
+    produced = yield_qty * batches
+    new_containers = [dict(c, id="c_" + uuid.uuid4().hex[:8], createdAt=_pg_now_iso())
+                       for c in containers if (c.get("count") or 0) > 0 and (c.get("size") or 0) > 0]
+    existing = await conn.fetchrow("SELECT on_hand, containers FROM prep_recipe_stock WHERE dish_id=$1 AND store_id=$2", recipe["id"], store_id)
+    on_hand = float((existing["on_hand"] if existing else 0) or 0) + produced
+    conts = ((existing["containers"] if existing else None) or []) + new_containers
+    await conn.execute(
+        """INSERT INTO prep_recipe_stock (dish_id, store_id, on_hand, containers) VALUES ($1,$2,$3,$4)
+           ON CONFLICT (store_id, dish_id) WHERE dish_id IS NOT NULL
+           DO UPDATE SET on_hand=EXCLUDED.on_hand, containers=EXCLUDED.containers""",
+        recipe["id"], store_id, round(on_hand, 3), conts)
+    total_cost = round(sum(u["cost"] for u in usage), 2)
+    log_row = await conn.fetchrow(
+        """INSERT INTO prep_logs (store_id, kind, dish_id, name, batches, produced, yield_uom, usage, containers, total_cost, date, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *""",
+        store_id, kind, recipe["id"], name, batches, round(produced, 2), recipe["yield_uom"],
+        usage, new_containers, total_cost, _pg_today(), _pg_now_iso())
+    return {"prepStock": await _pg_prep_stock_list(conn, store_id), "log": _pg_log_to_api(log_row)}
+
+async def _pg_deduct_item_and_stock(conn, store_id, pitem, vessels):
+    if not pitem["item_code"]:
+        raise HTTPException(400, "prep item has no linked inventory item")
+    si = await conn.fetchrow("SELECT * FROM store_items WHERE store_id=$1 AND item_code=$2", store_id, pitem["item_code"])
+    if not si:
+        raise HTTPException(404, f"inventory item {pitem['item_code']} not found")
+    item = await conn.fetchrow("SELECT name FROM items WHERE code=$1", pitem["item_code"])
+    derived = await _pg_item_derived(conn, pitem["item_code"])
+    ppu = derived["portionsPerUnit"]
+    portions = vessels * float(pitem["vessel_capacity"] or 0)
+    units = portions / ppu if ppu > 0 else 0
+    cost = portions * derived["costPerPortion"]
+    new_stock = max(0, round(float(si["current_stock"] or 0) - units, 3))
+    await conn.execute("UPDATE store_items SET current_stock=$1 WHERE store_id=$2 AND item_code=$3", new_stock, store_id, pitem["item_code"])
+    existing = await conn.fetchrow("SELECT on_hand FROM prep_recipe_stock WHERE store_id=$1 AND prep_item_id=$2", store_id, pitem["id"])
+    on_hand = float((existing["on_hand"] if existing else 0) or 0) + vessels
+    await conn.execute(
+        """INSERT INTO prep_recipe_stock (prep_item_id, store_id, on_hand, containers) VALUES ($1,$2,$3,'[]'::jsonb)
+           ON CONFLICT (store_id, prep_item_id) WHERE prep_item_id IS NOT NULL
+           DO UPDATE SET on_hand=EXCLUDED.on_hand""",
+        pitem["id"], store_id, round(on_hand, 3))
+    log_row = await conn.fetchrow(
+        """INSERT INTO prep_logs (store_id, kind, prep_item_id, name, batches, produced, yield_uom, usage, containers, total_cost, date, created_at)
+           VALUES ($1,'batch',$2,$3,$4,$5,$6,$7,'[]'::jsonb,$8,$9,$10) RETURNING *""",
+        store_id, pitem["id"], pitem["name"], vessels, round(vessels, 2), pitem["container"] or "vessel",
+        [{"controlNumber": pitem["item_code"], "name": (item["name"] if item else ""), "portions": round(portions, 2),
+          "units": round(units, 3), "purchaseUnit": si["count_unit"], "cost": round(cost, 2)}],
+        round(cost, 2), _pg_today(), _pg_now_iso())
+    log = _pg_log_to_api(log_row)
+    log["prepItemId"] = str(pitem["id"])
+    return {"prepStock": await _pg_prep_stock_list(conn, store_id), "log": log}
+
+class PgContainerIn(BaseModel):
+    label: str = ""
+    size: float = 0
+    count: int = 0
+
+class PgPrepCompleteIn(BaseModel):
+    recipeId: str
+    batches: float
+    containers: List[PgContainerIn] = []
+
+@pg_router.post("/prep/{store_id}/complete")
+async def pg_complete_prep(store_id: str, body: PgPrepCompleteIn):
+    check_store_id(store_id)
+    if body.batches <= 0:
+        raise HTTPException(400, "batches must be greater than zero")
+    conn = await db_pg.pool().acquire()
+    try:
+        recipe = await conn.fetchrow("SELECT * FROM dishes WHERE id=$1 AND store_id=$2 AND recipe_type='prep'", body.recipeId, store_id)
+        if not recipe:
+            raise HTTPException(404, "prep recipe not found")
+        return await _pg_deduct_and_stock(conn, store_id, recipe, body.batches, [c.model_dump() for c in body.containers], "batch", recipe["name"])
+    finally:
+        await db_pg.pool().release(conn)
+
+class PgApplySalesIn(BaseModel):
+    dishSales: dict = {}
+
+@pg_router.post("/prep/{store_id}/apply-sales")
+async def pg_apply_sales(store_id: str, body: PgApplySalesIn):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        dishes = await conn.fetch("SELECT * FROM dishes WHERE store_id=$1", store_id)
+        by_id = {str(d["id"]): dict(d) for d in dishes}
+        usage_by_recipe = {}
+        for d in dishes:
+            if d["recipe_type"] == "prep":
+                continue
+            sold = f(body.dishSales.get(str(d["id"])))
+            if sold <= 0:
+                continue
+            lines = await conn.fetch("SELECT * FROM dish_lines WHERE dish_id=$1 AND source_type='prep'", d["id"])
+            for l in lines:
+                key = str(l["prep_dish_id"])
+                usage_by_recipe[key] = usage_by_recipe.get(key, 0) + float(l["qty"] or 0) * sold
+        if not usage_by_recipe:
+            raise HTTPException(400, "no prep usage found in the saved sales figures")
+        usage_rows = []
+        for recipe_id, used in usage_by_recipe.items():
+            stock = await conn.fetchrow("SELECT * FROM prep_recipe_stock WHERE store_id=$1 AND dish_id=$2", store_id, recipe_id)
+            if not stock:
+                continue
+            new_on_hand = max(0, round(float(stock["on_hand"] or 0) - used, 3))
+            await conn.execute("UPDATE prep_recipe_stock SET on_hand=$1 WHERE store_id=$2 AND dish_id=$3", new_on_hand, store_id, recipe_id)
+            sub = by_id.get(recipe_id, {})
+            usage_rows.append({"recipeId": recipe_id, "name": sub.get("name", ""), "used": round(used, 2),
+                               "yieldUOM": sub.get("yield_uom", ""), "remaining": new_on_hand})
+        log_row = await conn.fetchrow(
+            """INSERT INTO prep_logs (store_id, kind, name, usage, date, created_at)
+               VALUES ($1,'sales_usage','Menu sales prep usage',$2,$3,$4) RETURNING *""",
+            store_id, usage_rows, _pg_today(), _pg_now_iso())
+        return {"prepStock": await _pg_prep_stock_list(conn, store_id), "log": _pg_log_to_api(log_row)}
+    finally:
+        await db_pg.pool().release(conn)
+
+class PgUseContainerIn(BaseModel):
+    recipeId: str
+    containerId: str
+
+@pg_router.post("/prep/{store_id}/use-container")
+async def pg_use_container(store_id: str, body: PgUseContainerIn):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        stock = await conn.fetchrow("SELECT * FROM prep_recipe_stock WHERE store_id=$1 AND dish_id=$2", store_id, body.recipeId)
+        if not stock:
+            raise HTTPException(404, "prep stock not found")
+        conts = stock["containers"] or []
+        target = next((c for c in conts if c.get("id") == body.containerId), None)
+        if not target:
+            raise HTTPException(404, "container not found")
+        remaining = [c for c in conts if c.get("id") != body.containerId]
+        new_on_hand = max(0, round(float(stock["on_hand"] or 0) - float(target.get("size") or 0), 3))
+        await conn.execute("UPDATE prep_recipe_stock SET on_hand=$1, containers=$2 WHERE store_id=$3 AND dish_id=$4",
+                            new_on_hand, remaining, store_id, body.recipeId)
+        dish = await conn.fetchrow("SELECT name, yield_uom FROM dishes WHERE id=$1", body.recipeId)
+        log_row = await conn.fetchrow(
+            """INSERT INTO prep_logs (store_id, kind, dish_id, name, produced, yield_uom, date, created_at)
+               VALUES ($1,'container_use',$2,$3,$4,$5,$6,$7) RETURNING *""",
+            store_id, body.recipeId, f"{(dish['name'] if dish else '')} — {target.get('label', 'container')} to service",
+            -float(target.get("size") or 0), (dish["yield_uom"] if dish else ""), _pg_today(), _pg_now_iso())
+        return {"prepStock": await _pg_prep_stock_list(conn, store_id), "log": _pg_log_to_api(log_row)}
+    finally:
+        await db_pg.pool().release(conn)
+
+# ---------------- Nightly prep count & task workflow (Postgres) ----------------
+async def _pg_prep_universe_for_track(conn, store_id, track):
+    all_recipes = await conn.fetch("SELECT * FROM dishes WHERE store_id=$1 AND recipe_type='prep'", store_id)
+    prep_items = await conn.fetch(
+        f"SELECT * FROM prep_items WHERE store_id=$1 AND active=TRUE AND ({_pg_prep_items_track_where(track)})", store_id)
+    direct_recipes = [] if track == "bulk" else all_recipes
+    all_recipes_by_id = {str(r["id"]): r for r in all_recipes}
+    return direct_recipes, prep_items, all_recipes_by_id
+
+async def _pg_get_or_create_session(conn, store_id, date, track):
+    count_type = TRACK_TO_COUNT_TYPE.get(track, "nightly_prep")
+    s = await conn.fetchrow("SELECT * FROM count_sessions WHERE store_id=$1 AND count_date=$2 AND count_type=$3",
+                             store_id, date, count_type)
+    if not s:
+        s = await conn.fetchrow(
+            "INSERT INTO count_sessions (store_id, count_date, count_type, status) VALUES ($1,$2,$3,'open') RETURNING *",
+            store_id, date, count_type)
+    recipes, prep_items, _ = await _pg_prep_universe_for_track(conn, store_id, track)
+    existing_lines = await conn.fetch("SELECT dish_id, prep_item_id FROM count_lines WHERE session_id=$1", s["id"])
+    known = {str(l["dish_id"] or l["prep_item_id"]) for l in existing_lines}
+    for r in recipes:
+        if str(r["id"]) not in known:
+            await conn.execute("INSERT INTO count_lines (session_id, dish_id, status) VALUES ($1,$2,'not_counted')", s["id"], r["id"])
+    for p in prep_items:
+        if str(p["id"]) not in known:
+            await conn.execute("INSERT INTO count_lines (session_id, prep_item_id, status) VALUES ($1,$2,'not_counted')", s["id"], p["id"])
+    lines = await conn.fetch("SELECT * FROM count_lines WHERE session_id = $1", s["id"])
+    entries = [{"recipeId": str(l["dish_id"]) if l["dish_id"] else None,
+                "prepItemId": str(l["prep_item_id"]) if l["prep_item_id"] else None,
+                "onHand": float(l["qty"]) if l["qty"] is not None else None,
+                "note": l["note"] or "", "savedAt": l["updated_at"].isoformat() if l["updated_at"] else None,
+                "savedBy": l["saved_by"] or ""} for l in lines]
+    return {
+        "id": str(s["id"]), "date": s["count_date"].isoformat(), "track": track, "status": s["status"],
+        "countedBy": s["counted_by_name"] or "", "entries": entries,
+        "submittedAt": s["submitted_at"].isoformat() if s["submitted_at"] else None,
+        "recipes": [{"id": str(r["id"]), "name": r["name"], "yieldUOM": r["yield_uom"],
+                     "yieldQty": float(r["yield_qty"] or 1), "shelfLife": r["shelf_life"] or "", "prepPar": float(r["prep_par"] or 0)}
+                    for r in recipes],
+        "prepItems": [{"id": str(p["id"]), "name": p["name"], "vesselName": p["container"] or "vessel",
+                       "parVessels": float(p["par_vessels"] or 0), "schedule": p["schedule"]} for p in prep_items],
+    }
+
+@pg_router.get("/prepcount/{store_id}/session")
+async def pg_get_count_session(store_id: str, date: str = Query(""), track: str = Query("daily")):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        return await _pg_get_or_create_session(conn, store_id, date or _pg_today(), track)
+    finally:
+        await db_pg.pool().release(conn)
+
+class PgCountEntryIn(BaseModel):
+    recipeId: Optional[str] = None
+    prepItemId: Optional[str] = None
+    onHand: Optional[float] = None
+    note: str = ""
+    countedBy: str = ""
+
+@pg_router.post("/prepcount/{store_id}/session/{sid}/entry")
+async def pg_save_count_entry(store_id: str, sid: str, body: PgCountEntryIn):
+    check_store_id(store_id)
+    if body.onHand is None:
+        raise HTTPException(400, "Blank counts are not saved — enter a number")
+    conn = await db_pg.pool().acquire()
+    try:
+        s = await conn.fetchrow("SELECT * FROM count_sessions WHERE id=$1 AND store_id=$2", sid, store_id)
+        if not s:
+            raise HTTPException(404, "session not found")
+        key_col = "dish_id" if body.recipeId else "prep_item_id"
+        key_val = body.recipeId or body.prepItemId
+        line = await conn.fetchrow(f"SELECT * FROM count_lines WHERE session_id=$1 AND {key_col}=$2", sid, key_val)
+        if not line:
+            raise HTTPException(404, "item not in this count list")
+        # Revision history (Mongo's archive-then-bump on re-save-after-submit) isn't
+        # tracked in Postgres yet -- see docs/SUPABASE_MIGRATION_PLAN.md. Updates in
+        # place regardless of session status.
+        await conn.execute(
+            "UPDATE count_lines SET status='counted', qty=$1, note=$2, saved_by=$3, updated_at=now() WHERE id=$4",
+            body.onHand, body.note, body.countedBy, line["id"])
+        if body.countedBy:
+            await conn.execute("UPDATE count_sessions SET counted_by_name=$1 WHERE id=$2", body.countedBy, sid)
+        return {"ok": True, "entry": {"recipeId": body.recipeId, "prepItemId": body.prepItemId, "onHand": body.onHand,
+                                       "note": body.note, "savedAt": _pg_now_iso(), "savedBy": body.countedBy}}
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/prepcount/{store_id}/session/{sid}/submit")
+async def pg_submit_count(store_id: str, sid: str, body: dict):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        s = await conn.fetchrow("SELECT * FROM count_sessions WHERE id=$1 AND store_id=$2", sid, store_id)
+        if not s:
+            raise HTTPException(404, "session not found")
+        uncounted = await conn.fetchval("SELECT count(*) FROM count_lines WHERE session_id=$1 AND status='not_counted'", sid)
+        if uncounted and not body.get("acknowledgeUncounted"):
+            raise HTTPException(409, f"{uncounted} item(s) have no saved count")
+        counted_by = body.get("countedBy") or s["counted_by_name"] or ""
+        await conn.execute("UPDATE count_sessions SET status='submitted', submitted_at=now(), counted_by_name=$1 WHERE id=$2",
+                            counted_by, sid)
+        return {"ok": True, "uncounted": uncounted}
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.get("/prepcount/{store_id}/history")
+async def pg_count_history(store_id: str):
+    check_store_id(store_id)
+    rows = await db_pg.pool().fetch("SELECT * FROM count_sessions WHERE store_id=$1 ORDER BY count_date DESC LIMIT 60", store_id)
+    return [{"id": str(r["id"]), "date": r["count_date"].isoformat(), "track": COUNT_TYPE_TO_TRACK.get(r["count_type"], "daily"),
+             "status": r["status"], "countedBy": r["counted_by_name"] or "",
+             "submittedAt": r["submitted_at"].isoformat() if r["submitted_at"] else None} for r in rows]
+
+# ---------------- Prep lists (Postgres) ----------------
+async def _pg_prep_list_to_api(conn, plist):
+    lines = await conn.fetch("SELECT * FROM prep_list_lines WHERE list_id=$1", plist["id"])
+    tasks = [{
+        "id": str(l["id"]), "recipeId": str(l["recipe_id"]) if l["recipe_id"] else None,
+        "prepItemId": str(l["prep_item_id"]) if l["prep_item_id"] else None, "taskType": l["task_type"],
+        "name": l["name"], "yieldUOM": l["yield_uom"], "yieldQty": float(l["yield_qty"] or 0),
+        "par": float(l["par"] or 0), "counted": float(l["on_hand"]) if l["on_hand"] is not None else None,
+        "uncounted": l["uncounted"], "neededUnits": float(l["needed_units"] or 0),
+        "batchesPlanned": float(l["batches_planned"] or 0), "batchesDone": float(l["batches_done"] or 0),
+        "doneBy": l["done_by_name"] or "", "doneAt": l["done_at"].isoformat() if l["done_at"] else None,
+        "note": l["note"] or "", "vesselName": l["vessel_name"] or "", "removed": l["removed"],
+    } for l in lines]
+    return {
+        "id": str(plist["id"]), "date": plist["prep_date"].isoformat(),
+        "track": COUNT_TYPE_TO_TRACK.get(plist["count_type"], "daily"), "status": plist["status"], "tasks": tasks,
+        "releasedAt": plist["released_at"].isoformat() if plist["released_at"] else None,
+        "releasedBy": plist["released_by"] or "",
+    }
+
+@pg_router.get("/preplists/{store_id}")
+async def pg_get_prep_list(store_id: str, date: str = Query(""), track: str = Query("daily")):
+    check_store_id(store_id)
+    count_type = TRACK_TO_COUNT_TYPE.get(track, "nightly_prep")
+    conn = await db_pg.pool().acquire()
+    try:
+        plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE store_id=$1 AND prep_date=$2 AND count_type=$3",
+                                     store_id, date or _pg_today(), count_type)
+        return {"list": await _pg_prep_list_to_api(conn, plist) if plist else None}
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/preplists/{store_id}/generate")
+async def pg_generate_prep_list(store_id: str, body: dict):
+    check_store_id(store_id)
+    date = body.get("date") or _pg_today()
+    track = body.get("track") or "daily"
+    count_type = TRACK_TO_COUNT_TYPE.get(track, "nightly_prep")
+    conn = await db_pg.pool().acquire()
+    try:
+        existing = await conn.fetchrow("SELECT * FROM prep_lists WHERE store_id=$1 AND prep_date=$2 AND count_type=$3",
+                                        store_id, date, count_type)
+        if existing:
+            return {"list": await _pg_prep_list_to_api(conn, existing), "regenerated": False}
+        session = await conn.fetchrow(
+            """SELECT * FROM count_sessions WHERE store_id=$1 AND status='submitted' AND count_date<=$2 AND count_type=$3
+               ORDER BY count_date DESC LIMIT 1""", store_id, date, count_type)
+        if not session:
+            raise HTTPException(400, "No submitted evening count yet — submit a prep count first.")
+        recipes, prep_items, by_id = await _pg_prep_universe_for_track(conn, store_id, track)
+        overrides = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 AND date=$2", store_id, date)
+        removed_ids = {str(o["recipe_id"] or o["prep_item_id"]) for o in overrides
+                       if o["type"] == "remove" and (o["recipe_id"] or o["prep_item_id"])}
+        par_over, par_note = {}, {}
+        for o in overrides:
+            if o["type"] == "par":
+                k = str(o["recipe_id"] or o["prep_item_id"]) if (o["recipe_id"] or o["prep_item_id"]) else None
+                if k:
+                    par_over[k] = float(o["par"] or 0)
+                    par_note[k] = o["note"] or ""
+        count_lines = await conn.fetch("SELECT * FROM count_lines WHERE session_id=$1", session["id"])
+        counted_map = {}
+        for l in count_lines:
+            k = str(l["dish_id"]) if l["dish_id"] else (str(l["prep_item_id"]) if l["prep_item_id"] else None)
+            if k:
+                counted_map[k] = l
+        governed = {str(p["recipe_id"]) for p in prep_items if p["recipe_id"]}
+
+        def note_for(key, counted):
+            parts = []
+            if counted is None:
+                parts.append("Not counted — planned at full par")
+            if key in par_over:
+                parts.append(("Par override for this date: " + par_note[key]) if par_note[key] else "Par override for this date")
+            return " ".join(parts)
+
+        tasks = []
+        for r in recipes:
+            rid_s = str(r["id"])
+            if rid_s in removed_ids or rid_s in governed:
+                continue
+            par = par_over.get(rid_s, float(r["prep_par"] or 0))
+            line = counted_map.get(rid_s)
+            counted = float(line["qty"]) if line and line["qty"] is not None else None
+            yield_qty = float(r["yield_qty"] or 1) or 1
+            needed = max(0, par - counted) if counted is not None else par
+            batches = math.ceil(needed / yield_qty) if needed > 0 and yield_qty > 0 else 0
+            tasks.append({"recipe_id": r["id"], "prep_item_id": None, "task_type": "batch", "name": r["name"],
+                          "yield_uom": r["yield_uom"], "yield_qty": yield_qty, "par": par, "on_hand": counted,
+                          "uncounted": counted is None, "needed_units": round(needed, 2), "batches_planned": batches,
+                          "batches_done": 0, "vessel_name": None, "note": note_for(rid_s, counted), "removed": False})
+        for p in prep_items:
+            pid_s = str(p["id"])
+            if pid_s in removed_ids or (p["schedule"] or "daily") != "daily":
+                continue
+            line = counted_map.get(pid_s)
+            counted = float(line["qty"]) if line and line["qty"] is not None else None
+            note = note_for(pid_s, counted)
+            if p["recipe_id"]:
+                r = by_id.get(str(p["recipe_id"]))
+                if not r:
+                    continue
+                item_par = float(p["par_weekday"] or 0)
+                default_par = item_par if item_par > 0 else float(r["prep_par"] or 0)
+                par = par_over.get(pid_s, default_par)
+                yield_qty = float(r["yield_qty"] or 1) or 1
+                needed = max(0, par - counted) if counted is not None else par
+                batches = math.ceil(needed / yield_qty) if needed > 0 and yield_qty > 0 else 0
+                vn = p["container"] or ""
+                tasks.append({"recipe_id": r["id"], "prep_item_id": p["id"], "task_type": "batch",
+                              "name": p["name"] or r["name"], "yield_uom": r["yield_uom"], "yield_qty": yield_qty,
+                              "par": par, "on_hand": counted, "uncounted": counted is None, "needed_units": round(needed, 2),
+                              "batches_planned": batches, "batches_done": 0, "vessel_name": vn,
+                              "note": ((f"Portion into {vn}. " if vn else "") + note).strip(), "removed": False})
+            else:
+                par = par_over.get(pid_s, float(p["par_vessels"] or 0))
+                needed = max(0, par - counted) if counted is not None else par
+                vessels = math.ceil(needed * 2) / 2 if needed > 0 else 0
+                tasks.append({"recipe_id": None, "prep_item_id": p["id"], "task_type": "vessel", "name": p["name"],
+                              "yield_uom": p["container"] or "vessel", "yield_qty": 1, "par": par, "on_hand": counted,
+                              "uncounted": counted is None, "needed_units": round(needed, 2), "batches_planned": vessels,
+                              "batches_done": 0, "vessel_name": p["container"], "note": note, "removed": False})
+        for o in overrides:
+            if o["type"] != "add":
+                continue
+            r = by_id.get(str(o["recipe_id"])) if o["recipe_id"] else None
+            if o["recipe_id"] and not r:
+                continue
+            tasks.append({"recipe_id": r["id"] if r else None, "prep_item_id": None, "task_type": "batch",
+                          "name": (r["name"] + " (one-off)") if r else (o["custom_name"] or "One-off item"),
+                          "yield_uom": (r["yield_uom"] if r else "batch"), "yield_qty": float((r["yield_qty"] if r else 1) or 1),
+                          "par": 0, "on_hand": None, "uncounted": False, "needed_units": 0,
+                          "batches_planned": float(o["batches"] or 1) or 1, "batches_done": 0, "vessel_name": None,
+                          "note": ("One-off add: " + (o["note"] or "")).strip(), "removed": False})
+
+        plist = await conn.fetchrow(
+            """INSERT INTO prep_lists (store_id, prep_date, from_count, status, count_type, created_at)
+               VALUES ($1,$2,$3,'draft',$4,$5) RETURNING *""",
+            store_id, date, session["id"], count_type, _pg_now_iso())
+        for t in tasks:
+            await conn.execute(
+                """INSERT INTO prep_list_lines (list_id, prep_item_id, recipe_id, task_type, name, yield_uom, yield_qty,
+                       par, on_hand, uncounted, needed_units, batches_planned, batches_done, vessel_name, note, done, removed)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,FALSE,$16)""",
+                plist["id"], t["prep_item_id"], t["recipe_id"], t["task_type"], t["name"], t["yield_uom"], t["yield_qty"],
+                t["par"], t["on_hand"], t["uncounted"], t["needed_units"], t["batches_planned"], t["batches_done"],
+                t["vessel_name"], t["note"], t["removed"])
+        return {"list": await _pg_prep_list_to_api(conn, plist), "regenerated": True}
+    finally:
+        await db_pg.pool().release(conn)
+
+class PgPrepListUpdateIn(BaseModel):
+    tasks: List[dict]
+
+@pg_router.put("/preplists/{store_id}/{list_id}")
+async def pg_update_prep_list(store_id: str, list_id: str, body: PgPrepListUpdateIn):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE id=$1 AND store_id=$2", list_id, store_id)
+        if not plist:
+            raise HTTPException(404, "prep list not found")
+        if plist["status"] != "draft":
+            raise HTTPException(400, "Only draft lists can be edited")
+        async with conn.transaction():
+            await conn.execute("DELETE FROM prep_list_lines WHERE list_id=$1", list_id)
+            for t in body.tasks:
+                batches_planned = f(t.get("batchesPlanned"))
+                batches_done = f(t.get("batchesDone"))
+                await conn.execute(
+                    """INSERT INTO prep_list_lines (list_id, prep_item_id, recipe_id, task_type, name, yield_uom, yield_qty,
+                           par, on_hand, uncounted, needed_units, batches_planned, batches_done, vessel_name, note, done,
+                           done_by_name, done_at, removed)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)""",
+                    list_id, t.get("prepItemId"), t.get("recipeId"), t.get("taskType", "batch"), t.get("name"),
+                    t.get("yieldUOM"), t.get("yieldQty"), t.get("par"), t.get("counted"), bool(t.get("uncounted", False)),
+                    t.get("neededUnits"), batches_planned, batches_done, t.get("vesselName"), t.get("note"),
+                    bool(batches_planned > 0 and batches_done >= batches_planned), t.get("doneBy"), t.get("doneAt"),
+                    bool(t.get("removed", False)))
+        return {"ok": True}
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/preplists/{store_id}/{list_id}/release")
+async def pg_release_prep_list(store_id: str, list_id: str, body: dict):
+    check_store_id(store_id)
+    row = await db_pg.pool().fetchrow(
+        "UPDATE prep_lists SET status='released', released_at=now(), released_by=$3 WHERE id=$1 AND store_id=$2 RETURNING id",
+        list_id, store_id, body.get("releasedBy", ""))
+    if not row:
+        raise HTTPException(404, "prep list not found")
+    return {"ok": True}
+
+async def _pg_complete_task_core(conn, store_id, list_id, task_id, batches, done_by, containers):
+    plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE id=$1 AND store_id=$2", list_id, store_id)
+    if not plist:
+        raise HTTPException(404, "prep list not found")
+    if plist["status"] != "released":
+        raise HTTPException(400, "The list must be released before tasks can be completed")
+    task = await conn.fetchrow("SELECT * FROM prep_list_lines WHERE id=$1 AND list_id=$2", task_id, list_id)
+    if not task:
+        raise HTTPException(404, "task not found")
+    remaining = float(task["batches_planned"] or 0) - float(task["batches_done"] or 0)
+    if batches <= 0 or batches > remaining + 1e-9:
+        raise HTTPException(400, f"batches must be between 0 and {remaining:g} remaining")
+    result = {}
+    if task["recipe_id"]:
+        recipe = await conn.fetchrow("SELECT * FROM dishes WHERE id=$1", task["recipe_id"])
+        if recipe:
+            result = await _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, "batch", f"{task['name']} — prep task")
+    elif task["prep_item_id"]:
+        pitem = await conn.fetchrow("SELECT * FROM prep_items WHERE id=$1", task["prep_item_id"])
+        if pitem:
+            result = await _pg_deduct_item_and_stock(conn, store_id, pitem, batches)
+    new_done = round(float(task["batches_done"] or 0) + batches, 3)
+    await conn.execute("UPDATE prep_list_lines SET batches_done=$1, done_by_name=$2, done_at=now() WHERE id=$3",
+                        new_done, done_by, task_id)
+    return {"list": await _pg_prep_list_to_api(conn, plist), **result}
+
+class PgTaskCompleteIn(BaseModel):
+    batches: float
+    doneBy: str = ""
+    containers: List[PgContainerIn] = []
+
+@pg_router.post("/preplists/{store_id}/{list_id}/task/{task_id}/complete")
+async def pg_complete_task(store_id: str, list_id: str, task_id: str, body: PgTaskCompleteIn):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        return await _pg_complete_task_core(conn, store_id, list_id, task_id, body.batches, body.doneBy,
+                                             [c.model_dump() for c in body.containers])
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/preplists/{store_id}/{list_id}/add-item")
+async def pg_add_item_to_list(store_id: str, list_id: str, body: dict):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE id=$1 AND store_id=$2", list_id, store_id)
+        if not plist:
+            raise HTTPException(404, "prep list not found")
+        pitem = await conn.fetchrow("SELECT * FROM prep_items WHERE id=$1 AND store_id=$2", body.get("prepItemId"), store_id)
+        if not pitem:
+            raise HTTPException(404, "prep item not found")
+        dup = await conn.fetchrow("SELECT 1 FROM prep_list_lines WHERE list_id=$1 AND prep_item_id=$2", list_id, pitem["id"])
+        if dup:
+            raise HTTPException(400, "That item is already on this day's list")
+        qty = f(body.get("qty"), 0)
+        note = ("One-off add: " + (body.get("note") or "")).strip()
+        if pitem["recipe_id"]:
+            r = await conn.fetchrow("SELECT * FROM dishes WHERE id=$1", pitem["recipe_id"])
+            if not r:
+                raise HTTPException(404, "linked prep recipe not found")
+            await conn.execute(
+                """INSERT INTO prep_list_lines (list_id, prep_item_id, recipe_id, task_type, name, yield_uom, yield_qty,
+                       par, batches_planned, batches_done, vessel_name, note, done, removed)
+                   VALUES ($1,$2,$3,'batch',$4,$5,$6,0,$7,0,$8,$9,FALSE,FALSE)""",
+                list_id, pitem["id"], r["id"], pitem["name"] or r["name"], r["yield_uom"], float(r["yield_qty"] or 1) or 1,
+                qty or 1, pitem["container"], note)
+        else:
+            await conn.execute(
+                """INSERT INTO prep_list_lines (list_id, prep_item_id, recipe_id, task_type, name, yield_uom, yield_qty,
+                       par, batches_planned, batches_done, vessel_name, note, done, removed)
+                   VALUES ($1,$2,NULL,'vessel',$3,$4,1,0,$5,0,$6,$7,FALSE,FALSE)""",
+                list_id, pitem["id"], pitem["name"], pitem["container"] or "vessel",
+                qty or float(pitem["par_vessels"] or 1) or 1, pitem["container"], note)
+        return {"list": await _pg_prep_list_to_api(conn, plist)}
+    finally:
+        await db_pg.pool().release(conn)
+
+# ---------------- Standing prep items catalog (Postgres) ----------------
+class PgPrepItemIn(BaseModel):
+    name: str
+    sourceType: str
+    itemCode: Optional[str] = None
+    recipeId: Optional[str] = None
+    vesselName: str = "1/6 Pan"
+    vesselCapacity: float = 0
+    parVessels: float = 0
+    schedule: str = "daily"
+    note: str = ""
+    track: str = "daily"
+    par: float = 0
+
+def _pg_prep_item_to_api(row):
+    return {"id": str(row["id"]), "name": row["name"], "sourceType": "item" if row["item_code"] else "prep",
+            "controlNumber": row["item_code"], "recipeId": str(row["recipe_id"]) if row["recipe_id"] else None,
+            "vesselName": row["container"] or "", "vesselCapacity": float(row["vessel_capacity"] or 0),
+            "parVessels": float(row["par_vessels"] or 0), "schedule": row["schedule"],
+            "track": "daily" if (row["made_at"] is None or row["made_at"] == row["store_id"]) else "bulk",
+            "note": row["note"] or "", "par": float(row["par_weekday"] or 0), "active": row["active"]}
+
+@pg_router.get("/prep-items/{store_id}")
+async def pg_list_prep_items(store_id: str, track: Optional[str] = Query(None)):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        if track:
+            rows = await conn.fetch(f"SELECT * FROM prep_items WHERE store_id=$1 AND ({_pg_prep_items_track_where(track)})", store_id)
+        else:
+            rows = await conn.fetch("SELECT * FROM prep_items WHERE store_id=$1", store_id)
+        return [_pg_prep_item_to_api(r) for r in rows]
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/prep-items/{store_id}")
+async def pg_create_prep_item(store_id: str, body: PgPrepItemIn):
+    check_store_id(store_id)
+    if body.sourceType not in ("item", "prep"):
+        raise HTTPException(400, "sourceType must be item or prep")
+    if body.schedule not in ("daily", "oneoff"):
+        raise HTTPException(400, "schedule must be daily or oneoff")
+    if body.track not in ("daily", "bulk"):
+        raise HTTPException(400, "track must be daily or bulk")
+    conn = await db_pg.pool().acquire()
+    try:
+        if body.sourceType == "item":
+            if not await conn.fetchrow("SELECT 1 FROM store_items WHERE store_id=$1 AND item_code=$2", store_id, body.itemCode):
+                raise HTTPException(404, "inventory item not found")
+        else:
+            if not await conn.fetchrow("SELECT 1 FROM dishes WHERE id=$1 AND store_id=$2 AND recipe_type='prep'", body.recipeId, store_id):
+                raise HTTPException(404, "prep recipe not found")
+        made_at = "comm" if body.track == "bulk" else store_id
+        row = await conn.fetchrow(
+            """INSERT INTO prep_items (store_id, name, item_code, recipe_id, container, vessel_capacity, par_vessels,
+                   schedule, note, made_at, par_weekday, par_weekend, active)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,TRUE) RETURNING *""",
+            store_id, body.name, body.itemCode if body.sourceType == "item" else None,
+            body.recipeId if body.sourceType == "prep" else None, body.vesselName, body.vesselCapacity,
+            body.parVessels, body.schedule, body.note, made_at, body.par)
+        return _pg_prep_item_to_api(row)
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.put("/prep-items/{store_id}/{pid}")
+async def pg_update_prep_item(store_id: str, pid: str, body: PgPrepItemIn):
+    check_store_id(store_id)
+    made_at = "comm" if body.track == "bulk" else store_id
+    row = await db_pg.pool().fetchrow(
+        """UPDATE prep_items SET name=$3, item_code=$4, recipe_id=$5, container=$6, vessel_capacity=$7,
+               par_vessels=$8, schedule=$9, note=$10, made_at=$11, par_weekday=$12, par_weekend=$12
+           WHERE id=$1 AND store_id=$2 RETURNING *""",
+        pid, store_id, body.name, body.itemCode if body.sourceType == "item" else None,
+        body.recipeId if body.sourceType == "prep" else None, body.vesselName, body.vesselCapacity,
+        body.parVessels, body.schedule, body.note, made_at, body.par)
+    if not row:
+        raise HTTPException(404, "prep item not found")
+    return {"ok": True}
+
+@pg_router.delete("/prep-items/{store_id}/{pid}")
+async def pg_delete_prep_item(store_id: str, pid: str):
+    check_store_id(store_id)
+    await db_pg.pool().execute("DELETE FROM prep_items WHERE id=$1 AND store_id=$2", pid, store_id)
+    return {"ok": True}
+
+# ---------------- Day overrides (Postgres) ----------------
+class PgOverrideIn(BaseModel):
+    date: str
+    type: str
+    recipeId: Optional[str] = None
+    prepItemId: Optional[str] = None
+    customName: str = ""
+    par: Optional[float] = None
+    batches: Optional[float] = None
+    note: str = ""
+    createdBy: str = ""
+
+def _pg_override_to_api(row):
+    return {"id": str(row["id"]), "date": row["date"].isoformat(), "type": row["type"],
+            "recipeId": str(row["recipe_id"]) if row["recipe_id"] else None,
+            "prepItemId": str(row["prep_item_id"]) if row["prep_item_id"] else None,
+            "customName": row["custom_name"] or "", "par": float(row["par"]) if row["par"] is not None else None,
+            "batches": float(row["batches"]) if row["batches"] is not None else None,
+            "note": row["note"] or "", "createdBy": row["created_by"] or ""}
+
+@pg_router.get("/prep-overrides/{store_id}")
+async def pg_list_overrides(store_id: str, date: str = Query("")):
+    check_store_id(store_id)
+    conn = await db_pg.pool().acquire()
+    try:
+        if date:
+            rows = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 AND date=$2 ORDER BY date DESC", store_id, date)
+        else:
+            rows = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 ORDER BY date DESC LIMIT 500", store_id)
+        return [_pg_override_to_api(r) for r in rows]
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/prep-overrides/{store_id}")
+async def pg_add_override(store_id: str, body: PgOverrideIn):
+    check_store_id(store_id)
+    if body.type not in ("add", "par", "remove"):
+        raise HTTPException(400, "type must be add, par, or remove")
+    row = await db_pg.pool().fetchrow(
+        """INSERT INTO prep_overrides (store_id, date, type, recipe_id, prep_item_id, custom_name, par, batches, note, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *""",
+        store_id, body.date, body.type, body.recipeId, body.prepItemId, body.customName, body.par, body.batches,
+        body.note, body.createdBy)
+    return _pg_override_to_api(row)
+
+@pg_router.delete("/prep-overrides/{store_id}/{oid}")
+async def pg_delete_override(store_id: str, oid: str):
+    check_store_id(store_id)
+    await db_pg.pool().execute("DELETE FROM prep_overrides WHERE id=$1 AND store_id=$2", oid, store_id)
+    return {"ok": True}
+
 app.include_router(api_router)
 app.include_router(pg_router)
 

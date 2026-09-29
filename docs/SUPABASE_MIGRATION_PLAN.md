@@ -1,12 +1,12 @@
 # MongoDB → Supabase (Postgres) Migration Plan
 
-Status: **step 2 in progress (schema+data done, backend/frontend wiring pending),
-step 3 data migration done**. All real MongoDB data for both Vendors/Items/Invoices
-and Prep (dishes, prep stock/logs, evening counts, prep lists) is now in Supabase.
+Status: **step 3 backend endpoints done (not live-verified), step 2 frontend wiring
+still pending**. All real MongoDB data (Vendors/Items/Invoices from step 2, all of
+Prep from step 3) is in Supabase. `/api/pg/*` backend code now exists for both areas.
 `server.py`'s existing `/api/...` routes still run entirely on MongoDB and are
-untouched — nothing has cut over yet; no `/api/pg/*` backend endpoints exist yet for
-the Prep area. This doc is the reference for that work as it continues across
-sessions.
+untouched — nothing has cut over yet, and no `/api/pg/*` endpoint has been exercised
+against a live connection (still needs the real `DATABASE_URL` password). This doc is
+the reference for that work as it continues across sessions.
 
 ## Applied migrations (step 1 — schema only)
 
@@ -165,16 +165,59 @@ duplicates the final submitted state, an artifact of the submit flow, not real
 divergent history), but a session with genuinely different revision history would
 lose it under this migration. No table exists yet to hold it if this needs revisiting.
 
-## Step 3 status: data migration complete
+## Step 3 status: data migration + backend endpoints done
 
-All real Prep data (dishes/dish_lines, prep_recipe_stock, prep_logs, count_sessions/
-count_lines, prep_lists/prep_list_lines) is now in Supabase, matching the Vendors/
-Items/Invoices data from step 2. **Not done**: `/api/pg/*` backend endpoints for any
-of the Prep area (recipes/dishes CRUD, Prep Items catalog CRUD, evening count flow,
-prep list generate/release/complete-task, prep stock deduction) — step 2's backend
-code only covers Vendors/Items/Invoices so far. Also still pending from step 2: local
-end-to-end verification (needs the real `DATABASE_URL` password) and all frontend
-wiring — the app's UI doesn't talk to Postgres anywhere yet.
+All real Prep data is in Supabase (dishes/dish_lines, prep_recipe_stock, prep_logs,
+count_sessions/count_lines, prep_lists/prep_list_lines), and `/api/pg/*` now has full
+backend coverage for Prep, ported function-for-function from the Mongo version:
+`_pg_deduct_and_stock`/`_pg_deduct_item_and_stock` (the shared stock-deduction/costing
+core), `_pg_raw_portions` (recursive prep-within-prep resolution over `dish_lines`),
+`_pg_item_derived` (cost/portions from the item's preferred `vendor_item`, not
+`store_items.base_per_count_unit` — those can differ once purchase_unit and count_unit
+diverge, even though they're equal for every item in the currently-migrated data),
+evening count session flow (get-or-create/entry/submit/history), prep list
+generate/get/update/release/complete-task/add-item (the `generate` endpoint is the
+most complex port — par overrides, removed overrides, one-off adds, governed-recipe
+exclusion, batch/vessel math, all mirrored from the real `generate_prep_list`), Prep
+Items catalog CRUD, and Day Overrides CRUD.
+
+**Three more schema gaps found while writing this** (all fixed):
+- `prep_overrides.type` only allowed `add`/`remove` — the actual code (`OverrideIn`)
+  supports a third value, `par` (a one-date par adjustment with no add/remove).
+  Widened via migration `prep_overrides_type_par`.
+- `prep_items` was missing `vessel_capacity`, `par_vessels`, `schedule`, `note` — real
+  fields the create/update endpoints require. Added via `prep_items_missing_columns`
+  (kept `par_weekday`/`par_weekend` as schema headroom, both set to Mongo's single
+  flat `par` value for now since nothing differentiates weekday/weekend yet).
+- `prep_recipe_stock` only supported recipe-keyed stock (`dish_id NOT NULL` in the
+  original PK) — but a prep item sourced directly from an inventory item (not a
+  recipe) also tracks its own on-hand stock. Had 1 real row, so **altered** (not
+  dropped): added a surrogate `id` PK, added `prep_item_id`, made `dish_id` nullable,
+  added a `CHECK (num_nonnulls(dish_id, prep_item_id) = 1)` and two partial unique
+  indexes so both keying styles can upsert correctly. Migration
+  `prep_recipe_stock_item_sourced`.
+- `prep_lists` had no `count_type` column (Mongo stores `track` directly; Postgres
+  only had it reachable via a join through `from_count`) — added directly and
+  backfilled the 5 already-migrated rows, matching Mongo's shape and avoiding a join
+  on every list lookup. Migration `prep_lists_count_type`.
+
+**Also added**: automatic jsonb encode/decode on the Postgres connection
+(`backend/db_pg.py`'s `_init_connection`) — the Prep module's `usage`/`containers`
+log fields are jsonb-heavy, and manual `json.dumps`/`json.loads` on every touch would
+have been easy to get wrong somewhere.
+
+**Known, deliberate gap carried over from the count-session flow**: since revision
+history isn't tracked (see above), `save_count_entry`'s Postgres version always
+updates the count line in place, even if the session was already submitted — the
+Mongo version archives a revision snapshot first in that case. Matches the earlier
+decision not to build a revisions table.
+
+**Verified**: server boots clean, existing Mongo routes still 200, every new
+`/api/pg/*` Prep route 503s cleanly (not crashes) with Postgres still unreachable,
+full pytest suite unchanged (same 6 known-environmental failures, zero regressions).
+**Not yet verified**: the actual Prep business logic end to end — needs the real
+`DATABASE_URL` password to run the queries themselves. Frontend still doesn't talk
+to Postgres anywhere.
 
 ### Suggested build order within step 3
 

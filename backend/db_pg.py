@@ -6,6 +6,7 @@ in FastAPI, matching the existing collaboration_security middleware, since none 
 the new tables have RLS policies written yet.
 """
 import os
+import json
 import logging
 import asyncpg
 from fastapi import HTTPException
@@ -15,6 +16,13 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 _pool = None
+
+async def _init_connection(conn):
+    # The Prep module leans heavily on jsonb columns (usage/containers logs, etc.).
+    # Without this codec asyncpg hands back/expects raw JSON text on every touch;
+    # with it, query params and result columns round-trip as plain Python
+    # dicts/lists everywhere in the app code.
+    await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog", format="text")
 
 async def init_pool():
     # Fails open, deliberately: during the migration the app must keep serving the
@@ -26,7 +34,7 @@ async def init_pool():
         logger.warning("DATABASE_URL not configured (or password placeholder not filled in) -- /api/pg/* routes will 503")
         return None
     try:
-        _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5, statement_cache_size=0)
+        _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5, statement_cache_size=0, init=_init_connection)
     except Exception:
         logger.exception("Could not connect to Postgres -- /api/pg/* routes will 503")
         _pool = None
