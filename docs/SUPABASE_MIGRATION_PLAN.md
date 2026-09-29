@@ -1,13 +1,14 @@
 # MongoDB → Supabase (Postgres) Migration Plan
 
-Status: **frontend wiring chunks 1-5 done (Prep, Items/Purchases, Dishes/Recipes,
-Staff PIN portal), all gated behind `USE_PG` (default off); only chunk 6 remains**.
-All real MongoDB data is in Supabase, `/api/pg/*` has full backend coverage for
-Vendors/Items/Invoices/Dishes/Prep/Staff, and the frontend (`frontend/src/lib/api.js`)
-can route through it end-to-end via `REACT_APP_USE_PG=true`. `server.py`'s existing
-`/api/...` routes still run entirely on MongoDB and are untouched — nothing has cut
-over for real users yet, and no `/api/pg/*` endpoint has been exercised against a live
-connection (still needs the real `DATABASE_URL` password — that's chunk 6). This doc
+Status: **all 6 chunks done and live-verified**. All real MongoDB data is in Supabase,
+`/api/pg/*` has full backend coverage for Vendors/Items/Invoices/Dishes/Prep/Staff, and
+the frontend (`frontend/src/lib/api.js`) routes through it end-to-end via
+`REACT_APP_USE_PG`/`USE_PG` (both currently `false` — off by default). Chunk 6 connected
+to the real Supabase database (via the Supavisor pooler, see the note below), found and
+fixed a real asyncpg date-encoding bug, and verified every area works correctly live in
+the browser against real migrated data. `server.py`'s existing `/api/...` routes still
+run entirely on MongoDB and are untouched — nothing has cut over for real users yet;
+flipping both `USE_PG` flags to `true` is what a real cutover would look like. This doc
 is the reference for that work as
 it continues across sessions.
 
@@ -218,9 +219,67 @@ Chunks, in order:
      instead of silently touching the wrong database; re-ran with `USE_PG=false`
      (the real default) and confirmed the baseline is unchanged (57 passing, same 6
      pre-existing environmental failures).
-6. **Live verification** — once the real `DATABASE_URL` password is available,
-   actually exercise all of the above against a running local backend + browser,
-   the same way every other piece of this migration has been verified so far.
+6. **Live verification** — ✅ Done. The real `DATABASE_URL` was configured (via the
+   Supavisor connection pooler on port 6543 — the direct `db.<ref>.supabase.co:5432`
+   host is IPv6-only and didn't resolve from this dev machine; see the pooler note
+   below) and `USE_PG=true` was set on both frontend and backend.
+   - **Real bug found and fixed**: every single date-column write (`prep_lists.prep_date`,
+     `count_sessions.count_date`, `invoices.invoice_date`, `prep_overrides.date`,
+     `staff_tasks.due_date`, `store_items.last_counted`, and the
+     `inventory_count_submissions.submitted_at` timestamptz filter — 13 call sites in
+     all) was passing a bare ISO string as an asyncpg bind parameter. asyncpg does
+     client-side binary encoding of bind parameters (unlike a SQL text literal, which
+     Postgres itself casts at parse time) and needs a real `datetime.date`/`datetime`
+     object, raising `DataError: ... 'str' object has no attribute 'toordinal'`
+     otherwise. This had never surfaced before because every one of chunks 1-5's SQL
+     dry-run checks used literal dates typed directly into the query string, not bound
+     parameters — live verification was the first time these ran through the actual
+     driver path the app uses. First caught live in the browser (Prep List showed
+     "Couldn't load this prep list"); fixed with one `_pg_date()` helper applied at
+     every site, then re-verified the same flows worked (correct empty states, not
+     errors) and re-ran the full pytest suite under `USE_PG=true` to confirm no other
+     date-column site was missed.
+   - **Verified working live, end to end, in the browser**: Dashboard (real inventory
+     value, food-cost %, low-stock list), Owner Dashboard (`_pg_owner_view` rollup
+     across all three restaurants), Item Setup (list + edit form, correct
+     portions-per-unit/cost-per-portion, including the `OF-001` "no portion data" edge
+     case), Invoice Master (real invoice history, including the documented
+     `INV-100902` vendor-mismatch judgment call), Menu Costing (a recipe with both
+     `sourceType: "item"` and `sourceType: "prep"` ingredient lines resolving
+     correctly), Prep (List, Evening Count, Inventory & Log), and the Staff PIN portal
+     (PIN unlock via the default-PIN fallback, Tasks, Prep, Counts views).
+   - **Supabase branch testing was attempted first and abandoned**: created a dev
+     branch to test destructively without risking real data, but branches replay
+     migrations onto an empty database and it failed (`MIGRATIONS_FAILED`) — traced to
+     an unrelated `add_private_toast_analytics_landing_zone` migration (confirmed with
+     the user: a coworker's separate Toast POS integration, not part of this
+     migration) that a fresh branch's migration replay couldn't satisfy. Deleted the
+     branch and verified against the real project instead, using pg-specific test
+     files plus careful manual browser checks.
+   - **Real, if minor, incident during verification**: running the *full* pytest
+     suite (not just the pg-specific files) with `USE_PG=true` let two purchase-order
+     tests actually receive real inventory against `rudds_WI-001` (Russet Potatoes) in
+     the live database — a `+16` drift from its migrated value (`100.0` → `116.0`).
+     Checked every item across all three restaurants against the original migration
+     backup; nothing else was affected. Restored `rudds_WI-001` to `100.0` (confirmed
+     with the user before writing to the shared database). Lesson: once `USE_PG=true`
+     actually works, the full test suite is no longer safe to run against the real
+     project without a disposable branch or database — pg-specific tests plus manual
+     spot-checks is the right default until branch testing is fixed or a disposable
+     project exists.
+   - Both `USE_PG` flags were returned to `false` afterward — same off-by-default
+     posture as every other chunk. Flip both together (`backend/.env` and
+     `frontend/.env`) when ready for a real cutover.
+
+**Connecting to Supabase from this dev machine**: the direct connection host
+(`db.<project-ref>.supabase.co:5432`) is IPv6-only on the free tier and did not
+resolve locally. Use the Supavisor connection pooler instead — swap the username to
+`postgres.<project-ref>`, the host to `aws-<N>-<region>.pooler.supabase.com`, and the
+port to `6543` (transaction mode; matches `db_pg.py`'s existing
+`statement_cache_size=0`, which transaction-mode pooling requires). Also: a password
+containing `@` (or any other URL-reserved character) must be percent-encoded in
+`DATABASE_URL` (`@` → `%40`), or asyncpg's DSN parser fails with a confusing
+IPv6-bracket parsing error.
 
 Given none of this is live-tested yet (still blocked on the password), each chunk
 gets built and reviewed the same way the backend was — logically verified, committed,

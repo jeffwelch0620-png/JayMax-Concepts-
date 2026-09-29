@@ -1464,11 +1464,13 @@ async def count_history(rid: str, request: Request, date_from: str = Query(None,
         try:
             q = "SELECT * FROM inventory_count_submissions WHERE store_id=$1"
             params = [store_id]
+            # asyncpg needs a real tz-aware datetime for a timestamptz column bind
+            # parameter, not a bare string -- see _pg_date's docstring for why.
             if date_from:
-                params.append(date_from)
+                params.append(datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc))
                 q += f" AND submitted_at >= ${len(params)}"
             if date_to:
-                params.append((datetime.fromisoformat(date_to) + timedelta(days=2)).date().isoformat())
+                params.append((datetime.fromisoformat(date_to) + timedelta(days=2)).replace(tzinfo=timezone.utc))
                 q += f" AND submitted_at < ${len(params)}"
             q += " ORDER BY submitted_at DESC LIMIT 500"
             rows = await conn.fetch(q, *params)
@@ -2949,9 +2951,9 @@ async def pg_list_invoices(store_id: str, date_from: str = Query(None, alias="fr
         q = "SELECT * FROM invoices WHERE store_id = $1"
         params = [store_id]
         if date_from:
-            params.append(date_from); q += f" AND invoice_date >= ${len(params)}"
+            params.append(_pg_date(date_from)); q += f" AND invoice_date >= ${len(params)}"
         if date_to:
-            params.append(date_to); q += f" AND invoice_date <= ${len(params)}"
+            params.append(_pg_date(date_to)); q += f" AND invoice_date <= ${len(params)}"
         q += " ORDER BY invoice_date DESC"
         invoices = await conn.fetch(q, *params)
         out = []
@@ -2989,7 +2991,7 @@ async def pg_create_invoice(store_id: str, body: InvoiceIn):
                 """INSERT INTO invoices (store_id, delivered_to, vendor_id, invoice_number, invoice_date, total, source, created_by)
                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *""",
                 store_id, body.delivered_to or store_id, body.vendor_id, body.invoice_number,
-                body.invoice_date, total, body.source or "manual", body.created_by)
+                _pg_date(body.invoice_date), total, body.source or "manual", body.created_by)
             for ln in body.lines:
                 extended = (ln.qty or 0) * (ln.unit_price or 0)
                 await conn.execute(
@@ -3175,6 +3177,15 @@ def _pg_now_iso():
 
 def _pg_today():
     return datetime.now(timezone.utc).date().isoformat()
+
+def _pg_date(s):
+    # asyncpg needs a real datetime.date for a `date`-typed column -- it does
+    # client-side binary encoding of bind parameters, unlike a plain SQL text literal
+    # (which Postgres itself casts at parse time). A bare ISO string here raises
+    # `asyncpg.exceptions.DataError: ... 'str' object has no attribute 'toordinal'`.
+    # Found live in chunk 6 verification -- every date-column bind parameter needs
+    # this, not just the one that first surfaced it.
+    return datetime.fromisoformat(s).date() if s else None
 
 def _pg_prep_items_track_where(track):
     return "made_at IS NOT NULL AND made_at != store_id" if track == "bulk" else "(made_at IS NULL OR made_at = store_id)"
@@ -3422,12 +3433,13 @@ async def _pg_prep_universe_for_track(conn, store_id, track):
 
 async def _pg_get_or_create_session(conn, store_id, date, track):
     count_type = TRACK_TO_COUNT_TYPE.get(track, "nightly_prep")
+    pg_date = _pg_date(date)
     s = await conn.fetchrow("SELECT * FROM count_sessions WHERE store_id=$1 AND count_date=$2 AND count_type=$3",
-                             store_id, date, count_type)
+                             store_id, pg_date, count_type)
     if not s:
         s = await conn.fetchrow(
             "INSERT INTO count_sessions (store_id, count_date, count_type, status) VALUES ($1,$2,$3,'open') RETURNING *",
-            store_id, date, count_type)
+            store_id, pg_date, count_type)
     recipes, prep_items, _ = await _pg_prep_universe_for_track(conn, store_id, track)
     existing_lines = await conn.fetch("SELECT dish_id, prep_item_id FROM count_lines WHERE session_id=$1", s["id"])
     known = {str(l["dish_id"] or l["prep_item_id"]) for l in existing_lines}
@@ -3557,7 +3569,7 @@ async def pg_get_prep_list(store_id: str, date: str = Query(""), track: str = Qu
     conn = await db_pg.pool().acquire()
     try:
         plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE store_id=$1 AND prep_date=$2 AND count_type=$3",
-                                     store_id, date or _pg_today(), count_type)
+                                     store_id, _pg_date(date or _pg_today()), count_type)
         return {"list": await _pg_prep_list_to_api(conn, plist) if plist else None}
     finally:
         await db_pg.pool().release(conn)
@@ -3578,17 +3590,18 @@ async def pg_generate_prep_list(store_id: str, body: dict):
         await db_pg.pool().release(conn)
 
 async def _pg_generate_prep_list_in_transaction(conn, store_id, date, track, count_type):
+    pg_date = _pg_date(date)
     existing = await conn.fetchrow("SELECT * FROM prep_lists WHERE store_id=$1 AND prep_date=$2 AND count_type=$3",
-                                    store_id, date, count_type)
+                                    store_id, pg_date, count_type)
     if existing:
         return {"list": await _pg_prep_list_to_api(conn, existing), "regenerated": False}
     session = await conn.fetchrow(
         """SELECT * FROM count_sessions WHERE store_id=$1 AND status='submitted' AND count_date<=$2 AND count_type=$3
-           ORDER BY count_date DESC LIMIT 1""", store_id, date, count_type)
+           ORDER BY count_date DESC LIMIT 1""", store_id, pg_date, count_type)
     if not session:
         raise HTTPException(400, "No submitted evening count yet — submit a prep count first.")
     recipes, prep_items, by_id = await _pg_prep_universe_for_track(conn, store_id, track)
-    overrides = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 AND date=$2", store_id, date)
+    overrides = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 AND date=$2", store_id, pg_date)
     removed_ids = {str(o["recipe_id"] or o["prep_item_id"]) for o in overrides
                    if o["type"] == "remove" and (o["recipe_id"] or o["prep_item_id"])}
     par_over, par_note = {}, {}
@@ -3676,7 +3689,7 @@ async def _pg_generate_prep_list_in_transaction(conn, store_id, date, track, cou
     plist = await conn.fetchrow(
         """INSERT INTO prep_lists (store_id, prep_date, from_count, status, count_type, created_at)
            VALUES ($1,$2,$3,'draft',$4,$5) RETURNING *""",
-        store_id, date, session["id"], count_type, _pg_now_iso())
+        store_id, pg_date, session["id"], count_type, _pg_now_iso())
     for t in tasks:
         await conn.execute(
             """INSERT INTO prep_list_lines (list_id, prep_item_id, recipe_id, task_type, name, yield_uom, yield_qty,
@@ -3930,7 +3943,7 @@ async def pg_list_overrides(store_id: str, date: str = Query("")):
     conn = await db_pg.pool().acquire()
     try:
         if date:
-            rows = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 AND date=$2 ORDER BY date DESC", store_id, date)
+            rows = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 AND date=$2 ORDER BY date DESC", store_id, _pg_date(date))
         else:
             rows = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 ORDER BY date DESC LIMIT 500", store_id)
         return [_pg_override_to_api(r) for r in rows]
@@ -3945,7 +3958,7 @@ async def pg_add_override(store_id: str, body: PgOverrideIn):
     row = await db_pg.pool().fetchrow(
         """INSERT INTO prep_overrides (store_id, date, type, recipe_id, prep_item_id, custom_name, par, batches, note, created_by)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *""",
-        store_id, body.date, body.type, body.recipeId, body.prepItemId, body.customName, body.par, body.batches,
+        store_id, _pg_date(body.date), body.type, body.recipeId, body.prepItemId, body.customName, body.par, body.batches,
         body.note, body.createdBy)
     return _pg_override_to_api(row)
 
@@ -4103,7 +4116,7 @@ async def _pg_staff_prepsheet(conn, store_id, track):
     today = _pg_today()
     plist = await conn.fetchrow(
         "SELECT * FROM prep_lists WHERE store_id=$1 AND prep_date=$2 AND status='released' AND count_type=$3",
-        store_id, today, count_type)
+        store_id, _pg_date(today), count_type)
     if not plist:
         plist = await conn.fetchrow(
             "SELECT * FROM prep_lists WHERE store_id=$1 AND status='released' AND count_type=$2 ORDER BY prep_date DESC LIMIT 1",
@@ -4209,7 +4222,7 @@ class PgStaffCountsSaveIn(BaseModel):
 
 async def _pg_apply_and_record_counts(conn, store_id, submitted_by, counts, source):
     prefix = PG_STORE_TO_RESTAURANT[store_id] + "_"
-    today = _pg_today()
+    today = _pg_date(_pg_today())
     entries = []
     for entry in counts:
         code = f"{prefix}{entry.controlNumber}"
@@ -4314,7 +4327,7 @@ async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Requ
     row = await db_pg.pool().fetchrow(
         """INSERT INTO staff_tasks (store_id, task_type, title, due_date, recurrence, assigned_to, track, note, created_by)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
-        store_id, body.taskType, body.title, body.dueDate, body.recurrence, body.assignedTo, body.track, body.note,
+        store_id, body.taskType, body.title, _pg_date(body.dueDate), body.recurrence, body.assignedTo, body.track, body.note,
         (user or {}).get("email", ""))
     task = _pg_staff_task_to_api(row)
     await _pg_notify_new_staff_task(store_id, task)
@@ -4338,7 +4351,7 @@ async def pg_staff_task_inbox(store_id: str, body: PgPinBodyIn, request: Request
         today = _pg_today()
         rows = await conn.fetch(
             "SELECT * FROM staff_tasks WHERE store_id=$1 AND status='pending' AND due_date<=$2 ORDER BY due_date",
-            store_id, today)
+            store_id, _pg_date(today))
         return {"date": today, "tasks": [_pg_staff_task_to_api(r) for r in rows]}
     finally:
         await db_pg.pool().release(conn)
@@ -4365,9 +4378,9 @@ async def pg_staff_task_complete(store_id: str, task_id: str, body: PgStaffTaskC
                 raise HTTPException(404, "task not found")
             next_due = None
             if task["recurrence"] == "daily":
-                next_due = (datetime.fromisoformat(_pg_today()) + timedelta(days=1)).date().isoformat()
+                next_due = (datetime.fromisoformat(_pg_today()) + timedelta(days=1)).date()
             elif task["recurrence"] == "weekly":
-                next_due = (datetime.fromisoformat(_pg_today()) + timedelta(days=7)).date().isoformat()
+                next_due = (datetime.fromisoformat(_pg_today()) + timedelta(days=7)).date()
             await conn.execute(
                 "UPDATE staff_tasks SET status='done', completed_by=$2, completed_at=now() WHERE id=$1",
                 task_id, done_by)
