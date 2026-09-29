@@ -1,0 +1,198 @@
+# MongoDB → Supabase (Postgres) Migration Plan
+
+Status: **planning** — no application code changed yet, no schema changes applied to
+the live Supabase project yet. This doc is the reference for that work as it happens
+across sessions.
+
+## Decisions made so far
+
+- **Target project**: `jaymaxcorp@gmail.com's Project` (ref `yrlhwcoirgqmtlvvnzvo`), org
+  `flijkjpzkmphymcistku`. Connection details in `backend/.env` (`SUPABASE_URL`,
+  `SUPABASE_ANON_KEY`, `DATABASE_URL` — the real DB password was added directly to
+  `.env` by the user, never typed into chat).
+- **A hand-designed schema already exists** in that project (16 tables: `stores`,
+  `people`, `store_roles`, `vendors`, `items`, `store_items`, `vendor_items`,
+  `invoices`, `invoice_lines`, `count_sessions`, `count_lines`, `prep_items`,
+  `prep_lists`, `prep_list_lines`, `manager_log`, `sales_daily`), RLS enabled on all of
+  them with **no policies written yet**, and `stores` already seeded with the real 4
+  locations (including a business fact not present anywhere in the current app: each
+  store's ownership split, and the commissary modeled as its own store `comm` rather
+  than a `track` field). **This is the target schema — build around it, don't replace
+  it.**
+- **Auth**: adopt real Supabase Auth (`people.auth_user_id` → `auth.users`), replacing
+  the current hand-rolled PBKDF2/HMAC session-token system entirely.
+- **`manager_log`**: schema only for now. The table gets created (it's part of the
+  existing design) but the feature itself is not built in this pass — a separate
+  follow-up project once the migration is stable.
+- **Scope**: extend the existing schema with whatever tables are needed so nothing
+  currently working is lost — Menu Costing, Purchase Orders, running stock balance,
+  Waste/Adjustments, vendor pricing, Reporting Periods/COGS, the Staff PIN portal +
+  roster, employee tasks/push notifications, AI chat history, and the activity log all
+  need a home. See "New tables to add" below.
+- **RLS**: tables are RLS-enabled with zero policies (fully locked down to the
+  anon/authenticated keys right now). Per the standing "keep security simple until
+  fully deployed" preference from earlier in this project, the backend will connect
+  with the Postgres **service role** (bypasses RLS) and keep deciding authorization in
+  FastAPI, same as today's `collaboration_security` middleware. Writing real RLS
+  policies is a deferred hardening step, not part of this migration.
+- **Data safety before this started**: full MongoDB export
+  (`python scripts/export_mongo_backup.py`) → `backups/2026-09-29_133440_pre-supabase-migration/`
+  (gitignored). Code snapshot: git tag `pre-supabase-migration` on `main`, migration
+  work happens on the `supabase-migration` branch.
+
+## Existing schema (already in Supabase, not yet altered)
+
+`stores`, `people`, `store_roles`, `vendors`, `items`, `store_items`, `vendor_items`,
+`invoices`, `invoice_lines`, `count_sessions`, `count_lines`, `prep_items`,
+`prep_lists`, `prep_list_lines`, `manager_log`, `sales_daily`.
+
+Full column/FK detail is in the live project — use the Supabase MCP tools
+(`list_tables` with `verbose: true`) to re-fetch it rather than trusting this doc to
+stay in sync, since the schema may evolve during the migration itself.
+
+Two structural differences from the current MongoDB shape worth calling out
+explicitly, since they change behavior, not just storage:
+
+1. **Item identity is split three ways.** Today, Mongo's `items` collection is one
+   flat per-restaurant document holding identity (name, category), per-store tracking
+   config (par, currentStock, storageArea), and an embedded `vendorSkus[]` array all
+   together. The new schema splits this into `items` (global catalog, keyed by
+   `code`), `store_items` (per-store tracking config), and `vendor_items` (per-vendor
+   SKU/pack info) — a real normalization, not just a rename.
+2. **No running stock balance exists yet.** The current app maintains a live
+   `currentStock` per item, continuously deducted by purchases/prep completion/waste
+   and corrected by physical counts. The existing `store_items`/`count_lines` design
+   only has point-in-time count snapshots — nothing computes or stores a running
+   balance. This needs to be added (see below) rather than assumed away, since
+   Dashboard's Live Inventory Value, Next Order Exposure, and the prep-deduction flow
+   all depend on a real-time balance, not just the last count.
+
+## New tables to add
+
+Sketched here at the column level for planning; exact types/constraints get finalized
+when each is actually created (via `apply_migration`, tracked as a proper Postgres
+migration, not ad-hoc `execute_sql`).
+
+- **`store_items` gets new columns** (not a new table): `current_stock numeric`,
+  `par numeric`, `last_counted date`, `last_counted_by text`, `last_counted_at
+  timestamptz`. This is the running balance the current app relies on everywhere.
+- **`vendor_items` gets new columns**: `price numeric`, `price_updated_at
+  timestamptz`, `price_source text`, `preferred boolean default false`, `available
+  boolean default true`. Price *history* comes from `invoice_lines.unit_price` over
+  time (already dated), matching today's "two-purchase price change" logic — no
+  separate price-history table needed.
+- **`purchase_orders`**: `id uuid pk`, `store_id fk`, `vendor_id fk`, `status text
+  check(draft/pending/approved/sent/received/rejected)`, `created_by text`,
+  `created_at`, `approved_by text`, `approved_at`, `rejected_reason text`, `sent_at`,
+  `invoice_id fk→invoices nullable` (set once a PO is received and turned into an
+  invoice).
+- **`purchase_order_lines`**: `id uuid pk`, `po_id fk`, `vendor_item_id fk nullable`,
+  `item_code fk nullable`, `description text`, `qty numeric`, `unit text`,
+  `unit_price numeric`, `extended numeric`, `received_qty numeric nullable`.
+- **`adjustments`**: `id uuid pk`, `store_id fk`, `item_code fk`, `date date`,
+  `reason text`, `qty numeric`, `direction text check(add/remove)`, `note text`,
+  `created_by text`, `created_at`.
+- **`reporting_periods`**: `id uuid pk`, `store_id fk`, `period_start date`,
+  `period_end date`, `name text`, `status text check(draft/closed)`, `dish_sales
+  jsonb`, `item_counts jsonb`, `saved_at timestamptz`. Kept as jsonb rather than fully
+  normalized for the first pass — mirrors the current Mongo shape closely and is fast
+  to build against; revisit if reporting queries end up needing to filter inside those
+  blobs often.
+- **`dishes`** (menu items + prep recipes, currently one Mongo collection distinguished
+  by `recipeType`): `id uuid pk`, `store_id fk`, `name text`, `menu_code text`,
+  `recipe_type text check(menu/prep)`, `price numeric`, `target_pct numeric`,
+  `yield_qty numeric`, `yield_uom text`, `prep_par numeric`, `procedure text`,
+  `equipment text`, `shelf_life text`, `menu_category text`, `sort_order int`.
+- **`dish_lines`** (recipe ingredients): `id uuid pk`, `dish_id fk`, `source_type text
+  check(item/prep)`, `item_code fk nullable`, `prep_dish_id fk nullable→dishes.id`,
+  `qty numeric`, `uom text`.
+- **`prep_recipe_stock`**: `dish_id fk`, `store_id fk`, `on_hand numeric`,
+  `containers jsonb`, PK `(dish_id, store_id)`.
+- **`prep_logs`**: `id uuid pk`, `store_id fk`, `kind text check(batch/sales_usage)`,
+  `dish_id fk nullable`, `prep_item_id fk nullable→prep_items`, `name text`, `batches
+  numeric`, `produced numeric`, `yield_uom text`, `usage jsonb`, `containers jsonb`,
+  `total_cost numeric`, `date date`, `created_at`.
+- **`prep_overrides`**: `id uuid pk`, `store_id fk`, `date date`, plus the one-off
+  prep-list-addition fields from the current collection.
+- **Staff PIN portal** (what the "Staff" tab / StaffSheet PWA use, distinct from
+  `people`/`store_roles` which model full accounts):
+  - **`staff_members`**: `id uuid pk`, `store_id fk`, `name text`, `role text
+    check(cook/owner_admin)`, `active bool`, `created_at`.
+  - **`staff_pins`**: `store_id fk pk`, `pin text`.
+- **`staff_tasks`**: `id uuid pk`, `store_id fk`, `task_type text check(count/prep)`,
+  `title text`, `due_date date`, `recurrence text`, `assigned_to text`, `track text`,
+  `note text`, `status text`, `completed_by text`, `completed_at`, `created_by text`,
+  `created_at`.
+- **`push_subscriptions`**: `id uuid pk`, `store_id fk`, `endpoint text unique`, `keys
+  jsonb`, `created_at`.
+- **`ai_chat_messages`**: `id uuid pk`, `store_id fk`, `role text
+  check(user/assistant)`, `content text`, `ts timestamptz`.
+- **`activity_log`**: `id uuid pk`, `store_id fk nullable`, `user_email text`, `role
+  text`, `method text`, `path text`, `status int`, `created_at`.
+- **`inventory_count_submissions`**: already effectively covered by
+  `count_sessions`/`count_lines` (which are more normalized than the Mongo version) —
+  no new table needed, just map onto those instead of porting the Mongo shape as-is.
+
+## Auth migration
+
+- Move from custom `AUTH_SECRET`/PBKDF2/HMAC tokens to Supabase Auth. `people.auth_user_id`
+  links a `people` row to a real `auth.users` row.
+- Owner/manager/staff/readonly roles move from `people`/`store_roles` (`role text
+  check(owner/gm/manager/lead/staff/consultant)` — note this role set is different
+  from today's `owner/manager/staff/readonly` and needs a mapping decision).
+- The Staff PIN portal (shared PIN, no account) stays outside Supabase Auth by design
+  — it's meant to be account-free. The "Owner/Admin identified via PIN" elevation
+  (mints a real session today) would need to mint a real Supabase session instead of
+  the current custom HMAC token — needs Supabase's admin API (service role) to do this
+  server-side.
+- Bootstrap flow (`/api/auth/bootstrap`, one-time token to create the first owner)
+  needs a Supabase-Auth-native equivalent.
+
+## Backend approach
+
+- Keep FastAPI. Replace Motor (`AsyncIOMotorClient`) calls with a Postgres driver —
+  likely `asyncpg` directly or SQLAlchemy's async engine, connecting via
+  `DATABASE_URL` with the **service role** (bypasses RLS; authorization stays decided
+  in Python, matching today's middleware).
+- This is a full rewrite of the data-access code in `server.py`, not a thin adapter —
+  every endpoint currently does schemaless Mongo document reads/writes and needs real
+  SQL (joins, foreign keys, transactions where multiple tables change together, e.g.
+  receiving a PO touching `purchase_orders`, `invoices`, `invoice_lines`, and
+  `store_items.current_stock` all at once).
+- Recommend migrating one feature area at a time (e.g., Vendors/Items/Invoices first,
+  since that's what the existing schema already covers most completely) rather than
+  attempting the whole backend in one pass — each area can be built, tested, and
+  verified against the live Supabase project independently.
+
+## Data migration mechanics
+
+1. Source: the JSON export in `backups/<timestamp>_pre-supabase-migration/` (one file
+   per Mongo collection, `bson.json_util` format).
+2. A transform script per collection maps Mongo documents to the new relational shape
+   (e.g. `items` Mongo docs split across `items`/`store_items`/`vendor_items` rows).
+3. Insert via the Supabase MCP tools or a Python script using the service-role
+   connection — not by hand.
+4. Re-run `scripts/export_mongo_backup.py` immediately before the real cutover (not
+   just once now) so the migrated data reflects the actual state at cutover time, not
+   whatever existed when planning started.
+
+## Suggested order of work
+
+1. Apply the new-table migrations above (via `apply_migration`, one migration file per
+   logical group — e.g. inventory balance + PO tables together, prep/menu tables
+   together, staff/PIN tables together).
+2. Migrate Vendors → Items → Invoices (the best-covered area) first: backend
+   endpoints, data transform, verify against a live restaurant's real purchase
+   history.
+3. Migrate Prep (recipes, prep items, prep lists, prep stock, prep logs).
+4. Migrate Counts (nightly + the Count History feature) onto `count_sessions`/`count_lines`.
+5. Migrate Purchase Orders, Adjustments, Reporting Periods/Dashboard COGS.
+6. Migrate Staff (accounts via Supabase Auth + `people`/`store_roles`; PIN portal via
+   `staff_members`/`staff_pins`).
+7. Migrate Employee tasks/push notifications, AI chat history, activity log.
+8. Auth cutover (bootstrap flow, login, session handling) — likely needs to happen
+   alongside step 6, not strictly after everything else, since most endpoints depend
+   on auth working.
+9. Frontend: swap `frontend/src/lib/api.js` calls as each backend area moves, not all
+   at once — the app can run against a mix of "already migrated" and "still Mongo"
+   endpoints during the transition if the branch stays deployable throughout.
