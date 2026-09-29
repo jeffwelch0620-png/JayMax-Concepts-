@@ -101,9 +101,9 @@ export const createStaffMember = (rid, body) => USE_PG ? pgCreateStaffMember(pgS
 export const updateStaffMember = (rid, staffId, body) => USE_PG ? pgUpdateStaffMember(pgStoreId(rid), staffId, body) : axios.put(`${API}/staff/${rid}/members/${staffId}`, body).then((r) => r.data);
 export const deleteStaffMember = (rid, staffId) => USE_PG ? pgDeleteStaffMember(pgStoreId(rid), staffId) : axios.delete(`${API}/staff/${rid}/members/${staffId}`).then((r) => r.data);
 
-// submitCounts/itemCountSubmissionHistory (CountsTab.js's manager-facing "Enter Counts"
-// tab) are intentionally NOT gated -- out of chunk 5's scope, see
-// docs/SUPABASE_MIGRATION_PLAN.md. Always Mongo-backed for now.
+// submitCounts/itemCountSubmissionHistory keep their legacy URLs because CountsTab.js
+// is not frontend-gated; the backend selects Mongo or Postgres via its own USE_PG flag
+// (see docs/SUPABASE_MIGRATION_PLAN.md, chunk 5.5).
 export const submitCounts = (rid, body) => axios.post(`${API}/counts/${rid}/submit`, body).then((r) => r.data);
 export const itemCountSubmissionHistory = (rid, from, to) => axios.get(`${API}/counts/${rid}/history`, { params: { from, to } }).then((r) => r.data);
 
