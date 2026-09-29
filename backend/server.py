@@ -4196,11 +4196,11 @@ async def pg_staff_counts(store_id: str, body: PgPinBodyIn, request: Request):
             raise HTTPException(403, "Invalid PIN")
         rows = await conn.fetch(
             """SELECT i.code, i.name, i.unit_uom, si.storage_area, si.current_stock, si.last_counted,
-                      si.last_counted_by, si.active
+                      si.last_counted_by
                FROM store_items si JOIN items i ON i.code = si.item_code
-               WHERE si.store_id=$1""", store_id)
+               WHERE si.store_id=$1 AND si.counted_nightly=TRUE""", store_id)
         prefix = PG_STORE_TO_RESTAURANT[store_id] + "_"
-        counted = [r for r in rows if r["active"]]
+        counted = rows
         return {"date": _pg_today(), "items": [{
             "controlNumber": r["code"][len(prefix):] if r["code"].startswith(prefix) else r["code"],
             "name": r["name"], "storageArea": r["storage_area"] or "", "unitUOM": r["unit_uom"] or "",
