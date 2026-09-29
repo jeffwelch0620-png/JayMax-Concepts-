@@ -1,8 +1,33 @@
 # MongoDB → Supabase (Postgres) Migration Plan
 
-Status: **planning** — no application code changed yet, no schema changes applied to
-the live Supabase project yet. This doc is the reference for that work as it happens
-across sessions.
+Status: **step 1 done** — all 14 new tables + the `store_items`/`vendor_items` column
+additions are live in Supabase (8 tracked migrations, see below). No application code
+changed yet; `server.py` still runs entirely on MongoDB. This doc is the reference for
+that work as it continues across sessions.
+
+## Applied migrations (step 1 — schema only)
+
+Run via the Supabase MCP `apply_migration` tool against project `yrlhwcoirgqmtlvvnzvo`,
+each tracked and independently reviewable:
+
+1. `inventory_balance_and_pricing` — `store_items` gains `current_stock`, `par`,
+   `last_counted`, `last_counted_by`, `last_counted_at`; `vendor_items` gains `price`,
+   `price_updated_at`, `price_source`, `preferred`, `available`.
+2. `purchase_orders` — `purchase_orders`, `purchase_order_lines`.
+3. `adjustments_and_reporting` — `adjustments`, `reporting_periods`.
+4. `menu_and_recipes` — `dishes`, `dish_lines`.
+5. `prep_extras` — `prep_recipe_stock`, `prep_logs`, `prep_overrides`.
+6. `staff_pin_portal` — `staff_members`, `staff_pins`.
+7. `staff_tasks_and_push` — `staff_tasks`, `push_subscriptions`.
+8. `ai_and_activity` — `ai_chat_messages`, `activity_log`.
+
+All new tables have RLS enabled with no policies yet, matching the 16 tables that
+already existed — consistent with the "backend connects via service role, RLS
+deferred" decision below. Verified via `list_tables`: 30 tables total in `public`,
+`stores` still has its original 4 rows untouched.
+
+**Next**: step 2, Vendors → Items → Invoices — build the FastAPI/Postgres data-access
+code and migrate real data for that slice first.
 
 ## Decisions made so far
 
