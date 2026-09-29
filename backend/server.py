@@ -1361,6 +1361,29 @@ class StaffCountsSaveIn(BaseModel):
     doneBy: str = ""
     counts: List[StaffCountEntryIn] = []
 
+async def _apply_and_record_counts(rid, submitted_by, counts, source):
+    # Shared by both count-entry surfaces (the manager-facing Enter Counts tab and the
+    # PIN-gated staff portal) so "Count History" is a single, complete audit trail no
+    # matter which one a physical count came through — both write the same currentStock/
+    # lastCounted* fields on items today, but neither used to leave a per-submission record.
+    ts, today = _now_iso(), _today()
+    entries = []
+    for entry in counts:
+        it = await db.items.find_one({"restaurantId": rid, "controlNumber": entry.controlNumber}, {"_id": 0})
+        if not it:
+            continue
+        prev = f(it.get("currentStock"))
+        await db.items.update_one({"restaurantId": rid, "controlNumber": entry.controlNumber},
+            {"$set": {"currentStock": entry.onHand, "lastCounted": today, "lastCountedBy": submitted_by, "lastCountedAt": ts}})
+        entries.append({"controlNumber": entry.controlNumber, "name": it.get("name", ""),
+                         "storageArea": it.get("storageArea", ""), "purchaseUnit": it.get("purchaseUnit", ""),
+                         "previousStock": prev, "newStock": f(entry.onHand)})
+    if entries:
+        await db.inventory_count_submissions.insert_one({
+            "id": "cnt_" + uuid.uuid4().hex[:10], "restaurantId": rid, "submittedAt": ts,
+            "submittedBy": submitted_by, "source": source, "itemCount": len(entries), "items": entries})
+    return len(entries)
+
 @api_router.post("/staff/{rid}/counts/save")
 async def staff_counts_save(rid: str, body: StaffCountsSaveIn, request: Request):
     check_rid(rid)
@@ -1373,13 +1396,40 @@ async def staff_counts_save(rid: str, body: StaffCountsSaveIn, request: Request)
         raise HTTPException(400, "Enter your name so the count is attributed")
     if not body.counts:
         raise HTTPException(400, "No counts submitted")
-    ts, today, saved = _now_iso(), _today(), 0
-    for entry in body.counts:
-        res = await db.items.update_one({"restaurantId": rid, "controlNumber": entry.controlNumber},
-            {"$set": {"currentStock": entry.onHand, "lastCounted": today, "lastCountedBy": done_by, "lastCountedAt": ts}})
-        if res.matched_count:
-            saved += 1
+    saved = await _apply_and_record_counts(rid, done_by, body.counts, "staff_pwa")
     return {"ok": True, "saved": saved}
+
+class CountSubmitIn(BaseModel):
+    submittedBy: str = ""
+    counts: List[StaffCountEntryIn] = []
+
+@api_router.post("/counts/{rid}/submit")
+async def submit_count(rid: str, body: CountSubmitIn, request: Request):
+    check_rid(rid)
+    submitted_by = body.submittedBy.strip()
+    if not submitted_by:
+        raise HTTPException(400, "Enter your name so the count is attributed")
+    if not body.counts:
+        raise HTTPException(400, "No counts submitted")
+    saved = await _apply_and_record_counts(rid, submitted_by, body.counts, "manager")
+    return {"ok": True, "saved": saved}
+
+@api_router.get("/counts/{rid}/history")
+async def count_history(rid: str, request: Request, date_from: str = Query(None, alias="from"), date_to: str = Query(None, alias="to")):
+    check_rid(rid)
+    _require_manager(request)
+    q = {"restaurantId": rid}
+    if date_from or date_to:
+        q["submittedAt"] = {}
+        if date_from:
+            q["submittedAt"]["$gte"] = date_from
+        if date_to:
+            # +2 days, not +1: submittedAt is a UTC timestamp, but `date_to` is the browser's
+            # LOCAL "today" — every restaurant here is US-based (behind UTC), so an evening
+            # submission can already read as tomorrow's date in UTC. One extra day of slack
+            # absorbs that skew without needing to convert timezones on either side.
+            q["submittedAt"]["$lt"] = (datetime.fromisoformat(date_to) + timedelta(days=2)).date().isoformat()
+    return await db.inventory_count_submissions.find(q, {"_id": 0}).sort("submittedAt", -1).to_list(500)
 
 # ---------------- Employee task portal: scheduled/assigned tasks + web push ----------------
 def _require_manager(request: Request):

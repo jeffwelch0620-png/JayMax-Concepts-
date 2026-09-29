@@ -80,6 +80,9 @@ export const createStaffMember = (rid, body) => axios.post(`${API}/staff/${rid}/
 export const updateStaffMember = (rid, staffId, body) => axios.put(`${API}/staff/${rid}/members/${staffId}`, body).then((r) => r.data);
 export const deleteStaffMember = (rid, staffId) => axios.delete(`${API}/staff/${rid}/members/${staffId}`).then((r) => r.data);
 
+export const submitCounts = (rid, body) => axios.post(`${API}/counts/${rid}/submit`, body).then((r) => r.data);
+export const itemCountSubmissionHistory = (rid, from, to) => axios.get(`${API}/counts/${rid}/history`, { params: { from, to } }).then((r) => r.data);
+
 export const staffPrepsheet = (rid, pin, track = "daily") => axios.post(`${API}/staff/${rid}/prepsheet`, { pin, track }).then((r) => r.data);
 export const staffCompleteTask = (rid, body) => axios.post(`${API}/staff/${rid}/prepsheet/complete`, body).then((r) => r.data);
 

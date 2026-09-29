@@ -283,7 +283,7 @@ export default function App() {
           <>
             {activeTab === "dashboard" && <DashboardTab rid={loc} items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />}
             {activeTab === "prep" && <PrepTab rid={loc} items={S.items} dishes={S.dishes} persistDishes={persistDishes} prepStock={S.prepStock} prepLogs={S.prepLogs} applyPrepResult={applyPrepResult} salesPeriod={S.salesPeriod} showToast={showToast} />}
-            {activeTab === "counts" && <CountsTab items={S.items} persist={persistItems} showToast={showToast} />}
+            {activeTab === "counts" && <CountsTab rid={loc} items={S.items} onCountsApplied={(next) => setS((p) => ({ ...p, items: next }))} showToast={showToast} />}
             {activeTab === "setup" && <SetupTab items={S.items} persistItems={persistItems} areas={S.areas} persistAreas={persistAreas} showToast={showToast} rid={loc} />}
             {activeTab === "invoices" && <InvoicesTab items={S.items} persistItems={persistItems} purchases={S.purchases} persistPurchases={persistPurchases} showToast={showToast} restaurantName={current.name} />}
             {activeTab === "order" && <OrderTab items={S.items} showToast={showToast} restaurantName={current.name} rid={loc} onCreatedPO={() => setActiveTab("purchaseOrders")} />}
