@@ -91,34 +91,37 @@ export const getProjections = (rid) => axios.get(`${API}/projections/${rid}`).th
 export const putProjection = (rid, body) => axios.put(`${API}/projections/${rid}`, body).then((r) => r.data);
 export const prepReport = (rid, from, to) => axios.get(`${API}/reports/${rid}/prep`, { params: { from, to } }).then((r) => r.data);
 
-export const getStaffPin = (rid) => axios.get(`${API}/staff/${rid}/pin`).then((r) => r.data);
-export const setStaffPin = (rid, staffPin) => axios.post(`${API}/staff/${rid}/pin`, { staffPin }).then((r) => r.data);
-export const verifyStaffPin = (rid, pin) => axios.post(`${API}/staff/verify`, { restaurantId: rid, pin }).then((r) => r.data);
-export const identifyStaffMember = (rid, pin, staffId) => axios.post(`${API}/staff/${rid}/identify`, { pin, staffId }).then((r) => r.data);
+export const getStaffPin = (rid) => USE_PG ? pgGetStaffPin(pgStoreId(rid)) : axios.get(`${API}/staff/${rid}/pin`).then((r) => r.data);
+export const setStaffPin = (rid, staffPin) => USE_PG ? pgSetStaffPin(pgStoreId(rid), staffPin) : axios.post(`${API}/staff/${rid}/pin`, { staffPin }).then((r) => r.data);
+export const verifyStaffPin = (rid, pin) => USE_PG ? pgVerifyStaffPin(pgStoreId(rid), pin) : axios.post(`${API}/staff/verify`, { restaurantId: rid, pin }).then((r) => r.data);
+export const identifyStaffMember = (rid, pin, staffId) => USE_PG ? pgIdentifyStaffMember(pgStoreId(rid), pin, staffId) : axios.post(`${API}/staff/${rid}/identify`, { pin, staffId }).then((r) => r.data);
 
-export const listStaffMembers = (rid) => axios.get(`${API}/staff/${rid}/members`).then((r) => r.data);
-export const createStaffMember = (rid, body) => axios.post(`${API}/staff/${rid}/members`, body).then((r) => r.data);
-export const updateStaffMember = (rid, staffId, body) => axios.put(`${API}/staff/${rid}/members/${staffId}`, body).then((r) => r.data);
-export const deleteStaffMember = (rid, staffId) => axios.delete(`${API}/staff/${rid}/members/${staffId}`).then((r) => r.data);
+export const listStaffMembers = (rid) => USE_PG ? pgListStaffMembers(pgStoreId(rid)) : axios.get(`${API}/staff/${rid}/members`).then((r) => r.data);
+export const createStaffMember = (rid, body) => USE_PG ? pgCreateStaffMember(pgStoreId(rid), body) : axios.post(`${API}/staff/${rid}/members`, body).then((r) => r.data);
+export const updateStaffMember = (rid, staffId, body) => USE_PG ? pgUpdateStaffMember(pgStoreId(rid), staffId, body) : axios.put(`${API}/staff/${rid}/members/${staffId}`, body).then((r) => r.data);
+export const deleteStaffMember = (rid, staffId) => USE_PG ? pgDeleteStaffMember(pgStoreId(rid), staffId) : axios.delete(`${API}/staff/${rid}/members/${staffId}`).then((r) => r.data);
 
+// submitCounts/itemCountSubmissionHistory keep their legacy URLs because CountsTab.js
+// is not frontend-gated; the backend selects Mongo or Postgres via its own USE_PG flag
+// (see docs/SUPABASE_MIGRATION_PLAN.md, chunk 5.5).
 export const submitCounts = (rid, body) => axios.post(`${API}/counts/${rid}/submit`, body).then((r) => r.data);
 export const itemCountSubmissionHistory = (rid, from, to) => axios.get(`${API}/counts/${rid}/history`, { params: { from, to } }).then((r) => r.data);
 
-export const staffPrepsheet = (rid, pin, track = "daily") => axios.post(`${API}/staff/${rid}/prepsheet`, { pin, track }).then((r) => r.data);
-export const staffCompleteTask = (rid, body) => axios.post(`${API}/staff/${rid}/prepsheet/complete`, body).then((r) => r.data);
+export const staffPrepsheet = (rid, pin, track = "daily") => USE_PG ? pgStaffPrepsheet(pgStoreId(rid), pin, track) : axios.post(`${API}/staff/${rid}/prepsheet`, { pin, track }).then((r) => r.data);
+export const staffCompleteTask = (rid, body) => USE_PG ? pgStaffCompleteTask(pgStoreId(rid), body) : axios.post(`${API}/staff/${rid}/prepsheet/complete`, body).then((r) => r.data);
 
-export const staffCounts = (rid, pin) => axios.post(`${API}/staff/${rid}/counts`, { pin }).then((r) => r.data);
-export const staffSaveCounts = (rid, body) => axios.post(`${API}/staff/${rid}/counts/save`, body).then((r) => r.data);
+export const staffCounts = (rid, pin) => USE_PG ? pgStaffCounts(pgStoreId(rid), pin) : axios.post(`${API}/staff/${rid}/counts`, { pin }).then((r) => r.data);
+export const staffSaveCounts = (rid, body) => USE_PG ? pgStaffSaveCounts(pgStoreId(rid), body) : axios.post(`${API}/staff/${rid}/counts/save`, body).then((r) => r.data);
 
-export const staffTaskInbox = (rid, pin) => axios.post(`${API}/staff/${rid}/tasks`, { pin }).then((r) => r.data);
-export const staffCompleteStaffTask = (rid, taskId, body) => axios.post(`${API}/staff/${rid}/tasks/${taskId}/complete`, body).then((r) => r.data);
-export const listStaffTasks = (rid) => axios.get(`${API}/staff-tasks/${rid}`).then((r) => r.data);
-export const createStaffTask = (rid, body) => axios.post(`${API}/staff-tasks/${rid}`, body).then((r) => r.data);
-export const deleteStaffTask = (rid, taskId) => axios.delete(`${API}/staff-tasks/${rid}/${taskId}`).then((r) => r.data);
+export const staffTaskInbox = (rid, pin) => USE_PG ? pgStaffTaskInbox(pgStoreId(rid), pin) : axios.post(`${API}/staff/${rid}/tasks`, { pin }).then((r) => r.data);
+export const staffCompleteStaffTask = (rid, taskId, body) => USE_PG ? pgStaffCompleteStaffTask(pgStoreId(rid), taskId, body) : axios.post(`${API}/staff/${rid}/tasks/${taskId}/complete`, body).then((r) => r.data);
+export const listStaffTasks = (rid) => USE_PG ? pgListStaffTasks(pgStoreId(rid)) : axios.get(`${API}/staff-tasks/${rid}`).then((r) => r.data);
+export const createStaffTask = (rid, body) => USE_PG ? pgCreateStaffTask(pgStoreId(rid), body) : axios.post(`${API}/staff-tasks/${rid}`, body).then((r) => r.data);
+export const deleteStaffTask = (rid, taskId) => USE_PG ? pgDeleteStaffTask(pgStoreId(rid), taskId) : axios.delete(`${API}/staff-tasks/${rid}/${taskId}`).then((r) => r.data);
 
-export const pushPublicKey = (rid) => axios.get(`${API}/staff/${rid}/push/public-key`).then((r) => r.data);
-export const pushSubscribe = (rid, body) => axios.post(`${API}/staff/${rid}/push/subscribe`, body).then((r) => r.data);
-export const pushUnsubscribe = (rid, body) => axios.post(`${API}/staff/${rid}/push/unsubscribe`, body).then((r) => r.data);
+export const pushPublicKey = (rid) => USE_PG ? pgPushPublicKey(pgStoreId(rid)) : axios.get(`${API}/staff/${rid}/push/public-key`).then((r) => r.data);
+export const pushSubscribe = (rid, body) => USE_PG ? pgPushSubscribe(pgStoreId(rid), body) : axios.post(`${API}/staff/${rid}/push/subscribe`, body).then((r) => r.data);
+export const pushUnsubscribe = (rid, body) => USE_PG ? pgPushUnsubscribe(pgStoreId(rid), body) : axios.post(`${API}/staff/${rid}/push/unsubscribe`, body).then((r) => r.data);
 
 export const runParAdvisor = (rid) => axios.post(`${API}/ai/par-advisor/${rid}`).then((r) => r.data);
 export const getParRecs = (rid) => axios.get(`${API}/ai/par-advisor/${rid}`).then((r) => r.data);
@@ -190,6 +193,33 @@ export const pgDeletePrepItem = (storeId, pid) => axios.delete(`${PG_API}/prep-i
 export const pgListOverrides = (storeId, date) => axios.get(`${PG_API}/prep-overrides/${storeId}`, { params: date ? { date } : {} }).then((r) => r.data);
 export const pgAddOverride = (storeId, body) => axios.post(`${PG_API}/prep-overrides/${storeId}`, body).then((r) => r.data);
 export const pgDeleteOverride = (storeId, oid) => axios.delete(`${PG_API}/prep-overrides/${storeId}/${oid}`).then((r) => r.data);
+
+// ---- Staff PIN portal (chunk 5) ----
+export const pgGetStaffPin = (storeId) => axios.get(`${PG_API}/staff/${storeId}/pin`).then((r) => r.data);
+export const pgSetStaffPin = (storeId, staffPin) => axios.post(`${PG_API}/staff/${storeId}/pin`, { staffPin }).then((r) => r.data);
+export const pgVerifyStaffPin = (storeId, pin) => axios.post(`${PG_API}/staff/${storeId}/verify`, { pin }).then((r) => r.data);
+export const pgIdentifyStaffMember = (storeId, pin, staffId) => axios.post(`${PG_API}/staff/${storeId}/identify`, { pin, staffId }).then((r) => r.data);
+
+export const pgListStaffMembers = (storeId) => axios.get(`${PG_API}/staff/${storeId}/members`).then((r) => r.data);
+export const pgCreateStaffMember = (storeId, body) => axios.post(`${PG_API}/staff/${storeId}/members`, body).then((r) => r.data);
+export const pgUpdateStaffMember = (storeId, staffId, body) => axios.put(`${PG_API}/staff/${storeId}/members/${staffId}`, body).then((r) => r.data);
+export const pgDeleteStaffMember = (storeId, staffId) => axios.delete(`${PG_API}/staff/${storeId}/members/${staffId}`).then((r) => r.data);
+
+export const pgStaffPrepsheet = (storeId, pin, track = "daily") => axios.post(`${PG_API}/staff/${storeId}/prepsheet`, { pin, track }).then((r) => r.data);
+export const pgStaffCompleteTask = (storeId, body) => axios.post(`${PG_API}/staff/${storeId}/prepsheet/complete`, body).then((r) => r.data);
+
+export const pgStaffCounts = (storeId, pin) => axios.post(`${PG_API}/staff/${storeId}/counts`, { pin }).then((r) => r.data);
+export const pgStaffSaveCounts = (storeId, body) => axios.post(`${PG_API}/staff/${storeId}/counts/save`, body).then((r) => r.data);
+
+export const pgStaffTaskInbox = (storeId, pin) => axios.post(`${PG_API}/staff/${storeId}/tasks`, { pin }).then((r) => r.data);
+export const pgStaffCompleteStaffTask = (storeId, taskId, body) => axios.post(`${PG_API}/staff/${storeId}/tasks/${taskId}/complete`, body).then((r) => r.data);
+export const pgListStaffTasks = (storeId) => axios.get(`${PG_API}/staff-tasks/${storeId}`).then((r) => r.data);
+export const pgCreateStaffTask = (storeId, body) => axios.post(`${PG_API}/staff-tasks/${storeId}`, body).then((r) => r.data);
+export const pgDeleteStaffTask = (storeId, taskId) => axios.delete(`${PG_API}/staff-tasks/${storeId}/${taskId}`).then((r) => r.data);
+
+export const pgPushPublicKey = (storeId) => axios.get(`${PG_API}/staff/${storeId}/push/public-key`).then((r) => r.data);
+export const pgPushSubscribe = (storeId, body) => axios.post(`${PG_API}/staff/${storeId}/push/subscribe`, body).then((r) => r.data);
+export const pgPushUnsubscribe = (storeId, body) => axios.post(`${PG_API}/staff/${storeId}/push/unsubscribe`, body).then((r) => r.data);
 
 // ==================== Chunk 3: state-blob adapter for Items/Purchases ====================
 // See docs/SUPABASE_MIGRATION_PLAN.md. fetchState/putCollection below reshape the granular

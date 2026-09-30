@@ -1,13 +1,15 @@
 # MongoDB → Supabase (Postgres) Migration Plan
 
-Status: **frontend wiring chunks 1-4 done (Prep, Items/Purchases, Dishes/Recipes),
-all gated behind `USE_PG` (default off); chunks 5-6 remain**. All real MongoDB data is
-in Supabase, `/api/pg/*` has full backend coverage for Vendors/Items/Invoices/Dishes/
-Prep, and the frontend (`frontend/src/lib/api.js`) can route through it end-to-end via
-`REACT_APP_USE_PG=true`. `server.py`'s existing `/api/...` routes still run entirely on
-MongoDB and are untouched — nothing has cut over for real users yet, and no `/api/pg/*`
-endpoint has been exercised against a live connection (still needs the real
-`DATABASE_URL` password — that's chunk 6). This doc is the reference for that work as
+Status: **all 6 chunks done and live-verified**. All real MongoDB data is in Supabase,
+`/api/pg/*` has full backend coverage for Vendors/Items/Invoices/Dishes/Prep/Staff, and
+the frontend (`frontend/src/lib/api.js`) routes through it end-to-end via
+`REACT_APP_USE_PG`/`USE_PG` (both currently `false` — off by default). Chunk 6 connected
+to the real Supabase database (via the Supavisor pooler, see the note below), found and
+fixed a real asyncpg date-encoding bug, and verified every area works correctly live in
+the browser against real migrated data. `server.py`'s existing `/api/...` routes still
+run entirely on MongoDB and are untouched — nothing has cut over for real users yet;
+flipping both `USE_PG` flags to `true` is what a real cutover would look like. This doc
+is the reference for that work as
 it continues across sessions.
 
 ## Frontend wiring plan
@@ -139,17 +141,148 @@ Chunks, in order:
      (one dish edited and saved at a time) — not a live risk today.
    - Legacy `qtyPortions` alias on dish lines (some old records use it instead of
      `qty`) is read as a fallback on write; the adapter always emits `qty` on read.
-5. **Staff PIN portal (PWA)** — not started on the backend at all yet. The
-   manager-facing prep/count endpoints wired in chunk 2 are separate from the
-   PIN-portal ones (`/api/staff/{rid}/prepsheet`, `/api/staff/{rid}/counts`, etc.) —
-   those need their own `/api/pg/staff/*` backend work before this can be wired.
-6. **Live verification** — once the real `DATABASE_URL` password is available,
-   actually exercise all of the above against a running local backend + browser,
-   the same way every other piece of this migration has been verified so far.
+5. **Staff PIN portal (PWA)** — ✅ Done, gated behind `USE_PG`.
+   - No new schema needed for most of it: `staff_pins`/`staff_members`/`staff_tasks`/
+     `push_subscriptions` were already in the pre-existing schema, just unused until
+     now. One real gap found: Mongo's staff item-counting feature
+     (`inventory_count_submissions` — the PIN portal's "Enter Counts", a *different*
+     feature from Prep's evening count) allows unlimited independent submissions per
+     day, each its own Count History entry. `count_sessions`/`count_lines` couldn't
+     represent that — they have a `UNIQUE(store_id, count_date, count_type)` built for
+     Prep's one-session-per-day evening count; reusing them would have silently
+     collapsed multiple same-day submissions into one, losing real history. Added a
+     dedicated `inventory_count_submissions` table instead (migration
+     `add_inventory_count_submissions`), storing each submission's item snapshot as
+     jsonb, matching Mongo's denormalized document shape directly.
+   - **Second bug found and fixed proactively** (not by Copilot's review this time —
+     found while building): `_is_pin_optional()` in the auth middleware only ever
+     checked the raw `/api/staff/...` path. Every new `/api/pg/staff/*` route would
+     have hit the blanket 401 *before* its own PIN-fallback logic ever ran, silently
+     breaking the entire PIN-only staff model (Prep Sheet, Enter Counts, task portal)
+     under `USE_PG` whenever `AUTH_REQUIRED=true` — the same class of bug the
+     `route_path`-stripping fix (from the earlier Copilot review round) already fixed
+     for `OWNER_PATHS`/`STAFF_PATHS`/`STAFF_WRITE_PATHS`, just in the one place that
+     fix didn't reach. Fixed the same way: strip `/api/pg` before matching.
+   - **Scope boundary, deliberate**: covers exactly what `StaffSheet.js`/`StaffTab.js`/
+     `SchedulingTab.js`/`push.js` call — PIN get/set, roster CRUD, verify, identify,
+     prep sheet view + complete (reuses chunk 2's `_pg_complete_task_core` directly),
+     staff item-counts view + save, task inbox + manager CRUD, web push. The separate
+     manager-facing `/counts/{rid}/submit` + `/counts/{rid}/history`
+     (`CountsTab.js`'s own "Enter Counts" tab — a different feature that happens to
+     share the same audit table) was left un-gated on the frontend on purpose (out of
+     this chunk's stated scope) — **but see chunk 5.5 below**, which made the backend
+     itself pg-aware for exactly this endpoint, since it turned out to matter.
+   - All 19 endpoints verified: SQL dry-run tested directly against real Supabase data
+     via rollback transactions (PIN upsert, staff member insert, the item-counts join
+     query, task insert with recurrence, push subscription upsert, and the jsonb
+     count-submission insert all confirmed working).
+5.5. **Backend integration gap, found and fixed before live verification** — asked
+   proactively ("any other schema gaps to check before chunk 6?") and traced every
+   backend code path touching `items`/`purchases`/`dishes`/`adjustments`/Prep
+   collections directly, rather than through the gated `/api/pg/*` routes. This isn't
+   a schema gap (no missing columns) — it's that chunks 1-5 only gated the
+   *frontend's own* calls. Several Mongo-native backend features never got told about
+   the cutover, so flipping `USE_PG` on for a restaurant would have left them silently
+   reading or writing the wrong database:
+   - **Write-side (data would go to the wrong place)**: manager "Enter Counts" submit
+     (`/api/counts/{rid}/submit`, `CountsTab.js`) wrote `currentStock` to Mongo `items`
+     even though the app would display Postgres's; PO receiving
+     (`/api/orders/{rid}/{oid}/receive`) did the same for received quantities; PO →
+     invoice price sync (`apply_prices`) wrote vendor SKU prices to Mongo `items`. PO
+     receiving's invoice-matching (`_match_invoice`) also read Mongo `purchases`, so
+     it would report "invoice not found" for every invoice entered after cutover.
+   - **Read-side (dashboards/AI would show stale numbers)**: Owner Dashboard
+     (`/api/owner/summary`, `/api/owner/prep-summary`) and the AI Assistant
+     (`/api/ai/chat`) both compute their rollups straight from Mongo `items`/
+     `purchases`/`dishes`/`adjustments`/Prep collections.
+   - Adjustments and Purchase Orders themselves turned out fine: Adjustments never
+     touches `items` (pure append-only waste log), and POs are internally consistent
+     since they're entirely unmigrated (PO data only ever lives in Mongo either way —
+     just not started, not desynced).
+   - **Fix**: added a backend-side `USE_PG` flag (`backend/.env`, separate from but
+     meant to be set alongside the frontend's `REACT_APP_USE_PG`), since the frontend
+     flag alone has no way to reach server-side aggregation code. Each of the 6 paths
+     above now branches on it: `submit_count`/`count_history` reuse chunk 5's
+     `_pg_apply_and_record_counts`/`inventory_count_submissions` directly (so manager
+     and staff submissions land in the same place once both are on Postgres);
+     `receive_order`'s stock bump became an atomic `current_stock + $1` update (a
+     small correctness improvement over the old fetch-then-set, which could race);
+     `_match_invoice` and `apply_prices` got pg-native equivalents
+     (`_pg_invoice_lines_by_number`, `_pg_apply_prices`); Owner Dashboard and the AI
+     Assistant share a new `_pg_owner_view(rid)` helper that reads items/purchases/
+     dishes/prep_stock from Postgres and reshapes them into the exact Mongo shape
+     `item_derived`/`recipe_cost`/`raw_portions` already expect, so those pure-Python
+     costing functions work completely unchanged.
+   - Verified: all new SQL dry-run tested against real Supabase data; ran the full
+     pytest suite with `USE_PG=true` while `DATABASE_URL` still has the placeholder
+     password — every one of these paths now correctly 503s (fail-open, no crashes)
+     instead of silently touching the wrong database; re-ran with `USE_PG=false`
+     (the real default) and confirmed the baseline is unchanged (57 passing, same 6
+     pre-existing environmental failures).
+6. **Live verification** — ✅ Done. The real `DATABASE_URL` was configured (via the
+   Supavisor connection pooler on port 6543 — the direct `db.<ref>.supabase.co:5432`
+   host is IPv6-only and didn't resolve from this dev machine; see the pooler note
+   below) and `USE_PG=true` was set on both frontend and backend.
+   - **Real bug found and fixed**: every single date-column write (`prep_lists.prep_date`,
+     `count_sessions.count_date`, `invoices.invoice_date`, `prep_overrides.date`,
+     `staff_tasks.due_date`, `store_items.last_counted`, and the
+     `inventory_count_submissions.submitted_at` timestamptz filter — 13 call sites in
+     all) was passing a bare ISO string as an asyncpg bind parameter. asyncpg does
+     client-side binary encoding of bind parameters (unlike a SQL text literal, which
+     Postgres itself casts at parse time) and needs a real `datetime.date`/`datetime`
+     object, raising `DataError: ... 'str' object has no attribute 'toordinal'`
+     otherwise. This had never surfaced before because every one of chunks 1-5's SQL
+     dry-run checks used literal dates typed directly into the query string, not bound
+     parameters — live verification was the first time these ran through the actual
+     driver path the app uses. First caught live in the browser (Prep List showed
+     "Couldn't load this prep list"); fixed with one `_pg_date()` helper applied at
+     every site, then re-verified the same flows worked (correct empty states, not
+     errors) and re-ran the full pytest suite under `USE_PG=true` to confirm no other
+     date-column site was missed.
+   - **Verified working live, end to end, in the browser**: Dashboard (real inventory
+     value, food-cost %, low-stock list), Owner Dashboard (`_pg_owner_view` rollup
+     across all three restaurants), Item Setup (list + edit form, correct
+     portions-per-unit/cost-per-portion, including the `OF-001` "no portion data" edge
+     case), Invoice Master (real invoice history, including the documented
+     `INV-100902` vendor-mismatch judgment call), Menu Costing (a recipe with both
+     `sourceType: "item"` and `sourceType: "prep"` ingredient lines resolving
+     correctly), Prep (List, Evening Count, Inventory & Log), and the Staff PIN portal
+     (PIN unlock via the default-PIN fallback, Tasks, Prep, Counts views).
+   - **Supabase branch testing was attempted first and abandoned**: created a dev
+     branch to test destructively without risking real data, but branches replay
+     migrations onto an empty database and it failed (`MIGRATIONS_FAILED`) — traced to
+     an unrelated `add_private_toast_analytics_landing_zone` migration (confirmed with
+     the user: a coworker's separate Toast POS integration, not part of this
+     migration) that a fresh branch's migration replay couldn't satisfy. Deleted the
+     branch and verified against the real project instead, using pg-specific test
+     files plus careful manual browser checks.
+   - **Real, if minor, incident during verification**: running the *full* pytest
+     suite (not just the pg-specific files) with `USE_PG=true` let two purchase-order
+     tests actually receive real inventory against `rudds_WI-001` (Russet Potatoes) in
+     the live database — a `+16` drift from its migrated value (`100.0` → `116.0`).
+     Checked every item across all three restaurants against the original migration
+     backup; nothing else was affected. Restored `rudds_WI-001` to `100.0` (confirmed
+     with the user before writing to the shared database). Lesson: once `USE_PG=true`
+     actually works, the full test suite is no longer safe to run against the real
+     project without a disposable branch or database — pg-specific tests plus manual
+     spot-checks is the right default until branch testing is fixed or a disposable
+     project exists.
+   - Both `USE_PG` flags were returned to `false` afterward — same off-by-default
+     posture as every other chunk. Flip both together (`backend/.env` and
+     `frontend/.env`) when ready for a real cutover.
 
-Given none of this is live-tested yet (still blocked on the password), each chunk
-gets built and reviewed the same way the backend was — logically verified, committed,
-documented — with actual browser verification deferred to chunk 6.
+**Connecting to Supabase from this dev machine**: the direct connection host
+(`db.<project-ref>.supabase.co:5432`) is IPv6-only on the free tier and did not
+resolve locally. Use the Supavisor connection pooler instead — swap the username to
+`postgres.<project-ref>`, the host to `aws-<N>-<region>.pooler.supabase.com`, and the
+port to `6543` (transaction mode; matches `db_pg.py`'s existing
+`statement_cache_size=0`, which transaction-mode pooling requires). Also: a password
+containing `@` (or any other URL-reserved character) must be percent-encoded in
+`DATABASE_URL` (`@` → `%40`), or asyncpg's DSN parser fails with a confusing
+IPv6-bracket parsing error.
+
+The migration has now been live-tested through the Supavisor pooler; the verification
+results and remaining limitations are recorded in chunk 6 below.
 
 ## Applied migrations (step 1 — schema only)
 
@@ -500,9 +633,9 @@ migration, not ad-hoc `execute_sql`).
   check(user/assistant)`, `content text`, `ts timestamptz`.
 - **`activity_log`**: `id uuid pk`, `store_id fk nullable`, `user_email text`, `role
   text`, `method text`, `path text`, `status int`, `created_at`.
-- **`inventory_count_submissions`**: already effectively covered by
-  `count_sessions`/`count_lines` (which are more normalized than the Mongo version) —
-  no new table needed, just map onto those instead of porting the Mongo shape as-is.
+- **`inventory_count_submissions`**: dedicated table added by migration
+  `add_inventory_count_submissions`; each row stores the submitted item snapshot as
+  jsonb so multiple same-day submissions remain separate history entries.
 
 ## Auth migration
 
