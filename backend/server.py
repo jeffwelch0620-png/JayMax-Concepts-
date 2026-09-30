@@ -493,12 +493,15 @@ async def _pg_get_store_state(rid):
             else {"periodStart": ws, "periodEnd": we, "dishSales": {}, "itemCounts": {}},
     }
 
-async def _pg_check_and_bump_revision(rid, request: Request):
+async def _pg_check_and_bump_revision(rid, request: Request, conn=None):
     # Same contract as the Mongo version below: an If-Match header must equal the
     # current revision (409 otherwise); the bump itself is an atomic compare-and-swap.
+    # Pass the save's own `conn` (inside its transaction) so a save that fails also
+    # rolls the bump back -- otherwise the client's revision goes stale and every later
+    # save is refused with 409 until a reload.
     store_id = _pg_state_store_id(rid)
     raw = request.headers.get("if-match")
-    pool = db_pg.pool()
+    pool = conn or db_pg.pool()
     if raw:
         expected = raw.strip('"')
         new = None
@@ -519,9 +522,9 @@ async def _pg_check_and_bump_revision(rid, request: Request):
            ON CONFLICT (store_id) DO UPDATE SET revision=store_state.revision+1, updated_at=now()
            RETURNING revision""", store_id)
 
-async def _check_and_bump_revision(rid, request: Request):
+async def _check_and_bump_revision(rid, request: Request, conn=None):
     if USE_PG:
-        return await _pg_check_and_bump_revision(rid, request)
+        return await _pg_check_and_bump_revision(rid, request, conn)
     raw = request.headers.get("if-match")
     current = await db.state_versions.find_one({"restaurantId": rid}, {"_id": 0, "revision": 1})
     revision = (current or {}).get("revision", 0)
@@ -717,9 +720,10 @@ def _pg_adj_rows(rid, payload):
                      _ts_in(a.get("createdAt")) or datetime.now(timezone.utc)))
     return rows
 
-async def _pg_replace_adjustments(rid, rows):
+async def _pg_replace_adjustments(rid, rows, conn=None):
     store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
-    conn = await db_pg.pool().acquire()
+    own = conn is None
+    conn = conn or await db_pg.pool().acquire()
     try:
         async with conn.transaction():
             await conn.execute("DELETE FROM adjustments WHERE store_id=$1", store_id)
@@ -730,7 +734,8 @@ async def _pg_replace_adjustments(rid, rows):
                    VALUES ($1, $2, $3, (SELECT code FROM items WHERE code=$4), $5, $6, $7, $8, $9, $10, $11, $12)""",
                 [(store_id, *r) for r in rows])
     finally:
-        await db_pg.pool().release(conn)
+        if own:
+            await db_pg.pool().release(conn)
 
 async def _pg_list_adjustments(rid):
     rows = await db_pg.pool().fetch("SELECT * FROM adjustments WHERE store_id=$1 ORDER BY date, created_at",
@@ -755,9 +760,10 @@ def _pg_period_rows(rid, payload):
                      p.get("dishSales") or {}, p.get("itemCounts") or {}, _ts_in(p.get("savedAt"))))
     return rows
 
-async def _pg_replace_reporting_periods(rid, rows):
+async def _pg_replace_reporting_periods(rid, rows, conn=None):
     store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
-    conn = await db_pg.pool().acquire()
+    own = conn is None
+    conn = conn or await db_pg.pool().acquire()
     try:
         async with conn.transaction():
             await conn.execute("DELETE FROM reporting_periods WHERE store_id=$1", store_id)
@@ -767,7 +773,8 @@ async def _pg_replace_reporting_periods(rid, rows):
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
                 [(store_id, *r) for r in rows])
     finally:
-        await db_pg.pool().release(conn)
+        if own:
+            await db_pg.pool().release(conn)
 
 async def _pg_list_reporting_periods(rid):
     rows = await db_pg.pool().fetch("SELECT * FROM reporting_periods WHERE store_id=$1 ORDER BY period_start, created_at",
@@ -812,15 +819,17 @@ async def get_state(rid: str):
 @api_router.put("/state/{rid}/salesPeriod")
 async def put_sales_period(rid: str, payload: dict, request: Request):
     check_rid(rid)
-    revision = await _check_and_bump_revision(rid, request)
     payload = dict(payload)
     if USE_PG:
         payload.pop("restaurantId", None)
-        await db_pg.pool().execute(
-            """INSERT INTO store_state (store_id, sales_period) VALUES ($1, $2)
-               ON CONFLICT (store_id) DO UPDATE SET sales_period=$2, updated_at=now()""",
-            _pg_state_store_id(rid), payload)
+        async with db_pg.pool().acquire() as conn, conn.transaction():
+            revision = await _check_and_bump_revision(rid, request, conn)
+            await conn.execute(
+                """INSERT INTO store_state (store_id, sales_period) VALUES ($1, $2)
+                   ON CONFLICT (store_id) DO UPDATE SET sales_period=$2, updated_at=now()""",
+                _pg_state_store_id(rid), payload)
         return {"ok": True, "revision": revision}
+    revision = await _check_and_bump_revision(rid, request)
     payload["restaurantId"] = rid
     await db.sales_periods.replace_one({"restaurantId": rid}, payload, upsert=True)
     return {"ok": True, "revision": revision}
@@ -828,13 +837,15 @@ async def put_sales_period(rid: str, payload: dict, request: Request):
 @api_router.put("/state/{rid}/areas")
 async def put_areas(rid: str, payload: List[Any], request: Request):
     check_rid(rid)
-    revision = await _check_and_bump_revision(rid, request)
     if USE_PG:
-        await db_pg.pool().execute(
-            """INSERT INTO store_state (store_id, areas) VALUES ($1, $2)
-               ON CONFLICT (store_id) DO UPDATE SET areas=$2, updated_at=now()""",
-            _pg_state_store_id(rid), payload)
+        async with db_pg.pool().acquire() as conn, conn.transaction():
+            revision = await _check_and_bump_revision(rid, request, conn)
+            await conn.execute(
+                """INSERT INTO store_state (store_id, areas) VALUES ($1, $2)
+                   ON CONFLICT (store_id) DO UPDATE SET areas=$2, updated_at=now()""",
+                _pg_state_store_id(rid), payload)
         return {"ok": True, "revision": revision}
+    revision = await _check_and_bump_revision(rid, request)
     await db.areas.update_one({"restaurantId": rid}, {"$set": {"restaurantId": rid, "list": payload}}, upsert=True)
     return {"ok": True, "revision": revision}
 
@@ -848,8 +859,13 @@ async def put_collection(rid: str, collection: str, payload: List[Any], request:
             # items/purchases/dishes have their own /api/pg/* writers; nothing may land in Mongo.
             raise HTTPException(400, f"{collection} is saved through /api/pg in Postgres mode")
         rows = _PG_REPLACERS[collection][0](rid, payload)  # validate before bumping the revision
-        revision = await _check_and_bump_revision(rid, request)
-        await _PG_REPLACERS[collection][1](rid, rows)
+        conn = await db_pg.pool().acquire()
+        try:
+            async with conn.transaction():
+                revision = await _check_and_bump_revision(rid, request, conn)
+                await _PG_REPLACERS[collection][1](rid, rows, conn)
+        finally:
+            await db_pg.pool().release(conn)
         return {"ok": True, "count": len(rows), "revision": revision}
     revision = await _check_and_bump_revision(rid, request)
     coll = COLL_MAP[collection]
@@ -2073,7 +2089,9 @@ def _ai():
     if not os.environ.get("ANTHROPIC_API_KEY", "").strip():
         raise HTTPException(503, "Sous isn't set up yet: ANTHROPIC_API_KEY is missing on the server (Render > jaymax-api > Environment).")
     if _ai_client is None:
-        _ai_client = anthropic.AsyncAnthropic()
+        # An organization-level key (not scoped to a workspace) must name the workspace per request.
+        workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+        _ai_client = anthropic.AsyncAnthropic(default_headers={"anthropic-workspace-id": workspace} if workspace else None)
     return _ai_client
 
 def _ai_error_message(e):
@@ -2085,13 +2103,19 @@ def _ai_error_message(e):
         return "This Anthropic API key isn't allowed to use Sous's model. Check the key's workspace in the Anthropic Console."
     if isinstance(e, anthropic.NotFoundError):
         return f"The AI model '{AI_MODEL}' isn't available to this Anthropic account. Set ANTHROPIC_MODEL to a model it can use."
+    if "anthropic-workspace-id" in text or "scoped to a workspace" in text:
+        return ("This Anthropic API key isn't tied to a workspace. Create a key inside a workspace in the Anthropic Console, "
+                "or set ANTHROPIC_WORKSPACE_ID on the server.")
     if "credit" in text or "billing" in text:
         return "The Anthropic account is out of credits. Add credits under Billing in the Anthropic Console."
     if isinstance(e, anthropic.RateLimitError):
         return "Sous is busy right now (rate limit). Try again in a minute."
     if isinstance(e, anthropic.APIConnectionError):
         return "The server couldn't reach Anthropic. Try again shortly."
-    return "The assistant hit an error. Please try again."
+    # Anything else: pass Anthropic's own explanation through (it never contains the key).
+    status = getattr(e, "status_code", None)
+    detail = str(getattr(e, "message", "") or "").strip()[:300]
+    return "The assistant hit an error" + (f" ({status})" if status else "") + (f": {detail}" if detail else ". Please try again.")
 
 PAR_ADVISOR_SCHEMA = {
     "type": "object",
@@ -2936,7 +2960,8 @@ def _assert_safe_email(subject, html):
 async def send_email(*, to, subject, html, from_name=None, reply_to=None):
     _assert_safe_email(subject, html)
     if not EMAIL_KEY or not EMAIL_RE.match(EMAIL_FROM_ADDRESS):
-        raise HTTPException(500, "Email is not configured")
+        missing = [n for n, ok in (("RESEND_API_KEY", EMAIL_KEY), ("EMAIL_FROM_ADDRESS", EMAIL_RE.match(EMAIL_FROM_ADDRESS))) if not ok]
+        raise HTTPException(503, f"Supplier email isn't set up yet: set {' and '.join(missing)} on the server (Render > jaymax-api > Environment).")
     # Display name goes into the From header: drop anything that could break out of it.
     name = re.sub(r'[\r\n<>"\\]', "", from_name or EMAIL_FROM_NAME).strip() or "Orders"
     subject = re.sub(r"[\r\n]+", " ", subject).strip()
@@ -3492,6 +3517,18 @@ async def pg_list_items(store_id: str):
     finally:
         await db_pg.pool().release(conn)
 
+# Suppliers the frontend maps names onto (VENDOR_NAME_TO_ID in frontend/src/lib/api.js; an
+# unrecognized supplier name falls back to "other"). They're created on first use so an
+# invoice or SKU never fails on a missing vendors row.
+PG_KNOWN_VENDORS = {"us_foods": "US Foods", "pfg": "PFG", "sysco": "Sysco", "webstaurant": "Webstaurant", "other": "Other"}
+
+async def _pg_ensure_vendor(conn, vendor_id):
+    if vendor_id in PG_KNOWN_VENDORS:
+        await conn.execute("INSERT INTO vendors (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
+                           vendor_id, PG_KNOWN_VENDORS[vendor_id])
+    elif not await conn.fetchval("SELECT 1 FROM vendors WHERE id=$1", vendor_id):
+        raise HTTPException(400, f"Unknown supplier '{vendor_id}'")
+
 async def _pg_save_item(conn, store_id, body):
     await conn.execute(
                 """INSERT INTO items (code, name, category, base_unit, item_type, is_high_value, notes,
@@ -3524,6 +3561,7 @@ async def _pg_save_item(conn, store_id, body):
     desired_skus = set()
     for sk in body.vendor_skus:
         desired_skus.add((sk.vendor_id, sk.vendor_sku))
+        await _pg_ensure_vendor(conn, sk.vendor_id)
         existing = await conn.fetchrow(
                     "SELECT id, item_code FROM vendor_items WHERE vendor_id=$1 AND vendor_sku=$2 FOR UPDATE",
                     sk.vendor_id, sk.vendor_sku)
@@ -3533,8 +3571,8 @@ async def _pg_save_item(conn, store_id, body):
             await conn.execute(
                         """UPDATE vendor_items SET vendor_description=$2, purchase_unit=$3,
                                base_per_purchase_unit=$4, pack_count=$5, unit_qty=$6, unit_uom=$7,
-                               price=$8, price_updated_at=CASE WHEN $8 IS NOT NULL THEN now() ELSE price_updated_at END,
-                               price_source=CASE WHEN $8 IS NOT NULL THEN 'manual' ELSE price_source END,
+                               price=$8::numeric, price_updated_at=CASE WHEN $8::numeric IS NOT NULL THEN now() ELSE price_updated_at END,
+                               price_source=CASE WHEN $8::numeric IS NOT NULL THEN 'manual' ELSE price_source END,
                                preferred=$9, available=$10 WHERE id=$1""",
                         existing["id"], sk.vendor_description, sk.purchase_unit, sk.base_per_purchase_unit,
                         sk.pack_count, sk.unit_qty, sk.unit_uom, sk.price, sk.preferred, sk.available)
@@ -3543,7 +3581,7 @@ async def _pg_save_item(conn, store_id, body):
                         """INSERT INTO vendor_items (vendor_id, vendor_sku, vendor_description, item_code,
                                purchase_unit, base_per_purchase_unit, pack_count, unit_qty, unit_uom,
                                price, price_updated_at, price_source, preferred, available)
-                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, CASE WHEN $10 IS NOT NULL THEN now() END, 'manual', $11, $12)""",
+                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::numeric, CASE WHEN $10::numeric IS NOT NULL THEN now() END, 'manual', $11, $12)""",
                         sk.vendor_id, sk.vendor_sku, sk.vendor_description, body.code, sk.purchase_unit,
                         sk.base_per_purchase_unit, sk.pack_count, sk.unit_qty, sk.unit_uom, sk.price,
                         sk.preferred, sk.available)
@@ -3570,10 +3608,10 @@ async def pg_create_item(store_id: str, body: ItemIn):
 async def pg_replace_items(store_id: str, body: List[ItemIn], request: Request):
     check_store_id(store_id)
     revision_rid = {"papa": "papa_leonis"}.get(store_id, store_id)
-    revision = await _check_and_bump_revision(revision_rid, request)
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            revision = await _check_and_bump_revision(revision_rid, request, conn)
             existing = await conn.fetch("SELECT item_code FROM store_items WHERE store_id=$1 FOR UPDATE", store_id)
             next_codes = {item.code for item in body}
             for item in body:
@@ -3665,6 +3703,7 @@ async def pg_create_invoice(store_id: str, body: InvoiceIn):
     try:
         async with conn.transaction():
             total = sum((ln.qty or 0) * (ln.unit_price or 0) for ln in body.lines)
+            await _pg_ensure_vendor(conn, body.vendor_id)
             inv = await conn.fetchrow(
                 """INSERT INTO invoices (store_id, delivered_to, vendor_id, invoice_number, invoice_date, total, source, created_by)
                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *""",
@@ -3796,10 +3835,10 @@ async def _pg_save_dish(conn, store_id, body, client_ids):
 async def pg_replace_dishes(store_id: str, body: List[DishIn], request: Request):
     check_store_id(store_id)
     revision_rid = {"papa": "papa_leonis"}.get(store_id, store_id)
-    revision = await _check_and_bump_revision(revision_rid, request)
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            revision = await _check_and_bump_revision(revision_rid, request, conn)
             existing = await conn.fetch("SELECT id FROM dishes WHERE store_id=$1 FOR UPDATE", store_id)
             next_ids = {dish.id for dish in body if dish.id}
             client_ids, saved = {}, {}

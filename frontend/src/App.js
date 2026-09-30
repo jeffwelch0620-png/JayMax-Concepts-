@@ -66,6 +66,11 @@ export default function App() {
   // locations again (a slow fetch for the old location landing after a newer one).
   const locRef = useRef(loc);
   locRef.current = loc;
+  // Latest known store revision. Saves read and update this directly instead of the
+  // rendered `S.revision`: back-to-back saves (Restore, quick edits) run before React
+  // re-renders, and a stale revision makes the server refuse every save after the first.
+  const revisionRef = useRef(null);
+  useEffect(() => { revisionRef.current = S?.revision; }, [S?.revision]);
 
   const isOwner = !!session && loc === "owner" && session.user.role === "owner";
   const current = isOwner ? OWNER : RESTAURANTS.find((r) => r.id === loc) || RESTAURANTS[0];
@@ -101,7 +106,8 @@ export default function App() {
 
   function persistCollection(name, next) {
     setS((p) => ({ ...p, [name]: next }));
-    return api.putCollection(loc, name, next, S?.revision).then((result) => {
+    return api.putCollection(loc, name, next, revisionRef.current).then((result) => {
+      if (result.revision != null) revisionRef.current = result.revision;
       setS((p) => ({ ...p, ...(result.dishes ? { dishes: result.dishes } : {}),
         revision: result.revision ?? p.revision }));
       return result;
@@ -118,7 +124,8 @@ export default function App() {
   const persistAreas = (next) => persistCollection("areas", next);
   function persistSalesPeriod(next) {
     setS((p) => ({ ...p, salesPeriod: next }));
-    return api.putSalesPeriod(loc, next, S?.revision).then((result) => {
+    return api.putSalesPeriod(loc, next, revisionRef.current).then((result) => {
+      if (result.revision != null) revisionRef.current = result.revision;
       setS((p) => ({ ...p, revision: result.revision ?? p.revision }));
       return result;
     }).catch((err) => {

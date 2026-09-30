@@ -406,7 +406,7 @@ def test_send_email_posts_to_resend_with_sanitized_headers(monkeypatch):
     monkeypatch.setattr(server, "EMAIL_FROM_ADDRESS", "")
     with pytest.raises(HTTPException) as exc:
         asyncio.run(server.send_email(to="rep@vendor.example", subject="s", html="<p>x</p>"))
-    assert exc.value.status_code == 500
+    assert exc.value.status_code == 503 and "set EMAIL_FROM_ADDRESS on the server" in exc.value.detail
 
 
 def test_cors_origins_tolerate_copy_paste_variants():
@@ -457,7 +457,21 @@ def test_ai_errors_explain_the_setup_problem(monkeypatch):
         (status_error(anthropic.BadRequestError, 400, "Your credit balance is too low"), "out of credits"),
         (status_error(anthropic.NotFoundError, 404, "model not found"), "isn't available"),
         (status_error(anthropic.RateLimitError, 429, "slow down"), "rate limit"),
-        (status_error(anthropic.InternalServerError, 500, "boom"), "Please try again"),
+        (status_error(anthropic.BadRequestError, 400, "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header"), "ANTHROPIC_WORKSPACE_ID"),
+        (status_error(anthropic.InternalServerError, 500, "boom"), "(500): boom"),
+        (status_error(anthropic.BadRequestError, 400, "fallbacks: unknown field"), "(400): fallbacks: unknown field"),
     ]
     for err, expected in cases:
         assert expected in server._ai_error_message(err)
+
+
+def test_ai_client_sends_workspace_header_when_configured(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_WORKSPACE_ID", "wrkspc_123")
+    monkeypatch.setattr(server, "_ai_client", None)
+    client = server._ai()
+    assert client.default_headers.get("anthropic-workspace-id") == "wrkspc_123"
+    monkeypatch.delenv("ANTHROPIC_WORKSPACE_ID")
+    monkeypatch.setattr(server, "_ai_client", None)
+    assert "anthropic-workspace-id" not in server._ai().default_headers
+    monkeypatch.setattr(server, "_ai_client", None)

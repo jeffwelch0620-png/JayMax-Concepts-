@@ -490,3 +490,37 @@ def test_no_api_route_touches_mongo_in_postgres_mode(monkeypatch):
             "SELECT count(*) FROM activity_log WHERE user_id='usr_sweep' AND store_id='papa'")
         assert logged > 10
     run(scenario)
+
+
+def test_item_save_with_new_priced_sku_and_failed_save_keeps_revision():
+    # Found by the UI smoke test: a new vendor SKU with a price failed to prepare
+    # ($10 type ambiguous), and the failed save had already bumped the revision, so
+    # every later save that session was refused with 409.
+    from tests.test_pg_routes import revision_request
+    async def scenario():
+        pool = db_pg.pool()
+        await pool.execute("DELETE FROM vendors WHERE id IN ('sysco', 'other')")
+        item = server.ItemIn(code="berts_WI-001", name="Ground Beef", base_unit="lb", count_unit="case",
+                             vendor_skus=[server.VendorSkuIn(vendor_id="sysco", vendor_sku="SY-1", price=92.5)])
+        saved = await server.pg_replace_items("berts", [item], revision_request(0))
+        assert saved["revision"] == 1
+        row = await pool.fetchrow("SELECT price, price_source FROM vendor_items WHERE vendor_sku='SY-1'")
+        assert float(row["price"]) == 92.5 and row["price_source"] == "manual"
+        assert await pool.fetchval("SELECT name FROM vendors WHERE id='sysco'") == "Sysco"
+
+        bad = server.ItemIn(code="berts_WI-002", name="Buns", vendor_skus=[server.VendorSkuIn(vendor_id="nobody", vendor_sku="X")])
+        with pytest.raises(HTTPException) as exc:
+            await server.pg_replace_items("berts", [item, bad], revision_request(1))
+        assert exc.value.status_code == 400
+        # The failed save rolled back with its revision bump, so revision 1 still saves.
+        assert await pool.fetchval("SELECT revision FROM store_state WHERE store_id='berts'") == 1
+        with pytest.raises(HTTPException) as exc:
+            await server.put_collection("berts", "adjustments", [{"controlNumber": "WI-001"}], revision_request(1))
+        assert exc.value.status_code == 400  # invalid rows are refused before any bump
+        assert (await server.put_areas("berts", [{"name": "Shed", "prefix": "SH"}], revision_request(1)))["revision"] == 2
+        assert (await server.put_collection("berts", "adjustments", [], revision_request(2)))["revision"] == 3
+
+        invoice = await server.pg_create_invoice("berts", server.InvoiceIn(
+            vendor_id="other", invoice_date="2026-09-30", lines=[server.InvoiceLineIn(qty=2, unit_price=10)]))
+        assert invoice["total"] == 20.0
+    run(scenario)

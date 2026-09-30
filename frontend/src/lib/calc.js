@@ -99,7 +99,9 @@ export function shiftWorkweek(range, weeks) {
 }
 export function fmtDate(iso) {
   if (!iso) return "—";
-  return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // Accepts a date ("2026-09-30") or a full timestamp from Postgres ("2026-09-30T18:04:00+00:00").
+  const d = new Date(String(iso).slice(0, 10) + "T00:00:00");
+  return isNaN(d) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 export function fmtMoney(n) {
   if (n === null || n === undefined || isNaN(n)) return "$0.00";
