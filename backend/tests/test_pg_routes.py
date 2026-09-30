@@ -406,7 +406,7 @@ def test_send_email_posts_to_resend_with_sanitized_headers(monkeypatch):
     monkeypatch.setattr(server, "EMAIL_FROM_ADDRESS", "")
     with pytest.raises(HTTPException) as exc:
         asyncio.run(server.send_email(to="rep@vendor.example", subject="s", html="<p>x</p>"))
-    assert exc.value.status_code == 500
+    assert exc.value.status_code == 503 and "set EMAIL_FROM_ADDRESS on the server" in exc.value.detail
 
 
 def test_cors_origins_tolerate_copy_paste_variants():
