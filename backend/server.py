@@ -52,6 +52,11 @@ READ_ONLY_PATHS = ("/owner/summary", "/owner/prep-summary", "/owner/orders",
 STAFF_PATHS = ("/prepcount/", "/preplists/", "/prep/", "/staff/", "/prep-items/")
 OWNER_PATHS = ("/owner/",)
 STAFF_WRITE_PATHS = ("/prepcount/", "/preplists/", "/prep/")
+# Mongo-backed /api/... route families whose Postgres twins live under /api/pg/... . With
+# USE_PG on they're refused outright: the frontend never calls them in that mode, and a
+# stale client or direct call would otherwise write to Mongo and silently diverge.
+LEGACY_MONGO_PATHS = ("/prep/", "/prepcount/", "/preplists/", "/prep-items/", "/prep-overrides/",
+                      "/staff/", "/staff-tasks/")
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "60"))
 _rate_buckets = {}
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").strip()
@@ -140,6 +145,8 @@ async def collaboration_security(request: Request, call_next):
         return await call_next(request)
     if AUTH_REQUIRED and not AUTH_SECRET:
         return JSONResponse({"detail": "AUTH_SECRET is not configured"}, status_code=503)
+    if USE_PG and not path.startswith("/api/pg/") and path.removeprefix("/api").startswith(LEGACY_MONGO_PATHS):
+        return JSONResponse({"detail": "This endpoint moved to /api/pg/... (Postgres mode)"}, status_code=410)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token) if token else None
     if AUTH_REQUIRED and not user and not _is_pin_optional(path):
@@ -1841,14 +1848,54 @@ async def push_unsubscribe(rid: str, body: PushUnsubscribeIn, request: Request):
     return {"ok": True}
 
 # ---------------- Prep reporting ----------------
+async def _pg_prep_report_sources(rid, frm, to):
+    """The prep report's inputs from Postgres, in the Mongo document shapes prep_report
+    aggregates over: count sessions (+ entries), prep logs, prep recipes, prep items."""
+    store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
+    start, end = _pg_date(frm), _pg_date(to)
+    conn = await db_pg.pool().acquire()
+    try:
+        session_rows = await conn.fetch(
+            """SELECT * FROM count_sessions WHERE store_id=$1 AND count_date BETWEEN $2 AND $3
+               ORDER BY count_date LIMIT 500""", store_id, start, end)
+        line_rows = await conn.fetch(
+            "SELECT * FROM count_lines WHERE session_id = ANY($1::uuid[])", [r["id"] for r in session_rows])
+        log_rows = await conn.fetch(
+            "SELECT * FROM prep_logs WHERE store_id=$1 AND date BETWEEN $2 AND $3 ORDER BY date LIMIT 1000",
+            store_id, start, end)
+        recipe_rows = await conn.fetch(
+            "SELECT id, name, yield_uom FROM dishes WHERE store_id=$1 AND recipe_type='prep' ORDER BY sort_order NULLS LAST, name",
+            store_id)
+        item_rows = await conn.fetch(
+            "SELECT id, name, container FROM prep_items WHERE store_id=$1 ORDER BY sort_order NULLS LAST, name", store_id)
+    finally:
+        await db_pg.pool().release(conn)
+    entries = {}
+    for l in line_rows:
+        entries.setdefault(l["session_id"], []).append({
+            "recipeId": str(l["dish_id"]) if l["dish_id"] else None,
+            "prepItemId": str(l["prep_item_id"]) if l["prep_item_id"] else None,
+            "onHand": f(l["qty"]) if l["status"] == "counted" and l["qty"] is not None else None,
+            "savedBy": l["saved_by"] or ""})
+    sessions = [{"id": str(r["id"]), "date": r["count_date"].isoformat(), "status": r["status"],
+                 "countedBy": r["counted_by_name"] or "", "revision": 1, "entries": entries.get(r["id"], [])}
+                for r in session_rows]
+    recipes = [{"id": str(r["id"]), "name": r["name"], "yieldUOM": r["yield_uom"] or ""} for r in recipe_rows]
+    pitems = [{"id": str(r["id"]), "name": r["name"], "vesselName": r["container"] or "vessel"} for r in item_rows]
+    return sessions, [_pg_log_to_api(r) for r in log_rows], recipes, pitems
+
 @api_router.get("/reports/{rid}/prep")
 async def prep_report(rid: str, frm: Optional[str] = Query(None, alias="from"), to: Optional[str] = Query(None)):
     check_rid(rid)
     frm = frm or (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
     to = to or _today()
-    sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": frm, "$lte": to}}, {"_id": 0}).sort("date", 1).to_list(500)
-    logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": frm, "$lte": to}}, {"_id": 0}).sort("date", 1).to_list(1000)
-    recipes = await _prep_recipes(rid)
+    if USE_PG:
+        sessions, logs, recipes, pitems = await _pg_prep_report_sources(rid, frm, to)
+    else:
+        sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": frm, "$lte": to}}, {"_id": 0}).sort("date", 1).to_list(500)
+        logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": frm, "$lte": to}}, {"_id": 0}).sort("date", 1).to_list(1000)
+        recipes = await _prep_recipes(rid)
+        pitems = await db.prep_items.find({"restaurantId": rid}, {"_id": 0}).to_list(1000)
     out = []
     for r in recipes:
         counts = [{"date": s["date"], "onHand": e["onHand"], "by": e.get("savedBy") or s.get("countedBy", "")}
@@ -1860,7 +1907,6 @@ async def prep_report(rid: str, frm: Optional[str] = Query(None, alias="from"), 
         out.append({"recipeId": r["id"], "name": r.get("name", ""), "yieldUOM": r.get("yieldUOM", ""),
                     "counts": counts, "produced": round(produced, 2), "producedCost": round(produced_cost, 2),
                     "usedBySales": round(used, 2), "sentToService": round(to_service, 2)})
-    pitems = await db.prep_items.find({"restaurantId": rid}, {"_id": 0}).to_list(1000)
     pout = []
     for p in pitems:
         counts = [{"date": s["date"], "onHand": e["onHand"], "by": e.get("savedBy") or s.get("countedBy", "")}

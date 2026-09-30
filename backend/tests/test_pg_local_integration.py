@@ -27,7 +27,7 @@ pytestmark = pytest.mark.skipif(not PG_URL, reason="TEST_PG_URL not set")
 
 RESET = """
 TRUNCATE purchase_order_lines, purchase_orders, store_vendor_contacts, store_state, app_users, adjustments,
-         reporting_periods, dish_lines, dishes, store_items, vendor_items, items, vendors, stores CASCADE;
+         reporting_periods, count_lines, count_sessions, prep_logs, prep_items, dish_lines, dishes, store_items, vendor_items, items, vendors, stores CASCADE;
 INSERT INTO stores (id, name) VALUES ('berts', 'Berts'), ('rudds', 'Rudds'), ('papa', 'Papa'), ('comm', 'Commissary');
 INSERT INTO vendors (id, name) VALUES ('us_foods', 'US Foods');
 INSERT INTO items (code, name, base_unit) VALUES ('papa_leonis_A1', 'Flour', 'lb');
@@ -244,4 +244,41 @@ def test_period_migration_remaps_mongo_dish_ids_to_postgres_uuids(tmp_path):
         assert state["reportingPeriods"][0]["dishSales"] == {pizza: 40, "dish_unknown": 1}
         assert state["salesPeriod"] == {"periodStart": "2026-09-28", "dishSales": {pizza: 5}}
         assert [a["id"] for a in state["adjustments"]] == ["adj_1"]
+    run(scenario)
+
+
+def test_prep_report_aggregates_postgres_counts_and_logs():
+    async def scenario():
+        pool = db_pg.pool()
+        sauce = await pool.fetchval(
+            "INSERT INTO dishes (store_id, name, recipe_type, yield_uom) VALUES ('papa', 'Red Sauce', 'prep', 'qt') RETURNING id")
+        await pool.execute("INSERT INTO dishes (store_id, name, recipe_type) VALUES ('papa', 'Pizza', 'menu')")
+        dough = await pool.fetchval(
+            "INSERT INTO prep_items (store_id, name, recipe_id, container) VALUES ('papa', 'Dough balls', $1, 'tray') RETURNING id", sauce)
+        sess = await pool.fetchval(
+            """INSERT INTO count_sessions (store_id, count_date, counted_by_name, status)
+               VALUES ('papa', '2026-09-29', 'Ana', 'submitted') RETURNING id""")
+        await pool.execute("INSERT INTO count_sessions (store_id, count_date, status) VALUES ('papa', '2026-08-01', 'open')")
+        await pool.execute(
+            """INSERT INTO count_lines (session_id, dish_id, status, qty, saved_by) VALUES ($1, $2, 'counted', 4, 'Ben'),
+                      ($1, NULL, 'not_counted', NULL, '')""", sess, sauce)
+        await pool.execute("INSERT INTO count_lines (session_id, prep_item_id, status, qty) VALUES ($1, $2, 'counted', 7)", sess, dough)
+        await pool.execute(
+            """INSERT INTO prep_logs (store_id, kind, dish_id, prep_item_id, produced, total_cost, usage, date) VALUES
+               ('papa', 'batch', $1, NULL, 6, 12.5, '[]', '2026-09-29'),
+               ('papa', 'batch', NULL, $2, 10, 3, '[]', '2026-09-29'),
+               ('papa', 'sales_usage', NULL, NULL, 0, 0, $3::jsonb, '2026-09-29'),
+               ('papa', 'container_use', $1, NULL, -2, 0, '[]', '2026-09-30'),
+               ('papa', 'batch', $1, NULL, 99, 99, '[]', '2026-07-01')""",
+            sauce, dough, [{"recipeId": str(sauce), "used": 1.5}])
+        rep = await server.prep_report("papa_leonis", frm="2026-09-01", to="2026-09-30")
+        assert [r["name"] for r in rep["recipes"]] == ["Red Sauce"]
+        assert rep["recipes"][0] == {"recipeId": str(sauce), "name": "Red Sauce", "yieldUOM": "qt",
+                                     "counts": [{"date": "2026-09-29", "onHand": 4.0, "by": "Ben"}],
+                                     "produced": 6.0, "producedCost": 12.5, "usedBySales": 1.5, "sentToService": 2.0}
+        assert rep["prepItems"] == [{"prepItemId": str(dough), "name": "Dough balls", "yieldUOM": "tray",
+                                     "counts": [{"date": "2026-09-29", "onHand": 7.0, "by": "Ana"}],
+                                     "produced": 10.0, "producedCost": 3.0}]
+        assert rep["sessions"] == [{"id": str(sess), "date": "2026-09-29", "status": "submitted", "countedBy": "Ana", "revision": 1}]
+        assert rep["totals"] == {"producedCost": 15.5}
     run(scenario)

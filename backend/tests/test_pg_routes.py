@@ -314,3 +314,26 @@ def test_pg_bootstrap_refuses_once_any_user_exists(monkeypatch):
         asyncio.run(server.auth_bootstrap(server.BootstrapIn(
             bootstrapToken="boot", email="new@example.test", password="a-long-enough-pass")))
     assert exc.value.status_code == 409
+
+
+def test_legacy_mongo_route_families_are_refused_in_pg_mode(monkeypatch):
+    async def no_activity(*args):
+        return None
+
+    monkeypatch.setattr(server, "_record_activity", no_activity)
+
+    async def ok(_):
+        return Response(status_code=204)
+
+    async def invoke(path, method="POST"):
+        return await server.collaboration_security(make_request(path, method), ok)
+
+    monkeypatch.setattr(server, "USE_PG", True)
+    for path in ("/api/prep/papa_leonis/complete", "/api/preplists/papa_leonis/generate", "/api/staff/papa_leonis/counts/save",
+                 "/api/staff-tasks/papa_leonis", "/api/prep-items/papa_leonis", "/api/staff/verify"):
+        assert asyncio.run(invoke(path)).status_code == 410, path
+    # Postgres twins, and routes that are Postgres-aware themselves, pass through.
+    assert asyncio.run(invoke("/api/pg/preplists/papa/generate")).status_code == 204
+    assert asyncio.run(invoke("/api/reports/papa_leonis/prep", "GET")).status_code == 204
+    monkeypatch.setattr(server, "USE_PG", False)
+    assert asyncio.run(invoke("/api/preplists/papa_leonis/generate")).status_code == 204
