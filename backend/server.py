@@ -3175,6 +3175,15 @@ COUNT_TYPE_TO_TRACK = {v: k for k, v in TRACK_TO_COUNT_TYPE.items()}
 def _pg_now_iso():
     return datetime.now(timezone.utc).isoformat()
 
+def _pg_now():
+    # Same asyncpg constraint as _pg_date -- a `timestamptz` bind parameter needs a
+    # real datetime object, not an ISO string. _pg_now_iso() stays as-is for JSON-
+    # embedded/response-only uses (e.g. a "createdAt" field inside a jsonb container
+    # list, or a value only ever returned to the client, never bound to a column);
+    # use this one for any created_at/timestamptz column bind. Found live while
+    # verifying the recurring-schedule feature -- see docs/SUPABASE_MIGRATION_PLAN.md.
+    return datetime.now(timezone.utc)
+
 def _pg_today():
     return datetime.now(timezone.utc).date().isoformat()
 
@@ -3291,7 +3300,7 @@ async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind
         """INSERT INTO prep_logs (store_id, kind, dish_id, name, batches, produced, yield_uom, usage, containers, total_cost, date, created_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *""",
         store_id, kind, recipe["id"], name, batches, round(produced, 2), recipe["yield_uom"],
-        usage, new_containers, total_cost, _pg_today(), _pg_now_iso())
+        usage, new_containers, total_cost, _pg_date(_pg_today()), _pg_now())
     return {"prepStock": await _pg_prep_stock_list(conn, store_id), "log": _pg_log_to_api(log_row)}
 
 async def _pg_deduct_item_and_stock(conn, store_id, pitem, vessels):
@@ -3322,7 +3331,7 @@ async def _pg_deduct_item_and_stock(conn, store_id, pitem, vessels):
         store_id, pitem["id"], pitem["name"], vessels, round(vessels, 2), pitem["container"] or "vessel",
         [{"controlNumber": pitem["item_code"], "name": (item["name"] if item else ""), "portions": round(portions, 2),
           "units": round(units, 3), "purchaseUnit": si["count_unit"], "cost": round(cost, 2)}],
-        round(cost, 2), _pg_today(), _pg_now_iso())
+        round(cost, 2), _pg_date(_pg_today()), _pg_now())
     log = _pg_log_to_api(log_row)
     log["prepItemId"] = str(pitem["id"])
     return {"prepStock": await _pg_prep_stock_list(conn, store_id), "log": log}
@@ -3387,7 +3396,7 @@ async def pg_apply_sales(store_id: str, body: PgApplySalesIn):
         log_row = await conn.fetchrow(
             """INSERT INTO prep_logs (store_id, kind, name, usage, date, created_at)
                VALUES ($1,'sales_usage','Menu sales prep usage',$2,$3,$4) RETURNING *""",
-            store_id, usage_rows, _pg_today(), _pg_now_iso())
+            store_id, usage_rows, _pg_date(_pg_today()), _pg_now())
         return {"prepStock": await _pg_prep_stock_list(conn, store_id), "log": _pg_log_to_api(log_row)}
     finally:
         await db_pg.pool().release(conn)
@@ -3417,7 +3426,7 @@ async def pg_use_container(store_id: str, body: PgUseContainerIn):
             """INSERT INTO prep_logs (store_id, kind, dish_id, name, produced, yield_uom, date, created_at)
                VALUES ($1,'container_use',$2,$3,$4,$5,$6,$7) RETURNING *""",
             store_id, body.recipeId, f"{(dish['name'] if dish else '')} — {target.get('label', 'container')} to service",
-            -float(target.get("size") or 0), (dish["yield_uom"] if dish else ""), _pg_today(), _pg_now_iso())
+            -float(target.get("size") or 0), (dish["yield_uom"] if dish else ""), _pg_date(_pg_today()), _pg_now())
         return {"prepStock": await _pg_prep_stock_list(conn, store_id), "log": _pg_log_to_api(log_row)}
     finally:
         await db_pg.pool().release(conn)
@@ -3441,12 +3450,15 @@ async def _pg_get_or_create_session(conn, store_id, date, track):
             "INSERT INTO count_sessions (store_id, count_date, count_type, status) VALUES ($1,$2,$3,'open') RETURNING *",
             store_id, pg_date, count_type)
     recipes, prep_items, _ = await _pg_prep_universe_for_track(conn, store_id, track)
+    # Recurring-schedule items are fixed-quantity, not count-driven -- they get no
+    # evening-count line at all (daily/oneoff items are unchanged, matching today).
+    countable_items = [p for p in prep_items if (p["schedule"] or "daily") != "recurring"]
     existing_lines = await conn.fetch("SELECT dish_id, prep_item_id FROM count_lines WHERE session_id=$1", s["id"])
     known = {str(l["dish_id"] or l["prep_item_id"]) for l in existing_lines}
     for r in recipes:
         if str(r["id"]) not in known:
             await conn.execute("INSERT INTO count_lines (session_id, dish_id, status) VALUES ($1,$2,'not_counted')", s["id"], r["id"])
-    for p in prep_items:
+    for p in countable_items:
         if str(p["id"]) not in known:
             await conn.execute("INSERT INTO count_lines (session_id, prep_item_id, status) VALUES ($1,$2,'not_counted')", s["id"], p["id"])
     lines = await conn.fetch("SELECT * FROM count_lines WHERE session_id = $1", s["id"])
@@ -3463,7 +3475,7 @@ async def _pg_get_or_create_session(conn, store_id, date, track):
                      "yieldQty": float(r["yield_qty"] or 1), "shelfLife": r["shelf_life"] or "", "prepPar": float(r["prep_par"] or 0)}
                     for r in recipes],
         "prepItems": [{"id": str(p["id"]), "name": p["name"], "vesselName": p["container"] or "vessel",
-                       "parVessels": float(p["par_vessels"] or 0), "schedule": p["schedule"]} for p in prep_items],
+                       "parVessels": float(p["par_vessels"] or 0), "schedule": p["schedule"]} for p in countable_items],
     }
 
 @pg_router.get("/prepcount/{store_id}/session")
@@ -3642,36 +3654,58 @@ async def _pg_generate_prep_list_in_transaction(conn, store_id, date, track, cou
                       "yield_uom": r["yield_uom"], "yield_qty": yield_qty, "par": par, "on_hand": counted,
                       "uncounted": counted is None, "needed_units": round(needed, 2), "batches_planned": batches,
                       "batches_done": 0, "vessel_name": None, "note": note_for(rid_s, counted), "removed": False})
+    target_weekday = pg_date.weekday()  # Mon=0..Sun=6, matches recur_days encoding
+
+    def override_note(key):
+        if key not in par_over:
+            return ""
+        return f"Par override for this date: {par_note[key]}" if par_note[key] else "Par override for this date"
+
     for p in prep_items:
         pid_s = str(p["id"])
-        if pid_s in removed_ids or (p["schedule"] or "daily") != "daily":
+        sched = p["schedule"] or "daily"
+        if pid_s in removed_ids or sched == "oneoff":
             continue
-        line = counted_map.get(pid_s)
-        counted = float(line["qty"]) if line and line["qty"] is not None else None
-        note = note_for(pid_s, counted)
+        if sched == "recurring":
+            if target_weekday not in (p["recur_days"] or []):
+                continue
+            counted, uncounted_flag, note = None, False, override_note(pid_s)
+        else:  # "daily" -- unchanged
+            line = counted_map.get(pid_s)
+            counted = float(line["qty"]) if line and line["qty"] is not None else None
+            uncounted_flag = counted is None
+            note = note_for(pid_s, counted)
         if p["recipe_id"]:
             r = by_id.get(str(p["recipe_id"]))
             if not r:
                 continue
-            item_par = float(p["par_weekday"] or 0)
-            default_par = item_par if item_par > 0 else float(r["prep_par"] or 0)
-            par = par_over.get(pid_s, default_par)
             yield_qty = float(r["yield_qty"] or 1) or 1
-            needed = max(0, par - counted) if counted is not None else par
-            batches = math.ceil(needed / yield_qty) if needed > 0 and yield_qty > 0 else 0
             vn = p["container"] or ""
+            if sched == "recurring":
+                par = par_over.get(pid_s, float(p["fixed_qty"] or 0))
+                needed = max(0, par)
+            else:
+                item_par = float(p["par_weekday"] or 0)
+                default_par = item_par if item_par > 0 else float(r["prep_par"] or 0)
+                par = par_over.get(pid_s, default_par)
+                needed = max(0, par - counted) if counted is not None else par
+            batches = math.ceil(needed / yield_qty) if needed > 0 and yield_qty > 0 else 0
             tasks.append({"recipe_id": r["id"], "prep_item_id": p["id"], "task_type": "batch",
                           "name": p["name"] or r["name"], "yield_uom": r["yield_uom"], "yield_qty": yield_qty,
-                          "par": par, "on_hand": counted, "uncounted": counted is None, "needed_units": round(needed, 2),
+                          "par": par, "on_hand": counted, "uncounted": uncounted_flag, "needed_units": round(needed, 2),
                           "batches_planned": batches, "batches_done": 0, "vessel_name": vn,
                           "note": ((f"Portion into {vn}. " if vn else "") + note).strip(), "removed": False})
         else:
-            par = par_over.get(pid_s, float(p["par_vessels"] or 0))
-            needed = max(0, par - counted) if counted is not None else par
+            if sched == "recurring":
+                par = par_over.get(pid_s, float(p["fixed_qty"] or 0))
+                needed = max(0, par)
+            else:
+                par = par_over.get(pid_s, float(p["par_vessels"] or 0))
+                needed = max(0, par - counted) if counted is not None else par
             vessels = math.ceil(needed * 2) / 2 if needed > 0 else 0
             tasks.append({"recipe_id": None, "prep_item_id": p["id"], "task_type": "vessel", "name": p["name"],
                           "yield_uom": p["container"] or "vessel", "yield_qty": 1, "par": par, "on_hand": counted,
-                          "uncounted": counted is None, "needed_units": round(needed, 2), "batches_planned": vessels,
+                          "uncounted": uncounted_flag, "needed_units": round(needed, 2), "batches_planned": vessels,
                           "batches_done": 0, "vessel_name": p["container"], "note": note, "removed": False})
     for o in overrides:
         if o["type"] != "add":
@@ -3689,7 +3723,7 @@ async def _pg_generate_prep_list_in_transaction(conn, store_id, date, track, cou
     plist = await conn.fetchrow(
         """INSERT INTO prep_lists (store_id, prep_date, from_count, status, count_type, created_at)
            VALUES ($1,$2,$3,'draft',$4,$5) RETURNING *""",
-        store_id, pg_date, session["id"], count_type, _pg_now_iso())
+        store_id, pg_date, session["id"], count_type, _pg_now())
     for t in tasks:
         await conn.execute(
             """INSERT INTO prep_list_lines (list_id, prep_item_id, recipe_id, task_type, name, yield_uom, yield_qty,
@@ -3834,6 +3868,8 @@ class PgPrepItemIn(BaseModel):
     note: str = ""
     track: str = "daily"
     par: float = 0
+    recurDays: List[int] = []
+    fixedQty: float = 0
 
 def _pg_prep_item_to_api(row, store_id):
     item_code = row["item_code"]
@@ -3844,7 +3880,9 @@ def _pg_prep_item_to_api(row, store_id):
             "vesselName": row["container"] or "", "vesselCapacity": float(row["vessel_capacity"] or 0),
             "parVessels": float(row["par_vessels"] or 0), "schedule": row["schedule"],
             "track": "daily" if (row["made_at"] is None or row["made_at"] == row["store_id"]) else "bulk",
-            "note": row["note"] or "", "par": float(row["par_weekday"] or 0), "active": row["active"]}
+            "note": row["note"] or "", "par": float(row["par_weekday"] or 0), "active": row["active"],
+            "recurDays": list(row["recur_days"]) if row["recur_days"] else [],
+            "fixedQty": float(row["fixed_qty"] or 0)}
 
 @pg_router.get("/prep-items/{store_id}")
 async def pg_list_prep_items(store_id: str, track: Optional[str] = Query(None)):
@@ -3862,8 +3900,13 @@ async def pg_list_prep_items(store_id: str, track: Optional[str] = Query(None)):
 async def _pg_validate_prep_item(conn, store_id, body):
     if body.sourceType not in ("item", "prep"):
         raise HTTPException(400, "sourceType must be item or prep")
-    if body.schedule not in ("daily", "oneoff"):
-        raise HTTPException(400, "schedule must be daily or oneoff")
+    if body.schedule not in ("daily", "oneoff", "recurring"):
+        raise HTTPException(400, "schedule must be daily, oneoff, or recurring")
+    if body.schedule == "recurring":
+        if not body.recurDays or any(d < 0 or d > 6 for d in body.recurDays):
+            raise HTTPException(400, "recurring schedule requires at least one weekday (0=Monday..6=Sunday)")
+        if not body.fixedQty or body.fixedQty <= 0:
+            raise HTTPException(400, "recurring schedule requires a positive fixed quantity")
     if body.track not in ("daily", "bulk"):
         raise HTTPException(400, "track must be daily or bulk")
     if body.sourceType == "item":
@@ -3880,13 +3923,15 @@ async def pg_create_prep_item(store_id: str, body: PgPrepItemIn):
     try:
         await _pg_validate_prep_item(conn, store_id, body)
         made_at = "comm" if body.track == "bulk" else store_id
+        recur_days = body.recurDays if body.schedule == "recurring" else []
+        fixed_qty = body.fixedQty if body.schedule == "recurring" else 0
         row = await conn.fetchrow(
             """INSERT INTO prep_items (store_id, name, item_code, recipe_id, container, vessel_capacity, par_vessels,
-                   schedule, note, made_at, par_weekday, par_weekend, active)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,TRUE) RETURNING *""",
+                   schedule, note, made_at, par_weekday, par_weekend, recur_days, fixed_qty, active)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$12,$13,TRUE) RETURNING *""",
             store_id, body.name, body.itemCode if body.sourceType == "item" else None,
             body.recipeId if body.sourceType == "prep" else None, body.vesselName, body.vesselCapacity,
-            body.parVessels, body.schedule, body.note, made_at, body.par)
+            body.parVessels, body.schedule, body.note, made_at, body.par, recur_days, fixed_qty)
         return _pg_prep_item_to_api(row, store_id)
     finally:
         await db_pg.pool().release(conn)
@@ -3898,13 +3943,16 @@ async def pg_update_prep_item(store_id: str, pid: str, body: PgPrepItemIn):
     try:
         await _pg_validate_prep_item(conn, store_id, body)
         made_at = "comm" if body.track == "bulk" else store_id
+        recur_days = body.recurDays if body.schedule == "recurring" else []
+        fixed_qty = body.fixedQty if body.schedule == "recurring" else 0
         row = await conn.fetchrow(
             """UPDATE prep_items SET name=$3, item_code=$4, recipe_id=$5, container=$6, vessel_capacity=$7,
-                   par_vessels=$8, schedule=$9, note=$10, made_at=$11, par_weekday=$12, par_weekend=$12
+                   par_vessels=$8, schedule=$9, note=$10, made_at=$11, par_weekday=$12, par_weekend=$12,
+                   recur_days=$13, fixed_qty=$14
                WHERE id=$1 AND store_id=$2 RETURNING *""",
             pid, store_id, body.name, body.itemCode if body.sourceType == "item" else None,
             body.recipeId if body.sourceType == "prep" else None, body.vesselName, body.vesselCapacity,
-            body.parVessels, body.schedule, body.note, made_at, body.par)
+            body.parVessels, body.schedule, body.note, made_at, body.par, recur_days, fixed_qty)
         if not row:
             raise HTTPException(404, "prep item not found")
         return {"ok": True}

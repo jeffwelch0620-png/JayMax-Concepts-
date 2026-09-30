@@ -285,6 +285,63 @@ Given none of this is live-tested yet (still blocked on the password), each chun
 gets built and reviewed the same way the backend was — logically verified, committed,
 documented — with actual browser verification deferred to chunk 6.
 
+## Chunk 7 — Recurring-schedule Prep Items (Postgres only)
+
+A new, user-requested feature on top of the finished migration: a third `prep_items`
+`schedule` value, `"recurring"` — a Prep Item that auto-appears on its own configured
+weekdays with a fixed quantity the manager sets when creating it, independent of any
+evening count (`"daily"` and `"oneoff"` are unchanged). Motivated by Bulk Prep's
+variable, item-by-item cadence (2-3x/week for some things, daily for others, one-off
+for catering) that previously could only be worked around one day at a time via manual
+overrides. Postgres only, per the user's explicit choice — the Mongo-backed routes are
+untouched. Full design plan (with exact code) is preserved at
+`C:\Users\jeffw\.claude\plans\logical-wandering-pnueli.md`.
+
+- **Schema**: `prep_items` gained `recur_days smallint[]` (Python `date.weekday()`
+  encoding, Mon=0..Sun=6) and `fixed_qty numeric`, plus 3 new constraints (widened
+  `schedule` CHECK, a `recur_days` range check, and a cross-field check requiring both
+  fields when `schedule='recurring'` — using `cardinality()`, not `array_length()`,
+  since the latter returns `NULL` for an empty array and `NULL` passes a CHECK rather
+  than failing it).
+- **Backend**: `_pg_get_or_create_session` excludes recurring items from evening-count
+  seeding (both the seeding loop and the session's `prepItems` response list — missing
+  either leaves an uncountable row that 404s on save). `_pg_generate_prep_list_in_transaction`
+  matches the target date's weekday against `recur_days`, uses `fixed_qty` directly as
+  the needed quantity (no par-minus-counted subtraction), and composes correctly with
+  existing `prep_overrides` (a `par`-type override still overrides the fixed quantity
+  for one date, `remove` still suppresses it, `add` one-off catering additions are
+  unaffected) — confirmed all three live against real data.
+- **Two more real bugs found while live-verifying this** (both pre-existing, not
+  introduced by this feature, and both in the core task-completion path used by every
+  restaurant's Prep tab — never caught before because chunk 6's browser walkthrough
+  never actually completed a real prep task):
+  - `_pg_now_iso()` (a string) was being bound directly to `timestamptz` bind
+    parameters (`prep_logs.created_at`, `prep_lists.created_at`) in 5 places —
+    asyncpg needs a real `datetime` object for a timestamptz column the same way it
+    needs a real `date` for a date column (see chunk 6's original date-encoding note).
+    Added `_pg_now()` (returns a real `datetime`) alongside the existing
+    `_pg_now_iso()` (kept for the 2 places that only ever embed it in JSON/a response,
+    never bind it to a column).
+  - `_pg_today()`'s raw string return value was being bound directly to the `date`
+    column `prep_logs.date` in 4 places, missed by chunk 6's original sweep because
+    that sweep looked for external date-string inputs, not this helper's own
+    unwrapped output. Fixed by wrapping with `_pg_date(_pg_today())` at each site.
+  - Both found by actually completing a prep task live (task completion → inventory
+    deduction → `prep_logs` insert), which chunk 6 itself never exercised.
+- **Verified live** against real data (`store="berts"`), then fully cleaned up
+  afterward — every test-created row deleted, and the 3 real rows the test touched
+  (a real evening count session, `store_items.current_stock` for Ground Beef 80/20,
+  and `prep_recipe_stock` for the Seasoned Beef Crumble recipe) restored to their
+  pre-test values, confirmed via direct query:
+  1. Weekday-matching inclusion and non-matching exclusion, both confirmed correct
+  2. No count-line seeded for a recurring item
+  3. Governance: a recipe governed by a recurring item is correctly hidden from the
+     direct/ungoverned daily path (pre-existing logic, unaffected)
+  4. `par`/`remove`/`add` override composition, all three confirmed correct
+  5. Task completion → real inventory deduction, confirmed against `store_items`
+  6. Full pytest baseline (`USE_PG=false`) unchanged: 57 passing, same 6 pre-existing
+     environmental failures, before and after
+
 ## Applied migrations (step 1 — schema only)
 
 Run via the Supabase MCP `apply_migration` tool against project `yrlhwcoirgqmtlvvnzvo`,
@@ -465,7 +522,11 @@ Items catalog CRUD, and Day Overrides CRUD.
 - `prep_items` was missing `vessel_capacity`, `par_vessels`, `schedule`, `note` — real
   fields the create/update endpoints require. Added via `prep_items_missing_columns`
   (kept `par_weekday`/`par_weekend` as schema headroom, both set to Mongo's single
-  flat `par` value for now since nothing differentiates weekday/weekend yet).
+  flat `par` value for now since nothing differentiates weekday/weekend yet). **Update:**
+  this headroom was never used for weekday/weekend differentiation — instead, the
+  recurring-schedule feature (see below) added fresh `recur_days`/`fixed_qty` columns
+  for arbitrary per-item weekday sets. `par_weekday`/`par_weekend` remain in active use
+  as the plain daily par (still always written identically) — don't repurpose them.
 - `prep_recipe_stock` only supported recipe-keyed stock (`dish_id NOT NULL` in the
   original PK) — but a prep item sourced directly from an inventory item (not a
   recipe) also tracks its own on-hand stock. Had 1 real row, so **altered** (not
