@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 from typing import Optional, List, Annotated, Any
 from datetime import datetime, timezone, timedelta
+from decimal import Decimal
 from pathlib import Path
 import os, json, math, re, uuid, logging, ipaddress, io, base64, hashlib, hmac, secrets, time, asyncio
 import httpx
@@ -1695,30 +1696,55 @@ class StaffCountEntryIn(BaseModel):
 class StaffCountsSaveIn(BaseModel):
     pin: str = ""
     doneBy: str = ""
+    countDate: Optional[str] = None
     counts: List[StaffCountEntryIn] = []
 
-async def _apply_and_record_counts(rid, submitted_by, counts, source):
+COUNT_BACKDATE_DAYS = 31
+
+def _count_date(value):
+    """The day a physical count was taken, as YYYY-MM-DD. Counts can be entered late and
+    backdated (up to COUNT_BACKDATE_DAYS); never in the future. The browser sends its local
+    date, so allow one day past UTC today (US evenings are already tomorrow in UTC)."""
+    today = datetime.now(timezone.utc).date()
+    if not value:
+        return today.isoformat()
+    try:
+        d = datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(400, "Count date must be YYYY-MM-DD")
+    if d > today + timedelta(days=1):
+        raise HTTPException(400, "Count date can't be in the future")
+    if d < today - timedelta(days=COUNT_BACKDATE_DAYS):
+        raise HTTPException(400, f"Count date can't be more than {COUNT_BACKDATE_DAYS} days ago")
+    return d.isoformat()
+
+async def _apply_and_record_counts(rid, submitted_by, counts, source, count_date=None):
     # Shared by both count-entry surfaces (the manager-facing Enter Counts tab and the
     # PIN-gated staff portal) so "Count History" is a single, complete audit trail no
     # matter which one a physical count came through — both write the same currentStock/
     # lastCounted* fields on items today, but neither used to leave a per-submission record.
-    ts, today = _now_iso(), _today()
-    entries = []
+    ts, day = _now_iso(), count_date or _today()
+    entries, not_applied = [], []
     for entry in counts:
         it = await db.items.find_one({"restaurantId": rid, "controlNumber": entry.controlNumber}, {"_id": 0})
         if not it:
             continue
         prev = f(it.get("currentStock"))
-        await db.items.update_one({"restaurantId": rid, "controlNumber": entry.controlNumber},
-            {"$set": {"currentStock": entry.onHand, "lastCounted": today, "lastCountedBy": submitted_by, "lastCountedAt": ts}})
+        # A backdated count older than the item's latest count is kept in history only.
+        applied = not (it.get("lastCounted") and str(it["lastCounted"])[:10] > day)
+        if applied:
+            await db.items.update_one({"restaurantId": rid, "controlNumber": entry.controlNumber},
+                {"$set": {"currentStock": round(entry.onHand, 4), "lastCounted": day, "lastCountedBy": submitted_by, "lastCountedAt": ts}})
+        else:
+            not_applied.append(entry.controlNumber)
         entries.append({"controlNumber": entry.controlNumber, "name": it.get("name", ""),
                          "storageArea": it.get("storageArea", ""), "purchaseUnit": it.get("purchaseUnit", ""),
-                         "previousStock": prev, "newStock": f(entry.onHand)})
+                         "previousStock": prev, "newStock": f(entry.onHand), "countDate": day, "applied": applied})
     if entries:
         await db.inventory_count_submissions.insert_one({
-            "id": "cnt_" + uuid.uuid4().hex[:10], "restaurantId": rid, "submittedAt": ts,
+            "id": "cnt_" + uuid.uuid4().hex[:10], "restaurantId": rid, "submittedAt": ts, "countDate": day,
             "submittedBy": submitted_by, "source": source, "itemCount": len(entries), "items": entries})
-    return len(entries)
+    return len(entries), not_applied
 
 @api_router.post("/staff/{rid}/counts/save")
 async def staff_counts_save(rid: str, body: StaffCountsSaveIn, request: Request):
@@ -1732,11 +1758,12 @@ async def staff_counts_save(rid: str, body: StaffCountsSaveIn, request: Request)
         raise HTTPException(400, "Enter your name so the count is attributed")
     if not body.counts:
         raise HTTPException(400, "No counts submitted")
-    saved = await _apply_and_record_counts(rid, done_by, body.counts, "staff_pwa")
-    return {"ok": True, "saved": saved}
+    saved, not_applied = await _apply_and_record_counts(rid, done_by, body.counts, "staff_pwa", _count_date(body.countDate))
+    return {"ok": True, "saved": saved, "notApplied": not_applied}
 
 class CountSubmitIn(BaseModel):
     submittedBy: str = ""
+    countDate: Optional[str] = None
     counts: List[StaffCountEntryIn] = []
 
 @api_router.post("/counts/{rid}/submit")
@@ -1747,6 +1774,7 @@ async def submit_count(rid: str, body: CountSubmitIn, request: Request):
         raise HTTPException(400, "Enter your name so the count is attributed")
     if not body.counts:
         raise HTTPException(400, "No counts submitted")
+    count_date = _count_date(body.countDate)
     # Chunk 5.5: this is the one manager-facing surface that was never gated on the
     # frontend (CountsTab.js always calls this same URL) -- so the backend itself has
     # to know whether this restaurant is on Postgres, or a manager's count would apply
@@ -1756,12 +1784,12 @@ async def submit_count(rid: str, body: CountSubmitIn, request: Request):
         conn = await db_pg.pool().acquire()
         try:
             async with conn.transaction():
-                saved = await _pg_apply_and_record_counts(conn, store_id, submitted_by, body.counts, "manager")
+                saved, not_applied = await _pg_apply_and_record_counts(conn, store_id, submitted_by, body.counts, "manager", count_date)
         finally:
             await db_pg.pool().release(conn)
     else:
-        saved = await _apply_and_record_counts(rid, submitted_by, body.counts, "manager")
-    return {"ok": True, "saved": saved}
+        saved, not_applied = await _apply_and_record_counts(rid, submitted_by, body.counts, "manager", count_date)
+    return {"ok": True, "saved": saved, "notApplied": not_applied}
 
 @api_router.get("/counts/{rid}/history")
 async def count_history(rid: str, request: Request, date_from: str = Query(None, alias="from"), date_to: str = Query(None, alias="to")):
@@ -1784,6 +1812,7 @@ async def count_history(rid: str, request: Request, date_from: str = Query(None,
             q += " ORDER BY submitted_at DESC LIMIT 500"
             rows = await conn.fetch(q, *params)
             return [{"id": str(r["id"]), "restaurantId": rid, "submittedAt": r["submitted_at"].isoformat(),
+                     "countDate": next((i.get("countDate") for i in (r["items"] or []) if i.get("countDate")), None),
                      "submittedBy": r["submitted_by"] or "", "source": r["source"],
                      "itemCount": len(r["items"] or []), "items": r["items"] or []} for r in rows]
         finally:
@@ -4993,33 +5022,41 @@ class PgStaffCountEntryIn(BaseModel):
 class PgStaffCountsSaveIn(BaseModel):
     pin: str = ""
     doneBy: str = ""
+    countDate: Optional[str] = None
     counts: List[PgStaffCountEntryIn] = []
 
-async def _pg_apply_and_record_counts(conn, store_id, submitted_by, counts, source):
+async def _pg_apply_and_record_counts(conn, store_id, submitted_by, counts, source, count_date=None):
     prefix = PG_STORE_TO_RESTAURANT[store_id] + "_"
-    today = _pg_date(_pg_today())
-    entries = []
+    day = _pg_date(count_date or _pg_today())
+    entries, not_applied = [], []
     for entry in counts:
         code = f"{prefix}{entry.controlNumber}"
         row = await conn.fetchrow(
-            """SELECT i.name, si.storage_area, si.count_unit, si.current_stock FROM store_items si
+            """SELECT i.name, si.storage_area, si.count_unit, si.current_stock, si.last_counted FROM store_items si
                JOIN items i ON i.code = si.item_code WHERE si.store_id=$1 AND si.item_code=$2 FOR UPDATE""",
             store_id, code)
         if not row:
             continue
         prev = float(row["current_stock"] or 0)
-        await conn.execute(
-            """UPDATE store_items SET current_stock=$1, last_counted=$2, last_counted_by=$3, last_counted_at=now()
-               WHERE store_id=$4 AND item_code=$5""",
-            entry.onHand, today, submitted_by, store_id, code)
+        # A backdated count older than the item's latest count is kept in history only,
+        # so entering yesterday's sheet late can't overwrite today's on-hand.
+        applied = not (row["last_counted"] and row["last_counted"] > day)
+        if applied:
+            await conn.execute(
+                """UPDATE store_items SET current_stock=$1, last_counted=$2, last_counted_by=$3, last_counted_at=now()
+                   WHERE store_id=$4 AND item_code=$5""",
+                Decimal(str(round(entry.onHand, 4))), day, submitted_by, store_id, code)
+        else:
+            not_applied.append(entry.controlNumber)
         entries.append({"controlNumber": entry.controlNumber, "name": row["name"],
                          "storageArea": row["storage_area"] or "", "purchaseUnit": row["count_unit"] or "",
-                         "previousStock": prev, "newStock": float(entry.onHand)})
+                         "previousStock": prev, "newStock": float(entry.onHand),
+                         "countDate": day.isoformat(), "applied": applied})
     if entries:
         await conn.execute(
             "INSERT INTO inventory_count_submissions (store_id, submitted_by, source, items) VALUES ($1,$2,$3,$4)",
             store_id, submitted_by, source, entries)
-    return len(entries)
+    return len(entries), not_applied
 
 @pg_router.post("/staff/{store_id}/counts/save")
 async def pg_staff_counts_save(store_id: str, body: PgStaffCountsSaveIn, request: Request):
@@ -5036,8 +5073,9 @@ async def pg_staff_counts_save(store_id: str, body: PgStaffCountsSaveIn, request
         if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
             raise HTTPException(403, "Invalid PIN")
         async with conn.transaction():
-            saved = await _pg_apply_and_record_counts(conn, store_id, done_by, body.counts, "staff_pwa")
-        return {"ok": True, "saved": saved}
+            saved, not_applied = await _pg_apply_and_record_counts(conn, store_id, done_by, body.counts, "staff_pwa",
+                                                                    _count_date(body.countDate))
+        return {"ok": True, "saved": saved, "notApplied": not_applied}
     finally:
         await db_pg.pool().release(conn)
 

@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Lock, X, Check, ChevronDown, ChevronUp, ChefHat, ClipboardList, Inbox, Bell, BellOff, Save } from "lucide-react";
 import { RESTAURANTS, num, fmtDate, isCountActive, todayISO } from "../lib/calc";
 import * as api from "../lib/api";
 import { enablePushNotifications, disablePushNotifications, pushSupported } from "../lib/push";
 import { inpCls, btnAcc, btnGhost, cardCls, Pill } from "./common";
+import { useCountSheet, CountSheetControls, CountSheetBanner, CountSheetList, SaveAllCountsButton } from "./CountSheet";
 
 const TRACKS = [
   { id: "daily", label: "Daily Prep" },
@@ -51,8 +52,6 @@ export function StaffSheet({ onClose, onElevate }) {
 
   // Counts view state
   const [counts, setCounts] = useState(null);
-  const [countsDraft, setCountsDraft] = useState({});
-  const [countsBusy, setCountsBusy] = useState(false);
   const [countsName, setCountsName] = useState("");
 
   // Push notifications
@@ -162,11 +161,7 @@ export function StaffSheet({ onClose, onElevate }) {
   // ---------------- Counts view ----------------
   async function loadCounts() {
     try {
-      const c = await api.staffCounts(rid, pin);
-      setCounts(c);
-      const d = {};
-      c.items.filter(isCountActive).forEach((it) => (d[it.controlNumber] = it.currentStock));
-      setCountsDraft(d);
+      setCounts(await api.staffCounts(rid, pin));
     } catch { /* keep current */ }
   }
   useEffect(() => {
@@ -174,16 +169,10 @@ export function StaffSheet({ onClose, onElevate }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unlocked, view]);
 
-  async function saveCounts() {
-    setErr("");
-    if (!countsName.trim()) { setErr("Enter your name so the counts are attributed"); return; }
-    setCountsBusy(true);
-    try {
-      const payload = Object.entries(countsDraft).map(([controlNumber, onHand]) => ({ controlNumber, onHand: Number(onHand) || 0 }));
-      await api.staffSaveCounts(rid, { pin, doneBy: countsName.trim(), counts: payload });
-      await loadCounts();
-    } catch (e) { setErr(e?.response?.data?.detail || "Couldn't save — tell your manager"); }
-    finally { setCountsBusy(false); }
+  async function saveCounts(entries, countDate) {
+    const result = await api.staffSaveCounts(rid, { pin, doneBy: countsName.trim(), countDate, counts: entries });
+    loadCounts();
+    return result;
   }
 
   return (
@@ -274,8 +263,8 @@ export function StaffSheet({ onClose, onElevate }) {
             )}
 
             {view === "counts" && (
-              <CountsView restaurant={restaurant} counts={counts} draft={countsDraft} setDraft={setCountsDraft}
-                onRefresh={loadCounts} name={countsName} setName={setCountsName} busy={countsBusy} onSave={saveCounts} />
+              <CountsView restaurant={restaurant} counts={counts} onRefresh={loadCounts}
+                name={countsName} setName={setCountsName} onSave={saveCounts} setErr={setErr} />
             )}
           </>
         )}
@@ -436,42 +425,43 @@ function PrepView({ restaurant, track, setTrack, sheet, onRefresh, expanded, set
   );
 }
 
-function CountsView({ restaurant, counts, draft, setDraft, onRefresh, name, setName, busy, onSave }) {
+function CountsView({ restaurant, counts, onRefresh, name, setName, onSave, setErr }) {
+  const items = useMemo(() => (counts?.items || []).filter(isCountActive).map((it) => ({ ...it, unit: it.unitUOM })), [counts]);
+  const sheet = useCountSheet(items, onSave);
+  const [notice, setNotice] = useState("");
+
+  async function run(action) {
+    setErr(""); setNotice("");
+    if (!name.trim()) { setErr("Enter your name so the counts are attributed"); return; }
+    const r = await action();
+    if (r.error) { setErr(r.error === "Couldn't save counts" ? "Couldn't save — tell your manager" : r.error); return; }
+    setNotice(r.notApplied.length
+      ? `Saved ${r.saved}. ${r.notApplied.length} already had a newer count, so on-hand wasn't changed.`
+      : r.saved === 1 ? "Count saved" : `${r.saved} counts saved`);
+  }
+
   if (!counts) return null;
-  const items = counts.items.filter(isCountActive);
   return (
     <>
       <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <div>
           <div className="font-display font-bold text-slate-100">{restaurant?.name} — Physical Count</div>
-          <div className="text-xs text-slate-500">Counts for {fmtDate(counts.date || todayISO())}</div>
+          <div className="text-xs text-slate-500">Counts for {fmtDate(sheet.countDate || todayISO())}</div>
         </div>
         <button className={btnGhost} onClick={onRefresh} data-testid="staff-refresh">Refresh</button>
       </div>
-      <label className="flex flex-col gap-1 text-xs text-slate-400 font-semibold mb-3">Your Name
-        <input className={`${inpCls} max-w-[220px]`} data-testid="staff-counts-name" placeholder="e.g. Maria" value={name} onChange={(e) => setName(e.target.value)} />
-      </label>
+      <div className="mb-3"><CountSheetControls sheet={sheet} name={name} setName={setName} nameTestId="staff-counts-name" /></div>
+      <CountSheetBanner sheet={sheet} />
       {items.length === 0 ? (
         <div className="text-center py-14 px-5 rounded-xl border border-dashed border-[#334155] bg-[#161F30] text-sm text-slate-500" data-testid="staff-counts-empty">
           No items are set up for the count yet. Check with your manager.
         </div>
       ) : (
-        <div className="flex flex-col gap-3" data-testid="staff-counts-list">
-          {items.map((it) => (
-            <div key={it.controlNumber} className={`${cardCls} p-4 flex items-center justify-between gap-3`} data-testid={`staff-count-item-${it.controlNumber}`}>
-              <div className="flex-1">
-                <div className="font-bold text-slate-100 text-base">{it.name}</div>
-                <div className="text-xs text-slate-500">{it.storageArea}{it.lastCountedBy ? ` · last by ${it.lastCountedBy}` : ""}</div>
-              </div>
-              <input type="number" step="0.01" className={`${inpCls} w-24 text-center`} data-testid={`staff-count-input-${it.controlNumber}`}
-                value={draft[it.controlNumber] ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [it.controlNumber]: e.target.value }))} />
-              <span className="text-xs text-slate-500 w-14">{it.unitUOM}</span>
-            </div>
-          ))}
-        </div>
+        <CountSheetList sheet={sheet} onSaveOne={(it) => run(() => sheet.saveOne(it))} />
       )}
+      {notice && <div className="text-emerald-400 text-xs mt-3" data-testid="staff-counts-notice">{notice}</div>}
       <div className="mt-4 flex justify-end">
-        <button className={btnAcc} onClick={onSave} disabled={busy} data-testid="staff-save-counts-button"><Save size={14} /> {busy ? "Saving…" : "Save All Counts"}</button>
+        <SaveAllCountsButton sheet={sheet} onClick={() => run(sheet.saveAll)} testId="staff-save-counts-button" />
       </div>
     </>
   );
