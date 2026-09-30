@@ -2465,7 +2465,7 @@ def _po_event(status, by, note=""):
 # logic (status machine, approval rules, receiving) is identical in both modes. Mongo
 # keeps one document per order; Postgres stores the header in purchase_orders (keyed by
 # `ref`, the public "po_..." id) and the lines in purchase_order_lines, and rebuilds the
-# same document shape on read. See supabase/pending/02_purchase_orders.sql.
+# same document shape on read. See supabase/schema.sql (phase2 migrations).
 _PO_COLS = {"vendor": "vendor_name", "status": "status", "createdBy": "created_by", "note": "note",
             "total": "total", "createdAt": "created_at", "submittedAt": "submitted_at",
             "approvedBy": "approved_by", "approvedAt": "approved_at", "rejectedReason": "rejected_reason",

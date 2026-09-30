@@ -24,11 +24,10 @@
    curl -X POST https://<api-url>/api/auth/bootstrap -H 'Content-Type: application/json' \
      -d '{"bootstrapToken":"<BOOTSTRAP_TOKEN>","email":"you@example.com","password":"<12+ chars>"}'
    ```
-   Skip this if users were migrated from Mongo (`migrate_users_and_state.py`) -- they log in as before.
+   Then create the other logins (manager, staff, read-only) from the owner account.
 6. Smoke test: log in, open a store, a PO, a count, Sales Tracking, Sous.
 
-Before step 2, the Supabase cutover (docs/SUPABASE_MIGRATION_PLAN.md, Phase 2) must be done:
-pending schema applied and data migrated.
+The Supabase schema for this is already live (Phase 2 migrations applied 2026-09-30).
 
 ---
 

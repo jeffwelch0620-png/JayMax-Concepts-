@@ -1,5 +1,5 @@
 """End-to-end checks of the Phase 2 Postgres paths against a real, throwaway Postgres
-loaded with supabase/schema.sql + supabase/pending/*.sql. Skipped unless TEST_PG_URL is
+loaded with supabase/schema.sql. Skipped unless TEST_PG_URL is
 set -- never point it at the live Supabase project: every test wipes the tables it uses.
 
   TEST_PG_URL=postgresql://postgres@localhost:55432/jmax_test pytest tests/test_pg_local_integration.py

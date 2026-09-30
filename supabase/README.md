@@ -1,7 +1,7 @@
 # Supabase schema
 
 `schema.sql` is a **reference snapshot** of the live `public` schema (project
-`yrlhwcoirgqmtlvvnzvo`), captured read-only on 2026-09-30. It exists so the schema is
+`yrlhwcoirgqmtlvvnzvo`), as of 2026-09-30 after the Phase 2 migrations. It exists so the schema is
 reviewable and diffable in git; it is not a migration and must not be applied to the
 live project.
 
@@ -29,6 +29,13 @@ Migrations applied to the live project at snapshot time (`supabase_migrations.sc
 | 20260929163134 | add_private_toast_analytics_landing_zone (Toast POS integration, separate work) |
 | 20260929210257 | add_inventory_count_submissions |
 | 20260930005411 | prep_items_recurring_schedule |
+| 20260930130026 | phase2_app_users_and_store_state |
+| 20260930130040 | phase2_purchase_orders |
+| 20260930130047 | phase2_adjustments_and_reporting_periods |
+| 20260930130058 | phase2_projections_and_par_recommendations |
+| 20260930130104 | phase2_activity_log_user_id |
+
+The phase2_* SQL is in git history under `supabase/pending/` (removed once applied).
 
 `migrations/20260930_recurring_prep_items.sql` (recurring prep items) is **already
 applied** as `20260930005411 prep_items_recurring_schedule` -- do not re-run it. The
@@ -44,6 +51,9 @@ re-running would only add two duplicate checks. `schema.sql` reflects the live s
   auto-generated Data API (PostgREST) deny all access for the `anon`/`authenticated`
   roles. Do not add permissive policies or disable RLS on any table.
 - New tables must be created with `ALTER TABLE ... ENABLE ROW LEVEL SECURITY;`.
+- No policies are needed while only the backend queries the database. Write them only if
+  something ever reads through the Data API or a client-side Supabase SDK -- and then only
+  for exactly the rows that client may see.
 
 ## Refreshing
 

@@ -1,5 +1,5 @@
 """Transform the MongoDB users/state_versions/areas/sales_periods export into SQL for
-the Phase 2 tables (app_users, store_state -- supabase/pending/01_app_users_and_store_state.sql).
+the Phase 2 tables (app_users, store_state -- supabase/schema.sql (phase2 migrations)).
 Reads the JSON backup, writes a .sql file -- doesn't connect to Postgres directly.
 See docs/SUPABASE_MIGRATION_PLAN.md ("Phase 2", chunk 1).
 

@@ -1,6 +1,6 @@
 """Transform the MongoDB chat_messages/projected_sales/par_recommendations export into SQL
 for ai_chat_messages and the Phase 2 tables in
-supabase/pending/04_projections_and_par_recommendations.sql. Reads the JSON backup,
+supabase/schema.sql (phase2 migrations). Reads the JSON backup,
 writes a .sql file -- doesn't connect to Postgres directly.
 See docs/SUPABASE_MIGRATION_PLAN.md ("Phase 2", chunk 5).
 
