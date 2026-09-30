@@ -281,9 +281,8 @@ containing `@` (or any other URL-reserved character) must be percent-encoded in
 `DATABASE_URL` (`@` → `%40`), or asyncpg's DSN parser fails with a confusing
 IPv6-bracket parsing error.
 
-Given none of this is live-tested yet (still blocked on the password), each chunk
-gets built and reviewed the same way the backend was — logically verified, committed,
-documented — with actual browser verification deferred to chunk 6.
+The migration has now been live-tested through the Supavisor pooler; the verification
+results and remaining limitations are recorded in chunk 6 below.
 
 ## Applied migrations (step 1 — schema only)
 
@@ -634,9 +633,9 @@ migration, not ad-hoc `execute_sql`).
   check(user/assistant)`, `content text`, `ts timestamptz`.
 - **`activity_log`**: `id uuid pk`, `store_id fk nullable`, `user_email text`, `role
   text`, `method text`, `path text`, `status int`, `created_at`.
-- **`inventory_count_submissions`**: already effectively covered by
-  `count_sessions`/`count_lines` (which are more normalized than the Mongo version) —
-  no new table needed, just map onto those instead of porting the Mongo shape as-is.
+- **`inventory_count_submissions`**: dedicated table added by migration
+  `add_inventory_count_submissions`; each row stores the submitted item snapshot as
+  jsonb so multiple same-day submissions remain separate history entries.
 
 ## Auth migration
 
