@@ -379,3 +379,62 @@ def test_legacy_mongo_route_families_are_refused_in_pg_mode(monkeypatch):
     assert asyncio.run(invoke("/api/reports/papa_leonis/prep", "GET")).status_code == 204
     monkeypatch.setattr(server, "USE_PG", False)
     assert asyncio.run(invoke("/api/preplists/papa_leonis/generate")).status_code == 204
+
+
+def test_send_email_posts_to_resend_with_sanitized_headers(monkeypatch):
+    import httpx
+    import json as _json
+    sent = {}
+
+    def handler(request):
+        sent["url"], sent["auth"], sent["body"] = str(request.url), request.headers["authorization"], _json.loads(request.content)
+        return httpx.Response(200, json={"id": "email_123"})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(server.httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    monkeypatch.setattr(server, "EMAIL_KEY", "re_test")
+    monkeypatch.setattr(server, "EMAIL_FROM_ADDRESS", "orders@example.com")
+
+    email_id = asyncio.run(server.send_email(to="rep@vendor.example", subject="PO for\r\nBcc: x@evil.example",
+                                             html="<p>Order</p>", from_name='Bert\'s <script>"\r\nX-Evil: 1'))
+    assert email_id == "email_123"
+    assert sent["url"] == "https://api.resend.com/emails" and sent["auth"] == "Bearer re_test"
+    assert sent["body"]["from"] == '"Bert\'s scriptX-Evil: 1" <orders@example.com>'
+    assert sent["body"]["subject"] == "PO for Bcc: x@evil.example"
+    assert sent["body"]["to"] == ["rep@vendor.example"]
+
+    monkeypatch.setattr(server, "EMAIL_FROM_ADDRESS", "")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server.send_email(to="rep@vendor.example", subject="s", html="<p>x</p>"))
+    assert exc.value.status_code == 500
+
+
+def test_cors_origins_tolerate_copy_paste_variants():
+    assert server._cors_origins(' "https://jaymax-concepts.onrender.com/" , https://b.example ') == [
+        "https://jaymax-concepts.onrender.com", "https://b.example"]
+    assert server._cors_origins("") == ["*"]
+
+
+def test_pg_pool_startup_never_hangs_and_retries_in_background(monkeypatch):
+    attempts = []
+
+    async def create_pool(url, **kwargs):
+        attempts.append(kwargs.get("timeout"))
+        if len(attempts) == 1:
+            await asyncio.sleep(3600)  # an unreachable host that never answers
+        return "pool"
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unreachable")
+    monkeypatch.setattr(db_pg.asyncpg, "create_pool", create_pool)
+    monkeypatch.setattr(db_pg, "CONNECT_TIMEOUT", 0.05)
+    monkeypatch.setattr(db_pg, "RETRY_INTERVAL", 0.01)
+    monkeypatch.setattr(db_pg, "_pool", None)
+    monkeypatch.setattr(db_pg, "_retry_task", None)
+
+    async def scenario():
+        assert await db_pg.init_pool() is None       # returns instead of hanging
+        await asyncio.wait_for(db_pg._retry_task, 2)  # background retry connects
+        return db_pg._pool
+
+    assert asyncio.run(scenario()) == "pool"
+    assert attempts[0] == 0.05

@@ -31,7 +31,12 @@ available), each paired with a `scripts/migrate_*.py` that turns the Mongo backu
 | P2.4 Prep report + legacy guard | `/reports/{rid}/prep` (manager counts were already PG-aware; `/prep/{rid}/complete` has no frontend caller) | existing count/prep tables | ✅ Report reads Postgres; in PG mode the Mongo-only prep/staff route families (`LEGACY_MONGO_PATHS`) return 410 |
 | P2.5 AI + planning | `chat_messages`, `projected_sales`, `par_recommendations` | `ai_chat_messages`, new `store_sales_projections`, `par_recommendations` | ✅ Code + tests (LLM faked); SQL pending apply |
 | P2.6 Activity log + Mongo retired | `activity_log`; everything else | `activity_log` (+ `user_id`) | ✅ With `USE_PG=true` Mongo is replaced by `_MongoRetired` (any access raises); sweep test calls every non-`/api/pg` route; boots without `MONGO_URL` |
-| P2.7 Cutover | -- | apply pending SQL, run migrate scripts on a fresh backup, flip flags, remove Mongo | ⏳ |
+| P2.7 Cutover | -- | schema applied 2026-09-30 (`phase2_*`); no data migration (see below); flip flags on deploy | ✅ Schema live; ⏳ deploy |
+
+**Decision (2026-09-30): no Mongo data is migrated** -- the owner confirmed nothing in Mongo needs bringing over, and the phase-1 data already in Supabase is kept. The `migrate_*.py` scripts below are therefore not part of the cutover (kept for reference). Accounts start empty: bootstrap the first owner after deploy.
+
+Cutover schema: `supabase/pending/01..05` -- applied on 2026-09-30. (`migrations/20260930_recurring_prep_items.sql`
+is already live -- see `supabase/README.md`.)
 
 Cutover data order (each script reads the same fresh Mongo backup; apply its SQL before
 running the next, since later ones resolve ids against earlier ones):
@@ -44,7 +49,7 @@ running the next, since later ones resolve ids against earlier ones):
 
 Testing without the live project: `backend/tests/test_pg_local_integration.py` runs the
 Postgres paths end to end against a throwaway local Postgres loaded with
-`supabase/schema.sql` + `supabase/pending/*.sql` (set `TEST_PG_URL`; skipped otherwise).
+`supabase/schema.sql` (set `TEST_PG_URL`; skipped otherwise).
 
 Done means: with `USE_PG=true`, `grep "await db\." backend/server.py` has no hit that
 is reachable, and the backend starts without `MONGO_URL`.

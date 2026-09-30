@@ -1,5 +1,5 @@
 """Transform the MongoDB adjustments/reporting_periods export into SQL for the Phase 2
-columns (supabase/pending/03_adjustments_and_reporting_periods.sql). Reads the JSON
+columns (supabase/schema.sql (phase2 migrations)). Reads the JSON
 backup, writes a .sql file -- doesn't connect to Postgres directly.
 See docs/SUPABASE_MIGRATION_PLAN.md ("Phase 2", chunk 3).
 

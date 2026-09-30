@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from pymongo import UpdateOne, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 import asyncpg
+import anthropic
 import db_pg
 try:
     from pywebpush import webpush, WebPushException
@@ -38,6 +39,9 @@ if os.environ.get("USE_PG", "false").strip().lower() == "true":
     client = None
     db = _MongoRetired()
 else:
+    if not os.environ.get("MONGO_URL") or not os.environ.get("DB_NAME"):
+        raise RuntimeError("USE_PG is not 'true', so the legacy MongoDB mode needs MONGO_URL and DB_NAME. "
+                           "For Supabase (the deployed setup) set USE_PG=true and DATABASE_URL instead.")
     client = AsyncIOMotorClient(os.environ['MONGO_URL'])
     db = client[os.environ['DB_NAME']]
 
@@ -619,12 +623,56 @@ async def auth_me(request: Request):
         raise HTTPException(401, "Authentication required")
     return user
 
-@api_router.post("/auth/users")
-async def auth_create_user(body: UserIn, request: Request):
+def _require_owner(request):
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     actor = _decode_token(token)
     if not actor or actor.get("role") != "owner":
         raise HTTPException(403, "Owner role required")
+    return actor
+
+class PasswordIn(BaseModel):
+    password: str
+
+@api_router.get("/auth/users")
+async def auth_list_users(request: Request):
+    _require_owner(request)
+    if USE_PG:
+        rows = await db_pg.pool().fetch("SELECT id, email, role, locations, created_at FROM app_users ORDER BY email")
+        return [{"id": r["id"], "email": r["email"], "role": r["role"], "locations": list(r["locations"] or []),
+                 "createdAt": r["created_at"].isoformat() if r["created_at"] else None} for r in rows]
+    docs = await db.users.find({}, {"_id": 0, "passwordHash": 0}).sort("email", 1).to_list(1000)
+    return [{**_clean_user(d), "createdAt": d.get("createdAt")} for d in docs]
+
+@api_router.put("/auth/users/{user_id}/password")
+async def auth_reset_password(user_id: str, body: PasswordIn, request: Request):
+    _require_owner(request)
+    if len(body.password) < 12:
+        raise HTTPException(400, "Password must be at least 12 characters")
+    pw_hash = _password_hash(body.password)
+    if USE_PG:
+        found = await db_pg.pool().fetchval("UPDATE app_users SET password_hash=$2 WHERE id=$1 RETURNING id", user_id, pw_hash)
+    else:
+        found = (await db.users.update_one({"id": user_id}, {"$set": {"passwordHash": pw_hash}})).matched_count
+    if not found:
+        raise HTTPException(404, "User not found")
+    return {"ok": True}
+
+@api_router.delete("/auth/users/{user_id}")
+async def auth_delete_user(user_id: str, request: Request):
+    actor = _require_owner(request)
+    if user_id == actor.get("sub"):
+        raise HTTPException(400, "You can't remove your own account")
+    if USE_PG:
+        found = await db_pg.pool().fetchval("DELETE FROM app_users WHERE id=$1 RETURNING id", user_id)
+    else:
+        found = (await db.users.delete_one({"id": user_id})).deleted_count
+    if not found:
+        raise HTTPException(404, "User not found")
+    return {"ok": True}
+
+@api_router.post("/auth/users")
+async def auth_create_user(body: UserIn, request: Request):
+    _require_owner(request)
     if body.role not in ("owner", "manager", "staff", "readonly") or len(body.password) < 12:
         raise HTTPException(400, "Invalid role or password")
     locations = sorted(set(body.locations) & RIDS)
@@ -2011,14 +2059,44 @@ async def owner_prep_summary():
                        "prepCost7d": round(sum(f(l.get("totalCost")) for l in logs), 2)})
     return {"stores": stores}
 
+# ---------------- Claude (Anthropic API) ----------------
+# Powers Sous (AI chat) and the par advisor. ANTHROPIC_API_KEY comes from the host's
+# environment; ANTHROPIC_MODEL overrides the model.
+AI_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5").strip()
+# Server-side refusal fallback: if a safety classifier declines a request, the API re-runs
+# it on Anthropic's recommended model for that refusal category instead of refusing.
+AI_FALLBACK = {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
+_ai_client = None
+
+def _ai():
+    global _ai_client
+    if not os.environ.get("ANTHROPIC_API_KEY", "").strip():
+        raise HTTPException(500, "AI key not configured")
+    if _ai_client is None:
+        _ai_client = anthropic.AsyncAnthropic()
+    return _ai_client
+
+PAR_ADVISOR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "recommendations": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"recipeId": {"type": "string"}, "recipeName": {"type": "string"},
+                           "currentPar": {"type": "number"}, "recommendedPar": {"type": "number"},
+                           "reasoning": {"type": "string"}},
+            "required": ["recipeId", "recipeName", "currentPar", "recommendedPar", "reasoning"],
+            "additionalProperties": False}},
+        "trends": {"type": "string"},
+    },
+    "required": ["recommendations", "trends"],
+    "additionalProperties": False,
+}
+
 # ---------------- AI par advisor (advisory only — never writes without manager apply) ----------------
 @api_router.post("/ai/par-advisor/{rid}")
 async def run_par_advisor(rid: str):
     check_rid(rid)
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise HTTPException(500, "AI key not configured")
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
+    client = _ai()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).date().isoformat()
     if USE_PG:
         sessions, logs, recipes, _ = await _pg_prep_report_sources(rid, cutoff, _today())
@@ -2042,24 +2120,26 @@ async def run_par_advisor(rid: str):
                                        "eveningCounts": counts, "produced45d": round(produced, 1), "usedBySales45d": round(used, 1)}))
     proj_lines = [f"{p['date']}: ${f(p.get('amount')):,.0f}" for p in sorted(projections, key=lambda x: x.get("date", ""))]
     sparse = total_counts < 5 and not logs
-    prompt = ("You are an F&B prep-planning analyst for a restaurant. Analyze this prep data and respond with STRICT JSON only, no markdown: "
-              '{"recommendations": [{"recipeId": "...", "recipeName": "...", "currentPar": 0, "recommendedPar": 0, "reasoning": "..."}], "trends": "short paragraph"}. '
+    prompt = ("You are an F&B prep-planning analyst for a restaurant. Analyze this prep data. "
+              "Return recommendations (recipeId, recipeName, currentPar, recommendedPar, reasoning) and trends (a short paragraph). "
               "Rules: recommend new pars only where data supports it (repeated zero/low counts = stockouts, or large leftover counts = over-prepping). Round pars to whole units. "
               + ("History is very sparse, so return an EMPTY recommendations array and describe only early trends. " if sparse else "")
               + "PREP STATS:\n" + "\n".join(stats_lines)
               + (("\nPROJECTED SALES (upcoming): " + "; ".join(proj_lines)) if proj_lines else ""))
-    chat = (LlmChat(api_key=api_key, session_id=f"par-{rid}", system_message="You output strict JSON only.")
-            .with_model("openai", "gpt-5.4"))
     full = ""
     try:
-        async for ev in chat.stream_message(UserMessage(text=prompt)):
-            if isinstance(ev, TextDelta):
-                full += ev.content
-            elif isinstance(ev, StreamDone):
-                break
-    except Exception as e:
+        # Structured output: the response text is guaranteed to be JSON matching the schema.
+        resp = await client.beta.messages.create(
+            model=AI_MODEL, max_tokens=16000,
+            messages=[{"role": "user", "content": prompt}],
+            output_config={"effort": "medium", "format": {"type": "json_schema", "schema": PAR_ADVISOR_SCHEMA}},
+            **AI_FALLBACK)
+        if resp.stop_reason == "refusal":
+            logger.warning(f"par advisor declined for {rid}: {resp.stop_details}")
+        else:
+            full = next((b.text for b in resp.content if b.type == "text"), "")
+    except anthropic.APIError as e:
         logger.error(f"par advisor LLM error for {rid}: {e}")
-        full = ""
     recs, trends = [], ""
     try:
         m = re.search(r"\{.*\}", full, re.S)
@@ -2327,10 +2407,7 @@ async def ai_chat(body: ChatIn, request: Request):
     user = _decode_token(token)
     if user and user.get("role") != "owner" and body.restaurantId not in user.get("locations", []):
         raise HTTPException(403, "Location access denied")
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise HTTPException(500, "AI key not configured")
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
+    client = _ai()
     rid = body.restaurantId
     await ensure_seed(rid)
     if USE_PG:
@@ -2353,21 +2430,24 @@ async def ai_chat(body: ChatIn, request: Request):
               "All figures come from the restaurant's live database snapshot below.\n\n" + context)
     if history:
         system += "\n\nRecent conversation:\n" + "\n".join(f"{h['role'].upper()}: {h['content'][:600]}" for h in history)
-    chat = (LlmChat(api_key=api_key, session_id=f"sous-{rid}", system_message=system)
-            .with_model("openai", "gpt-5.4"))
     now = datetime.now(timezone.utc).isoformat()
     await _chat_add(rid, "user", body.message, now)
 
     async def gen():
         full = ""
         try:
-            async for ev in chat.stream_message(UserMessage(text=body.message)):
-                if isinstance(ev, TextDelta):
-                    full += ev.content
-                    yield f"data: {json.dumps({'t': ev.content})}\n\n"
-                elif isinstance(ev, StreamDone):
-                    break
-        except Exception as e:
+            async with client.beta.messages.stream(
+                    model=AI_MODEL, max_tokens=64000, system=system,
+                    messages=[{"role": "user", "content": body.message}],
+                    output_config={"effort": "medium"}, **AI_FALLBACK) as stream:
+                async for text in stream.text_stream:
+                    full += text
+                    yield f"data: {json.dumps({'t': text})}\n\n"
+                final = await stream.get_final_message()
+            if final.stop_reason == "refusal":
+                full = ""  # don't store a partial answer the model withdrew
+                yield f"data: {json.dumps({'error': 'The assistant could not answer that. Try rephrasing the question.'})}\n\n"
+        except anthropic.APIError as e:
             logger.error(f"AI stream error: {e}")
             yield f"data: {json.dumps({'error': 'The assistant hit an error. Please try again.'})}\n\n"
         if full:
@@ -2432,7 +2512,7 @@ def _po_event(status, by, note=""):
 # logic (status machine, approval rules, receiving) is identical in both modes. Mongo
 # keeps one document per order; Postgres stores the header in purchase_orders (keyed by
 # `ref`, the public "po_..." id) and the lines in purchase_order_lines, and rebuilds the
-# same document shape on read. See supabase/pending/02_purchase_orders.sql.
+# same document shape on read. See supabase/schema.sql (phase2 migrations).
 _PO_COLS = {"vendor": "vendor_name", "status": "status", "createdBy": "created_by", "note": "note",
             "total": "total", "createdAt": "created_at", "submittedAt": "submitted_at",
             "approvedBy": "approved_by", "approvedAt": "approved_at", "rejectedReason": "rejected_reason",
@@ -2773,9 +2853,11 @@ async def owner_orders():
         out.append(d)
     return out
 
-# ---------------- Supplier email (Emergent-managed Resend) ----------------
-EMAIL_BASE_URL = "https://integrations.emergentagent.com"
-EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY")
+# ---------------- Supplier email (Resend) ----------------
+RESEND_API_URL = "https://api.resend.com/emails"
+EMAIL_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+# Must be an address on a domain verified in Resend (e.g. orders@yourdomain.com).
+EMAIL_FROM_ADDRESS = os.environ.get("EMAIL_FROM_ADDRESS", "").strip()
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "Bert's Restaurant Group")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
@@ -2836,15 +2918,17 @@ def _assert_safe_email(subject, html):
 
 async def send_email(*, to, subject, html, from_name=None, reply_to=None):
     _assert_safe_email(subject, html)
-    if not EMAIL_KEY:
+    if not EMAIL_KEY or not EMAIL_RE.match(EMAIL_FROM_ADDRESS):
         raise HTTPException(500, "Email is not configured")
-    payload = {"to": [to], "subject": subject, "html": html, "from_name": from_name or EMAIL_FROM_NAME}
+    # Display name goes into the From header: drop anything that could break out of it.
+    name = re.sub(r'[\r\n<>"\\]', "", from_name or EMAIL_FROM_NAME).strip() or "Orders"
+    subject = re.sub(r"[\r\n]+", " ", subject).strip()
+    payload = {"from": f'"{name}" <{EMAIL_FROM_ADDRESS}>', "to": [to], "subject": subject, "html": html}
     if reply_to:
-        payload["contact_email"] = reply_to
+        payload["reply_to"] = reply_to
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
-                                     headers={"X-Email-Key": EMAIL_KEY}, json=payload)
+            resp = await client.post(RESEND_API_URL, headers={"Authorization": f"Bearer {EMAIL_KEY}"}, json=payload)
         resp.raise_for_status()
         return resp.json().get("id")
     except httpx.HTTPStatusError as e:
@@ -5084,10 +5168,16 @@ async def pg_push_unsubscribe(store_id: str, body: PgPushUnsubscribeIn, request:
 app.include_router(api_router)
 app.include_router(pg_router)
 
+def _cors_origins(raw):
+    # Browsers send the Origin with no trailing slash; tolerate the usual copy-paste
+    # variants in the setting (spaces, quotes, a trailing "/") so one stray character
+    # doesn't block every request.
+    return [o.strip().strip('"\'').rstrip("/") for o in raw.split(",") if o.strip().strip('"\'')] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_cors_origins(os.environ.get('CORS_ORIGINS', '*')),
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,6 +1,40 @@
-# Current Hosting & Database Providers
+# Hosting & Database Providers
 
-## Where it runs today
+## Target (moving off Emergent)
+| Piece | Provider | Config |
+|---|---|---|
+| Backend API | Render web service (`jaymax-api`) | `render.yaml` |
+| Frontend | Render static site (`jaymax-web`) | `render.yaml` |
+| Database | Supabase Postgres (`USE_PG=true`; no MongoDB) | `DATABASE_URL`, shared pooler |
+| AI (Sous chat, par advisor) | Anthropic API (Claude) | `ANTHROPIC_API_KEY` |
+| Supplier email | Resend | `RESEND_API_KEY`, `EMAIL_FROM_ADDRESS` (verified domain) |
+
+### First deploy on Render
+1. Accounts/keys: Anthropic API key; Resend account with your sending domain verified;
+   Supabase shared-pooler connection string (after the password rotation).
+2. Render > New > **Blueprint** > this repo. It creates `jaymax-api` and `jaymax-web` and
+   prompts for every `sync: false` value; leave the three URL values for step 4.
+3. Let both services build once to get their `*.onrender.com` URLs (or add custom domains).
+4. Set `PUBLIC_APP_URL` (API's own URL) and `CORS_ORIGINS` (web URL) on `jaymax-api`, and
+   `REACT_APP_BACKEND_URL` (API URL) on `jaymax-web`, then redeploy `jaymax-web` -- React
+   bakes `REACT_APP_*` values in at build time.
+5. Create the first owner (password 12+ characters), then delete `BOOTSTRAP_TOKEN` from the
+   service -- the endpoint refuses once any account exists, and the token is no longer needed:
+   ```bash
+   curl -X POST https://<api-url>/api/auth/bootstrap -H 'Content-Type: application/json' \
+     -d '{"bootstrapToken":"<BOOTSTRAP_TOKEN>","email":"you@example.com","password":"<12+ chars>"}'
+   ```
+   Then create the other logins (manager, staff, read-only) from the owner account.
+6. Smoke test: log in, open a store, a PO, a count, Sales Tracking, Sous.
+
+The Supabase schema for this is already live (Phase 2 migrations applied 2026-09-30).
+
+---
+
+## Legacy: where it ran before (Emergent)
+
+
+### Platform
 - **Platform:** Emergent (managed containers on Kubernetes).
   - Base image: `fastapi_react_mongo_shadcn_base_image_cloud_arm` (see `.emergent/emergent.yml`).
   - Process manager: **supervisor** (frontend on :3000, backend on :8001).

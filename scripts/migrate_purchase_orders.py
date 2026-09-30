@@ -1,5 +1,5 @@
 """Transform the MongoDB purchase_orders/vendor_contacts export into SQL for the Phase 2
-PO schema (supabase/pending/02_purchase_orders.sql). Reads the JSON backup, writes a
+PO schema (supabase/schema.sql (phase2 migrations)). Reads the JSON backup, writes a
 .sql file -- doesn't connect to Postgres directly.
 See docs/SUPABASE_MIGRATION_PLAN.md ("Phase 2", chunk 2).
 

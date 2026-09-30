@@ -1,10 +1,11 @@
 """End-to-end checks of the Phase 2 Postgres paths against a real, throwaway Postgres
-loaded with supabase/schema.sql + supabase/pending/*.sql. Skipped unless TEST_PG_URL is
+loaded with supabase/schema.sql. Skipped unless TEST_PG_URL is
 set -- never point it at the live Supabase project: every test wipes the tables it uses.
 
   TEST_PG_URL=postgresql://postgres@localhost:55432/jmax_test pytest tests/test_pg_local_integration.py
 """
 import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -147,6 +148,30 @@ def test_auth_bootstrap_login_and_create_user_in_postgres(monkeypatch):
         assert exc.value.status_code == 409
         login = await server.auth_login(server.LoginIn(email="gm@example.test", password="manager-password-1"))
         assert login["user"]["locations"] == ["papa_leonis"]
+
+        listed = await server.auth_list_users(req)
+        assert [u["email"] for u in listed] == ["gm@example.test", "owner@example.test"]
+        assert all("passwordHash" not in u and "password_hash" not in u for u in listed)
+        gm_id = login["user"]["id"]
+        manager_req = make_request("/api/auth/users", "GET", {"id": gm_id, "email": "gm@example.test", "role": "manager", "locations": ["papa_leonis"]})
+        with pytest.raises(HTTPException) as exc:
+            await server.auth_list_users(manager_req)
+        assert exc.value.status_code == 403
+        with pytest.raises(HTTPException) as exc:
+            await server.auth_reset_password(gm_id, server.PasswordIn(password="short"), req)
+        assert exc.value.status_code == 400
+        await server.auth_reset_password(gm_id, server.PasswordIn(password="new-manager-pass-2"), req)
+        with pytest.raises(HTTPException):
+            await server.auth_login(server.LoginIn(email="gm@example.test", password="manager-password-1"))
+        await server.auth_login(server.LoginIn(email="gm@example.test", password="new-manager-pass-2"))
+        with pytest.raises(HTTPException) as exc:
+            await server.auth_delete_user(owner["sub"], req)
+        assert exc.value.status_code == 400
+        await server.auth_delete_user(gm_id, req)
+        with pytest.raises(HTTPException) as exc:
+            await server.auth_delete_user(gm_id, req)
+        assert exc.value.status_code == 404
+        assert [u["email"] for u in await server.auth_list_users(req)] == ["owner@example.test"]
     run(scenario)
 
 
@@ -286,45 +311,49 @@ def test_prep_report_aggregates_postgres_counts_and_logs():
 
 
 class _FakeLlm:
-    """Stands in for emergentintegrations' LlmChat: streams `reply` back in two chunks."""
+    """The real Anthropic SDK client wired to a fake HTTP transport: every request body is
+    recorded, and `reply` is returned as either a JSON message or an SSE text stream (in
+    two chunks), so the SDK's own request building and response parsing are exercised."""
     reply = ""
-    prompts = []
+    stop_reason = "end_turn"
+    requests = []
 
-    def __init__(self, **kwargs):
-        self.system = kwargs.get("system_message", "")
+    @classmethod
+    def prompts(cls):
+        return [(r.get("system", ""), r["messages"][-1]["content"]) for r in cls.requests]
 
-    def with_model(self, *args):
-        return self
-
-    async def stream_message(self, message):
-        _FakeLlm.prompts.append((self.system, message.text))
-        half = len(_FakeLlm.reply) // 2
-        for part in (_FakeLlm.reply[:half], _FakeLlm.reply[half:]):
-            yield _TextDelta(part)
-        yield _StreamDone()
-
-class _TextDelta:
-    def __init__(self, content):
-        self.content = content
-
-class _StreamDone:
-    pass
-
-class _UserMessage:
-    def __init__(self, text):
-        self.text = text
+    @classmethod
+    def handle(cls, request):
+        import httpx2
+        body = json.loads(request.content)
+        cls.requests.append({**body, "_beta": request.headers.get("anthropic-beta", "")})
+        message = {"id": "msg_test", "type": "message", "role": "assistant", "model": body["model"],
+                   "content": [{"type": "text", "text": cls.reply}], "stop_reason": cls.stop_reason,
+                   "stop_sequence": None, "usage": {"input_tokens": 10, "output_tokens": 5}}
+        if not body.get("stream"):
+            return httpx2.Response(200, json=message)
+        half = len(cls.reply) // 2
+        events = [("message_start", {"type": "message_start", "message": {**message, "content": [], "stop_reason": None}}),
+                  ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}})]
+        events += [("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": part}})
+                   for part in (cls.reply[:half], cls.reply[half:])]
+        events += [("content_block_stop", {"type": "content_block_stop", "index": 0}),
+                   ("message_delta", {"type": "message_delta", "delta": {"stop_reason": cls.stop_reason, "stop_sequence": None},
+                                      "usage": {"output_tokens": 5}}),
+                   ("message_stop", {"type": "message_stop"})]
+        sse = "".join(f"event: {name}\ndata: {json.dumps(data)}\n\n" for name, data in events)
+        return httpx2.Response(200, text=sse, headers={"content-type": "text/event-stream"})
 
 
 @pytest.fixture
 def fake_llm(monkeypatch):
-    import types
-    chat = types.ModuleType("emergentintegrations.llm.chat")
-    chat.LlmChat, chat.UserMessage, chat.TextDelta, chat.StreamDone = _FakeLlm, _UserMessage, _TextDelta, _StreamDone
-    monkeypatch.setitem(sys.modules, "emergentintegrations", types.ModuleType("emergentintegrations"))
-    monkeypatch.setitem(sys.modules, "emergentintegrations.llm", types.ModuleType("emergentintegrations.llm"))
-    monkeypatch.setitem(sys.modules, "emergentintegrations.llm.chat", chat)
-    monkeypatch.setenv("EMERGENT_LLM_KEY", "test-key")
-    _FakeLlm.prompts = []
+    import anthropic
+    import httpx2
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    client = anthropic.AsyncAnthropic(api_key="test-key", max_retries=0,
+                                      http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(_FakeLlm.handle)))
+    monkeypatch.setattr(server, "_ai_client", client)
+    _FakeLlm.requests, _FakeLlm.stop_reason = [], "end_turn"
     return _FakeLlm
 
 
@@ -350,7 +379,11 @@ def test_projections_and_par_advisor_round_trip_in_postgres(fake_llm):
             {"recipeId": "not-a-recipe", "recommendedPar": 3}]})
         result = await server.run_par_advisor(rid)
         assert result["trends"] == "steady" and len(result["recommendations"]) == 1
-        system, prompt = fake_llm.prompts[-1]
+        sent = fake_llm.requests[-1]
+        assert sent["model"] == "claude-opus-5-5" and sent["fallbacks"] == "default"
+        assert "server-side-fallback-2026-07-01" in sent["_beta"] and "stream" not in sent
+        assert sent["output_config"]["format"]["schema"] == server.PAR_ADVISOR_SCHEMA
+        system, prompt = fake_llm.prompts()[-1]
         assert '"currentPar": 6.0' in prompt and '"batchYield": 4.0' in prompt and "2026-10-02: $4,500" in prompt
 
         pending = await server.get_par_recs(rid)
@@ -384,7 +417,14 @@ def test_ai_chat_history_lives_in_postgres(fake_llm):
         assert [(m["role"], m["content"]) for m in history] == [
             ("user", "How is waste?"), ("assistant", "Waste is low."), ("user", "And cost?"), ("assistant", "Cost is 28%.")]
         # The second question's system prompt carried the first exchange as context.
-        assert "ASSISTANT: Waste is low." in fake_llm.prompts[-1][0]
+        assert "ASSISTANT: Waste is low." in fake_llm.prompts()[-1][0]
+        assert fake_llm.requests[-1]["stream"] is True and fake_llm.requests[-1]["fallbacks"] == "default"
+        # A declined answer is reported to the user and not stored as history.
+        fake_llm.reply, fake_llm.stop_reason = "partial", "refusal"
+        resp = await server.ai_chat(server.ChatIn(restaurantId=rid, message="Something off-limits"), owner)
+        chunks = [c async for c in resp.body_iterator]
+        assert any('"error"' in c for c in chunks) and chunks[-1] == "data: [DONE]\n\n"
+        assert [m["content"] for m in await server.ai_history(rid)][-1] == "Something off-limits"
         assert await server.ai_history("berts") == []
         await server.ai_clear(rid)
         assert await server.ai_history(rid) == []
