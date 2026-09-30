@@ -482,7 +482,7 @@ def test_no_api_route_touches_mongo_in_postgres_mode(monkeypatch):
                     resp = await client.request(method, path, json=body if method in ("POST", "PUT") else None)
                     called += 1
                     legacy += resp.status_code == 410
-                    if resp.status_code >= 500 and "AI key not configured" not in resp.text:
+                    if resp.status_code >= 500 and "ANTHROPIC_API_KEY is missing" not in resp.text:
                         failures.append((method, route.path, resp.status_code, resp.text[:200]))
         assert failures == []
         assert called > 60 and legacy > 30

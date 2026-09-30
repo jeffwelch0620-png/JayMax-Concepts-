@@ -2071,10 +2071,27 @@ _ai_client = None
 def _ai():
     global _ai_client
     if not os.environ.get("ANTHROPIC_API_KEY", "").strip():
-        raise HTTPException(500, "AI key not configured")
+        raise HTTPException(503, "Sous isn't set up yet: ANTHROPIC_API_KEY is missing on the server (Render > jaymax-api > Environment).")
     if _ai_client is None:
         _ai_client = anthropic.AsyncAnthropic()
     return _ai_client
+
+def _ai_error_message(e):
+    """Plain-language cause for an Anthropic API failure, so the owner can fix the setup."""
+    text = str(getattr(e, "message", "") or e).lower()
+    if isinstance(e, anthropic.AuthenticationError):
+        return "Sous can't sign in to Anthropic: ANTHROPIC_API_KEY on the server is wrong or was revoked."
+    if isinstance(e, anthropic.PermissionDeniedError):
+        return "This Anthropic API key isn't allowed to use Sous's model. Check the key's workspace in the Anthropic Console."
+    if isinstance(e, anthropic.NotFoundError):
+        return f"The AI model '{AI_MODEL}' isn't available to this Anthropic account. Set ANTHROPIC_MODEL to a model it can use."
+    if "credit" in text or "billing" in text:
+        return "The Anthropic account is out of credits. Add credits under Billing in the Anthropic Console."
+    if isinstance(e, anthropic.RateLimitError):
+        return "Sous is busy right now (rate limit). Try again in a minute."
+    if isinstance(e, anthropic.APIConnectionError):
+        return "The server couldn't reach Anthropic. Try again shortly."
+    return "The assistant hit an error. Please try again."
 
 PAR_ADVISOR_SCHEMA = {
     "type": "object",
@@ -2449,7 +2466,7 @@ async def ai_chat(body: ChatIn, request: Request):
                 yield f"data: {json.dumps({'error': 'The assistant could not answer that. Try rephrasing the question.'})}\n\n"
         except anthropic.APIError as e:
             logger.error(f"AI stream error: {e}")
-            yield f"data: {json.dumps({'error': 'The assistant hit an error. Please try again.'})}\n\n"
+            yield f"data: {json.dumps({'error': _ai_error_message(e)})}\n\n"
         if full:
             await _chat_add(rid, "assistant", full, datetime.now(timezone.utc).isoformat())
         yield "data: [DONE]\n\n"
