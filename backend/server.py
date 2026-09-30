@@ -5121,10 +5121,16 @@ async def pg_push_unsubscribe(store_id: str, body: PgPushUnsubscribeIn, request:
 app.include_router(api_router)
 app.include_router(pg_router)
 
+def _cors_origins(raw):
+    # Browsers send the Origin with no trailing slash; tolerate the usual copy-paste
+    # variants in the setting (spaces, quotes, a trailing "/") so one stray character
+    # doesn't block every request.
+    return [o.strip().strip('"\'').rstrip("/") for o in raw.split(",") if o.strip().strip('"\'')] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_cors_origins(os.environ.get('CORS_ORIGINS', '*')),
     allow_methods=["*"],
     allow_headers=["*"],
 )

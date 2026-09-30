@@ -407,3 +407,9 @@ def test_send_email_posts_to_resend_with_sanitized_headers(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(server.send_email(to="rep@vendor.example", subject="s", html="<p>x</p>"))
     assert exc.value.status_code == 500
+
+
+def test_cors_origins_tolerate_copy_paste_variants():
+    assert server._cors_origins(' "https://jaymax-concepts.onrender.com/" , https://b.example ') == [
+        "https://jaymax-concepts.onrender.com", "https://b.example"]
+    assert server._cors_origins("") == ["*"]
