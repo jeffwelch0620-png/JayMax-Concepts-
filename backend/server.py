@@ -1378,14 +1378,39 @@ class ProjectionIn(BaseModel):
     note: str = ""
     enteredBy: str = ""
 
+def _pg_projection_doc(rid, r):
+    return {"date": r["date"].isoformat(), "amount": f(r["amount"]), "note": r["note"], "enteredBy": r["entered_by"],
+            "restaurantId": rid, "updatedAt": _ts_out(r["updated_at"])}
+
+async def _projections_for(rid, limit=200):
+    """Newest first. Postgres: store_sales_projections, one row per store and date."""
+    if USE_PG:
+        rows = await db_pg.pool().fetch(
+            f"SELECT * FROM store_sales_projections WHERE store_id=$1 ORDER BY date DESC LIMIT {int(limit)}",
+            RESTAURANT_TO_PG_STORE.get(rid, rid))
+        return [_pg_projection_doc(rid, r) for r in rows]
+    return await db.projected_sales.find({"restaurantId": rid}, {"_id": 0}).sort("date", -1).limit(limit).to_list(limit)
+
 @api_router.get("/projections/{rid}")
 async def get_projections(rid: str):
     check_rid(rid)
-    return await db.projected_sales.find({"restaurantId": rid}, {"_id": 0}).sort("date", -1).limit(60).to_list(60)
+    return await _projections_for(rid, 60)
 
 @api_router.put("/projections/{rid}")
 async def put_projection(rid: str, body: ProjectionIn):
     check_rid(rid)
+    if USE_PG:
+        try:
+            day = _pg_date(body.date)
+        except ValueError:
+            day = None
+        if not day:
+            raise HTTPException(400, "date must be YYYY-MM-DD")
+        await db_pg.pool().execute(
+            """INSERT INTO store_sales_projections (store_id, date, amount, note, entered_by) VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (store_id, date) DO UPDATE SET amount=$3, note=$4, entered_by=$5, updated_at=now()""",
+            RESTAURANT_TO_PG_STORE.get(rid, rid), day, body.amount, body.note, body.enteredBy)
+        return {"ok": True}
     await db.projected_sales.update_one({"restaurantId": rid, "date": body.date},
         {"$set": {**body.model_dump(), "restaurantId": rid, "updatedAt": _now_iso()}}, upsert=True)
     return {"ok": True}
@@ -1864,7 +1889,8 @@ async def _pg_prep_report_sources(rid, frm, to):
             "SELECT * FROM prep_logs WHERE store_id=$1 AND date BETWEEN $2 AND $3 ORDER BY date LIMIT 1000",
             store_id, start, end)
         recipe_rows = await conn.fetch(
-            "SELECT id, name, yield_uom FROM dishes WHERE store_id=$1 AND recipe_type='prep' ORDER BY sort_order NULLS LAST, name",
+            """SELECT id, name, yield_uom, yield_qty, prep_par FROM dishes WHERE store_id=$1 AND recipe_type='prep'
+               ORDER BY sort_order NULLS LAST, name""",
             store_id)
         item_rows = await conn.fetch(
             "SELECT id, name, container FROM prep_items WHERE store_id=$1 ORDER BY sort_order NULLS LAST, name", store_id)
@@ -1880,7 +1906,8 @@ async def _pg_prep_report_sources(rid, frm, to):
     sessions = [{"id": str(r["id"]), "date": r["count_date"].isoformat(), "status": r["status"],
                  "countedBy": r["counted_by_name"] or "", "revision": 1, "entries": entries.get(r["id"], [])}
                 for r in session_rows]
-    recipes = [{"id": str(r["id"]), "name": r["name"], "yieldUOM": r["yield_uom"] or ""} for r in recipe_rows]
+    recipes = [{"id": str(r["id"]), "name": r["name"], "yieldUOM": r["yield_uom"] or "",
+                "yieldQty": r["yield_qty"], "prepPar": r["prep_par"]} for r in recipe_rows]
     pitems = [{"id": str(r["id"]), "name": r["name"], "vesselName": r["container"] or "vessel"} for r in item_rows]
     return sessions, [_pg_log_to_api(r) for r in log_rows], recipes, pitems
 
@@ -1974,13 +2001,16 @@ async def run_par_advisor(rid: str):
     if not api_key:
         raise HTTPException(500, "AI key not configured")
     from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
-    recipes = await _prep_recipes(rid)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).date().isoformat()
+    if USE_PG:
+        sessions, logs, recipes, _ = await _pg_prep_report_sources(rid, cutoff, _today())
+    else:
+        recipes = await _prep_recipes(rid)
+        sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(200)
+        logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(500)
     if not recipes:
         raise HTTPException(400, "No prep recipes yet")
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).date().isoformat()
-    sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(200)
-    logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(500)
-    projections = await db.projected_sales.find({"restaurantId": rid}, {"_id": 0}).to_list(200)
+    projections = await _projections_for(rid)
     stats_lines = []
     total_counts = 0
     for r in recipes:
@@ -2027,18 +2057,54 @@ async def run_par_advisor(rid: str):
                          "status": "pending", "createdAt": _now_iso()})
     except Exception:
         trends = full[:800]
-    if recs:
+    if recs and USE_PG:
+        await db_pg.pool().executemany(
+            """INSERT INTO par_recommendations (id, store_id, recipe_id, recipe_name, current_par, recommended_par,
+                   reasoning, status, created_at)
+               VALUES ($1, $2, $3::uuid, $4, $5, $6, $7, 'pending', $8)""",
+            [(r["id"], RESTAURANT_TO_PG_STORE.get(rid, rid), r["recipeId"], r["recipeName"], r["currentPar"],
+              r["recommendedPar"], r["reasoning"], _ts_in(r["createdAt"])) for r in recs])
+    elif recs:
         await db.par_recommendations.insert_many([dict(r) for r in recs])
     return {"recommendations": recs, "trends": trends, "sparse": sparse}
+
+def _pg_par_rec_doc(rid, r):
+    doc = {"id": r["id"], "restaurantId": rid, "recipeId": str(r["recipe_id"]), "recipeName": r["recipe_name"],
+           "currentPar": f(r["current_par"]), "recommendedPar": f(r["recommended_par"]), "reasoning": r["reasoning"],
+           "status": r["status"], "createdAt": _ts_out(r["created_at"])}
+    if r["applied_at"]:
+        doc["appliedAt"] = _ts_out(r["applied_at"])
+    return doc
 
 @api_router.get("/ai/par-advisor/{rid}")
 async def get_par_recs(rid: str):
     check_rid(rid)
+    if USE_PG:
+        rows = await db_pg.pool().fetch(
+            "SELECT * FROM par_recommendations WHERE store_id=$1 AND status='pending' ORDER BY created_at DESC LIMIT 50",
+            RESTAURANT_TO_PG_STORE.get(rid, rid))
+        return [_pg_par_rec_doc(rid, r) for r in rows]
     return await db.par_recommendations.find({"restaurantId": rid, "status": "pending"}, {"_id": 0}).sort("createdAt", -1).to_list(50)
 
 @api_router.post("/ai/par-advisor/{rid}/{rec_id}/apply")
 async def apply_par_rec(rid: str, rec_id: str):
     check_rid(rid)
+    if USE_PG:
+        store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
+        conn = await db_pg.pool().acquire()
+        try:
+            async with conn.transaction():
+                rec = await conn.fetchrow(
+                    "SELECT recipe_id, recommended_par FROM par_recommendations WHERE store_id=$1 AND id=$2 FOR UPDATE",
+                    store_id, rec_id)
+                if not rec:
+                    raise HTTPException(404, "recommendation not found")
+                await conn.execute("UPDATE dishes SET prep_par=$1, updated_at=now() WHERE id=$2 AND store_id=$3",
+                                   rec["recommended_par"], rec["recipe_id"], store_id)
+                await conn.execute("UPDATE par_recommendations SET status='applied', applied_at=now() WHERE id=$1", rec_id)
+        finally:
+            await db_pg.pool().release(conn)
+        return {"ok": True}
     rec = await db.par_recommendations.find_one({"restaurantId": rid, "id": rec_id})
     if not rec:
         raise HTTPException(404, "recommendation not found")
@@ -2049,6 +2115,10 @@ async def apply_par_rec(rid: str, rec_id: str):
 @api_router.post("/ai/par-advisor/{rid}/{rec_id}/dismiss")
 async def dismiss_par_rec(rid: str, rec_id: str):
     check_rid(rid)
+    if USE_PG:
+        await db_pg.pool().execute("UPDATE par_recommendations SET status='dismissed' WHERE store_id=$1 AND id=$2",
+                                   RESTAURANT_TO_PG_STORE.get(rid, rid), rec_id)
+        return {"ok": True}
     await db.par_recommendations.update_one({"restaurantId": rid, "id": rec_id}, {"$set": {"status": "dismissed"}})
     return {"ok": True}
 
@@ -2212,6 +2282,26 @@ class ChatIn(BaseModel):
     restaurantId: str
     message: str
 
+# Sous chat history (Postgres: ai_chat_messages).
+async def _chat_history(rid, limit, oldest_first=False):
+    """The `limit` most recent messages, returned in chronological order -- or, with
+    oldest_first, the first `limit` messages ever (matching the history screen's query)."""
+    if USE_PG:
+        rows = await db_pg.pool().fetch(
+            f"SELECT role, content, ts FROM ai_chat_messages WHERE store_id=$1 ORDER BY ts {'ASC' if oldest_first else 'DESC'} LIMIT {int(limit)}",
+            RESTAURANT_TO_PG_STORE.get(rid, rid))
+        msgs = [{"restaurantId": rid, "role": r["role"], "content": r["content"], "ts": _ts_out(r["ts"])} for r in rows]
+    else:
+        msgs = await db.chat_messages.find({"restaurantId": rid}, {"_id": 0}).sort("ts", 1 if oldest_first else -1).limit(limit).to_list(limit)
+    return msgs if oldest_first else msgs[::-1]
+
+async def _chat_add(rid, role, content, ts):
+    if USE_PG:
+        await db_pg.pool().execute("INSERT INTO ai_chat_messages (store_id, role, content, ts) VALUES ($1, $2, $3, $4)",
+                                   RESTAURANT_TO_PG_STORE.get(rid, rid), role, content, _ts_in(ts))
+    else:
+        await db.chat_messages.insert_one(ChatMessage(restaurantId=rid, role=role, content=content, ts=ts).to_mongo())
+
 @api_router.post("/ai/chat")
 async def ai_chat(body: ChatIn, request: Request):
     check_rid(body.restaurantId)
@@ -2234,8 +2324,7 @@ async def ai_chat(body: ChatIn, request: Request):
         prep_stock = await _prep_stock_list(rid)
     adjustments = await _adjustments_for(rid)
     context = build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock)
-    history = await db.chat_messages.find({"restaurantId": rid}, {"_id": 0}).sort("ts", -1).limit(10).to_list(10)
-    history.reverse()
+    history = await _chat_history(rid, 10)
     system = ("You are Sous, an expert restaurant operations copilot for a multi-unit restaurant group. "
               "You answer questions about inventory, food costing, recipes, prep planning, waste, and margins. "
               "Be concise, practical, and specific — cite actual numbers from the live data when relevant. "
@@ -2249,7 +2338,7 @@ async def ai_chat(body: ChatIn, request: Request):
     chat = (LlmChat(api_key=api_key, session_id=f"sous-{rid}", system_message=system)
             .with_model("openai", "gpt-5.4"))
     now = datetime.now(timezone.utc).isoformat()
-    await db.chat_messages.insert_one(ChatMessage(restaurantId=rid, role="user", content=body.message, ts=now).to_mongo())
+    await _chat_add(rid, "user", body.message, now)
 
     async def gen():
         full = ""
@@ -2264,8 +2353,7 @@ async def ai_chat(body: ChatIn, request: Request):
             logger.error(f"AI stream error: {e}")
             yield f"data: {json.dumps({'error': 'The assistant hit an error. Please try again.'})}\n\n"
         if full:
-            await db.chat_messages.insert_one(ChatMessage(restaurantId=rid, role="assistant", content=full,
-                                                          ts=datetime.now(timezone.utc).isoformat()).to_mongo())
+            await _chat_add(rid, "assistant", full, datetime.now(timezone.utc).isoformat())
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream",
@@ -2274,13 +2362,15 @@ async def ai_chat(body: ChatIn, request: Request):
 @api_router.get("/ai/history/{rid}")
 async def ai_history(rid: str):
     check_rid(rid)
-    msgs = await db.chat_messages.find({"restaurantId": rid}, {"_id": 0}).sort("ts", 1).limit(100).to_list(100)
-    return msgs
+    return await _chat_history(rid, 100, oldest_first=True)
 
 @api_router.delete("/ai/history/{rid}")
 async def ai_clear(rid: str):
     check_rid(rid)
-    await db.chat_messages.delete_many({"restaurantId": rid})
+    if USE_PG:
+        await db_pg.pool().execute("DELETE FROM ai_chat_messages WHERE store_id=$1", RESTAURANT_TO_PG_STORE.get(rid, rid))
+    else:
+        await db.chat_messages.delete_many({"restaurantId": rid})
     return {"ok": True}
 
 # ---------------- Purchase Orders / Approval chain ----------------

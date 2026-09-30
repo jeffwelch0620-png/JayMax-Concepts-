@@ -26,7 +26,7 @@ PG_URL = os.environ.get("TEST_PG_URL")
 pytestmark = pytest.mark.skipif(not PG_URL, reason="TEST_PG_URL not set")
 
 RESET = """
-TRUNCATE purchase_order_lines, purchase_orders, store_vendor_contacts, store_state, app_users, adjustments,
+TRUNCATE par_recommendations, store_sales_projections, ai_chat_messages, purchase_order_lines, purchase_orders, store_vendor_contacts, store_state, app_users, adjustments,
          reporting_periods, count_lines, count_sessions, prep_logs, prep_items, dish_lines, dishes, store_items, vendor_items, items, vendors, stores CASCADE;
 INSERT INTO stores (id, name) VALUES ('berts', 'Berts'), ('rudds', 'Rudds'), ('papa', 'Papa'), ('comm', 'Commissary');
 INSERT INTO vendors (id, name) VALUES ('us_foods', 'US Foods');
@@ -281,4 +281,137 @@ def test_prep_report_aggregates_postgres_counts_and_logs():
                                      "produced": 10.0, "producedCost": 3.0}]
         assert rep["sessions"] == [{"id": str(sess), "date": "2026-09-29", "status": "submitted", "countedBy": "Ana", "revision": 1}]
         assert rep["totals"] == {"producedCost": 15.5}
+    run(scenario)
+
+
+
+class _FakeLlm:
+    """Stands in for emergentintegrations' LlmChat: streams `reply` back in two chunks."""
+    reply = ""
+    prompts = []
+
+    def __init__(self, **kwargs):
+        self.system = kwargs.get("system_message", "")
+
+    def with_model(self, *args):
+        return self
+
+    async def stream_message(self, message):
+        _FakeLlm.prompts.append((self.system, message.text))
+        half = len(_FakeLlm.reply) // 2
+        for part in (_FakeLlm.reply[:half], _FakeLlm.reply[half:]):
+            yield _TextDelta(part)
+        yield _StreamDone()
+
+class _TextDelta:
+    def __init__(self, content):
+        self.content = content
+
+class _StreamDone:
+    pass
+
+class _UserMessage:
+    def __init__(self, text):
+        self.text = text
+
+
+@pytest.fixture
+def fake_llm(monkeypatch):
+    import types
+    chat = types.ModuleType("emergentintegrations.llm.chat")
+    chat.LlmChat, chat.UserMessage, chat.TextDelta, chat.StreamDone = _FakeLlm, _UserMessage, _TextDelta, _StreamDone
+    monkeypatch.setitem(sys.modules, "emergentintegrations", types.ModuleType("emergentintegrations"))
+    monkeypatch.setitem(sys.modules, "emergentintegrations.llm", types.ModuleType("emergentintegrations.llm"))
+    monkeypatch.setitem(sys.modules, "emergentintegrations.llm.chat", chat)
+    monkeypatch.setenv("EMERGENT_LLM_KEY", "test-key")
+    _FakeLlm.prompts = []
+    return _FakeLlm
+
+
+def test_projections_and_par_advisor_round_trip_in_postgres(fake_llm):
+    import json
+    async def scenario():
+        rid = "papa_leonis"
+        pool = db_pg.pool()
+        await server.put_projection(rid, server.ProjectionIn(date="2026-10-02", amount=4200, note="game night", enteredBy="Ana"))
+        await server.put_projection(rid, server.ProjectionIn(date="2026-10-02", amount=4500, enteredBy="Ben"))
+        await server.put_projection(rid, server.ProjectionIn(date="2026-10-01", amount=3000))
+        projections = await server.get_projections(rid)
+        assert [(p["date"], p["amount"], p["enteredBy"]) for p in projections] == [("2026-10-02", 4500.0, "Ben"), ("2026-10-01", 3000.0, "")]
+        with pytest.raises(HTTPException) as exc:
+            await server.put_projection(rid, server.ProjectionIn(date="next friday"))
+        assert exc.value.status_code == 400
+
+        sauce = await pool.fetchval(
+            """INSERT INTO dishes (store_id, name, recipe_type, yield_uom, yield_qty, prep_par)
+               VALUES ('papa', 'Red Sauce', 'prep', 'qt', 4, 6) RETURNING id::text""")
+        fake_llm.reply = json.dumps({"trends": "steady", "recommendations": [
+            {"recipeId": sauce, "recipeName": "Red Sauce", "currentPar": 6, "recommendedPar": 8, "reasoning": "stockouts"},
+            {"recipeId": "not-a-recipe", "recommendedPar": 3}]})
+        result = await server.run_par_advisor(rid)
+        assert result["trends"] == "steady" and len(result["recommendations"]) == 1
+        system, prompt = fake_llm.prompts[-1]
+        assert '"currentPar": 6.0' in prompt and '"batchYield": 4.0' in prompt and "2026-10-02: $4,500" in prompt
+
+        pending = await server.get_par_recs(rid)
+        assert [(r["recipeId"], r["recommendedPar"], r["status"]) for r in pending] == [(sauce, 8.0, "pending")]
+        await server.apply_par_rec(rid, pending[0]["id"])
+        assert float(await pool.fetchval("SELECT prep_par FROM dishes WHERE id=$1::uuid", sauce)) == 8.0
+        assert await server.get_par_recs(rid) == []
+        assert await pool.fetchval("SELECT applied_at IS NOT NULL FROM par_recommendations") is True
+        with pytest.raises(HTTPException) as exc:
+            await server.apply_par_rec("berts", pending[0]["id"])  # another store can't apply it
+        assert exc.value.status_code == 404
+
+        await server.run_par_advisor(rid)
+        again = await server.get_par_recs(rid)
+        await server.dismiss_par_rec(rid, again[0]["id"])
+        assert await server.get_par_recs(rid) == []
+    run(scenario)
+
+
+def test_ai_chat_history_lives_in_postgres(fake_llm):
+    from tests.test_pg_routes import make_request
+    async def scenario():
+        rid = "papa_leonis"
+        owner = make_request("/api/ai/chat", "POST", {"id": "u", "email": "o@example.test", "role": "owner", "locations": []})
+        for question, answer in (("How is waste?", "Waste is low."), ("And cost?", "Cost is 28%.")):
+            fake_llm.reply = answer
+            resp = await server.ai_chat(server.ChatIn(restaurantId=rid, message=question), owner)
+            chunks = [c async for c in resp.body_iterator]
+            assert chunks[-1] == "data: [DONE]\n\n"
+        history = await server.ai_history(rid)
+        assert [(m["role"], m["content"]) for m in history] == [
+            ("user", "How is waste?"), ("assistant", "Waste is low."), ("user", "And cost?"), ("assistant", "Cost is 28%.")]
+        # The second question's system prompt carried the first exchange as context.
+        assert "ASSISTANT: Waste is low." in fake_llm.prompts[-1][0]
+        assert await server.ai_history("berts") == []
+        await server.ai_clear(rid)
+        assert await server.ai_history(rid) == []
+    run(scenario)
+
+
+def test_ai_and_planning_migration_remaps_recipes(tmp_path):
+    import json
+    (tmp_path / "dishes.json").write_text(json.dumps([{"id": "dish_old_sauce", "restaurantId": "papa_leonis", "name": "Red Sauce"}]))
+    (tmp_path / "chat_messages.json").write_text(json.dumps([
+        {"restaurantId": "papa_leonis", "role": "user", "content": "hi", "ts": "2026-09-01T10:00:00+00:00"},
+        {"restaurantId": "papa_leonis", "role": "assistant", "content": "hello", "ts": "2026-09-01T10:00:01+00:00"}]))
+    (tmp_path / "projected_sales.json").write_text(json.dumps([{"restaurantId": "berts", "date": "2026-10-01", "amount": 900}]))
+    (tmp_path / "par_recommendations.json").write_text(json.dumps([
+        {"id": "rec_1", "restaurantId": "papa_leonis", "recipeId": "dish_old_sauce", "recipeName": "Red Sauce",
+         "currentPar": 6, "recommendedPar": 8, "status": "pending", "createdAt": "2026-09-02T00:00:00+00:00"},
+        {"id": "rec_2", "restaurantId": "papa_leonis", "recipeId": "dish_gone", "recommendedPar": 1}]))
+    out = tmp_path / "out.sql"
+    subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "migrate_ai_and_planning.py"), str(tmp_path), str(out)],
+                   check=True, capture_output=True)
+
+    async def scenario():
+        sauce = await db_pg.pool().fetchval(
+            "INSERT INTO dishes (store_id, name, recipe_type) VALUES ('papa', 'Red Sauce', 'prep') RETURNING id::text")
+        for _ in range(2):
+            await db_pg.pool().execute(out.read_text())
+        assert [m["content"] for m in await server.ai_history("papa_leonis")] == ["hi", "hello"]
+        assert (await server.get_projections("berts"))[0]["amount"] == 900.0
+        assert [(r["id"], r["recipeId"]) for r in await server.get_par_recs("papa_leonis")] == [("rec_1", sauce)]
     run(scenario)
