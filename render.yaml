@@ -1,0 +1,61 @@
+# Render Blueprint: backend API + frontend static site, both deployed from this repo.
+# Render > New > Blueprint > pick this repo. Values marked `sync: false` are prompted for
+# (or set later under each service's Environment tab) and are never stored in git.
+# Deploy order: create both, then fill the two URL values below with the URLs Render
+# assigns (backend: PUBLIC_APP_URL + REACT_APP_BACKEND_URL; frontend: CORS_ORIGINS).
+services:
+  - type: web
+    name: jaymax-api
+    runtime: python
+    rootDir: backend
+    plan: starter            # always-on; the free plan sleeps and would stall first requests
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      # Supabase only: the backend never connects to MongoDB in this mode.
+      - key: USE_PG
+        value: "true"
+      - key: DATABASE_URL        # Supabase > Connect > Shared pooler (Transaction mode)
+        sync: false
+      - key: AUTH_REQUIRED
+        value: "true"
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: BOOTSTRAP_TOKEN     # one-time: create the first owner, then delete this value
+        sync: false
+      - key: SESSION_TTL_SECONDS
+        value: "28800"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "60"
+      - key: CORS_ORIGINS        # the frontend's https URL, exactly (no trailing slash)
+        sync: false
+      - key: PUBLIC_APP_URL      # this service's own https URL (PO-PDF links in emails)
+        sync: false
+      - key: ANTHROPIC_API_KEY   # Sous chat + par advisor
+        sync: false
+      - key: RESEND_API_KEY      # supplier PO emails
+        sync: false
+      - key: EMAIL_FROM_ADDRESS  # an address on a domain verified in Resend
+        sync: false
+      - key: EMAIL_FROM_NAME
+        value: JayMax Restaurant Group
+
+  - type: web
+    name: jaymax-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: yarn install --frozen-lockfile && yarn build
+    staticPublishPath: build
+    envVars:
+      - key: REACT_APP_BACKEND_URL   # the backend's https URL (no trailing slash)
+        sync: false
+      - key: REACT_APP_USE_PG
+        value: "true"
+    routes:
+      # Single-page app: every path serves index.html and the React router takes over.
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -6,7 +6,8 @@ approval chain (with supplier email + PDF), an ownership rollup dashboard, and a
 AI assistant ("Sous").
 
 **Stack:** React 19 (CRA + CRACO) · FastAPI · MongoDB (Motor async) · Tailwind + shadcn/ui
-· Emergent LLM (OpenAI GPT-4o via `emergentintegrations`) · Resend (managed) for supplier email.
+· Supabase (Postgres) · Claude (Anthropic API) for the AI assistant · Resend for supplier email.
+Deployed on Render via `render.yaml`.
 
 > This package is a **source + docs handoff**. It contains editable source, dependency/lock
 > files, DB schema/collection definitions, data-ingest scripts ("migrations"), a sanitized
@@ -49,7 +50,7 @@ handoff/
 
 - Python 3.11+
 - Node 18+ and **Yarn** (do not use npm — resolutions rely on Yarn)
-- MongoDB 5+ running locally or a connection string (Atlas works)
+- A Supabase (Postgres) connection string -- or, for the legacy Mongo mode only, MongoDB 5+
 
 ## Setup — Backend
 
@@ -57,8 +58,6 @@ handoff/
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-# emergentintegrations comes from a private index:
-pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
 cp .env.example .env      # then fill in real values
 uvicorn server:app --host 0.0.0.0 --port 8001 --reload
 ```
@@ -87,8 +86,9 @@ The frontend talks to the backend **only** via `REACT_APP_BACKEND_URL` (never ha
 ## Environment variables
 
 See `backend/.env.example` and `frontend/.env.example`. Required backend keys:
-`MONGO_URL`, `DB_NAME`, `CORS_ORIGINS`, `EMERGENT_LLM_KEY` (AI assistant),
-`EMERGENT_EMAIL_KEY` + `EMAIL_FROM_NAME` (supplier email), `PUBLIC_APP_URL`
+`USE_PG=true` + `DATABASE_URL` (Supabase; `MONGO_URL`/`DB_NAME` only in legacy Mongo mode), `CORS_ORIGINS`,
+`AUTH_SECRET`, `ANTHROPIC_API_KEY` (AI assistant), `RESEND_API_KEY` + `EMAIL_FROM_ADDRESS` + `EMAIL_FROM_NAME`
+(supplier email), `PUBLIC_APP_URL`
 (server origin used to build the PO-PDF link in emails — must be a first-party https URL).
 
 ## Tests
@@ -99,6 +99,8 @@ cd backend && pytest tests/ -q      # requires backend running + MONGO_URL
 
 ## Security note (read before sharing widely)
 
-The app currently has **no authentication** on its APIs (staff PIN gates only the
-read-only staff prep sheet). This is a deliberate, deferred decision — RBAC is on the
-roadmap. See `docs/ACCESS_POLICIES.md` and `docs/KNOWN_GAPS.md`.
+Every API route requires a signed-in session (`AUTH_REQUIRED=true`, the default) with
+roles `owner` / `manager` / `staff` / `readonly` and per-location access, enforced in the
+backend. The staff portal is the exception by design: it signs in with a per-store PIN.
+Set a custom PIN for every store before go-live -- a store without one accepts `1234`.
+See `docs/ACCESS_POLICIES.md` and `docs/KNOWN_GAPS.md`.
