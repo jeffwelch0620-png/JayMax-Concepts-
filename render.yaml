@@ -54,6 +54,10 @@ services:
         sync: false
       - key: REACT_APP_USE_PG
         value: "true"
+      # Build like the app always has: react-hooks lint findings stay warnings. With CI=true
+      # (Render's default) create-react-app fails the build on the existing ones.
+      - key: CI
+        value: "false"
     routes:
       # Single-page app: every path serves index.html and the React router takes over.
       - type: rewrite
