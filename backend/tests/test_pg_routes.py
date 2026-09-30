@@ -202,3 +202,25 @@ def test_pg_pool_reads_database_url_after_environment_is_loaded(monkeypatch):
     asyncio.run(db_pg.init_pool())
 
     assert calls["url"] == "postgresql://configured-after-import"
+
+
+def test_pg_staff_management_routes_require_manager_like_mongo_counterparts(monkeypatch):
+    # These handlers must enforce the manager role themselves (as their Mongo twins do),
+    # not rely solely on the middleware -- which is bypassed when AUTH_REQUIRED=false.
+    conn = FakeConnection()
+    monkeypatch.setattr(db_pg, "pool", lambda: conn)
+    staff = make_request("/api/pg/staff/papa/members", "POST")
+    member = server.PgStaffMemberIn(name="Cook")
+    calls = [
+        server.pg_set_staff_pin("papa", server.PgStaffPinIn(staffPin="4321"), staff),
+        server.pg_create_staff_member("papa", member, staff),
+        server.pg_update_staff_member("papa", "s1", member, staff),
+        server.pg_delete_staff_member("papa", "s1", staff),
+        server.pg_create_staff_task("papa", server.PgStaffTaskIn(taskType="prep", title="Mop", dueDate="2026-10-01"), staff),
+        server.pg_delete_staff_task("papa", "t1", staff),
+    ]
+    for call in calls:
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(call)
+        assert exc.value.status_code == 403
+    assert conn.queries == []

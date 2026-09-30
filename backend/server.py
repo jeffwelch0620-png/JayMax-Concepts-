@@ -4059,8 +4059,9 @@ class PgStaffPinIn(BaseModel):
     staffPin: str
 
 @pg_router.post("/staff/{store_id}/pin")
-async def pg_set_staff_pin(store_id: str, body: PgStaffPinIn):
+async def pg_set_staff_pin(store_id: str, body: PgStaffPinIn, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     pin = body.staffPin.strip()
     if not (pin.isdigit() and 4 <= len(pin) <= 8):
         raise HTTPException(400, "PIN must be 4-8 digits")
@@ -4094,8 +4095,9 @@ def _pg_validate_staff_member(body):
     return name
 
 @pg_router.post("/staff/{store_id}/members")
-async def pg_create_staff_member(store_id: str, body: PgStaffMemberIn):
+async def pg_create_staff_member(store_id: str, body: PgStaffMemberIn, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     name = _pg_validate_staff_member(body)
     row = await db_pg.pool().fetchrow(
         "INSERT INTO staff_members (store_id, name, role, active) VALUES ($1,$2,$3,TRUE) RETURNING *",
@@ -4103,8 +4105,9 @@ async def pg_create_staff_member(store_id: str, body: PgStaffMemberIn):
     return _pg_staff_member_to_api(row)
 
 @pg_router.put("/staff/{store_id}/members/{staff_id}")
-async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemberIn):
+async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemberIn, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     name = _pg_validate_staff_member(body)
     row = await db_pg.pool().fetchrow(
         "UPDATE staff_members SET name=$3, role=$4, active=$5 WHERE id=$1 AND store_id=$2 RETURNING *",
@@ -4114,8 +4117,9 @@ async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemb
     return _pg_staff_member_to_api(row)
 
 @pg_router.delete("/staff/{store_id}/members/{staff_id}")
-async def pg_delete_staff_member(store_id: str, staff_id: str):
+async def pg_delete_staff_member(store_id: str, staff_id: str, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     await db_pg.pool().execute("DELETE FROM staff_members WHERE id=$1 AND store_id=$2", staff_id, store_id)
     return {"ok": True}
 
@@ -4384,8 +4388,7 @@ async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Requ
         raise HTTPException(400, "taskType must be count or prep")
     if body.recurrence not in ("once", "daily", "weekly"):
         raise HTTPException(400, "recurrence must be once, daily, or weekly")
-    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
-    user = _decode_token(token)
+    user = _require_manager(request)
     row = await db_pg.pool().fetchrow(
         """INSERT INTO staff_tasks (store_id, task_type, title, due_date, recurrence, assigned_to, track, note, created_by)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
@@ -4396,8 +4399,9 @@ async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Requ
     return task
 
 @pg_router.delete("/staff-tasks/{store_id}/{task_id}")
-async def pg_delete_staff_task(store_id: str, task_id: str):
+async def pg_delete_staff_task(store_id: str, task_id: str, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     await db_pg.pool().execute("DELETE FROM staff_tasks WHERE id=$1 AND store_id=$2", task_id, store_id)
     return {"ok": True}
 
