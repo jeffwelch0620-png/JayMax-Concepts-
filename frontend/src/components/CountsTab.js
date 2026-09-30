@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Save, History, X, ChevronDown, ChevronRight } from "lucide-react";
-import { isCountActive, num, todayISO } from "../lib/calc";
-import { PageTitle, EmptyState, cardCls, inpCls, btnAcc, btnGhost } from "./common";
+import { History, X, ChevronDown, ChevronRight } from "lucide-react";
+import { isCountActive, num, todayISO, fmtDate } from "../lib/calc";
+import { PageTitle, EmptyState, cardCls, inpCls, btnGhost } from "./common";
+import { useCountSheet, CountSheetControls, CountSheetBanner, CountSheetList, SaveAllCountsButton } from "./CountSheet";
 import * as api from "../lib/api";
 
 function isoDaysAgo(n) {
@@ -15,14 +16,29 @@ function fmtDateTime(iso) {
 }
 
 export function CountsTab({ rid, items, onCountsApplied, showToast }) {
-  const [draft, setDraft] = useState({});
   const [submittedBy, setSubmittedBy] = useState("");
-  const countItems = useMemo(() => items.filter(isCountActive), [items]);
-  useEffect(() => {
-    const d = {};
-    countItems.forEach((it) => (d[it.controlNumber] = it.currentStock));
-    setDraft(d);
-  }, [countItems]);
+  const countItems = useMemo(() => items.filter(isCountActive).map((it) => ({ ...it, unit: it.purchaseUnit })), [items]);
+
+  async function submit(entries, countDate) {
+    const result = await api.submitCounts(rid, { submittedBy: submittedBy.trim(), countDate, counts: entries });
+    const skipped = new Set(result.notApplied || []);
+    const byControlNumber = new Map(entries.filter((e) => !skipped.has(e.controlNumber)).map((e) => [e.controlNumber, e]));
+    onCountsApplied(items.map((it) => {
+      const hit = byControlNumber.get(it.controlNumber);
+      return hit ? { ...it, currentStock: hit.onHand, lastCounted: countDate } : it;
+    }));
+    return result;
+  }
+  const sheet = useCountSheet(countItems, submit);
+
+  async function run(action) {
+    if (!submittedBy.trim()) { showToast("Enter your name before saving"); return; }
+    const r = await action();
+    if (r.error) { showToast(r.error); return; }
+    showToast(r.notApplied.length
+      ? `Saved ${r.saved}. ${r.notApplied.length} already had a newer count, so on-hand wasn't changed.`
+      : r.saved === 1 ? "Count saved" : `${r.saved} counts saved`);
+  }
 
   // ---------------- Count History (management-only; not exposed on the PWA staff portal) ----------------
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -37,100 +53,25 @@ export function CountsTab({ rid, items, onCountsApplied, showToast }) {
     try { setHistory(await api.itemCountSubmissionHistory(rid, historyFrom, historyTo)); }
     catch (e) { setHistory([]); setHistoryErr(e?.response?.data?.detail || "Couldn't load count history"); }
   }
-  useEffect(() => { if (historyOpen) loadHistory(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [historyOpen, historyFrom, historyTo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (historyOpen) loadHistory(); }, [historyOpen, historyFrom, historyTo]);
 
   if (countItems.length === 0) return <EmptyState text="No items are included in the biweekly count. Enable them in Item Setup first." />;
-
-  function updateDraft(cn, val) { setDraft((p) => ({ ...p, [cn]: val })); }
-
-  function applyLocally(entries) {
-    const byControlNumber = new Map(entries.map((e) => [e.controlNumber, e]));
-    onCountsApplied(items.map((it) => {
-      const hit = byControlNumber.get(it.controlNumber);
-      return hit ? { ...it, currentStock: hit.newStock, lastCounted: todayISO() } : it;
-    }));
-  }
-
-  async function saveOne(cn) {
-    if (!submittedBy.trim()) { showToast("Enter your name before saving"); return; }
-    const onHand = Number(draft[cn]) || 0;
-    try {
-      await api.submitCounts(rid, { submittedBy: submittedBy.trim(), counts: [{ controlNumber: cn, onHand }] });
-      applyLocally([{ controlNumber: cn, newStock: onHand }]);
-      showToast("Count saved");
-    } catch (e) { showToast(e?.response?.data?.detail || "Couldn't save count"); }
-  }
-  async function saveAll() {
-    if (!submittedBy.trim()) { showToast("Enter your name before saving"); return; }
-    const counts = countItems.map((it) => ({ controlNumber: it.controlNumber, onHand: draft[it.controlNumber] !== undefined ? Number(draft[it.controlNumber]) || 0 : it.currentStock }));
-    try {
-      await api.submitCounts(rid, { submittedBy: submittedBy.trim(), counts });
-      applyLocally(counts.map((c) => ({ controlNumber: c.controlNumber, newStock: c.onHand })));
-      showToast("All counts saved");
-    } catch (e) { showToast(e?.response?.data?.detail || "Couldn't save counts"); }
-  }
 
   return (
     <>
     <div className="fade-slide-in" data-testid="counts-tab">
       <PageTitle right={
         <div className="flex items-end gap-2 flex-wrap">
-          <label className="flex flex-col gap-1 text-xs text-slate-400 font-semibold">Counted By
-            <input className={`${inpCls} w-40`} data-testid="counted-by-input" placeholder="Your name" value={submittedBy} onChange={(e) => setSubmittedBy(e.target.value)} />
-          </label>
+          <CountSheetControls sheet={sheet} name={submittedBy} setName={setSubmittedBy} nameTestId="counted-by-input" />
           <button className={btnGhost} onClick={() => setHistoryOpen(true)} data-testid="count-history-button"><History size={14} /> Count History</button>
-          <button data-testid="save-all-counts-button" className={btnAcc} onClick={saveAll}><Save size={15} /> Save All Counts</button>
+          <SaveAllCountsButton sheet={sheet} onClick={() => run(sheet.saveAll)} testId="save-all-counts-button" />
         </div>
       }>
         Physical Count Entry
       </PageTitle>
-      {/* Desktop / tablet table */}
-      <div className={`${cardCls} overflow-hidden hidden md:block`}>
-        <div className="overflow-x-auto">
-          <table className="ops-table">
-            <thead><tr><th>Control #</th><th>Item</th><th>Current Count</th><th>Par</th><th></th></tr></thead>
-            <tbody>
-              {countItems.map((it) => (
-                <tr key={it.controlNumber} data-testid={`count-row-${it.controlNumber}`}>
-                  <td className="font-bold" style={{ color: "var(--acc)" }}>{it.controlNumber}</td>
-                  <td className="font-semibold text-slate-200">{it.name}</td>
-                  <td>
-                    <input data-testid={`count-input-${it.controlNumber}`} type="number" step="0.1" className={`${inpCls} w-24`} value={draft[it.controlNumber] ?? ""} onChange={(e) => updateDraft(it.controlNumber, e.target.value)} />
-                    {" "}<span className="text-xs text-slate-500">{it.purchaseUnit}</span>
-                  </td>
-                  <td className="num">{num(it.par)} {it.purchaseUnit}</td>
-                  <td><button data-testid={`count-save-${it.controlNumber}`} className={btnGhost} onClick={() => saveOne(it.controlNumber)}>Save</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Mobile card layout */}
-      <div className="md:hidden flex flex-col gap-2.5" data-testid="counts-mobile-list">
-        {countItems.map((it) => (
-          <div key={it.controlNumber} className={`${cardCls} p-3.5`} data-testid={`count-card-${it.controlNumber}`}>
-            <div className="flex items-start justify-between gap-2 mb-2.5">
-              <div className="min-w-0">
-                <div className="font-bold text-xs" style={{ color: "var(--acc)" }}>{it.controlNumber}</div>
-                <div className="font-semibold text-slate-200 text-sm leading-snug break-words">{it.name}</div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className="text-[10px] uppercase tracking-wide text-slate-500 font-bold">Par</div>
-                <div className="num text-sm text-slate-300">{num(it.par)} {it.purchaseUnit}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 flex-1">
-                <input data-testid={`count-input-${it.controlNumber}`} type="number" step="0.1" inputMode="decimal" className={`${inpCls} flex-1 w-full`} value={draft[it.controlNumber] ?? ""} onChange={(e) => updateDraft(it.controlNumber, e.target.value)} placeholder="Count" />
-                <span className="text-xs text-slate-500 shrink-0">{it.purchaseUnit}</span>
-              </div>
-              <button data-testid={`count-save-${it.controlNumber}`} className={btnGhost} onClick={() => saveOne(it.controlNumber)}>Save</button>
-            </div>
-          </div>
-        ))}
-      </div>
+      <CountSheetBanner sheet={sheet} />
+      <CountSheetList sheet={sheet} showPar onSaveOne={(it) => run(() => sheet.saveOne(it))} />
     </div>
 
       {historyOpen && (
@@ -163,8 +104,8 @@ export function CountsTab({ rid, items, onCountsApplied, showToast }) {
                         <div className="flex items-center gap-2">
                           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           <div>
-                            <div className="font-semibold text-slate-200 text-sm">{fmtDateTime(h.submittedAt)}</div>
-                            <div className="text-xs text-slate-500">By {h.submittedBy} · {h.source === "staff_pwa" ? "Staff portal" : "Management"}</div>
+                            <div className="font-semibold text-slate-200 text-sm">{h.countDate ? `Count for ${fmtDate(h.countDate)}` : fmtDateTime(h.submittedAt)}</div>
+                            <div className="text-xs text-slate-500">By {h.submittedBy} · {h.source === "staff_pwa" ? "Staff portal" : "Management"}{h.countDate ? ` · entered ${fmtDateTime(h.submittedAt)}` : ""}</div>
                           </div>
                         </div>
                         <div className="text-xs text-slate-400 font-semibold">{h.itemCount} item{h.itemCount !== 1 ? "s" : ""}</div>
@@ -178,7 +119,7 @@ export function CountsTab({ rid, items, onCountsApplied, showToast }) {
                                 <td>{it.controlNumber} — {it.name}</td>
                                 <td>{it.storageArea}</td>
                                 <td className="num">{num(it.previousStock, 1)} {it.purchaseUnit}</td>
-                                <td className="num font-bold">{num(it.newStock, 1)} {it.purchaseUnit}</td>
+                                <td className="num font-bold">{num(it.newStock, 1)} {it.purchaseUnit}{it.applied === false && <span className="block text-[10.5px] font-normal text-amber-400">history only (newer count exists)</span>}</td>
                               </tr>
                             ))}
                           </tbody>

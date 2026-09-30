@@ -524,3 +524,47 @@ def test_item_save_with_new_priced_sku_and_failed_save_keeps_revision():
             vendor_id="other", invoice_date="2026-09-30", lines=[server.InvoiceLineIn(qty=2, unit_price=10)]))
         assert invoice["total"] == 20.0
     run(scenario)
+
+
+def test_counts_take_a_count_date_and_backdating_never_overwrites_a_newer_count():
+    from datetime import date, timedelta
+    from tests.test_pg_routes import make_request
+    today, yesterday = date.today(), date.today() - timedelta(days=1)
+    async def scenario():
+        pool = db_pg.pool()
+        manager = make_request("/api/counts/papa_leonis/submit", "POST",
+                               {"id": "m", "email": "gm@example.test", "role": "manager", "locations": ["papa_leonis"]})
+        entry = [server.StaffCountEntryIn(controlNumber="A1", onHand=5.52)]
+        r = await server.submit_count("papa_leonis", server.CountSubmitIn(submittedBy="Gina", countDate=today.isoformat(), counts=entry), manager)
+        assert r == {"ok": True, "saved": 1, "notApplied": []}
+        row = await pool.fetchrow("SELECT current_stock, last_counted FROM store_items WHERE item_code='papa_leonis_A1'")
+        assert str(row["current_stock"]) == "5.52" and row["last_counted"] == today  # stored exactly, not 5.5199...
+
+        # Yesterday's sheet entered late: recorded in history, but today's on-hand stays.
+        late = [server.StaffCountEntryIn(controlNumber="A1", onHand=3)]
+        r = await server.submit_count("papa_leonis", server.CountSubmitIn(submittedBy="Gina", countDate=yesterday.isoformat(), counts=late), manager)
+        assert r["notApplied"] == ["A1"]
+        row = await pool.fetchrow("SELECT current_stock, last_counted FROM store_items WHERE item_code='papa_leonis_A1'")
+        assert str(row["current_stock"]) == "5.52" and row["last_counted"] == today
+        history = await server.count_history("papa_leonis", manager, date_from=None, date_to=None)
+        assert history[0]["countDate"] == yesterday.isoformat() and history[0]["items"][0]["applied"] is False
+        assert history[1]["countDate"] == today.isoformat() and history[1]["items"][0]["applied"] is True
+
+        for bad in ((today + timedelta(days=3)).isoformat(), (today - timedelta(days=40)).isoformat(), "09/30/2026"):
+            with pytest.raises(HTTPException) as exc:
+                await server.submit_count("papa_leonis", server.CountSubmitIn(submittedBy="Gina", countDate=bad, counts=entry), manager)
+            assert exc.value.status_code == 400
+
+        # Staff portal: same date handling, PIN-gated.
+        anon = server.Request({"type": "http", "method": "POST", "path": "/api/pg/staff/papa/counts/save", "query_string": b"",
+                               "headers": [], "scheme": "http", "server": ("t", 80), "client": ("127.0.0.1", 1)})
+        r = await server.pg_staff_counts_save("papa", server.PgStaffCountsSaveIn(
+            pin=server.DEFAULT_STAFF_PIN_PG, doneBy="Maria", countDate=today.isoformat(),
+            counts=[server.PgStaffCountEntryIn(controlNumber="A1", onHand=9)]), anon)
+        assert r == {"ok": True, "saved": 1, "notApplied": []}
+        assert float(await pool.fetchval("SELECT current_stock FROM store_items WHERE item_code='papa_leonis_A1'")) == 9
+        with pytest.raises(HTTPException) as exc:
+            await server.pg_staff_counts_save("papa", server.PgStaffCountsSaveIn(
+                pin="0000", doneBy="Maria", counts=[server.PgStaffCountEntryIn(controlNumber="A1", onHand=1)]), anon)
+        assert exc.value.status_code == 403
+    run(scenario)
