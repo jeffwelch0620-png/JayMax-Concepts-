@@ -12,6 +12,7 @@ const PG_API = `${API}/pg`;
 // working on Mongo until DATABASE_URL has a real password and Chunk 6
 // verification passes. Flip via REACT_APP_USE_PG=true in frontend/.env.
 const USE_PG = process.env.REACT_APP_USE_PG === "true";
+export const isPostgres = USE_PG;
 const MONGO_TO_PG_STORE = { berts: "berts", rudds: "rudds", papa_leonis: "papa" };
 const pgStoreId = (rid) => MONGO_TO_PG_STORE[rid] || rid;
 const TOKEN_KEY = "jaymax_session";

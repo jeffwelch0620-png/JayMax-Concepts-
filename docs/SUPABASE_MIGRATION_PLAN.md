@@ -293,8 +293,8 @@ evening count (`"daily"` and `"oneoff"` are unchanged). Motivated by Bulk Prep's
 variable, item-by-item cadence (2-3x/week for some things, daily for others, one-off
 for catering) that previously could only be worked around one day at a time via manual
 overrides. Postgres only, per the user's explicit choice — the Mongo-backed routes are
-untouched. Full design plan (with exact code) is preserved at
-`C:\Users\jeffw\.claude\plans\logical-wandering-pnueli.md`.
+untouched. The deployable schema migration is
+[`migrations/20260930_recurring_prep_items.sql`](../migrations/20260930_recurring_prep_items.sql).
 
 - **Schema**: `prep_items` gained `recur_days smallint[]` (Python `date.weekday()`
   encoding, Mon=0..Sun=6) and `fixed_qty numeric`, plus 3 new constraints (widened

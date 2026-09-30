@@ -43,7 +43,7 @@ function RecurringScheduleFields({ recurDays, toggleDay, fixedQty, setFixedQty, 
       <div className="flex gap-1 mb-2">
         {WEEKDAYS.map((d) => (
           <button key={d.v} className={recurDays.includes(d.v) ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }}
-            onClick={() => toggleDay(d.v)} data-testid={`${idPrefix}-recur-day-${d.v}`}>{d.label}</button>
+            onClick={() => toggleDay(d.v)} aria-pressed={recurDays.includes(d.v)} data-testid={`${idPrefix}-recur-day-${d.v}`}>{d.label}</button>
         ))}
       </div>
       <Field label={`Fixed Quantity (${unitLabel})`}>
@@ -98,7 +98,7 @@ export function PrepTab({ rid, items, dishes, persistDishes, prepStock, prepLogs
 }
 
 /* ---------------- Edit Recurring Schedule modal ---------------- */
-function EditRecurringModal({ prepItem, onClose, onSave }) {
+function EditRecurringModal({ prepItem, onClose, onSave, showToast }) {
   const [recurDays, setRecurDays] = useState(prepItem.recurDays || []);
   const [fixedQty, setFixedQty] = useState(prepItem.fixedQty || 0);
 
@@ -107,8 +107,8 @@ function EditRecurringModal({ prepItem, onClose, onSave }) {
   }
 
   function save() {
-    if (recurDays.length === 0) return;
-    if (!(Number(fixedQty) > 0)) return;
+    if (recurDays.length === 0) { showToast("Pick at least one day"); return; }
+    if (!(Number(fixedQty) > 0)) { showToast("Enter a fixed quantity"); return; }
     onSave(recurDays, Number(fixedQty) || 0);
   }
 
@@ -261,7 +261,7 @@ function AddPrepItemModal({ rid, track, items, dishes, onClose, onSaved, showToa
         <div className="flex gap-2 mb-3 flex-wrap">
           <button className={schedule === "daily" ? btnAcc : btnGhost} onClick={() => setSchedule("daily")} data-testid="schedule-daily">Daily — on every prep list</button>
           <button className={schedule === "oneoff" ? btnAcc : btnGhost} onClick={() => setSchedule("oneoff")} data-testid="schedule-oneoff">One-off — add as needed</button>
-          <button className={schedule === "recurring" ? btnAcc : btnGhost} onClick={() => setSchedule("recurring")} data-testid="schedule-recurring">Recurring — specific days</button>
+          {api.isPostgres && <button className={schedule === "recurring" ? btnAcc : btnGhost} onClick={() => setSchedule("recurring")} data-testid="schedule-recurring">Recurring — specific days</button>}
         </div>
         {schedule === "recurring" && (
           <RecurringScheduleFields recurDays={recurDays} toggleDay={toggleDay} fixedQty={fixedQty} setFixedQty={setFixedQty}
@@ -625,7 +625,7 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
                         <div className="flex gap-1">
                           <button className={p.schedule === "daily" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => toggleSchedule(p, "daily")} data-testid={`schedule-daily-${p.id}`}>Daily</button>
                           <button className={p.schedule === "oneoff" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => toggleSchedule(p, "oneoff")} data-testid={`schedule-oneoff-${p.id}`}>One-off</button>
-                          <button className={p.schedule === "recurring" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => setEditingRecurring(p)} data-testid={`schedule-recurring-${p.id}`}>Recurring</button>
+                          {api.isPostgres && <button className={p.schedule === "recurring" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => setEditingRecurring(p)} data-testid={`schedule-recurring-${p.id}`}>Recurring</button>}
                         </div>
                       </td>
                       <td>
@@ -652,7 +652,7 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
       )}
 
       {editingRecurring && (
-        <EditRecurringModal prepItem={editingRecurring} onClose={() => setEditingRecurring(null)}
+        <EditRecurringModal prepItem={editingRecurring} onClose={() => setEditingRecurring(null)} showToast={showToast}
           onSave={(recurDays, fixedQty) => saveRecurring(editingRecurring, recurDays, fixedQty)} />
       )}
 

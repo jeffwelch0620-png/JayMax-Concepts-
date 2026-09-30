@@ -3509,6 +3509,10 @@ async def _pg_get_or_create_session(conn, store_id, date, track):
             "INSERT INTO count_sessions (store_id, count_date, count_type, status) VALUES ($1,$2,$3,'open') RETURNING *",
             store_id, pg_date, count_type)
     recipes, prep_items, _ = await _pg_prep_universe_for_track(conn, store_id, track)
+    if s["status"] == "open":
+        for p in prep_items:
+            if (p["schedule"] or "daily") == "recurring":
+                await conn.execute("DELETE FROM count_lines WHERE session_id=$1 AND prep_item_id=$2", s["id"], p["id"])
     # Recurring-schedule items are fixed-quantity, not count-driven -- they get no
     # evening-count line at all (daily/oneoff items are unchanged, matching today).
     countable_items = [p for p in prep_items if (p["schedule"] or "daily") != "recurring"]
