@@ -27,11 +27,19 @@ available), each paired with a `scripts/migrate_*.py` that turns the Mongo backu
 |---|---|---|---|
 | P2.1 Login + per-store state | `users`, `state_versions`, `areas`, `sales_periods` | new `app_users`, `store_state` | ✅ Code + tests; SQL pending apply |
 | P2.2 Purchase orders | `purchase_orders`, `vendor_contacts` | `purchase_orders`/`purchase_order_lines` (extended), new `store_vendor_contacts` | ✅ Code + tests (incl. local-Postgres integration); SQL pending apply |
-| P2.3 State blob leftovers | `adjustments`, `reporting_periods` (still loaded by `GET /state`) | existing `adjustments`, `reporting_periods` | ⏳ |
+| P2.3 State blob leftovers | `adjustments`, `reporting_periods` (still loaded by `GET /state`) | existing `adjustments`, `reporting_periods` (+ `ref`, `control_number`, `qty_basis`) | ✅ Code + tests; SQL pending apply. `GET /state` no longer reads Mongo in PG mode |
 | P2.4 Manager counts + prep extras | `/counts/{rid}/submit`+history, `/prep/{rid}/complete`, `/reports/{rid}/prep` | existing tables | ⏳ |
 | P2.5 AI + planning | `chat_messages`, `projected_sales`, `par_recommendations` | `ai_chat_messages` + new tables | ⏳ |
 | P2.6 Activity log + owner rollups | `activity_log`, owner summary/discrepancies/scorecard reads | `activity_log` | ⏳ |
 | P2.7 Cutover | -- | apply pending SQL, run migrate scripts on a fresh backup, flip flags, remove Mongo | ⏳ |
+
+Cutover data order (each script reads the same fresh Mongo backup; apply its SQL before
+running the next, since later ones resolve ids against earlier ones):
+1. phase-1 scripts (`migrate_items_and_invoices`, `migrate_dishes`, `migrate_prep_stock_and_logs`,
+   `migrate_counts_and_prep_lists`) -- re-run on the fresh backup
+2. `migrate_users_and_state.py` (remaps the current sales period's dishSales to dish uuids)
+3. `migrate_purchase_orders.py`
+4. `migrate_adjustments_and_periods.py` (remaps each reporting period's dishSales)
 
 Testing without the live project: `backend/tests/test_pg_local_integration.py` runs the
 Postgres paths end to end against a throwaway local Postgres loaded with
@@ -155,7 +163,9 @@ Chunks, in order:
      `mongoDishToPgBody` (`frontend/src/lib/api.js`) detects a non-uuid `id` (a
      brand-new dish from `CostingTab`'s `emptyDish()`) and omits it so the backend
      inserts a fresh row rather than trying to `UPDATE ... WHERE id = 'dish_xxx'`.
-   - **Known limitation, real and unresolved**: `reportingPeriods.dishSales` (Sales
+   - **Known limitation -- resolved in Phase 2 chunk 3**: the migration scripts now remap
+     dishSales keys to Postgres dish uuids by (store_id, name). Original note:
+     `reportingPeriods.dishSales` (Sales
      Tracking, `SalesTrackingTab.js`) is keyed by the OLD Mongo dish id and is not
      migrated or remapped by this chunk. Under `USE_PG`, Sales Tracking's per-dish
      sales lookups will not resolve against the new uuids — that tab needs its own

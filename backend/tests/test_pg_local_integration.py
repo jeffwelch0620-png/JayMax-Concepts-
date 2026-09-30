@@ -26,8 +26,8 @@ PG_URL = os.environ.get("TEST_PG_URL")
 pytestmark = pytest.mark.skipif(not PG_URL, reason="TEST_PG_URL not set")
 
 RESET = """
-TRUNCATE purchase_order_lines, purchase_orders, store_vendor_contacts, store_state, app_users,
-         store_items, vendor_items, items, vendors, stores CASCADE;
+TRUNCATE purchase_order_lines, purchase_orders, store_vendor_contacts, store_state, app_users, adjustments,
+         reporting_periods, dish_lines, dishes, store_items, vendor_items, items, vendors, stores CASCADE;
 INSERT INTO stores (id, name) VALUES ('berts', 'Berts'), ('rudds', 'Rudds'), ('papa', 'Papa'), ('comm', 'Commissary');
 INSERT INTO vendors (id, name) VALUES ('us_foods', 'US Foods');
 INSERT INTO items (code, name, base_unit) VALUES ('papa_leonis_A1', 'Flour', 'lb');
@@ -179,4 +179,69 @@ def test_migration_scripts_produce_sql_that_applies(tmp_path):
         assert await server._vc_email("berts", "US Foods") == "o@x.example"
         assert (await server._pg_get_store_state("berts"))["revision"] == 4
         assert await db_pg.pool().fetchval("SELECT role FROM app_users WHERE id='usr_1'") == "owner"
+    run(scenario)
+
+
+def test_adjustments_and_reporting_periods_replace_and_reload_in_postgres():
+    from tests.test_pg_routes import revision_request
+    async def scenario():
+        rid = "papa_leonis"
+        adjs = [{"id": "adj_1", "date": "2026-09-29", "controlNumber": "A1", "reason": "waste", "qtyBasis": "portion",
+                 "qty": 2, "note": "dropped", "createdAt": "2026-09-29T20:00:00+00:00"},
+                {"id": "adj_2", "date": "2026-09-30", "controlNumber": "GONE", "reason": "transfer_in", "qty": 1}]
+        res = await server.put_collection(rid, "adjustments", adjs, revision_request(0))
+        assert res == {"ok": True, "count": 2, "revision": 1}
+        rows = await db_pg.pool().fetch("SELECT ref, item_code, direction, qty_basis FROM adjustments ORDER BY ref")
+        assert [tuple(r) for r in rows] == [("adj_1", "papa_leonis_A1", "remove", "portion"), ("adj_2", None, "add", "purchase")]
+
+        periods = [{"id": "period_1", "name": "Week 39", "periodStart": "2026-09-21", "periodEnd": "2026-09-27",
+                    "dishSales": {"uuid-x": 12}, "itemCounts": {"A1": {"begin": 3}}, "savedAt": "2026-09-28T09:00:00+00:00",
+                    "status": "closed"}]
+        await server.put_collection(rid, "reportingPeriods", periods, revision_request(1))
+
+        state = await server.get_state(rid)
+        assert state["revision"] == 2 and state["items"] == [] and state["dishes"] == []
+        assert state["adjustments"][0] == {**adjs[0], "createdAt": "2026-09-29T20:00:00+00:00"}
+        assert state["adjustments"][1]["controlNumber"] == "GONE" and state["adjustments"][1]["qtyBasis"] == "purchase"
+        assert state["reportingPeriods"] == [{**periods[0], "savedAt": "2026-09-28T09:00:00+00:00"}]
+
+        # Replacing with a shorter list removes the rest; invalid rows are rejected before the revision moves.
+        await server.put_collection(rid, "adjustments", adjs[:1], revision_request(2))
+        assert [a["id"] for a in (await server.get_state(rid))["adjustments"]] == ["adj_1"]
+        with pytest.raises(HTTPException) as exc:
+            await server.put_collection(rid, "reportingPeriods", [{"id": "p", "periodStart": "", "periodEnd": "x"}], revision_request(3))
+        assert exc.value.status_code == 400
+        with pytest.raises(HTTPException) as exc:
+            await server.put_collection(rid, "items", [], revision_request(3))
+        assert exc.value.status_code == 400
+        assert (await server._pg_get_store_state(rid))["revision"] == 3
+        assert await server._adjustments_for(rid) == (await server.get_state(rid))["adjustments"]
+    run(scenario)
+
+
+def test_period_migration_remaps_mongo_dish_ids_to_postgres_uuids(tmp_path):
+    import json
+    (tmp_path / "dishes.json").write_text(json.dumps([{"id": "dish_old_pizza", "restaurantId": "papa_leonis", "name": "Pizza"}]))
+    (tmp_path / "reporting_periods.json").write_text(json.dumps([
+        {"id": "period_1", "restaurantId": "papa_leonis", "periodStart": "2026-09-21", "periodEnd": "2026-09-27",
+         "dishSales": {"dish_old_pizza": 40, "dish_unknown": 1}, "itemCounts": {}, "status": "closed"}]))
+    (tmp_path / "adjustments.json").write_text(json.dumps([
+        {"id": "adj_1", "restaurantId": "papa_leonis", "date": "2026-09-29", "controlNumber": "A1", "reason": "waste", "qty": 1}]))
+    (tmp_path / "sales_periods.json").write_text(json.dumps([
+        {"restaurantId": "papa_leonis", "periodStart": "2026-09-28", "dishSales": {"dish_old_pizza": 5}}]))
+    outs = []
+    for script in ("migrate_adjustments_and_periods.py", "migrate_users_and_state.py"):
+        out = tmp_path / (script + ".sql")
+        subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / script), str(tmp_path), str(out)], check=True, capture_output=True)
+        outs.append(out.read_text())
+
+    async def scenario():
+        pizza = await db_pg.pool().fetchval(
+            "INSERT INTO dishes (store_id, name) VALUES ('papa', 'Pizza') RETURNING id::text")
+        for sql in outs * 2:
+            await db_pg.pool().execute(sql)
+        state = await server.get_state("papa_leonis")
+        assert state["reportingPeriods"][0]["dishSales"] == {pizza: 40, "dish_unknown": 1}
+        assert state["salesPeriod"] == {"periodStart": "2026-09-28", "dishSales": {pizza: 5}}
+        assert [a["id"] for a in state["adjustments"]] == ["adj_1"]
     run(scenario)

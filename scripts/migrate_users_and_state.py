@@ -7,10 +7,17 @@ Run: python scripts/migrate_users_and_state.py <backup_dir> [out.sql]
 
 Users keep their Mongo id and PBKDF2 hash, so passwords and already-issued session
 tokens keep working after cutover. Re-running is safe: every statement upserts.
+The sales period's dishSales keys are remapped to Postgres dish uuids (see
+migrate_adjustments_and_periods.py), so run this AFTER migrate_dishes.py is applied.
 """
 import json
 import sys
 from pathlib import Path
+
+try:
+    from scripts.migrate_adjustments_and_periods import dish_sales_sql, mongo_dish_index
+except ImportError:  # run directly as `python scripts/migrate_users_and_state.py`
+    from migrate_adjustments_and_periods import dish_sales_sql, mongo_dish_index
 
 STORE_ID_MAP = {"berts": "berts", "rudds": "rudds", "papa_leonis": "papa", "comm": "comm"}
 USER_ROLES = {"owner", "manager", "staff", "readonly"}
@@ -54,7 +61,7 @@ def build_users_sql(users):
     return statements
 
 
-def build_store_state_sql(versions, areas, sales_periods):
+def build_store_state_sql(versions, areas, sales_periods, dish_index=None):
     state = {}
     def row(rid):
         store_id = STORE_ID_MAP.get(rid)
@@ -71,9 +78,14 @@ def build_store_state_sql(versions, areas, sales_periods):
     for sp in sales_periods:
         if (r := row(sp.get("restaurantId"))) is not None:
             r["sales_period"] = {k: v for k, v in sp.items() if k not in ("_id", "restaurantId")}
+    def sales_period_sql(sp):
+        if sp is None:
+            return "NULL"
+        rest = {k: v for k, v in sp.items() if k != "dishSales"}
+        return f"({sql_json(rest)} || jsonb_build_object('dishSales', {dish_sales_sql(sp.get('dishSales') or {}, dish_index or {})}))"
     return [
         "INSERT INTO store_state (store_id, revision, areas, sales_period) VALUES "
-        f"({sql_str(store_id)}, {r['revision']}, {sql_json(r['areas'])}, {sql_json(r['sales_period'])}) "
+        f"({sql_str(store_id)}, {r['revision']}, {sql_json(r['areas'])}, {sales_period_sql(r['sales_period'])}) "
         "ON CONFLICT (store_id) DO UPDATE SET revision=GREATEST(store_state.revision, EXCLUDED.revision), "
         "areas=EXCLUDED.areas, sales_period=EXCLUDED.sales_period, updated_at=now();"
         for store_id, r in sorted(state.items())
@@ -92,7 +104,8 @@ def main():
     print(f"Loaded {len(users)} users, {len(versions)} state_versions, {len(areas)} areas, "
           f"{len(sales_periods)} sales_periods from {backup_dir}")
 
-    statements = build_users_sql(users) + build_store_state_sql(versions, areas, sales_periods)
+    dish_index = mongo_dish_index(load(backup_dir, "dishes"))
+    statements = build_users_sql(users) + build_store_state_sql(versions, areas, sales_periods, dish_index)
     out_path.write_text("BEGIN;\n" + "\n".join(statements) + "\nCOMMIT;\n", encoding="utf-8")
     print(f"Wrote {len(statements)} statements to {out_path}")
 

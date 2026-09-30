@@ -621,16 +621,111 @@ async def auth_create_user(body: UserIn, request: Request):
 async def restaurants():
     return RESTAURANTS
 
+# ---- Adjustments + reporting periods (Postgres) ----
+# Both are saved by the frontend as a whole per-store array (PUT /state/{rid}/{collection}),
+# so the Postgres writer replaces the store's rows in one transaction. `ref` keeps the
+# client-generated id ("adj_..." / "period_...").
+ADJ_ADD_REASONS = {"transfer_in", "count_correction_add", "other_add"}  # mirrors ADJUSTMENT_REASONS in frontend/src/lib/calc.js
+
+def _pg_adj_rows(rid, payload):
+    rows = []
+    for a in payload:
+        if not isinstance(a, dict):
+            continue
+        if not a.get("controlNumber") or not a.get("date") or not a.get("reason"):
+            raise HTTPException(400, f"adjustment {a.get('id') or '?'} needs an item, date and reason")
+        try:
+            day = _pg_date(a["date"])
+        except ValueError:
+            raise HTTPException(400, f"adjustment {a.get('id') or '?'} has an invalid date")
+        rows.append((a.get("id") or "adj_" + uuid.uuid4().hex[:10], a["controlNumber"], f"{rid}_{a['controlNumber']}",
+                     day, a["reason"], "add" if a["reason"] in ADJ_ADD_REASONS else "remove",
+                     "portion" if a.get("qtyBasis") == "portion" else "purchase", f(a.get("qty")), a.get("note") or "", a.get("createdBy") or None,
+                     _ts_in(a.get("createdAt")) or datetime.now(timezone.utc)))
+    return rows
+
+async def _pg_replace_adjustments(rid, rows):
+    store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM adjustments WHERE store_id=$1", store_id)
+            # item_code links to the catalog when the item still exists; control_number is the source of truth.
+            await conn.executemany(
+                """INSERT INTO adjustments (store_id, ref, control_number, item_code, date, reason, direction, qty_basis,
+                       qty, note, created_by, created_at)
+                   VALUES ($1, $2, $3, (SELECT code FROM items WHERE code=$4), $5, $6, $7, $8, $9, $10, $11, $12)""",
+                [(store_id, *r) for r in rows])
+    finally:
+        await db_pg.pool().release(conn)
+
+async def _pg_list_adjustments(rid):
+    rows = await db_pg.pool().fetch("SELECT * FROM adjustments WHERE store_id=$1 ORDER BY date, created_at",
+                                    RESTAURANT_TO_PG_STORE.get(rid, rid))
+    return [{"id": r["ref"], "date": r["date"].isoformat(), "controlNumber": r["control_number"], "reason": r["reason"],
+             "qtyBasis": r["qty_basis"], "qty": f(r["qty"]), "note": r["note"] or "",
+             "createdAt": _ts_out(r["created_at"])} for r in rows]
+
+def _pg_period_rows(rid, payload):
+    rows = []
+    for p in payload:
+        if not isinstance(p, dict):
+            continue
+        try:
+            start, end = _pg_date(p.get("periodStart")), _pg_date(p.get("periodEnd"))
+        except ValueError:
+            start = end = None
+        if not start or not end:
+            raise HTTPException(400, f"reporting period {p.get('name') or p.get('id') or '?'} needs valid start and end dates")
+        rows.append((p.get("id") or "period_" + uuid.uuid4().hex[:10], p.get("name"), start, end,
+                     p.get("status") if p.get("status") in ("draft", "closed") else "closed",
+                     p.get("dishSales") or {}, p.get("itemCounts") or {}, _ts_in(p.get("savedAt"))))
+    return rows
+
+async def _pg_replace_reporting_periods(rid, rows):
+    store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM reporting_periods WHERE store_id=$1", store_id)
+            await conn.executemany(
+                """INSERT INTO reporting_periods (store_id, ref, name, period_start, period_end, status, dish_sales,
+                       item_counts, saved_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                [(store_id, *r) for r in rows])
+    finally:
+        await db_pg.pool().release(conn)
+
+async def _pg_list_reporting_periods(rid):
+    rows = await db_pg.pool().fetch("SELECT * FROM reporting_periods WHERE store_id=$1 ORDER BY period_start, created_at",
+                                    RESTAURANT_TO_PG_STORE.get(rid, rid))
+    return [{"id": r["ref"], "name": r["name"], "periodStart": r["period_start"].isoformat(),
+             "periodEnd": r["period_end"].isoformat(), "dishSales": r["dish_sales"], "itemCounts": r["item_counts"],
+             "savedAt": _ts_out(r["saved_at"]), "status": r["status"]} for r in rows]
+
+_PG_REPLACERS = {"adjustments": (_pg_adj_rows, _pg_replace_adjustments),
+                 "reportingPeriods": (_pg_period_rows, _pg_replace_reporting_periods)}
+
+async def _adjustments_for(rid):
+    if USE_PG:
+        return await _pg_list_adjustments(rid)
+    return await db.adjustments.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+
 @api_router.get("/state/{rid}")
 async def get_state(rid: str):
     check_rid(rid)
+    if USE_PG:
+        # items/purchases/dishes/prepStock/prepLogs come from /api/pg/* -- the frontend's
+        # fetchState merges those over these empty lists -- so nothing here touches Mongo.
+        state = {name: [] for name in COLL_MAP}
+        state["adjustments"] = await _pg_list_adjustments(rid)
+        state["reportingPeriods"] = await _pg_list_reporting_periods(rid)
+        state.update(await _pg_get_store_state(rid))
+        return state
     await ensure_seed(rid)
     state = {}
     for name, coll in COLL_MAP.items():
         state[name] = await db[coll].find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
-    if USE_PG:
-        state.update(await _pg_get_store_state(rid))
-        return state
     sp = await db.sales_periods.find_one({"restaurantId": rid}, {"_id": 0})
     ws, we = _workweek()
     state["salesPeriod"] = sp or {"periodStart": ws, "periodEnd": we, "dishSales": {}, "itemCounts": {}}
@@ -675,6 +770,14 @@ async def put_collection(rid: str, collection: str, payload: List[Any], request:
     check_rid(rid)
     if collection not in WRITABLE:
         raise HTTPException(400, "collection not writable")
+    if USE_PG:
+        if collection not in _PG_REPLACERS:
+            # items/purchases/dishes have their own /api/pg/* writers; nothing may land in Mongo.
+            raise HTTPException(400, f"{collection} is saved through /api/pg in Postgres mode")
+        rows = _PG_REPLACERS[collection][0](rid, payload)  # validate before bumping the revision
+        revision = await _check_and_bump_revision(rid, request)
+        await _PG_REPLACERS[collection][1](rid, rows)
+        return {"ok": True, "count": len(rows), "revision": revision}
     revision = await _check_and_bump_revision(rid, request)
     coll = COLL_MAP[collection]
     # Insert the new snapshot FIRST (tagged with a one-off batch marker), then delete
@@ -1983,7 +2086,7 @@ async def store_summary(r):
         purchases = await db.purchases.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         prep_stock = await _prep_stock_list(rid)
-    adjustments = await db.adjustments.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+    adjustments = await _adjustments_for(rid)
     items_by_cn = {i["controlNumber"]: i for i in items}
     by_id = {d["id"]: d for d in dishes}
     inv_value = sum(f(i.get("currentStock")) * item_derived(i)["price"] for i in items)
@@ -2083,7 +2186,7 @@ async def ai_chat(body: ChatIn, request: Request):
         purchases = await db.purchases.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         prep_stock = await _prep_stock_list(rid)
-    adjustments = await db.adjustments.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+    adjustments = await _adjustments_for(rid)
     context = build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock)
     history = await db.chat_messages.find({"restaurantId": rid}, {"_id": 0}).sort("ts", -1).limit(10).to_list(10)
     history.reverse()
