@@ -2221,11 +2221,17 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
             store_id = RESTAURANT_TO_PG_STORE[rid]
             conn = await db_pg.pool().acquire()
             try:
-                async with conn.transaction():
-                    for cn, rq in updates:
-                        await conn.execute(
-                            "UPDATE store_items SET current_stock = current_stock + $1 WHERE store_id=$2 AND item_code=$3",
-                            rq, store_id, f"{rid}_{cn}")
+                try:
+                    async with conn.transaction():
+                        for cn, rq in updates:
+                            await conn.execute(
+                                "UPDATE store_items SET current_stock = current_stock + $1 WHERE store_id=$2 AND item_code=$3",
+                                rq, store_id, f"{rid}_{cn}")
+                except Exception:
+                    await db.purchase_orders.update_one(
+                        {"restaurantId": rid, "id": oid, "status": "receiving"},
+                        {"$set": {"status": "sent"}, "$unset": {"receiptStartedAt": ""}})
+                    raise
             finally:
                 await db_pg.pool().release(conn)
         else:
@@ -2234,7 +2240,13 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
             ops = [UpdateOne({"restaurantId": rid, "controlNumber": cn},
                              {"$set": {"currentStock": round(stock.get(cn, 0) + rq, 3)}}) for cn, rq in updates if cn in stock]
             if ops:
-                await db.items.bulk_write(ops)
+                try:
+                    await db.items.bulk_write(ops)
+                except Exception:
+                    await db.purchase_orders.update_one(
+                        {"restaurantId": rid, "id": oid, "status": "receiving"},
+                        {"$set": {"status": "sent"}, "$unset": {"receiptStartedAt": ""}})
+                    raise
     receipt_match = await _match_invoice(rid, invoice_number, lines) if invoice_number else None
     now = datetime.now(timezone.utc).isoformat()
     set_fields = {"status": "received", "receivedAt": now, "lines": lines, "invoiceNumber": invoice_number or None, "receiptMatch": receipt_match}
