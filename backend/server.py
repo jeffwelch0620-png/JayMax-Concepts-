@@ -2073,7 +2073,9 @@ def _ai():
     if not os.environ.get("ANTHROPIC_API_KEY", "").strip():
         raise HTTPException(503, "Sous isn't set up yet: ANTHROPIC_API_KEY is missing on the server (Render > jaymax-api > Environment).")
     if _ai_client is None:
-        _ai_client = anthropic.AsyncAnthropic()
+        # An organization-level key (not scoped to a workspace) must name the workspace per request.
+        workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+        _ai_client = anthropic.AsyncAnthropic(default_headers={"anthropic-workspace-id": workspace} if workspace else None)
     return _ai_client
 
 def _ai_error_message(e):
@@ -2085,6 +2087,9 @@ def _ai_error_message(e):
         return "This Anthropic API key isn't allowed to use Sous's model. Check the key's workspace in the Anthropic Console."
     if isinstance(e, anthropic.NotFoundError):
         return f"The AI model '{AI_MODEL}' isn't available to this Anthropic account. Set ANTHROPIC_MODEL to a model it can use."
+    if "anthropic-workspace-id" in text or "scoped to a workspace" in text:
+        return ("This Anthropic API key isn't tied to a workspace. Create a key inside a workspace in the Anthropic Console, "
+                "or set ANTHROPIC_WORKSPACE_ID on the server.")
     if "credit" in text or "billing" in text:
         return "The Anthropic account is out of credits. Add credits under Billing in the Anthropic Console."
     if isinstance(e, anthropic.RateLimitError):

@@ -36,6 +36,8 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY   # Sous chat + par advisor
         sync: false
+      - key: ANTHROPIC_WORKSPACE_ID  # only for an org-level key not scoped to a workspace
+        sync: false
       - key: RESEND_API_KEY      # supplier PO emails
         sync: false
       - key: EMAIL_FROM_ADDRESS  # an address on a domain verified in Resend
