@@ -244,3 +244,138 @@ def test_pg_pool_reads_database_url_after_environment_is_loaded(monkeypatch):
     asyncio.run(db_pg.init_pool())
 
     assert calls["url"] == "postgresql://configured-after-import"
+
+
+def test_pg_staff_management_routes_require_manager_like_mongo_counterparts(monkeypatch):
+    # These handlers must enforce the manager role themselves (as their Mongo twins do),
+    # not rely solely on the middleware -- which is bypassed when AUTH_REQUIRED=false.
+    conn = FakeConnection()
+    monkeypatch.setattr(db_pg, "pool", lambda: conn)
+    staff = make_request("/api/pg/staff/papa/members", "POST")
+    member = server.PgStaffMemberIn(name="Cook")
+    calls = [
+        server.pg_set_staff_pin("papa", server.PgStaffPinIn(staffPin="4321"), staff),
+        server.pg_create_staff_member("papa", member, staff),
+        server.pg_update_staff_member("papa", "s1", member, staff),
+        server.pg_delete_staff_member("papa", "s1", staff),
+        server.pg_create_staff_task("papa", server.PgStaffTaskIn(taskType="prep", title="Mop", dueDate="2026-10-01"), staff),
+        server.pg_delete_staff_task("papa", "t1", staff),
+    ]
+    for call in calls:
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(call)
+        assert exc.value.status_code == 403
+    assert conn.queries == []
+
+
+def test_mongo_staff_pin_read_requires_manager_like_pg_counterpart():
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server.get_pin("papa_leonis", make_request("/api/staff/papa_leonis/pin")))
+    assert exc.value.status_code == 403
+
+
+class FakeStatePool:
+    """Minimal in-memory stand-in for the store_state / app_users queries."""
+    def __init__(self, revision=None, users=()):
+        self.revision = revision
+        self.users = {u["email"]: u for u in users}
+        self.queries = []
+
+    async def fetchval(self, query, *args):
+        self.queries.append(query)
+        if query.startswith("UPDATE store_state"):
+            if self.revision is not None and self.revision == args[1]:
+                self.revision += 1
+                return self.revision
+            return None
+        if "ON CONFLICT (store_id) DO NOTHING" in query:
+            if self.revision is None:
+                self.revision = 1
+                return 1
+            return None
+        if "ON CONFLICT (store_id) DO UPDATE" in query:
+            self.revision = (self.revision or 0) + 1
+            return self.revision
+        if query.startswith("SELECT revision"):
+            return self.revision
+        if "count(*) FROM app_users" in query:
+            return len(self.users)
+        raise AssertionError(query)
+
+    async def fetchrow(self, query, *args):
+        self.queries.append(query)
+        if "FROM app_users" in query:
+            return self.users.get(args[0])
+        raise AssertionError(query)
+
+
+def revision_request(if_match=None):
+    headers = [(b"if-match", f'"{if_match}"'.encode())] if if_match is not None else []
+    return Request({"type": "http", "method": "PUT", "path": "/api/state/papa_leonis/areas", "query_string": b"",
+                    "headers": headers, "scheme": "http", "server": ("testserver", 80), "client": ("127.0.0.1", 1)})
+
+
+def test_pg_revision_matches_mongo_contract(monkeypatch):
+    monkeypatch.setattr(server, "USE_PG", True)
+    fake = FakeStatePool(revision=None)
+    monkeypatch.setattr(db_pg, "pool", lambda: fake)
+
+    # First write with If-Match "0" creates the row at revision 1.
+    assert asyncio.run(server._check_and_bump_revision("papa_leonis", revision_request(0))) == 1
+    # Matching If-Match bumps; stale If-Match is a 409 and leaves the revision alone.
+    assert asyncio.run(server._check_and_bump_revision("papa_leonis", revision_request(1))) == 2
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server._check_and_bump_revision("papa_leonis", revision_request(1)))
+    assert exc.value.status_code == 409 and "revision 2" in exc.value.detail
+    assert fake.revision == 2
+    # No If-Match: unconditional bump.
+    assert asyncio.run(server._check_and_bump_revision("papa_leonis", revision_request())) == 3
+
+
+def test_pg_login_uses_app_users_and_issues_same_token_shape(monkeypatch):
+    monkeypatch.setattr(server, "USE_PG", True)
+    row = {"id": "usr_abc", "email": "gm@example.test", "role": "manager", "locations": ["papa_leonis"],
+           "password_hash": server._password_hash("correct horse battery")}
+    monkeypatch.setattr(db_pg, "pool", lambda: FakeStatePool(users=[row]))
+
+    ok = asyncio.run(server.auth_login(server.LoginIn(email=" GM@example.test ", password="correct horse battery")))
+    assert ok["user"] == {"id": "usr_abc", "email": "gm@example.test", "role": "manager", "locations": ["papa_leonis"]}
+    assert server._decode_token(ok["token"])["sub"] == "usr_abc"
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server.auth_login(server.LoginIn(email="gm@example.test", password="wrong password")))
+    assert exc.value.status_code == 401
+
+
+def test_pg_bootstrap_refuses_once_any_user_exists(monkeypatch):
+    monkeypatch.setattr(server, "USE_PG", True)
+    monkeypatch.setattr(server, "BOOTSTRAP_TOKEN", "boot")
+    row = {"id": "usr_x", "email": "o@example.test", "role": "owner", "locations": [], "password_hash": "x"}
+    monkeypatch.setattr(db_pg, "pool", lambda: FakeStatePool(users=[row]))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server.auth_bootstrap(server.BootstrapIn(
+            bootstrapToken="boot", email="new@example.test", password="a-long-enough-pass")))
+    assert exc.value.status_code == 409
+
+
+def test_legacy_mongo_route_families_are_refused_in_pg_mode(monkeypatch):
+    async def no_activity(*args):
+        return None
+
+    monkeypatch.setattr(server, "_record_activity", no_activity)
+
+    async def ok(_):
+        return Response(status_code=204)
+
+    async def invoke(path, method="POST"):
+        return await server.collaboration_security(make_request(path, method), ok)
+
+    monkeypatch.setattr(server, "USE_PG", True)
+    for path in ("/api/prep/papa_leonis/complete", "/api/preplists/papa_leonis/generate", "/api/staff/papa_leonis/counts/save",
+                 "/api/staff-tasks/papa_leonis", "/api/prep-items/papa_leonis", "/api/staff/verify"):
+        assert asyncio.run(invoke(path)).status_code == 410, path
+    # Postgres twins, and routes that are Postgres-aware themselves, pass through.
+    assert asyncio.run(invoke("/api/pg/preplists/papa/generate")).status_code == 204
+    assert asyncio.run(invoke("/api/reports/papa_leonis/prep", "GET")).status_code == 204
+    monkeypatch.setattr(server, "USE_PG", False)
+    assert asyncio.run(invoke("/api/preplists/papa_leonis/generate")).status_code == 204

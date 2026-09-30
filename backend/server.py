@@ -26,9 +26,20 @@ except ImportError:  # pragma: no cover - optional dependency, push notification
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+class _MongoRetired:
+    """Stands in for the Mongo database when USE_PG=true. Postgres mode is Supabase-only:
+    any code path still reaching for a Mongo collection fails loudly here instead of
+    quietly reading or writing data that has diverged from Postgres."""
+    def __getattr__(self, name):
+        raise RuntimeError(f"MongoDB accessed in Postgres mode (collection '{name}')")
+    __getitem__ = __getattr__
+
+if os.environ.get("USE_PG", "false").strip().lower() == "true":
+    client = None
+    db = _MongoRetired()
+else:
+    client = AsyncIOMotorClient(os.environ['MONGO_URL'])
+    db = client[os.environ['DB_NAME']]
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -52,6 +63,11 @@ READ_ONLY_PATHS = ("/owner/summary", "/owner/prep-summary", "/owner/orders",
 STAFF_PATHS = ("/prepcount/", "/preplists/", "/prep/", "/staff/", "/prep-items/")
 OWNER_PATHS = ("/owner/",)
 STAFF_WRITE_PATHS = ("/prepcount/", "/preplists/", "/prep/")
+# Mongo-backed /api/... route families whose Postgres twins live under /api/pg/... . With
+# USE_PG on they're refused outright: the frontend never calls them in that mode, and a
+# stale client or direct call would otherwise write to Mongo and silently diverge.
+LEGACY_MONGO_PATHS = ("/prep/", "/prepcount/", "/preplists/", "/prep-items/", "/prep-overrides/",
+                      "/staff/", "/staff-tasks/")
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "60"))
 _rate_buckets = {}
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").strip()
@@ -127,7 +143,14 @@ def _is_pin_optional(path):
     return not (len(tail) >= 2 and tail[1] in ("pin", "members"))
 
 async def _record_activity(request, user, status):
-    if user and request.url.path not in ("/api/health",):
+    if user and request.url.path not in ("/api/health",) and USE_PG:
+        rid = _path_rid(request.url.path)
+        await db_pg.pool().execute(
+            """INSERT INTO activity_log (user_id, user_email, role, method, path, status, store_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)""",
+            user.get("sub"), user.get("email"), user.get("role"), request.method, request.url.path, status,
+            RESTAURANT_TO_PG_STORE.get(rid) if rid else None)
+    elif user and request.url.path not in ("/api/health",):
         await db.activity_log.insert_one({"id": "act_" + uuid.uuid4().hex[:12],
             "userId": user.get("sub"), "email": user.get("email"), "role": user.get("role"),
             "method": request.method, "path": request.url.path, "status": status,
@@ -140,6 +163,8 @@ async def collaboration_security(request: Request, call_next):
         return await call_next(request)
     if AUTH_REQUIRED and not AUTH_SECRET:
         return JSONResponse({"detail": "AUTH_SECRET is not configured"}, status_code=503)
+    if USE_PG and not path.startswith("/api/pg/") and path.removeprefix("/api").startswith(LEGACY_MONGO_PATHS):
+        return JSONResponse({"detail": "This endpoint moved to /api/pg/... (Postgres mode)"}, status_code=410)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token) if token else None
     if AUTH_REQUIRED and not user and not _is_pin_optional(path):
@@ -434,6 +459,10 @@ def _workweek():
     return start.isoformat(), (start + timedelta(days=6)).isoformat()
 
 async def ensure_seed(rid):
+    if USE_PG:
+        # Postgres mode: items/purchases/dishes live in Postgres, and missing areas /
+        # sales period fall back to defaults in _pg_get_store_state -- nothing to seed.
+        return
     if await db.items.count_documents({"restaurantId": rid}) > 0:
         return
     seed = SEEDS[rid]
@@ -446,7 +475,49 @@ async def ensure_seed(rid):
         {"$setOnInsert": {"restaurantId": rid, "periodStart": ws, "periodEnd": we, "dishSales": {}, "itemCounts": {}}}, upsert=True)
     await db.areas.update_one({"restaurantId": rid}, {"$setOnInsert": {"restaurantId": rid, "list": DEFAULT_AREAS}}, upsert=True)
 
+def _pg_state_store_id(rid):
+    return RESTAURANT_TO_PG_STORE.get(rid, rid)
+
+async def _pg_get_store_state(rid):
+    row = await db_pg.pool().fetchrow(
+        "SELECT revision, areas, sales_period FROM store_state WHERE store_id=$1", _pg_state_store_id(rid))
+    ws, we = _workweek()
+    return {
+        "revision": row["revision"] if row else 0,
+        "areas": row["areas"] if row and row["areas"] is not None else DEFAULT_AREAS,
+        "salesPeriod": row["sales_period"] if row and row["sales_period"] is not None
+            else {"periodStart": ws, "periodEnd": we, "dishSales": {}, "itemCounts": {}},
+    }
+
+async def _pg_check_and_bump_revision(rid, request: Request):
+    # Same contract as the Mongo version below: an If-Match header must equal the
+    # current revision (409 otherwise); the bump itself is an atomic compare-and-swap.
+    store_id = _pg_state_store_id(rid)
+    raw = request.headers.get("if-match")
+    pool = db_pg.pool()
+    if raw:
+        expected = raw.strip('"')
+        new = None
+        if expected.isdigit():
+            new = await pool.fetchval(
+                "UPDATE store_state SET revision=revision+1, updated_at=now() WHERE store_id=$1 AND revision=$2 RETURNING revision",
+                store_id, int(expected))
+            if new is None and int(expected) == 0:
+                new = await pool.fetchval(
+                    "INSERT INTO store_state (store_id, revision) VALUES ($1, 1) ON CONFLICT (store_id) DO NOTHING RETURNING revision",
+                    store_id)
+        if new is None:
+            latest = await pool.fetchval("SELECT revision FROM store_state WHERE store_id=$1", store_id) or 0
+            raise HTTPException(409, f"State changed by another collaborator; reload before saving (revision {latest})")
+        return new
+    return await pool.fetchval(
+        """INSERT INTO store_state (store_id, revision) VALUES ($1, 1)
+           ON CONFLICT (store_id) DO UPDATE SET revision=store_state.revision+1, updated_at=now()
+           RETURNING revision""", store_id)
+
 async def _check_and_bump_revision(rid, request: Request):
+    if USE_PG:
+        return await _pg_check_and_bump_revision(rid, request)
     raw = request.headers.get("if-match")
     current = await db.state_versions.find_one({"restaurantId": rid}, {"_id": 0, "revision": 1})
     revision = (current or {}).get("revision", 0)
@@ -493,23 +564,49 @@ def _clean_user(doc):
     return {"id": doc["id"], "email": doc["email"], "role": doc["role"],
             "locations": doc.get("locations", [])}
 
+# Postgres home of the Mongo `users` collection (table app_users). Same account model,
+# same PBKDF2 hashes and user ids, so migrated users keep their passwords and any
+# session token issued before cutover stays valid. `locations` keeps the Mongo-side
+# restaurant ids (berts/rudds/papa_leonis) because that's what tokens and the
+# collaboration_security middleware compare against.
+def _pg_user_row(row):
+    return {"id": row["id"], "email": row["email"], "role": row["role"],
+            "locations": list(row["locations"] or []), "passwordHash": row["password_hash"]}
+
+async def _pg_insert_user(user):
+    try:
+        await db_pg.pool().execute(
+            "INSERT INTO app_users (id, email, password_hash, role, locations) VALUES ($1,$2,$3,$4,$5)",
+            user["id"], user["email"], user["passwordHash"], user["role"], user["locations"])
+    except asyncpg.UniqueViolationError:
+        raise HTTPException(409, "A user with that email already exists")
+
 @api_router.post("/auth/bootstrap")
 async def auth_bootstrap(body: BootstrapIn):
     if not BOOTSTRAP_TOKEN or not hmac.compare_digest(body.bootstrapToken, BOOTSTRAP_TOKEN):
         raise HTTPException(403, "Invalid bootstrap token")
-    if await db.users.count_documents({}):
+    existing = (await db_pg.pool().fetchval("SELECT count(*) FROM app_users")) if USE_PG else await db.users.count_documents({})
+    if existing:
         raise HTTPException(409, "Bootstrap has already been completed")
     if body.role != "owner" or not body.email.strip() or len(body.password) < 12:
         raise HTTPException(400, "The first account must be an owner with a 12-character password")
     user = {"id": "usr_" + uuid.uuid4().hex[:12], "email": body.email.strip().lower(),
             "passwordHash": _password_hash(body.password), "role": "owner",
             "locations": sorted(RIDS), "createdAt": _now_iso()}
-    await db.users.insert_one(user)
+    if USE_PG:
+        await _pg_insert_user(user)
+    else:
+        await db.users.insert_one(user)
     return {"user": _clean_user(user), "token": _token(user)}
 
 @api_router.post("/auth/login")
 async def auth_login(body: LoginIn):
-    user = await db.users.find_one({"email": body.email.strip().lower()})
+    email = body.email.strip().lower()
+    if USE_PG:
+        row = await db_pg.pool().fetchrow("SELECT * FROM app_users WHERE email=$1", email)
+        user = _pg_user_row(row) if row else None
+    else:
+        user = await db.users.find_one({"email": email})
     if not user or not _password_ok(body.password, user.get("passwordHash", "")):
         raise HTTPException(401, "Invalid email or password")
     return {"user": _clean_user(user), "token": _token(user)}
@@ -536,6 +633,9 @@ async def auth_create_user(body: UserIn, request: Request):
     user = {"id": "usr_" + uuid.uuid4().hex[:12], "email": body.email.strip().lower(),
             "passwordHash": _password_hash(body.password), "role": body.role,
             "locations": locations, "createdAt": _now_iso()}
+    if USE_PG:
+        await _pg_insert_user(user)
+        return _clean_user(user)
     try:
         await db.users.insert_one(user)
     except Exception:
@@ -546,9 +646,107 @@ async def auth_create_user(body: UserIn, request: Request):
 async def restaurants():
     return RESTAURANTS
 
+# ---- Adjustments + reporting periods (Postgres) ----
+# Both are saved by the frontend as a whole per-store array (PUT /state/{rid}/{collection}),
+# so the Postgres writer replaces the store's rows in one transaction. `ref` keeps the
+# client-generated id ("adj_..." / "period_...").
+ADJ_ADD_REASONS = {"transfer_in", "count_correction_add", "other_add"}  # mirrors ADJUSTMENT_REASONS in frontend/src/lib/calc.js
+
+def _pg_adj_rows(rid, payload):
+    rows = []
+    for a in payload:
+        if not isinstance(a, dict):
+            continue
+        if not a.get("controlNumber") or not a.get("date") or not a.get("reason"):
+            raise HTTPException(400, f"adjustment {a.get('id') or '?'} needs an item, date and reason")
+        try:
+            day = _pg_date(a["date"])
+        except ValueError:
+            raise HTTPException(400, f"adjustment {a.get('id') or '?'} has an invalid date")
+        rows.append((a.get("id") or "adj_" + uuid.uuid4().hex[:10], a["controlNumber"], f"{rid}_{a['controlNumber']}",
+                     day, a["reason"], "add" if a["reason"] in ADJ_ADD_REASONS else "remove",
+                     "portion" if a.get("qtyBasis") == "portion" else "purchase", f(a.get("qty")), a.get("note") or "", a.get("createdBy") or None,
+                     _ts_in(a.get("createdAt")) or datetime.now(timezone.utc)))
+    return rows
+
+async def _pg_replace_adjustments(rid, rows):
+    store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM adjustments WHERE store_id=$1", store_id)
+            # item_code links to the catalog when the item still exists; control_number is the source of truth.
+            await conn.executemany(
+                """INSERT INTO adjustments (store_id, ref, control_number, item_code, date, reason, direction, qty_basis,
+                       qty, note, created_by, created_at)
+                   VALUES ($1, $2, $3, (SELECT code FROM items WHERE code=$4), $5, $6, $7, $8, $9, $10, $11, $12)""",
+                [(store_id, *r) for r in rows])
+    finally:
+        await db_pg.pool().release(conn)
+
+async def _pg_list_adjustments(rid):
+    rows = await db_pg.pool().fetch("SELECT * FROM adjustments WHERE store_id=$1 ORDER BY date, created_at",
+                                    RESTAURANT_TO_PG_STORE.get(rid, rid))
+    return [{"id": r["ref"], "date": r["date"].isoformat(), "controlNumber": r["control_number"], "reason": r["reason"],
+             "qtyBasis": r["qty_basis"], "qty": f(r["qty"]), "note": r["note"] or "",
+             "createdAt": _ts_out(r["created_at"])} for r in rows]
+
+def _pg_period_rows(rid, payload):
+    rows = []
+    for p in payload:
+        if not isinstance(p, dict):
+            continue
+        try:
+            start, end = _pg_date(p.get("periodStart")), _pg_date(p.get("periodEnd"))
+        except ValueError:
+            start = end = None
+        if not start or not end:
+            raise HTTPException(400, f"reporting period {p.get('name') or p.get('id') or '?'} needs valid start and end dates")
+        rows.append((p.get("id") or "period_" + uuid.uuid4().hex[:10], p.get("name"), start, end,
+                     p.get("status") if p.get("status") in ("draft", "closed") else "closed",
+                     p.get("dishSales") or {}, p.get("itemCounts") or {}, _ts_in(p.get("savedAt"))))
+    return rows
+
+async def _pg_replace_reporting_periods(rid, rows):
+    store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM reporting_periods WHERE store_id=$1", store_id)
+            await conn.executemany(
+                """INSERT INTO reporting_periods (store_id, ref, name, period_start, period_end, status, dish_sales,
+                       item_counts, saved_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                [(store_id, *r) for r in rows])
+    finally:
+        await db_pg.pool().release(conn)
+
+async def _pg_list_reporting_periods(rid):
+    rows = await db_pg.pool().fetch("SELECT * FROM reporting_periods WHERE store_id=$1 ORDER BY period_start, created_at",
+                                    RESTAURANT_TO_PG_STORE.get(rid, rid))
+    return [{"id": r["ref"], "name": r["name"], "periodStart": r["period_start"].isoformat(),
+             "periodEnd": r["period_end"].isoformat(), "dishSales": r["dish_sales"], "itemCounts": r["item_counts"],
+             "savedAt": _ts_out(r["saved_at"]), "status": r["status"]} for r in rows]
+
+_PG_REPLACERS = {"adjustments": (_pg_adj_rows, _pg_replace_adjustments),
+                 "reportingPeriods": (_pg_period_rows, _pg_replace_reporting_periods)}
+
+async def _adjustments_for(rid):
+    if USE_PG:
+        return await _pg_list_adjustments(rid)
+    return await db.adjustments.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+
 @api_router.get("/state/{rid}")
 async def get_state(rid: str):
     check_rid(rid)
+    if USE_PG:
+        # items/purchases/dishes/prepStock/prepLogs come from /api/pg/* -- the frontend's
+        # fetchState merges those over these empty lists -- so nothing here touches Mongo.
+        state = {name: [] for name in COLL_MAP}
+        state["adjustments"] = await _pg_list_adjustments(rid)
+        state["reportingPeriods"] = await _pg_list_reporting_periods(rid)
+        state.update(await _pg_get_store_state(rid))
+        return state
     await ensure_seed(rid)
     state = {}
     for name, coll in COLL_MAP.items():
@@ -568,6 +766,13 @@ async def put_sales_period(rid: str, payload: dict, request: Request):
     check_rid(rid)
     revision = await _check_and_bump_revision(rid, request)
     payload = dict(payload)
+    if USE_PG:
+        payload.pop("restaurantId", None)
+        await db_pg.pool().execute(
+            """INSERT INTO store_state (store_id, sales_period) VALUES ($1, $2)
+               ON CONFLICT (store_id) DO UPDATE SET sales_period=$2, updated_at=now()""",
+            _pg_state_store_id(rid), payload)
+        return {"ok": True, "revision": revision}
     payload["restaurantId"] = rid
     await db.sales_periods.replace_one({"restaurantId": rid}, payload, upsert=True)
     return {"ok": True, "revision": revision}
@@ -576,6 +781,12 @@ async def put_sales_period(rid: str, payload: dict, request: Request):
 async def put_areas(rid: str, payload: List[Any], request: Request):
     check_rid(rid)
     revision = await _check_and_bump_revision(rid, request)
+    if USE_PG:
+        await db_pg.pool().execute(
+            """INSERT INTO store_state (store_id, areas) VALUES ($1, $2)
+               ON CONFLICT (store_id) DO UPDATE SET areas=$2, updated_at=now()""",
+            _pg_state_store_id(rid), payload)
+        return {"ok": True, "revision": revision}
     await db.areas.update_one({"restaurantId": rid}, {"$set": {"restaurantId": rid, "list": payload}}, upsert=True)
     return {"ok": True, "revision": revision}
 
@@ -584,6 +795,14 @@ async def put_collection(rid: str, collection: str, payload: List[Any], request:
     check_rid(rid)
     if collection not in WRITABLE:
         raise HTTPException(400, "collection not writable")
+    if USE_PG:
+        if collection not in _PG_REPLACERS:
+            # items/purchases/dishes have their own /api/pg/* writers; nothing may land in Mongo.
+            raise HTTPException(400, f"{collection} is saved through /api/pg in Postgres mode")
+        rows = _PG_REPLACERS[collection][0](rid, payload)  # validate before bumping the revision
+        revision = await _check_and_bump_revision(rid, request)
+        await _PG_REPLACERS[collection][1](rid, rows)
+        return {"ok": True, "count": len(rows), "revision": revision}
     revision = await _check_and_bump_revision(rid, request)
     coll = COLL_MAP[collection]
     # Insert the new snapshot FIRST (tagged with a one-off batch marker), then delete
@@ -1177,14 +1396,39 @@ class ProjectionIn(BaseModel):
     note: str = ""
     enteredBy: str = ""
 
+def _pg_projection_doc(rid, r):
+    return {"date": r["date"].isoformat(), "amount": f(r["amount"]), "note": r["note"], "enteredBy": r["entered_by"],
+            "restaurantId": rid, "updatedAt": _ts_out(r["updated_at"])}
+
+async def _projections_for(rid, limit=200):
+    """Newest first. Postgres: store_sales_projections, one row per store and date."""
+    if USE_PG:
+        rows = await db_pg.pool().fetch(
+            f"SELECT * FROM store_sales_projections WHERE store_id=$1 ORDER BY date DESC LIMIT {int(limit)}",
+            RESTAURANT_TO_PG_STORE.get(rid, rid))
+        return [_pg_projection_doc(rid, r) for r in rows]
+    return await db.projected_sales.find({"restaurantId": rid}, {"_id": 0}).sort("date", -1).limit(limit).to_list(limit)
+
 @api_router.get("/projections/{rid}")
 async def get_projections(rid: str):
     check_rid(rid)
-    return await db.projected_sales.find({"restaurantId": rid}, {"_id": 0}).sort("date", -1).limit(60).to_list(60)
+    return await _projections_for(rid, 60)
 
 @api_router.put("/projections/{rid}")
 async def put_projection(rid: str, body: ProjectionIn):
     check_rid(rid)
+    if USE_PG:
+        try:
+            day = _pg_date(body.date)
+        except ValueError:
+            day = None
+        if not day:
+            raise HTTPException(400, "date must be YYYY-MM-DD")
+        await db_pg.pool().execute(
+            """INSERT INTO store_sales_projections (store_id, date, amount, note, entered_by) VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (store_id, date) DO UPDATE SET amount=$3, note=$4, entered_by=$5, updated_at=now()""",
+            RESTAURANT_TO_PG_STORE.get(rid, rid), day, body.amount, body.note, body.enteredBy)
+        return {"ok": True}
     await db.projected_sales.update_one({"restaurantId": rid, "date": body.date},
         {"$set": {**body.model_dump(), "restaurantId": rid, "updatedAt": _now_iso()}}, upsert=True)
     return {"ok": True}
@@ -1197,8 +1441,9 @@ async def _get_pin(rid):
     return (cfg or {}).get("staffPin") or DEFAULT_STAFF_PIN
 
 @api_router.get("/staff/{rid}/pin")
-async def get_pin(rid: str):
+async def get_pin(rid: str, request: Request):
     check_rid(rid)
+    _require_manager(request)
     cfg = await db.settings.find_one({"restaurantId": rid, "key": "staff"}, {"_id": 0})
     return {"staffPin": (cfg or {}).get("staffPin") or DEFAULT_STAFF_PIN, "custom": bool((cfg or {}).get("staffPin"))}
 
@@ -1646,14 +1891,56 @@ async def push_unsubscribe(rid: str, body: PushUnsubscribeIn, request: Request):
     return {"ok": True}
 
 # ---------------- Prep reporting ----------------
+async def _pg_prep_report_sources(rid, frm, to):
+    """The prep report's inputs from Postgres, in the Mongo document shapes prep_report
+    aggregates over: count sessions (+ entries), prep logs, prep recipes, prep items."""
+    store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
+    start, end = _pg_date(frm), _pg_date(to)
+    conn = await db_pg.pool().acquire()
+    try:
+        session_rows = await conn.fetch(
+            """SELECT * FROM count_sessions WHERE store_id=$1 AND count_date BETWEEN $2 AND $3
+               ORDER BY count_date LIMIT 500""", store_id, start, end)
+        line_rows = await conn.fetch(
+            "SELECT * FROM count_lines WHERE session_id = ANY($1::uuid[])", [r["id"] for r in session_rows])
+        log_rows = await conn.fetch(
+            "SELECT * FROM prep_logs WHERE store_id=$1 AND date BETWEEN $2 AND $3 ORDER BY date LIMIT 1000",
+            store_id, start, end)
+        recipe_rows = await conn.fetch(
+            """SELECT id, name, yield_uom, yield_qty, prep_par FROM dishes WHERE store_id=$1 AND recipe_type='prep'
+               ORDER BY sort_order NULLS LAST, name""",
+            store_id)
+        item_rows = await conn.fetch(
+            "SELECT id, name, container FROM prep_items WHERE store_id=$1 ORDER BY sort_order NULLS LAST, name", store_id)
+    finally:
+        await db_pg.pool().release(conn)
+    entries = {}
+    for l in line_rows:
+        entries.setdefault(l["session_id"], []).append({
+            "recipeId": str(l["dish_id"]) if l["dish_id"] else None,
+            "prepItemId": str(l["prep_item_id"]) if l["prep_item_id"] else None,
+            "onHand": f(l["qty"]) if l["status"] == "counted" and l["qty"] is not None else None,
+            "savedBy": l["saved_by"] or ""})
+    sessions = [{"id": str(r["id"]), "date": r["count_date"].isoformat(), "status": r["status"],
+                 "countedBy": r["counted_by_name"] or "", "revision": 1, "entries": entries.get(r["id"], [])}
+                for r in session_rows]
+    recipes = [{"id": str(r["id"]), "name": r["name"], "yieldUOM": r["yield_uom"] or "",
+                "yieldQty": r["yield_qty"], "prepPar": r["prep_par"]} for r in recipe_rows]
+    pitems = [{"id": str(r["id"]), "name": r["name"], "vesselName": r["container"] or "vessel"} for r in item_rows]
+    return sessions, [_pg_log_to_api(r) for r in log_rows], recipes, pitems
+
 @api_router.get("/reports/{rid}/prep")
 async def prep_report(rid: str, frm: Optional[str] = Query(None, alias="from"), to: Optional[str] = Query(None)):
     check_rid(rid)
     frm = frm or (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
     to = to or _today()
-    sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": frm, "$lte": to}}, {"_id": 0}).sort("date", 1).to_list(500)
-    logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": frm, "$lte": to}}, {"_id": 0}).sort("date", 1).to_list(1000)
-    recipes = await _prep_recipes(rid)
+    if USE_PG:
+        sessions, logs, recipes, pitems = await _pg_prep_report_sources(rid, frm, to)
+    else:
+        sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": frm, "$lte": to}}, {"_id": 0}).sort("date", 1).to_list(500)
+        logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": frm, "$lte": to}}, {"_id": 0}).sort("date", 1).to_list(1000)
+        recipes = await _prep_recipes(rid)
+        pitems = await db.prep_items.find({"restaurantId": rid}, {"_id": 0}).to_list(1000)
     out = []
     for r in recipes:
         counts = [{"date": s["date"], "onHand": e["onHand"], "by": e.get("savedBy") or s.get("countedBy", "")}
@@ -1665,7 +1952,6 @@ async def prep_report(rid: str, frm: Optional[str] = Query(None, alias="from"), 
         out.append({"recipeId": r["id"], "name": r.get("name", ""), "yieldUOM": r.get("yieldUOM", ""),
                     "counts": counts, "produced": round(produced, 2), "producedCost": round(produced_cost, 2),
                     "usedBySales": round(used, 2), "sentToService": round(to_service, 2)})
-    pitems = await db.prep_items.find({"restaurantId": rid}, {"_id": 0}).to_list(1000)
     pout = []
     for p in pitems:
         counts = [{"date": s["date"], "onHand": e["onHand"], "by": e.get("savedBy") or s.get("countedBy", "")}
@@ -1733,13 +2019,16 @@ async def run_par_advisor(rid: str):
     if not api_key:
         raise HTTPException(500, "AI key not configured")
     from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
-    recipes = await _prep_recipes(rid)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).date().isoformat()
+    if USE_PG:
+        sessions, logs, recipes, _ = await _pg_prep_report_sources(rid, cutoff, _today())
+    else:
+        recipes = await _prep_recipes(rid)
+        sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(200)
+        logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(500)
     if not recipes:
         raise HTTPException(400, "No prep recipes yet")
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).date().isoformat()
-    sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(200)
-    logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(500)
-    projections = await db.projected_sales.find({"restaurantId": rid}, {"_id": 0}).to_list(200)
+    projections = await _projections_for(rid)
     stats_lines = []
     total_counts = 0
     for r in recipes:
@@ -1786,18 +2075,54 @@ async def run_par_advisor(rid: str):
                          "status": "pending", "createdAt": _now_iso()})
     except Exception:
         trends = full[:800]
-    if recs:
+    if recs and USE_PG:
+        await db_pg.pool().executemany(
+            """INSERT INTO par_recommendations (id, store_id, recipe_id, recipe_name, current_par, recommended_par,
+                   reasoning, status, created_at)
+               VALUES ($1, $2, $3::uuid, $4, $5, $6, $7, 'pending', $8)""",
+            [(r["id"], RESTAURANT_TO_PG_STORE.get(rid, rid), r["recipeId"], r["recipeName"], r["currentPar"],
+              r["recommendedPar"], r["reasoning"], _ts_in(r["createdAt"])) for r in recs])
+    elif recs:
         await db.par_recommendations.insert_many([dict(r) for r in recs])
     return {"recommendations": recs, "trends": trends, "sparse": sparse}
+
+def _pg_par_rec_doc(rid, r):
+    doc = {"id": r["id"], "restaurantId": rid, "recipeId": str(r["recipe_id"]), "recipeName": r["recipe_name"],
+           "currentPar": f(r["current_par"]), "recommendedPar": f(r["recommended_par"]), "reasoning": r["reasoning"],
+           "status": r["status"], "createdAt": _ts_out(r["created_at"])}
+    if r["applied_at"]:
+        doc["appliedAt"] = _ts_out(r["applied_at"])
+    return doc
 
 @api_router.get("/ai/par-advisor/{rid}")
 async def get_par_recs(rid: str):
     check_rid(rid)
+    if USE_PG:
+        rows = await db_pg.pool().fetch(
+            "SELECT * FROM par_recommendations WHERE store_id=$1 AND status='pending' ORDER BY created_at DESC LIMIT 50",
+            RESTAURANT_TO_PG_STORE.get(rid, rid))
+        return [_pg_par_rec_doc(rid, r) for r in rows]
     return await db.par_recommendations.find({"restaurantId": rid, "status": "pending"}, {"_id": 0}).sort("createdAt", -1).to_list(50)
 
 @api_router.post("/ai/par-advisor/{rid}/{rec_id}/apply")
 async def apply_par_rec(rid: str, rec_id: str):
     check_rid(rid)
+    if USE_PG:
+        store_id = RESTAURANT_TO_PG_STORE.get(rid, rid)
+        conn = await db_pg.pool().acquire()
+        try:
+            async with conn.transaction():
+                rec = await conn.fetchrow(
+                    "SELECT recipe_id, recommended_par FROM par_recommendations WHERE store_id=$1 AND id=$2 FOR UPDATE",
+                    store_id, rec_id)
+                if not rec:
+                    raise HTTPException(404, "recommendation not found")
+                await conn.execute("UPDATE dishes SET prep_par=$1, updated_at=now() WHERE id=$2 AND store_id=$3",
+                                   rec["recommended_par"], rec["recipe_id"], store_id)
+                await conn.execute("UPDATE par_recommendations SET status='applied', applied_at=now() WHERE id=$1", rec_id)
+        finally:
+            await db_pg.pool().release(conn)
+        return {"ok": True}
     rec = await db.par_recommendations.find_one({"restaurantId": rid, "id": rec_id})
     if not rec:
         raise HTTPException(404, "recommendation not found")
@@ -1808,6 +2133,10 @@ async def apply_par_rec(rid: str, rec_id: str):
 @api_router.post("/ai/par-advisor/{rid}/{rec_id}/dismiss")
 async def dismiss_par_rec(rid: str, rec_id: str):
     check_rid(rid)
+    if USE_PG:
+        await db_pg.pool().execute("UPDATE par_recommendations SET status='dismissed' WHERE store_id=$1 AND id=$2",
+                                   RESTAURANT_TO_PG_STORE.get(rid, rid), rec_id)
+        return {"ok": True}
     await db.par_recommendations.update_one({"restaurantId": rid, "id": rec_id}, {"$set": {"status": "dismissed"}})
     return {"ok": True}
 
@@ -1891,7 +2220,7 @@ async def store_summary(r):
         purchases = await db.purchases.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         prep_stock = await _prep_stock_list(rid)
-    adjustments = await db.adjustments.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+    adjustments = await _adjustments_for(rid)
     items_by_cn = {i["controlNumber"]: i for i in items}
     by_id = {d["id"]: d for d in dishes}
     inv_value = sum(f(i.get("currentStock")) * item_derived(i)["price"] for i in items)
@@ -1971,6 +2300,26 @@ class ChatIn(BaseModel):
     restaurantId: str
     message: str
 
+# Sous chat history (Postgres: ai_chat_messages).
+async def _chat_history(rid, limit, oldest_first=False):
+    """The `limit` most recent messages, returned in chronological order -- or, with
+    oldest_first, the first `limit` messages ever (matching the history screen's query)."""
+    if USE_PG:
+        rows = await db_pg.pool().fetch(
+            f"SELECT role, content, ts FROM ai_chat_messages WHERE store_id=$1 ORDER BY ts {'ASC' if oldest_first else 'DESC'} LIMIT {int(limit)}",
+            RESTAURANT_TO_PG_STORE.get(rid, rid))
+        msgs = [{"restaurantId": rid, "role": r["role"], "content": r["content"], "ts": _ts_out(r["ts"])} for r in rows]
+    else:
+        msgs = await db.chat_messages.find({"restaurantId": rid}, {"_id": 0}).sort("ts", 1 if oldest_first else -1).limit(limit).to_list(limit)
+    return msgs if oldest_first else msgs[::-1]
+
+async def _chat_add(rid, role, content, ts):
+    if USE_PG:
+        await db_pg.pool().execute("INSERT INTO ai_chat_messages (store_id, role, content, ts) VALUES ($1, $2, $3, $4)",
+                                   RESTAURANT_TO_PG_STORE.get(rid, rid), role, content, _ts_in(ts))
+    else:
+        await db.chat_messages.insert_one(ChatMessage(restaurantId=rid, role=role, content=content, ts=ts).to_mongo())
+
 @api_router.post("/ai/chat")
 async def ai_chat(body: ChatIn, request: Request):
     check_rid(body.restaurantId)
@@ -1991,10 +2340,9 @@ async def ai_chat(body: ChatIn, request: Request):
         purchases = await db.purchases.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         prep_stock = await _prep_stock_list(rid)
-    adjustments = await db.adjustments.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+    adjustments = await _adjustments_for(rid)
     context = build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock)
-    history = await db.chat_messages.find({"restaurantId": rid}, {"_id": 0}).sort("ts", -1).limit(10).to_list(10)
-    history.reverse()
+    history = await _chat_history(rid, 10)
     system = ("You are Sous, an expert restaurant operations copilot for a multi-unit restaurant group. "
               "You answer questions about inventory, food costing, recipes, prep planning, waste, and margins. "
               "Be concise, practical, and specific — cite actual numbers from the live data when relevant. "
@@ -2008,7 +2356,7 @@ async def ai_chat(body: ChatIn, request: Request):
     chat = (LlmChat(api_key=api_key, session_id=f"sous-{rid}", system_message=system)
             .with_model("openai", "gpt-5.4"))
     now = datetime.now(timezone.utc).isoformat()
-    await db.chat_messages.insert_one(ChatMessage(restaurantId=rid, role="user", content=body.message, ts=now).to_mongo())
+    await _chat_add(rid, "user", body.message, now)
 
     async def gen():
         full = ""
@@ -2023,8 +2371,7 @@ async def ai_chat(body: ChatIn, request: Request):
             logger.error(f"AI stream error: {e}")
             yield f"data: {json.dumps({'error': 'The assistant hit an error. Please try again.'})}\n\n"
         if full:
-            await db.chat_messages.insert_one(ChatMessage(restaurantId=rid, role="assistant", content=full,
-                                                          ts=datetime.now(timezone.utc).isoformat()).to_mongo())
+            await _chat_add(rid, "assistant", full, datetime.now(timezone.utc).isoformat())
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream",
@@ -2033,13 +2380,15 @@ async def ai_chat(body: ChatIn, request: Request):
 @api_router.get("/ai/history/{rid}")
 async def ai_history(rid: str):
     check_rid(rid)
-    msgs = await db.chat_messages.find({"restaurantId": rid}, {"_id": 0}).sort("ts", 1).limit(100).to_list(100)
-    return msgs
+    return await _chat_history(rid, 100, oldest_first=True)
 
 @api_router.delete("/ai/history/{rid}")
 async def ai_clear(rid: str):
     check_rid(rid)
-    await db.chat_messages.delete_many({"restaurantId": rid})
+    if USE_PG:
+        await db_pg.pool().execute("DELETE FROM ai_chat_messages WHERE store_id=$1", RESTAURANT_TO_PG_STORE.get(rid, rid))
+    else:
+        await db.chat_messages.delete_many({"restaurantId": rid})
     return {"ok": True}
 
 # ---------------- Purchase Orders / Approval chain ----------------
@@ -2078,8 +2427,170 @@ def _po_total(lines):
 def _po_event(status, by, note=""):
     return {"status": status, "at": datetime.now(timezone.utc).isoformat(), "by": by or "", "note": note or ""}
 
+# ---- Purchase-order storage ----
+# Every PO route reads/writes whole order documents through these helpers, so the route
+# logic (status machine, approval rules, receiving) is identical in both modes. Mongo
+# keeps one document per order; Postgres stores the header in purchase_orders (keyed by
+# `ref`, the public "po_..." id) and the lines in purchase_order_lines, and rebuilds the
+# same document shape on read. See supabase/pending/02_purchase_orders.sql.
+_PO_COLS = {"vendor": "vendor_name", "status": "status", "createdBy": "created_by", "note": "note",
+            "total": "total", "createdAt": "created_at", "submittedAt": "submitted_at",
+            "approvedBy": "approved_by", "approvedAt": "approved_at", "rejectedReason": "rejected_reason",
+            "sentAt": "sent_at", "receivedAt": "received_at", "receiptStartedAt": "receipt_started_at",
+            "invoiceNumber": "invoice_number", "receiptMatch": "receipt_match",
+            "emailedTo": "emailed_to", "emailedAt": "emailed_at", "history": "history"}
+_PO_TS = {"createdAt", "submittedAt", "approvedAt", "sentAt", "receivedAt", "receiptStartedAt", "emailedAt"}
+_PO_OPTIONAL = ("receiptStartedAt", "invoiceNumber", "receiptMatch", "emailedTo", "emailedAt")
+_PO_SORT = {"createdAt": "created_at", "submittedAt": "submitted_at", "receivedAt": "received_at"}
+
+def _ts_in(v):
+    return datetime.fromisoformat(v) if isinstance(v, str) and v else (v or None)
+
+def _ts_out(v):
+    return v.isoformat() if v else None
+
+def _pg_po_doc(row, lines):
+    doc = {"id": row["ref"], "restaurantId": PG_STORE_TO_RESTAURANT.get(row["store_id"], row["store_id"]),
+           "lines": [{"controlNumber": l["control_number"], "name": l["name"], "vendorSku": l["vendor_sku"],
+                      "qty": f(l["qty"]), "purchaseUnit": l["unit"] or "case", "unitCost": f(l["unit_price"]),
+                      "receivedQty": f(l["received_qty"]), "lineTotal": f(l["extended"])} for l in lines]}
+    for key, col in _PO_COLS.items():
+        v = row[col]
+        doc[key] = _ts_out(v) if key in _PO_TS else (f(v) if key == "total" else v)
+    doc["createdBy"] = doc["createdBy"] or ""
+    for key in _PO_OPTIONAL:
+        if doc[key] is None:
+            doc.pop(key)
+    return doc
+
+async def _pg_po_write_lines(conn, po_uuid, rid, lines):
+    await conn.execute("DELETE FROM purchase_order_lines WHERE po_id=$1", po_uuid)
+    if lines:
+        # item_code links to the migrated catalog when the item exists (NULL otherwise, so a
+        # line for a since-deleted item never fails the FK); control_number is the source of truth.
+        await conn.executemany(
+            """INSERT INTO purchase_order_lines (po_id, position, control_number, item_code, name, vendor_sku,
+                   qty, unit, unit_price, extended, received_qty)
+               VALUES ($1, $2, $3, (SELECT code FROM items WHERE code=$4), $5, $6, $7, $8, $9, $10, $11)""",
+            [(po_uuid, i, l.get("controlNumber"), f"{rid}_{l.get('controlNumber')}", l.get("name") or "",
+              l.get("vendorSku") or "", f(l.get("qty")), l.get("purchaseUnit") or "case", f(l.get("unitCost")),
+              f(l.get("lineTotal")), f(l.get("receivedQty"))) for i, l in enumerate(lines)])
+
+async def _pg_po_fetch(where, args, order="created_at DESC", limit=2000):
+    pool = db_pg.pool()
+    rows = await pool.fetch(f"SELECT * FROM purchase_orders WHERE {where} ORDER BY {order} NULLS LAST LIMIT {int(limit)}", *args)
+    if not rows:
+        return []
+    lines = await pool.fetch("SELECT * FROM purchase_order_lines WHERE po_id = ANY($1::uuid[]) ORDER BY position",
+                             [r["id"] for r in rows])
+    by_po = {}
+    for l in lines:
+        by_po.setdefault(l["po_id"], []).append(l)
+    return [_pg_po_doc(r, by_po.get(r["id"], [])) for r in rows]
+
+async def _po_find(rid, oid):
+    if USE_PG:
+        found = await _pg_po_fetch("store_id=$1 AND ref=$2", [RESTAURANT_TO_PG_STORE.get(rid, rid), oid], limit=1)
+        return found[0] if found else None
+    return await db.purchase_orders.find_one({"restaurantId": rid, "id": oid}, {"_id": 0})
+
+async def _po_query(rid=None, status=None, vendor=None, exclude_status=None, sort="createdAt", descending=True, limit=2000):
+    if USE_PG:
+        conds, args = [], []
+        for col, op, val in (("store_id", "=", RESTAURANT_TO_PG_STORE.get(rid, rid) if rid else None),
+                             ("status", "=", status), ("vendor_name", "=", vendor), ("status", "<>", exclude_status)):
+            if val is not None:
+                args.append(val)
+                conds.append(f"{col} {op} ${len(args)}")
+        order = f"{_PO_SORT[sort]} {'DESC' if descending else 'ASC'}"
+        return await _pg_po_fetch(" AND ".join(conds) or "TRUE", args, order, limit)
+    q = {}
+    if rid:
+        q["restaurantId"] = rid
+    if status:
+        q["status"] = status
+    if vendor is not None:
+        q["vendor"] = vendor
+    if exclude_status:
+        q["status"] = {"$ne": exclude_status}
+    return await db.purchase_orders.find(q, {"_id": 0}).sort(sort, -1 if descending else 1).to_list(limit)
+
+async def _po_insert(po):
+    if not USE_PG:
+        await db.purchase_orders.insert_one(dict(po))
+        return
+    rid = po["restaurantId"]
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            po_uuid = await conn.fetchval(
+                """INSERT INTO purchase_orders (ref, store_id, vendor_name, vendor_id, status, created_by, note, total,
+                       created_at, history)
+                   VALUES ($1, $2, $3, (SELECT id FROM vendors WHERE lower(name)=lower($3) LIMIT 1), $4, $5, $6, $7, $8, $9)
+                   RETURNING id""",
+                po["id"], RESTAURANT_TO_PG_STORE.get(rid, rid), po.get("vendor") or "Unassigned", po["status"],
+                po.get("createdBy") or "", po.get("note") or "", f(po.get("total")), _ts_in(po.get("createdAt")),
+                po.get("history") or [])
+            await _pg_po_write_lines(conn, po_uuid, rid, po.get("lines") or [])
+    finally:
+        await db_pg.pool().release(conn)
+
+async def _po_update(rid, oid, set_fields=None, events=(), expect_status=None, unset=()):
+    """Apply field changes (and append history events) to one order; returns False when
+    no order matched -- including when `expect_status` no longer holds (compare-and-swap)."""
+    set_fields = dict(set_fields or {})
+    if not USE_PG:
+        update = {}
+        if set_fields:
+            update["$set"] = set_fields
+        if unset:
+            update["$unset"] = {k: "" for k in unset}
+        if events:
+            update["$push"] = {"history": {"$each": list(events)}}
+        q = {"restaurantId": rid, "id": oid}
+        if expect_status:
+            q["status"] = expect_status
+        return (await db.purchase_orders.update_one(q, update)).matched_count > 0
+    lines = set_fields.pop("lines", None)
+    args = [RESTAURANT_TO_PG_STORE.get(rid, rid), oid]
+    sets = []
+    for key, v in set_fields.items():
+        args.append(_ts_in(v) if key in _PO_TS else v)
+        sets.append(f"{_PO_COLS[key]}=${len(args)}")
+        if key == "vendor":
+            sets.append(f"vendor_id=(SELECT id FROM vendors WHERE lower(name)=lower(${len(args)}) LIMIT 1)")
+    sets += [f"{_PO_COLS[k]}=NULL" for k in unset]
+    if events:
+        args.append(list(events))
+        sets.append(f"history = history || ${len(args)}::jsonb")
+    where = "store_id=$1 AND ref=$2"
+    if expect_status:
+        args.append(expect_status)
+        where += f" AND status=${len(args)}"
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            if sets:
+                po_uuid = await conn.fetchval(f"UPDATE purchase_orders SET {', '.join(sets)} WHERE {where} RETURNING id", *args)
+            else:
+                po_uuid = await conn.fetchval(f"SELECT id FROM purchase_orders WHERE {where} FOR UPDATE", *args)
+            if po_uuid is None:
+                return False
+            if lines is not None:
+                await _pg_po_write_lines(conn, po_uuid, rid, lines)
+        return True
+    finally:
+        await db_pg.pool().release(conn)
+
+async def _po_delete(rid, oid):
+    if USE_PG:
+        await db_pg.pool().execute("DELETE FROM purchase_orders WHERE store_id=$1 AND ref=$2",
+                                   RESTAURANT_TO_PG_STORE.get(rid, rid), oid)
+    else:
+        await db.purchase_orders.delete_one({"restaurantId": rid, "id": oid})
+
 async def _get_po(rid, oid):
-    po = await db.purchase_orders.find_one({"restaurantId": rid, "id": oid})
+    po = await _po_find(rid, oid)
     if not po:
         raise HTTPException(404, "purchase order not found")
     return po
@@ -2087,10 +2598,7 @@ async def _get_po(rid, oid):
 @api_router.get("/orders/{rid}")
 async def list_orders(rid: str, status: Optional[str] = None):
     check_rid(rid)
-    q = {"restaurantId": rid}
-    if status:
-        q["status"] = status
-    pos = await db.purchase_orders.find(q).sort("createdAt", -1).to_list(2000)
+    pos = await _po_query(rid=rid, status=status or None)
     return [_po_public(p) for p in pos]
 
 @api_router.post("/orders/{rid}")
@@ -2109,7 +2617,7 @@ async def create_order(rid: str, body: POCreateIn):
         "sentAt": None, "receivedAt": None,
         "history": [_po_event("draft", body.createdBy)],
     }
-    await db.purchase_orders.insert_one(dict(po))
+    await _po_insert(po)
     return _po_public(po)
 
 @api_router.put("/orders/{rid}/{oid}")
@@ -2122,8 +2630,7 @@ async def update_order(rid: str, oid: str, body: POCreateIn):
     for l in lines:
         l["receivedQty"] = 0
         l["lineTotal"] = round(f(l.get("qty")) * f(l.get("unitCost")), 2)
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"vendor": body.vendor or po.get("vendor"), "note": body.note, "lines": lines, "total": _po_total(lines)}})
+    await _po_update(rid, oid, {"vendor": body.vendor or po.get("vendor"), "note": body.note, "lines": lines, "total": _po_total(lines)})
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/submit")
@@ -2136,8 +2643,7 @@ async def submit_order(rid: str, oid: str, payload: dict = None):
         raise HTTPException(400, "cannot submit an empty order")
     by = (payload or {}).get("by", "")
     now = datetime.now(timezone.utc).isoformat()
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "pending", "submittedAt": now}, "$push": {"history": _po_event("pending", by)}})
+    await _po_update(rid, oid, {"status": "pending", "submittedAt": now}, [_po_event("pending", by)])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/approve")
@@ -2153,8 +2659,7 @@ async def approve_order(rid: str, oid: str, payload: dict = None):
     if creator and by.lower() == creator.lower():
         raise HTTPException(403, "This order's creator cannot approve their own order — a different person must approve it")
     now = datetime.now(timezone.utc).isoformat()
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "approved", "approvedBy": by, "approvedAt": now}, "$push": {"history": _po_event("approved", by)}})
+    await _po_update(rid, oid, {"status": "approved", "approvedBy": by, "approvedAt": now}, [_po_event("approved", by)])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/reject")
@@ -2165,8 +2670,7 @@ async def reject_order(rid: str, oid: str, payload: dict = None):
         raise HTTPException(400, "only pending orders can be rejected")
     by = (payload or {}).get("by", "")
     reason = (payload or {}).get("reason", "")
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "rejected", "rejectedReason": reason}, "$push": {"history": _po_event("rejected", by, reason)}})
+    await _po_update(rid, oid, {"status": "rejected", "rejectedReason": reason}, [_po_event("rejected", by, reason)])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/reopen")
@@ -2176,8 +2680,7 @@ async def reopen_order(rid: str, oid: str, payload: dict = None):
     if po["status"] != "rejected":
         raise HTTPException(400, "only rejected orders can be reopened")
     by = (payload or {}).get("by", "")
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "draft", "rejectedReason": None}, "$push": {"history": _po_event("draft", by, "reopened")}})
+    await _po_update(rid, oid, {"status": "draft", "rejectedReason": None}, [_po_event("draft", by, "reopened")])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/send")
@@ -2188,17 +2691,14 @@ async def send_order(rid: str, oid: str, payload: dict = None):
         raise HTTPException(400, "only approved orders can be sent to the supplier")
     by = (payload or {}).get("by", "")
     now = datetime.now(timezone.utc).isoformat()
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "sent", "sentAt": now}, "$push": {"history": _po_event("sent", by)}})
+    await _po_update(rid, oid, {"status": "sent", "sentAt": now}, [_po_event("sent", by)])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/receive")
 async def receive_order(rid: str, oid: str, payload: dict = None):
     check_rid(rid)
-    po = await db.purchase_orders.find_one_and_update(
-        {"restaurantId": rid, "id": oid, "status": "sent"},
-        {"$set": {"status": "receiving", "receiptStartedAt": _now_iso()}},
-        projection={"_id": 0}, return_document=ReturnDocument.AFTER)
+    claimed = await _po_update(rid, oid, {"status": "receiving", "receiptStartedAt": _now_iso()}, expect_status="sent")
+    po = await _po_find(rid, oid) if claimed else None
     if not po:
         current = await _get_po(rid, oid)
         if current.get("status") == "receiving":
@@ -2228,9 +2728,7 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
                                 "UPDATE store_items SET current_stock = current_stock + $1 WHERE store_id=$2 AND item_code=$3",
                                 rq, store_id, f"{rid}_{cn}")
                 except Exception:
-                    await db.purchase_orders.update_one(
-                        {"restaurantId": rid, "id": oid, "status": "receiving"},
-                        {"$set": {"status": "sent"}, "$unset": {"receiptStartedAt": ""}})
+                    await _po_update(rid, oid, {"status": "sent"}, expect_status="receiving", unset=("receiptStartedAt",))
                     raise
             finally:
                 await db_pg.pool().release(conn)
@@ -2243,9 +2741,7 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
                 try:
                     await db.items.bulk_write(ops)
                 except Exception:
-                    await db.purchase_orders.update_one(
-                        {"restaurantId": rid, "id": oid, "status": "receiving"},
-                        {"$set": {"status": "sent"}, "$unset": {"receiptStartedAt": ""}})
+                    await _po_update(rid, oid, {"status": "sent"}, expect_status="receiving", unset=("receiptStartedAt",))
                     raise
     receipt_match = await _match_invoice(rid, invoice_number, lines) if invoice_number else None
     now = datetime.now(timezone.utc).isoformat()
@@ -2253,8 +2749,7 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
     note = ""
     if receipt_match:
         note = f"invoice {invoice_number}: {receipt_match['flaggedCount']} discrepanc{'y' if receipt_match['flaggedCount'] == 1 else 'ies'}" if receipt_match["invoiceFound"] else f"invoice {invoice_number} not found in Invoice Master"
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid, "status": "receiving"},
-        {"$set": set_fields, "$push": {"history": _po_event("received", by, note)}})
+    await _po_update(rid, oid, set_fields, [_po_event("received", by, note)], expect_status="receiving")
     return _po_public(await _get_po(rid, oid))
 
 @api_router.delete("/orders/{rid}/{oid}")
@@ -2263,12 +2758,12 @@ async def delete_order(rid: str, oid: str):
     po = await _get_po(rid, oid)
     if po["status"] not in ("draft", "rejected"):
         raise HTTPException(400, "only draft or rejected orders can be deleted")
-    await db.purchase_orders.delete_one({"restaurantId": rid, "id": oid})
+    await _po_delete(rid, oid)
     return {"ok": True}
 
 @api_router.get("/owner/orders")
 async def owner_orders():
-    pos = await db.purchase_orders.find({"status": "pending"}).sort("submittedAt", 1).to_list(2000)
+    pos = await _po_query(status="pending", sort="submittedAt", descending=False)
     name_by_rid = {r["id"]: r["short"] for r in RESTAURANTS}
     out = []
     for p in pos:
@@ -2474,11 +2969,37 @@ async def _match_invoice(rid, invoice_number, po_lines):
     return {"invoiceNumber": str(invoice_number), "invoiceFound": len(plines) > 0,
             "matchedAt": datetime.now(timezone.utc).isoformat(), "flaggedCount": flagged, "lines": result_lines}
 
+# Supplier order emails, per store and vendor name (Postgres: store_vendor_contacts).
+async def _vc_list(rid):
+    if USE_PG:
+        rows = await db_pg.pool().fetch(
+            "SELECT vendor, order_email FROM store_vendor_contacts WHERE store_id=$1 ORDER BY vendor",
+            RESTAURANT_TO_PG_STORE.get(rid, rid))
+        return [{"vendor": r["vendor"], "orderEmail": r["order_email"]} for r in rows]
+    return await db.vendor_contacts.find({"restaurantId": rid}, {"_id": 0, "restaurantId": 0}).to_list(200)
+
+async def _vc_email(rid, vendor):
+    if USE_PG:
+        return await db_pg.pool().fetchval(
+            "SELECT order_email FROM store_vendor_contacts WHERE store_id=$1 AND vendor=$2",
+            RESTAURANT_TO_PG_STORE.get(rid, rid), vendor) or ""
+    vc = await db.vendor_contacts.find_one({"restaurantId": rid, "vendor": vendor}, {"_id": 0})
+    return (vc or {}).get("orderEmail", "")
+
+async def _vc_put(rid, vendor, email):
+    if USE_PG:
+        await db_pg.pool().execute(
+            """INSERT INTO store_vendor_contacts (store_id, vendor, order_email) VALUES ($1, $2, $3)
+               ON CONFLICT (store_id, vendor) DO UPDATE SET order_email=$3, updated_at=now()""",
+            RESTAURANT_TO_PG_STORE.get(rid, rid), vendor, email)
+        return
+    await db.vendor_contacts.update_one({"restaurantId": rid, "vendor": vendor},
+        {"$set": {"restaurantId": rid, "vendor": vendor, "orderEmail": email}}, upsert=True)
+
 @api_router.get("/vendor-contacts/{rid}")
 async def list_vendor_contacts(rid: str):
     check_rid(rid)
-    vcs = await db.vendor_contacts.find({"restaurantId": rid}, {"_id": 0, "restaurantId": 0}).to_list(200)
-    return vcs
+    return await _vc_list(rid)
 
 @api_router.put("/vendor-contacts/{rid}")
 async def put_vendor_contact(rid: str, payload: dict):
@@ -2489,8 +3010,7 @@ async def put_vendor_contact(rid: str, payload: dict):
         raise HTTPException(400, "vendor is required")
     if email and not EMAIL_RE.match(email):
         raise HTTPException(400, "that doesn't look like a valid email")
-    await db.vendor_contacts.update_one({"restaurantId": rid, "vendor": vendor},
-        {"$set": {"restaurantId": rid, "vendor": vendor, "orderEmail": email}}, upsert=True)
+    await _vc_put(rid, vendor, email)
     return {"ok": True, "vendor": vendor, "orderEmail": email}
 
 class OrderEmailIn(BaseModel):
@@ -2522,8 +3042,7 @@ async def email_order(rid: str, oid: str, body: OrderEmailIn):
     if override:
         to = override
     else:
-        vc = await db.vendor_contacts.find_one({"restaurantId": rid, "vendor": vendor}, {"_id": 0})
-        to = (vc or {}).get("orderEmail", "")
+        to = await _vc_email(rid, vendor)
     if not to:
         raise HTTPException(400, "no supplier email on file for this vendor — add one first")
     rname = next((r["name"] for r in RESTAURANTS if r["id"] == rid), rid)
@@ -2533,8 +3052,7 @@ async def email_order(rid: str, oid: str, body: OrderEmailIn):
     await send_email(to=to, subject=subject, html=html, from_name=rname)
     # only persist the recipient after a successful send
     if override:
-        await db.vendor_contacts.update_one({"restaurantId": rid, "vendor": vendor},
-            {"$set": {"restaurantId": rid, "vendor": vendor, "orderEmail": override}}, upsert=True)
+        await _vc_put(rid, vendor, override)
     now = datetime.now(timezone.utc).isoformat()
     set_fields = {"emailedTo": to, "emailedAt": now}
     events = [_po_event("emailed", body.by, f"emailed to {to}")]
@@ -2542,8 +3060,7 @@ async def email_order(rid: str, oid: str, body: OrderEmailIn):
         set_fields["status"] = "sent"
         set_fields["sentAt"] = now
         events.append(_po_event("sent", body.by, "sent via email"))
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": set_fields, "$push": {"history": {"$each": events}}})
+    await _po_update(rid, oid, set_fields, events)
     return _po_public(await _get_po(rid, oid))
 
 class ReorderIn(BaseModel):
@@ -2553,7 +3070,8 @@ class ReorderIn(BaseModel):
 @api_router.post("/orders/{rid}/reorder-last")
 async def reorder_last(rid: str, body: ReorderIn):
     check_rid(rid)
-    last = await db.purchase_orders.find_one({"restaurantId": rid, "vendor": body.vendor, "status": {"$ne": "rejected"}}, sort=[("createdAt", -1)])
+    recent = await _po_query(rid=rid, vendor=body.vendor, exclude_status="rejected", limit=1)
+    last = recent[0] if recent else None
     if not last:
         raise HTTPException(404, "no previous order for this vendor to reorder")
     lines = [{"controlNumber": l.get("controlNumber"), "name": l.get("name", ""), "vendorSku": l.get("vendorSku", ""),
@@ -2565,7 +3083,7 @@ async def reorder_last(rid: str, body: ReorderIn):
           "lines": lines, "total": _po_total(lines), "createdAt": now.isoformat(),
           "submittedAt": None, "approvedBy": None, "approvedAt": None, "rejectedReason": None,
           "sentAt": None, "receivedAt": None, "history": [_po_event("draft", body.createdBy, "reorder from history")]}
-    await db.purchase_orders.insert_one(dict(po))
+    await _po_insert(po)
     return _po_public(po)
 
 @api_router.get("/orders/{rid}/{oid}/pdf")
@@ -2582,7 +3100,7 @@ async def owner_discrepancies():
     name_by_rid = {r["id"]: r["short"] for r in RESTAURANTS}
     out = []
     for r in RESTAURANTS:
-        pos = await db.purchase_orders.find({"restaurantId": r["id"], "status": "received"}).sort("receivedAt", -1).to_list(5000)
+        pos = await _po_query(rid=r["id"], status="received", sort="receivedAt", limit=5000)
         for po in pos:
             rm = po.get("receiptMatch")
             if rm and rm.get("invoiceFound") and rm.get("flaggedCount", 0) > 0:
@@ -2616,7 +3134,7 @@ async def owner_vendor_scorecard():
 
     agg = {}
     for r in RESTAURANTS:
-        pos = await db.purchase_orders.find({"restaurantId": r["id"], "status": "received"}).to_list(5000)
+        pos = await _po_query(rid=r["id"], status="received", limit=5000)
         for po in pos:
             v = po.get("vendor", "")
             s = agg.setdefault(v, {"receivedOrders": 0, "leadDays": [], "matchedLines": 0, "priceAccurate": 0,
@@ -4111,8 +4629,9 @@ class PgStaffPinIn(BaseModel):
     staffPin: str
 
 @pg_router.post("/staff/{store_id}/pin")
-async def pg_set_staff_pin(store_id: str, body: PgStaffPinIn):
+async def pg_set_staff_pin(store_id: str, body: PgStaffPinIn, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     pin = body.staffPin.strip()
     if not (pin.isdigit() and 4 <= len(pin) <= 8):
         raise HTTPException(400, "PIN must be 4-8 digits")
@@ -4146,8 +4665,9 @@ def _pg_validate_staff_member(body):
     return name
 
 @pg_router.post("/staff/{store_id}/members")
-async def pg_create_staff_member(store_id: str, body: PgStaffMemberIn):
+async def pg_create_staff_member(store_id: str, body: PgStaffMemberIn, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     name = _pg_validate_staff_member(body)
     row = await db_pg.pool().fetchrow(
         "INSERT INTO staff_members (store_id, name, role, active) VALUES ($1,$2,$3,TRUE) RETURNING *",
@@ -4155,8 +4675,9 @@ async def pg_create_staff_member(store_id: str, body: PgStaffMemberIn):
     return _pg_staff_member_to_api(row)
 
 @pg_router.put("/staff/{store_id}/members/{staff_id}")
-async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemberIn):
+async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemberIn, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     name = _pg_validate_staff_member(body)
     row = await db_pg.pool().fetchrow(
         "UPDATE staff_members SET name=$3, role=$4, active=$5 WHERE id=$1 AND store_id=$2 RETURNING *",
@@ -4166,8 +4687,9 @@ async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemb
     return _pg_staff_member_to_api(row)
 
 @pg_router.delete("/staff/{store_id}/members/{staff_id}")
-async def pg_delete_staff_member(store_id: str, staff_id: str):
+async def pg_delete_staff_member(store_id: str, staff_id: str, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     await db_pg.pool().execute("DELETE FROM staff_members WHERE id=$1 AND store_id=$2", staff_id, store_id)
     return {"ok": True}
 
@@ -4436,8 +4958,7 @@ async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Requ
         raise HTTPException(400, "taskType must be count or prep")
     if body.recurrence not in ("once", "daily", "weekly"):
         raise HTTPException(400, "recurrence must be once, daily, or weekly")
-    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
-    user = _decode_token(token)
+    user = _require_manager(request)
     row = await db_pg.pool().fetchrow(
         """INSERT INTO staff_tasks (store_id, task_type, title, due_date, recurrence, assigned_to, track, note, created_by)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
@@ -4448,8 +4969,9 @@ async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Requ
     return task
 
 @pg_router.delete("/staff-tasks/{store_id}/{task_id}")
-async def pg_delete_staff_task(store_id: str, task_id: str):
+async def pg_delete_staff_task(store_id: str, task_id: str, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     await db_pg.pool().execute("DELETE FROM staff_tasks WHERE id=$1 AND store_id=$2", task_id, store_id)
     return {"ok": True}
 
@@ -4572,10 +5094,12 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_pg_pool():
-    await db.state_versions.create_index("restaurantId", unique=True)
+    if not USE_PG:
+        await db.state_versions.create_index("restaurantId", unique=True)
     await db_pg.init_pool()
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    if client is not None:
+        client.close()
     await db_pg.close_pool()

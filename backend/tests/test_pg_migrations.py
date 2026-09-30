@@ -45,3 +45,24 @@ def test_prep_list_migration_preserves_bulk_track(tmp_path, monkeypatch):
     assert "prep_lists (store_id, prep_date, count_type, from_count" in sql
     assert "'commissary', NULL" in sql
     assert "pl.count_type = 'commissary'" in sql
+
+
+def test_users_and_state_migration_keeps_hashes_ids_and_maps_store_ids():
+    from scripts import migrate_users_and_state as m
+    users = [
+        {"id": "usr_1", "email": " Owner@Example.test ", "passwordHash": "pbkdf2$s$d", "role": "owner",
+         "locations": ["berts", "papa_leonis"], "createdAt": {"$date": "2026-09-01T00:00:00Z"}},
+        {"id": "usr_2", "email": "bad@example.test", "passwordHash": "", "role": "owner"},
+    ]
+    sql = m.build_users_sql(users)
+    assert len(sql) == 1
+    assert "'usr_1', 'owner@example.test', 'pbkdf2$s$d', 'owner', ARRAY['berts', 'papa_leonis']::text[]" in sql[0]
+
+    state = m.build_store_state_sql(
+        [{"restaurantId": "papa_leonis", "revision": 7}],
+        [{"restaurantId": "papa_leonis", "list": [{"name": "Shed", "prefix": "SH"}]}],
+        [{"_id": {"$oid": "x"}, "restaurantId": "papa_leonis", "periodStart": "2026-09-28", "dishSales": {"d": 1}}],
+    )
+    assert len(state) == 1
+    assert state[0].startswith("INSERT INTO store_state (store_id, revision, areas, sales_period) VALUES ('papa', 7,")
+    assert '"prefix": "SH"' in state[0] and '"periodStart": "2026-09-28"' in state[0] and '"_id"' not in state[0]
