@@ -623,12 +623,56 @@ async def auth_me(request: Request):
         raise HTTPException(401, "Authentication required")
     return user
 
-@api_router.post("/auth/users")
-async def auth_create_user(body: UserIn, request: Request):
+def _require_owner(request):
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     actor = _decode_token(token)
     if not actor or actor.get("role") != "owner":
         raise HTTPException(403, "Owner role required")
+    return actor
+
+class PasswordIn(BaseModel):
+    password: str
+
+@api_router.get("/auth/users")
+async def auth_list_users(request: Request):
+    _require_owner(request)
+    if USE_PG:
+        rows = await db_pg.pool().fetch("SELECT id, email, role, locations, created_at FROM app_users ORDER BY email")
+        return [{"id": r["id"], "email": r["email"], "role": r["role"], "locations": list(r["locations"] or []),
+                 "createdAt": r["created_at"].isoformat() if r["created_at"] else None} for r in rows]
+    docs = await db.users.find({}, {"_id": 0, "passwordHash": 0}).sort("email", 1).to_list(1000)
+    return [{**_clean_user(d), "createdAt": d.get("createdAt")} for d in docs]
+
+@api_router.put("/auth/users/{user_id}/password")
+async def auth_reset_password(user_id: str, body: PasswordIn, request: Request):
+    _require_owner(request)
+    if len(body.password) < 12:
+        raise HTTPException(400, "Password must be at least 12 characters")
+    pw_hash = _password_hash(body.password)
+    if USE_PG:
+        found = await db_pg.pool().fetchval("UPDATE app_users SET password_hash=$2 WHERE id=$1 RETURNING id", user_id, pw_hash)
+    else:
+        found = (await db.users.update_one({"id": user_id}, {"$set": {"passwordHash": pw_hash}})).matched_count
+    if not found:
+        raise HTTPException(404, "User not found")
+    return {"ok": True}
+
+@api_router.delete("/auth/users/{user_id}")
+async def auth_delete_user(user_id: str, request: Request):
+    actor = _require_owner(request)
+    if user_id == actor.get("sub"):
+        raise HTTPException(400, "You can't remove your own account")
+    if USE_PG:
+        found = await db_pg.pool().fetchval("DELETE FROM app_users WHERE id=$1 RETURNING id", user_id)
+    else:
+        found = (await db.users.delete_one({"id": user_id})).deleted_count
+    if not found:
+        raise HTTPException(404, "User not found")
+    return {"ok": True}
+
+@api_router.post("/auth/users")
+async def auth_create_user(body: UserIn, request: Request):
+    _require_owner(request)
     if body.role not in ("owner", "manager", "staff", "readonly") or len(body.password) < 12:
         raise HTTPException(400, "Invalid role or password")
     locations = sorted(set(body.locations) & RIDS)

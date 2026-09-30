@@ -8,10 +8,9 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const PG_API = `${API}/pg`;
 // Chunk 2 cutover flag: when true, the Prep functions below route through
 // /api/pg/* (translating the Mongo-side restaurantId to the Postgres store id)
-// instead of the legacy Mongo-backed routes. Defaults to false so the app keeps
-// working on Mongo until DATABASE_URL has a real password and Chunk 6
-// verification passes. Flip via REACT_APP_USE_PG=true in frontend/.env.
-const USE_PG = process.env.REACT_APP_USE_PG === "true";
+// instead of the legacy Mongo-backed routes. On by default (Supabase is the only
+// database); only an explicit REACT_APP_USE_PG=false build uses the legacy routes.
+const USE_PG = process.env.REACT_APP_USE_PG !== "false";
 export const isPostgres = USE_PG;
 const MONGO_TO_PG_STORE = { berts: "berts", rudds: "rudds", papa_leonis: "papa" };
 const pgStoreId = (rid) => MONGO_TO_PG_STORE[rid] || rid;
@@ -27,6 +26,11 @@ export const authLogin = (email, password) => axios.post(`${API}/auth/login`, { 
   localStorage.setItem(TOKEN_KEY, JSON.stringify(r.data));
   return r.data;
 });
+// Email/password logins (owner only).
+export const listLogins = () => axios.get(`${API}/auth/users`).then((r) => r.data);
+export const createLogin = (body) => axios.post(`${API}/auth/users`, body).then((r) => r.data);
+export const resetLoginPassword = (id, password) => axios.put(`${API}/auth/users/${id}/password`, { password }).then((r) => r.data);
+export const deleteLogin = (id) => axios.delete(`${API}/auth/users/${id}`).then((r) => r.data);
 export const authLogout = () => localStorage.removeItem(TOKEN_KEY);
 export const currentSession = () => session();
 export const storeSession = (data) => { localStorage.setItem(TOKEN_KEY, JSON.stringify(data)); return data; };

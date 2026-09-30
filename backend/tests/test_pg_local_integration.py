@@ -148,6 +148,30 @@ def test_auth_bootstrap_login_and_create_user_in_postgres(monkeypatch):
         assert exc.value.status_code == 409
         login = await server.auth_login(server.LoginIn(email="gm@example.test", password="manager-password-1"))
         assert login["user"]["locations"] == ["papa_leonis"]
+
+        listed = await server.auth_list_users(req)
+        assert [u["email"] for u in listed] == ["gm@example.test", "owner@example.test"]
+        assert all("passwordHash" not in u and "password_hash" not in u for u in listed)
+        gm_id = login["user"]["id"]
+        manager_req = make_request("/api/auth/users", "GET", {"id": gm_id, "email": "gm@example.test", "role": "manager", "locations": ["papa_leonis"]})
+        with pytest.raises(HTTPException) as exc:
+            await server.auth_list_users(manager_req)
+        assert exc.value.status_code == 403
+        with pytest.raises(HTTPException) as exc:
+            await server.auth_reset_password(gm_id, server.PasswordIn(password="short"), req)
+        assert exc.value.status_code == 400
+        await server.auth_reset_password(gm_id, server.PasswordIn(password="new-manager-pass-2"), req)
+        with pytest.raises(HTTPException):
+            await server.auth_login(server.LoginIn(email="gm@example.test", password="manager-password-1"))
+        await server.auth_login(server.LoginIn(email="gm@example.test", password="new-manager-pass-2"))
+        with pytest.raises(HTTPException) as exc:
+            await server.auth_delete_user(owner["sub"], req)
+        assert exc.value.status_code == 400
+        await server.auth_delete_user(gm_id, req)
+        with pytest.raises(HTTPException) as exc:
+            await server.auth_delete_user(gm_id, req)
+        assert exc.value.status_code == 404
+        assert [u["email"] for u in await server.auth_list_users(req)] == ["owner@example.test"]
     run(scenario)
 
 

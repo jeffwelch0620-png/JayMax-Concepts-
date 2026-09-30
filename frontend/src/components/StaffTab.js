@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Users, Plus, Trash2 } from "lucide-react";
 import { PageTitle, cardCls, inpCls, btnAcc, btnGhost, btnDanger, Pill, EmptyState } from "./common";
 import * as api from "../lib/api";
+import { LoginsPanel } from "./LoginsPanel";
 
 const ROLES = [
   { id: "cook", label: "Cook" },
@@ -56,6 +57,8 @@ export function StaffTab({ rid, showToast }) {
   return (
     <div className="fade-slide-in" data-testid="staff-tab">
       <PageTitle>Staff</PageTitle>
+      {api.currentSession()?.user?.role === "owner" && <LoginsPanel showToast={showToast} />}
+      <div className="font-display font-bold text-slate-100 mb-1">PIN Roster</div>
       <div className="text-xs text-slate-500 -mt-2 mb-5">
         Anyone who taps in with the shared PIN picks their name from this list. Cooks get the Prep/Counts/Tasks
         portal only; Owner/Admin gets full access to this restaurant, same as an email/password owner login.
