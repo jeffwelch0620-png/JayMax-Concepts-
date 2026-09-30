@@ -139,6 +139,48 @@ def test_prep_list_generation_checks_and_creates_inside_transaction(monkeypatch)
     assert "count_type=$3" in conn.queries[1][0]
 
 
+def test_prep_list_generation_handles_recurring_items_and_overrides():
+    recipe = {"id": "recipe-1", "name": "Sauce", "yield_uom": "qt", "yield_qty": 2, "prep_par": 3}
+    prep_items = [
+        {"id": "recipe-item", "schedule": "recurring", "recur_days": [0], "fixed_qty": 4,
+         "recipe_id": "recipe-1", "container": "Deli", "par_weekday": 0, "par_vessels": 0, "name": "Sauce"},
+        {"id": "vessel-item", "schedule": "recurring", "recur_days": [1], "fixed_qty": 3,
+         "recipe_id": None, "container": "Pan", "par_weekday": 0, "par_vessels": 0, "name": "Garnish"},
+    ]
+    session = {"id": "session-1"}
+    plist = {
+        "id": "list-1", "store_id": "berts", "prep_date": date(2026, 9, 28),
+        "count_type": "nightly_prep", "status": "draft", "released_at": None, "released_by": None,
+    }
+    conn = FakeConnection(fetchrow_results=[None, session, plist], fetch_results=[
+        [recipe], prep_items, [{"type": "par", "recipe_id": "recipe-item", "prep_item_id": None, "par": 7, "note": "event"}],
+        [], [],
+    ])
+
+    result = asyncio.run(server._pg_generate_prep_list_in_transaction(
+        conn, "berts", "2026-09-28", "daily", "nightly_prep"))
+
+    assert result["regenerated"] is True
+    inserts = [(query, args) for query, args in conn.queries if query.startswith("INSERT INTO prep_list_lines")]
+    assert len(inserts) == 1
+    assert inserts[0][1][1] == "recipe-item"
+    assert inserts[0][1][7] == 7
+    assert inserts[0][1][10] == 7
+
+
+def test_open_count_session_removes_stale_recurring_lines():
+    session = {"id": "session-1", "status": "open", "count_date": date(2026, 9, 28),
+               "counted_by_name": None, "submitted_at": None}
+    recurring = {"id": "prep-1", "schedule": "recurring", "recipe_id": None, "container": "Pan",
+                 "par_vessels": 2, "name": "Garnish"}
+    conn = FakeConnection(fetchrow_results=[session], fetch_results=[[], [recurring], [], []])
+
+    result = asyncio.run(server._pg_get_or_create_session(conn, "berts", "2026-09-28", "daily"))
+
+    assert result["prepItems"] == []
+    assert any(query.startswith("DELETE FROM count_lines") for query, _ in conn.queries)
+
+
 def test_task_completion_locks_task_and_commits_as_one_unit(monkeypatch):
     plist = {
         "id": "list-1", "store_id": "berts", "prep_date": date(2026, 9, 29),

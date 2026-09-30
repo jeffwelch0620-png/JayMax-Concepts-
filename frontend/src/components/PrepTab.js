@@ -27,6 +27,33 @@ const TRACKS = [
   { id: "bulk", label: "Bulk Prep" },
 ];
 
+// v matches Python's date.weekday() (Mon=0..Sun=6) on the backend -- NOT JS
+// Date.getDay() (Sun=0). This is a static label table, never derived from a live
+// Date, so there's no actual mismatch today -- just don't "simplify" it later with
+// .getDay().
+const WEEKDAYS = [
+  { v: 0, label: "Mon" }, { v: 1, label: "Tue" }, { v: 2, label: "Wed" }, { v: 3, label: "Thu" },
+  { v: 4, label: "Fri" }, { v: 5, label: "Sat" }, { v: 6, label: "Sun" },
+];
+const weekdayLabel = (v) => WEEKDAYS.find((d) => d.v === v)?.label || "?";
+
+function RecurringScheduleFields({ recurDays, toggleDay, fixedQty, setFixedQty, unitLabel, idPrefix }) {
+  return (
+    <div className="mb-4">
+      <div className="flex gap-1 mb-2">
+        {WEEKDAYS.map((d) => (
+          <button key={d.v} className={recurDays.includes(d.v) ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }}
+            onClick={() => toggleDay(d.v)} aria-pressed={recurDays.includes(d.v)} data-testid={`${idPrefix}-recur-day-${d.v}`}>{d.label}</button>
+        ))}
+      </div>
+      <Field label={`Fixed Quantity (${unitLabel})`}>
+        <input type="number" step="0.5" className={inpCls} data-testid={`${idPrefix}-fixed-qty`}
+          value={fixedQty} onChange={(e) => setFixedQty(e.target.value)} />
+      </Field>
+    </div>
+  );
+}
+
 export function PrepTab({ rid, items, dishes, persistDishes, prepStock, prepLogs, applyPrepResult, salesPeriod, showToast }) {
   const [track, setTrack] = useState("daily");
   const [sub, setSub] = useState("list");
@@ -70,6 +97,39 @@ export function PrepTab({ rid, items, dishes, persistDishes, prepStock, prepLogs
   );
 }
 
+/* ---------------- Edit Recurring Schedule modal ---------------- */
+function EditRecurringModal({ prepItem, onClose, onSave, showToast }) {
+  const [recurDays, setRecurDays] = useState(prepItem.recurDays || []);
+  const [fixedQty, setFixedQty] = useState(prepItem.fixedQty || 0);
+
+  function toggleDay(d) {
+    setRecurDays((arr) => arr.includes(d) ? arr.filter((x) => x !== d) : [...arr, d].sort((a, b) => a - b));
+  }
+
+  function save() {
+    if (recurDays.length === 0) { showToast("Pick at least one day"); return; }
+    if (!(Number(fixedQty) > 0)) { showToast("Enter a fixed quantity"); return; }
+    onSave(recurDays, Number(fixedQty) || 0);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="edit-recurring-modal">
+      <div className={`${cardCls} w-full max-w-md p-5 m-4 bg-[#161F30]`}>
+        <div className="flex justify-between items-center mb-4">
+          <div className="font-display font-bold text-slate-100">Recurring Schedule — {prepItem.name}</div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white" data-testid="close-edit-recurring"><X size={18} /></button>
+        </div>
+        <RecurringScheduleFields recurDays={recurDays} toggleDay={toggleDay} fixedQty={fixedQty} setFixedQty={setFixedQty}
+          unitLabel={prepItem.sourceType === "item" ? `${prepItem.vesselName}s` : "batch yield units"} idPrefix="edit-recurring" />
+        <div className="flex gap-2 justify-end">
+          <button className={btnGhost} onClick={onClose}>Cancel</button>
+          <button className={btnAcc} onClick={save} data-testid="save-recurring-button">Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Add Prep Item modal ---------------- */
 function AddPrepItemModal({ rid, track, items, dishes, onClose, onSaved, showToast }) {
   const prepRecipes = dishes.filter((d) => d.recipeType === "prep").map(normalizeRecipeSchema);
@@ -83,6 +143,8 @@ function AddPrepItemModal({ rid, track, items, dishes, onClose, onSaved, showToa
   const [parVessels, setParVessels] = useState(4);
   const [par, setPar] = useState(0);
   const [schedule, setSchedule] = useState("daily");
+  const [recurDays, setRecurDays] = useState([]);
+  const [fixedQty, setFixedQty] = useState(0);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -97,11 +159,17 @@ function AddPrepItemModal({ rid, track, items, dishes, onClose, onSaved, showToa
     if (VESSELS[idx].capacity > 0) setVesselCapacity(VESSELS[idx].capacity);
   }
 
+  function toggleDay(d) {
+    setRecurDays((arr) => arr.includes(d) ? arr.filter((x) => x !== d) : [...arr, d].sort((a, b) => a - b));
+  }
+
   async function save() {
     const finalName = name.trim() || autoName;
     if (!finalName) { showToast("Name the prep item"); return; }
     if (sourceType === "item" && !controlNumber) { showToast("Pick an inventory item"); return; }
     if (sourceType === "prep" && !recipeId) { showToast("Pick a prep recipe"); return; }
+    if (schedule === "recurring" && recurDays.length === 0) { showToast("Pick at least one day"); return; }
+    if (schedule === "recurring" && !(Number(fixedQty) > 0)) { showToast("Enter a fixed quantity"); return; }
     setBusy(true);
     try {
       await api.createPrepItem(rid, {
@@ -111,6 +179,8 @@ function AddPrepItemModal({ rid, track, items, dishes, onClose, onSaved, showToa
         vesselName, vesselCapacity: Number(vesselCapacity) || 0,
         parVessels: Number(parVessels) || 0, par: sourceType === "prep" ? Number(par) || 0 : 0,
         schedule, note,
+        recurDays: schedule === "recurring" ? recurDays : [],
+        fixedQty: schedule === "recurring" ? Number(fixedQty) || 0 : 0,
       });
       showToast(`Prep item "${finalName}" added`);
       onSaved();
@@ -188,10 +258,15 @@ function AddPrepItemModal({ rid, track, items, dishes, onClose, onSaved, showToa
         </div>
 
         <SectionLabel>Schedule</SectionLabel>
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-3 flex-wrap">
           <button className={schedule === "daily" ? btnAcc : btnGhost} onClick={() => setSchedule("daily")} data-testid="schedule-daily">Daily — on every prep list</button>
           <button className={schedule === "oneoff" ? btnAcc : btnGhost} onClick={() => setSchedule("oneoff")} data-testid="schedule-oneoff">One-off — add as needed</button>
+          {api.isPostgres && <button className={schedule === "recurring" ? btnAcc : btnGhost} onClick={() => setSchedule("recurring")} data-testid="schedule-recurring">Recurring — specific days</button>}
         </div>
+        {schedule === "recurring" && (
+          <RecurringScheduleFields recurDays={recurDays} toggleDay={toggleDay} fixedQty={fixedQty} setFixedQty={setFixedQty}
+            unitLabel={sourceType === "item" ? `${vesselName}s` : portionUnit} idPrefix="prep-item" />
+        )}
 
         <div className="flex gap-2 justify-end">
           <button className={btnGhost} onClick={onClose}>Cancel</button>
@@ -345,6 +420,7 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
   const [containers, setContainers] = useState([]);
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingRecurring, setEditingRecurring] = useState(null);
 
   const load = () => {
     setLoaded(false);
@@ -416,6 +492,15 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
       reloadPrepItems();
       showToast(`${p.name} → ${schedule === "daily" ? "Daily" : "One-off"}`);
     } catch (e) { showToast("Couldn't update the schedule"); }
+  }
+
+  async function saveRecurring(p, recurDays, fixedQty) {
+    try {
+      await api.updatePrepItem(rid, p.id, { name: p.name, sourceType: p.sourceType, controlNumber: p.controlNumber, recipeId: p.recipeId, vesselName: p.vesselName, vesselCapacity: p.vesselCapacity, parVessels: p.parVessels, par: p.par, track: p.track, schedule: "recurring", recurDays, fixedQty, note: p.note || "" });
+      reloadPrepItems();
+      showToast(`${p.name} → Recurring`);
+      setEditingRecurring(null);
+    } catch (e) { showToast(e?.response?.data?.detail || "Couldn't update the schedule"); }
   }
 
   async function removePrepItem(p) {
@@ -531,11 +616,16 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
                       <td className="font-semibold text-slate-200">{p.name}</td>
                       <td>{p.sourceType === "item" ? <Pill color="#06B6D4" bg="rgba(6,182,212,0.12)">ITEM · {p.controlNumber}</Pill> : <Pill color="#EAB308" bg="rgba(234,179,8,0.12)">PREP RECIPE</Pill>}</td>
                       <td className="text-slate-300">{p.vesselName}{p.sourceType === "item" && p.vesselCapacity ? ` (${num(p.vesselCapacity, 1)})` : ""}</td>
-                      <td className="num">{p.sourceType === "item" ? `${num(p.parVessels, 1)} ${p.vesselName}` : (p.par ? num(p.par, 0) : "uses recipe's own par")}</td>
+                      <td className="num">
+                        {p.schedule === "recurring"
+                          ? `${(p.recurDays || []).map(weekdayLabel).join("/")} · ${num(p.fixedQty, p.sourceType === "item" ? 1 : 0)} ${p.sourceType === "item" ? p.vesselName : ""}`
+                          : p.sourceType === "item" ? `${num(p.parVessels, 1)} ${p.vesselName}` : (p.par ? num(p.par, 0) : "uses recipe's own par")}
+                      </td>
                       <td>
                         <div className="flex gap-1">
                           <button className={p.schedule === "daily" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => toggleSchedule(p, "daily")} data-testid={`schedule-daily-${p.id}`}>Daily</button>
                           <button className={p.schedule === "oneoff" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => toggleSchedule(p, "oneoff")} data-testid={`schedule-oneoff-${p.id}`}>One-off</button>
+                          {api.isPostgres && <button className={p.schedule === "recurring" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => setEditingRecurring(p)} data-testid={`schedule-recurring-${p.id}`}>Recurring</button>}
                         </div>
                       </td>
                       <td>
@@ -559,6 +649,11 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
       {showAdd && (
         <AddPrepItemModal rid={rid} track={track} items={items} dishes={dishes} showToast={showToast}
           onClose={() => setShowAdd(false)} onSaved={reloadPrepItems} />
+      )}
+
+      {editingRecurring && (
+        <EditRecurringModal prepItem={editingRecurring} onClose={() => setEditingRecurring(null)} showToast={showToast}
+          onSave={(recurDays, fixedQty) => saveRecurring(editingRecurring, recurDays, fixedQty)} />
       )}
 
       {completing && (
