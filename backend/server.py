@@ -39,6 +39,9 @@ if os.environ.get("USE_PG", "false").strip().lower() == "true":
     client = None
     db = _MongoRetired()
 else:
+    if not os.environ.get("MONGO_URL") or not os.environ.get("DB_NAME"):
+        raise RuntimeError("USE_PG is not 'true', so the legacy MongoDB mode needs MONGO_URL and DB_NAME. "
+                           "For Supabase (the deployed setup) set USE_PG=true and DATABASE_URL instead.")
     client = AsyncIOMotorClient(os.environ['MONGO_URL'])
     db = client[os.environ['DB_NAME']]
 
