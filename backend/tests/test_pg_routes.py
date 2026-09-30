@@ -224,3 +224,9 @@ def test_pg_staff_management_routes_require_manager_like_mongo_counterparts(monk
             asyncio.run(call)
         assert exc.value.status_code == 403
     assert conn.queries == []
+
+
+def test_mongo_staff_pin_read_requires_manager_like_pg_counterpart():
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server.get_pin("papa_leonis", make_request("/api/staff/papa_leonis/pin")))
+    assert exc.value.status_code == 403

@@ -1197,8 +1197,9 @@ async def _get_pin(rid):
     return (cfg or {}).get("staffPin") or DEFAULT_STAFF_PIN
 
 @api_router.get("/staff/{rid}/pin")
-async def get_pin(rid: str):
+async def get_pin(rid: str, request: Request):
     check_rid(rid)
+    _require_manager(request)
     cfg = await db.settings.find_one({"restaurantId": rid, "key": "staff"}, {"_id": 0})
     return {"staffPin": (cfg or {}).get("staffPin") or DEFAULT_STAFF_PIN, "custom": bool((cfg or {}).get("staffPin"))}
 
