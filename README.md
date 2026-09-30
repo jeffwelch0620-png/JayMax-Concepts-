@@ -1,4 +1,4 @@
-# Bert's Restaurant Group — Inventory / Prep / Food-Costing App (JMAX Handoff)
+#JayMax Restaurant Group — Inventory / Prep / Food-Costing App (JMAX Handoff)
 
 A multi-location restaurant operations platform: inventory counts, purchasing/par
 guidance, recipe costing, prep planning with auto inventory deduction, a purchase-order
