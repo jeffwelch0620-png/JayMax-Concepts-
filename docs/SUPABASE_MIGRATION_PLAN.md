@@ -30,7 +30,7 @@ available), each paired with a `scripts/migrate_*.py` that turns the Mongo backu
 | P2.3 State blob leftovers | `adjustments`, `reporting_periods` (still loaded by `GET /state`) | existing `adjustments`, `reporting_periods` (+ `ref`, `control_number`, `qty_basis`) | ✅ Code + tests; SQL pending apply. `GET /state` no longer reads Mongo in PG mode |
 | P2.4 Prep report + legacy guard | `/reports/{rid}/prep` (manager counts were already PG-aware; `/prep/{rid}/complete` has no frontend caller) | existing count/prep tables | ✅ Report reads Postgres; in PG mode the Mongo-only prep/staff route families (`LEGACY_MONGO_PATHS`) return 410 |
 | P2.5 AI + planning | `chat_messages`, `projected_sales`, `par_recommendations` | `ai_chat_messages`, new `store_sales_projections`, `par_recommendations` | ✅ Code + tests (LLM faked); SQL pending apply |
-| P2.6 Activity log + owner rollups | `activity_log`, owner summary/discrepancies/scorecard reads | `activity_log` | ⏳ |
+| P2.6 Activity log + Mongo retired | `activity_log`; everything else | `activity_log` (+ `user_id`) | ✅ With `USE_PG=true` Mongo is replaced by `_MongoRetired` (any access raises); sweep test calls every non-`/api/pg` route; boots without `MONGO_URL` |
 | P2.7 Cutover | -- | apply pending SQL, run migrate scripts on a fresh backup, flip flags, remove Mongo | ⏳ |
 
 Cutover data order (each script reads the same fresh Mongo backup; apply its SQL before

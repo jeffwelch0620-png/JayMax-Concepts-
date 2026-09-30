@@ -26,7 +26,7 @@ PG_URL = os.environ.get("TEST_PG_URL")
 pytestmark = pytest.mark.skipif(not PG_URL, reason="TEST_PG_URL not set")
 
 RESET = """
-TRUNCATE par_recommendations, store_sales_projections, ai_chat_messages, purchase_order_lines, purchase_orders, store_vendor_contacts, store_state, app_users, adjustments,
+TRUNCATE activity_log, par_recommendations, store_sales_projections, ai_chat_messages, purchase_order_lines, purchase_orders, store_vendor_contacts, store_state, app_users, adjustments,
          reporting_periods, count_lines, count_sessions, prep_logs, prep_items, dish_lines, dishes, store_items, vendor_items, items, vendors, stores CASCADE;
 INSERT INTO stores (id, name) VALUES ('berts', 'Berts'), ('rudds', 'Rudds'), ('papa', 'Papa'), ('comm', 'Commissary');
 INSERT INTO vendors (id, name) VALUES ('us_foods', 'US Foods');
@@ -414,4 +414,39 @@ def test_ai_and_planning_migration_remaps_recipes(tmp_path):
         assert [m["content"] for m in await server.ai_history("papa_leonis")] == ["hi", "hello"]
         assert (await server.get_projections("berts"))[0]["amount"] == 900.0
         assert [(r["id"], r["recipeId"]) for r in await server.get_par_recs("papa_leonis")] == [("rec_1", sauce)]
+    run(scenario)
+
+
+
+def test_no_api_route_touches_mongo_in_postgres_mode(monkeypatch):
+    """Sweep every /api route outside /api/pg with Mongo replaced by the retired stand-in:
+    none may reach for a Mongo collection, and the activity log lands in Postgres."""
+    import re
+    import httpx
+    from fastapi.routing import APIRoute
+    monkeypatch.setattr(server, "db", server._MongoRetired())
+    params = {"rid": "papa_leonis", "store_id": "papa", "oid": "po_missing", "rec_id": "rec_missing", "collection": "adjustments"}
+
+    async def scenario():
+        token = server._token({"id": "usr_sweep", "email": "o@example.test", "role": "owner", "locations": sorted(server.RIDS)})
+        transport = httpx.ASGITransport(app=server.app, raise_app_exceptions=False)
+        failures, legacy, called = [], 0, 0
+        async with httpx.AsyncClient(transport=transport, base_url="http://test",
+                                     headers={"Authorization": "Bearer " + token}) as client:
+            for route in server.app.routes:
+                if not isinstance(route, APIRoute) or not route.path.startswith("/api") or route.path.startswith("/api/pg/"):
+                    continue
+                path = re.sub(r"\{(\w+)\}", lambda m: params.get(m.group(1), "x"), route.path)
+                for method in sorted(route.methods):
+                    body = [] if method == "PUT" and "/state/" in route.path else {}
+                    resp = await client.request(method, path, json=body if method in ("POST", "PUT") else None)
+                    called += 1
+                    legacy += resp.status_code == 410
+                    if resp.status_code >= 500 and "AI key not configured" not in resp.text:
+                        failures.append((method, route.path, resp.status_code, resp.text[:200]))
+        assert failures == []
+        assert called > 60 and legacy > 30
+        logged = await db_pg.pool().fetchval(
+            "SELECT count(*) FROM activity_log WHERE user_id='usr_sweep' AND store_id='papa'")
+        assert logged > 10
     run(scenario)

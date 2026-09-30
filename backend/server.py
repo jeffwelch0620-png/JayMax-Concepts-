@@ -26,9 +26,20 @@ except ImportError:  # pragma: no cover - optional dependency, push notification
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+class _MongoRetired:
+    """Stands in for the Mongo database when USE_PG=true. Postgres mode is Supabase-only:
+    any code path still reaching for a Mongo collection fails loudly here instead of
+    quietly reading or writing data that has diverged from Postgres."""
+    def __getattr__(self, name):
+        raise RuntimeError(f"MongoDB accessed in Postgres mode (collection '{name}')")
+    __getitem__ = __getattr__
+
+if os.environ.get("USE_PG", "false").strip().lower() == "true":
+    client = None
+    db = _MongoRetired()
+else:
+    client = AsyncIOMotorClient(os.environ['MONGO_URL'])
+    db = client[os.environ['DB_NAME']]
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -132,7 +143,14 @@ def _is_pin_optional(path):
     return not (len(tail) >= 2 and tail[1] in ("pin", "members"))
 
 async def _record_activity(request, user, status):
-    if user and request.url.path not in ("/api/health",):
+    if user and request.url.path not in ("/api/health",) and USE_PG:
+        rid = _path_rid(request.url.path)
+        await db_pg.pool().execute(
+            """INSERT INTO activity_log (user_id, user_email, role, method, path, status, store_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)""",
+            user.get("sub"), user.get("email"), user.get("role"), request.method, request.url.path, status,
+            RESTAURANT_TO_PG_STORE.get(rid) if rid else None)
+    elif user and request.url.path not in ("/api/health",):
         await db.activity_log.insert_one({"id": "act_" + uuid.uuid4().hex[:12],
             "userId": user.get("sub"), "email": user.get("email"), "role": user.get("role"),
             "method": request.method, "path": request.url.path, "status": status,
@@ -5024,10 +5042,12 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_pg_pool():
-    await db.state_versions.create_index("restaurantId", unique=True)
+    if not USE_PG:
+        await db.state_versions.create_index("restaurantId", unique=True)
     await db_pg.init_pool()
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    if client is not None:
+        client.close()
     await db_pg.close_pool()
