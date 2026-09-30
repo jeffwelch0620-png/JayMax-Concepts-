@@ -1681,6 +1681,34 @@ async def prep_report(rid: str, frm: Optional[str] = Query(None, alias="from"), 
 
 @api_router.get("/owner/prep-summary")
 async def owner_prep_summary():
+    if USE_PG:
+        stores = []
+        conn = await db_pg.pool().acquire()
+        try:
+            for r in RESTAURANTS:
+                store_id = RESTAURANT_TO_PG_STORE[r["id"]]
+                session = await conn.fetchrow(
+                    "SELECT status FROM count_sessions WHERE store_id=$1 AND count_date=$2 AND count_type='nightly_prep'",
+                    store_id, _pg_date(_today()))
+                plist = await conn.fetchrow(
+                    "SELECT id FROM prep_lists WHERE store_id=$1 AND prep_date=$2 AND count_type='nightly_prep'",
+                    store_id, _pg_date(_today()))
+                tasks = await conn.fetch(
+                    "SELECT batches_planned, batches_done, removed FROM prep_list_lines WHERE list_id=$1",
+                    plist["id"]) if plist else []
+                logs = await conn.fetch(
+                    "SELECT total_cost FROM prep_logs WHERE store_id=$1 AND kind='batch' AND date >= $2",
+                    store_id, _pg_date((datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()))
+                active = [t for t in tasks if not t["removed"]]
+                stores.append({"id": r["id"], "short": r["short"], "accent": r["accent"],
+                               "countStatus": session["status"] if session else "none",
+                               "tasksTotal": len(active),
+                               "tasksDone": sum(1 for t in active if f(t["batches_planned"]) > 0 and
+                                                f(t["batches_done"]) >= f(t["batches_planned"])),
+                               "prepCost7d": round(sum(f(l["total_cost"]) for l in logs), 2)})
+        finally:
+            await db_pg.pool().release(conn)
+        return {"stores": stores}
     today = _today()
     week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
     stores = []
@@ -1801,28 +1829,40 @@ async def _pg_owner_view(rid):
                       si.order_enabled, si.sales_tracked, si.needs_review
                FROM items i JOIN store_items si ON si.item_code = i.code
                WHERE si.store_id = $1""", store_id)
+        sku_rows = await conn.fetch(
+            """SELECT vi.*, v.name AS vendor_name FROM vendor_items vi
+               JOIN vendors v ON v.id = vi.vendor_id
+               WHERE vi.item_code = ANY($1::text[])""",
+            [r["code"] for r in item_rows])
+        skus_by_code = {}
+        for sku in sku_rows:
+            skus_by_code.setdefault(sku["item_code"], []).append(sku)
         items = []
         for r2 in item_rows:
-            it = await _item_row_to_api(conn, store_id, r2, r2)
+            it = await _item_row_to_api(conn, store_id, r2, r2, skus_by_code.get(r2["code"], []))
             code = it["code"]
             it["controlNumber"] = code[len(prefix):] if code.startswith(prefix) else code
             it["purchaseUnit"] = (next((s["purchaseUnit"] for s in it["vendorSkus"] if s["preferred"]), None)
                                    or (it["vendorSkus"][0]["purchaseUnit"] if it["vendorSkus"] else "case"))
             items.append(it)
 
-        inv_rows = await conn.fetch("SELECT id, invoice_date FROM invoices WHERE store_id=$1", store_id)
-        purchases = []
-        for inv in inv_rows:
-            lines = await conn.fetch("SELECT extended FROM invoice_lines WHERE invoice_id=$1", inv["id"])
-            for l in lines:
-                purchases.append({"extendedCost": float(l["extended"] or 0), "invoiceDate": inv["invoice_date"].isoformat()})
+        purchases = [
+            {"extendedCost": float(l["extended"] or 0), "invoiceDate": l["invoice_date"].isoformat()}
+            for l in await conn.fetch(
+                """SELECT il.extended, i.invoice_date FROM invoice_lines il
+                   JOIN invoices i ON i.id = il.invoice_id WHERE i.store_id=$1""", store_id)]
 
         dish_rows = await conn.fetch("SELECT * FROM dishes WHERE store_id=$1", store_id)
+        dish_lines = await conn.fetch(
+            "SELECT * FROM dish_lines WHERE dish_id = ANY($1::uuid[])",
+            [d["id"] for d in dish_rows])
+        lines_by_dish = {}
+        for line in dish_lines:
+            lines_by_dish.setdefault(line["dish_id"], []).append(line)
         dishes = []
         for d in dish_rows:
-            dish_lines = await conn.fetch("SELECT * FROM dish_lines WHERE dish_id=$1", d["id"])
             lines = []
-            for l in dish_lines:
+            for l in lines_by_dish.get(d["id"], []):
                 cn = None
                 if l["item_code"]:
                     cn = l["item_code"][len(prefix):] if l["item_code"].startswith(prefix) else l["item_code"]
@@ -2155,8 +2195,14 @@ async def send_order(rid: str, oid: str, payload: dict = None):
 @api_router.post("/orders/{rid}/{oid}/receive")
 async def receive_order(rid: str, oid: str, payload: dict = None):
     check_rid(rid)
-    po = await _get_po(rid, oid)
-    if po["status"] != "sent":
+    po = await db.purchase_orders.find_one_and_update(
+        {"restaurantId": rid, "id": oid, "status": "sent"},
+        {"$set": {"status": "receiving", "receiptStartedAt": _now_iso()}},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER)
+    if not po:
+        current = await _get_po(rid, oid)
+        if current.get("status") == "receiving":
+            raise HTTPException(409, "receipt is already being processed")
         raise HTTPException(400, "only orders sent to the supplier can be received")
     by = (payload or {}).get("by", "")
     invoice_number = str((payload or {}).get("invoiceNumber", "")).strip()
@@ -2175,11 +2221,17 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
             store_id = RESTAURANT_TO_PG_STORE[rid]
             conn = await db_pg.pool().acquire()
             try:
-                async with conn.transaction():
-                    for cn, rq in updates:
-                        await conn.execute(
-                            "UPDATE store_items SET current_stock = current_stock + $1 WHERE store_id=$2 AND item_code=$3",
-                            rq, store_id, f"{rid}_{cn}")
+                try:
+                    async with conn.transaction():
+                        for cn, rq in updates:
+                            await conn.execute(
+                                "UPDATE store_items SET current_stock = current_stock + $1 WHERE store_id=$2 AND item_code=$3",
+                                rq, store_id, f"{rid}_{cn}")
+                except Exception:
+                    await db.purchase_orders.update_one(
+                        {"restaurantId": rid, "id": oid, "status": "receiving"},
+                        {"$set": {"status": "sent"}, "$unset": {"receiptStartedAt": ""}})
+                    raise
             finally:
                 await db_pg.pool().release(conn)
         else:
@@ -2188,14 +2240,20 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
             ops = [UpdateOne({"restaurantId": rid, "controlNumber": cn},
                              {"$set": {"currentStock": round(stock.get(cn, 0) + rq, 3)}}) for cn, rq in updates if cn in stock]
             if ops:
-                await db.items.bulk_write(ops)
+                try:
+                    await db.items.bulk_write(ops)
+                except Exception:
+                    await db.purchase_orders.update_one(
+                        {"restaurantId": rid, "id": oid, "status": "receiving"},
+                        {"$set": {"status": "sent"}, "$unset": {"receiptStartedAt": ""}})
+                    raise
     receipt_match = await _match_invoice(rid, invoice_number, lines) if invoice_number else None
     now = datetime.now(timezone.utc).isoformat()
     set_fields = {"status": "received", "receivedAt": now, "lines": lines, "invoiceNumber": invoice_number or None, "receiptMatch": receipt_match}
     note = ""
     if receipt_match:
         note = f"invoice {invoice_number}: {receipt_match['flaggedCount']} discrepanc{'y' if receipt_match['flaggedCount'] == 1 else 'ies'}" if receipt_match["invoiceFound"] else f"invoice {invoice_number} not found in Invoice Master"
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
+    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid, "status": "receiving"},
         {"$set": set_fields, "$push": {"history": _po_event("received", by, note)}})
     return _po_public(await _get_po(rid, oid))
 
@@ -2758,10 +2816,11 @@ class ItemIn(BaseModel):
     needs_review: bool = False
     vendor_skus: List[VendorSkuIn] = []
 
-async def _item_row_to_api(conn, store_id, item_row, store_item_row):
-    skus = await conn.fetch(
-        """SELECT vi.*, v.name AS vendor_name FROM vendor_items vi
-           JOIN vendors v ON v.id = vi.vendor_id WHERE vi.item_code = $1""", item_row["code"])
+async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None):
+    if skus is None:
+        skus = await conn.fetch(
+            """SELECT vi.*, v.name AS vendor_name FROM vendor_items vi
+               JOIN vendors v ON v.id = vi.vendor_id WHERE vi.item_code = $1""", item_row["code"])
     return {
         "code": item_row["code"], "name": item_row["name"], "category": item_row["category"],
         "baseUnit": item_row["base_unit"], "itemType": item_row["item_type"],
@@ -2777,7 +2836,7 @@ async def _item_row_to_api(conn, store_id, item_row, store_item_row):
         "storageArea": store_item_row["storage_area"] if store_item_row else None,
         "countedNightly": store_item_row["counted_nightly"] if store_item_row else False,
         "active": store_item_row["store_active"] if store_item_row else True,
-        "countActive": store_item_row["store_active"] if store_item_row else True,
+        "countActive": store_item_row["counted_nightly"] if store_item_row else False,
         "orderEnabled": store_item_row["order_enabled"] if store_item_row else True,
         "salesTracked": store_item_row["sales_tracked"] if store_item_row else True,
         "needsReview": store_item_row["needs_review"] if store_item_row else False,
@@ -4038,8 +4097,9 @@ async def _pg_get_staff_pin(conn, store_id):
     return (row["pin"] if row else None) or DEFAULT_STAFF_PIN_PG
 
 @pg_router.get("/staff/{store_id}/pin")
-async def pg_get_staff_pin(store_id: str):
+async def pg_get_staff_pin(store_id: str, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     row = await db_pg.pool().fetchrow("SELECT pin FROM staff_pins WHERE store_id=$1", store_id)
     return {"staffPin": (row["pin"] if row else None) or DEFAULT_STAFF_PIN_PG, "custom": bool(row)}
 
@@ -4067,8 +4127,9 @@ def _pg_staff_member_to_api(row):
     return {"id": str(row["id"]), "name": row["name"], "role": row["role"], "active": row["active"]}
 
 @pg_router.get("/staff/{store_id}/members")
-async def pg_list_staff_members(store_id: str):
+async def pg_list_staff_members(store_id: str, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     rows = await db_pg.pool().fetch("SELECT * FROM staff_members WHERE store_id=$1 ORDER BY name", store_id)
     return [_pg_staff_member_to_api(r) for r in rows]
 
@@ -4244,11 +4305,11 @@ async def pg_staff_counts(store_id: str, body: PgPinBodyIn, request: Request):
             raise HTTPException(403, "Invalid PIN")
         rows = await conn.fetch(
             """SELECT i.code, i.name, i.unit_uom, si.storage_area, si.current_stock, si.last_counted,
-                      si.last_counted_by, si.active
+                      si.last_counted_by
                FROM store_items si JOIN items i ON i.code = si.item_code
-               WHERE si.store_id=$1""", store_id)
+               WHERE si.store_id=$1 AND si.counted_nightly=TRUE""", store_id)
         prefix = PG_STORE_TO_RESTAURANT[store_id] + "_"
-        counted = [r for r in rows if r["active"]]
+        counted = rows
         return {"date": _pg_today(), "items": [{
             "controlNumber": r["code"][len(prefix):] if r["code"].startswith(prefix) else r["code"],
             "name": r["name"], "storageArea": r["storage_area"] or "", "unitUOM": r["unit_uom"] or "",
@@ -4358,8 +4419,9 @@ async def _pg_notify_new_staff_task(store_id, task):
         await db_pg.pool().execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, endpoint)
 
 @pg_router.get("/staff-tasks/{store_id}")
-async def pg_list_staff_tasks(store_id: str):
+async def pg_list_staff_tasks(store_id: str, request: Request):
     check_store_id(store_id)
+    _require_manager(request)
     rows = await db_pg.pool().fetch("SELECT * FROM staff_tasks WHERE store_id=$1 ORDER BY due_date DESC", store_id)
     return [_pg_staff_task_to_api(r) for r in rows]
 
@@ -4424,6 +4486,8 @@ async def pg_staff_task_complete(store_id: str, task_id: str, body: PgStaffTaskC
             task = await conn.fetchrow("SELECT * FROM staff_tasks WHERE id=$1 AND store_id=$2 FOR UPDATE", task_id, store_id)
             if not task:
                 raise HTTPException(404, "task not found")
+            if task["status"] != "pending":
+                raise HTTPException(409, "Task is already complete")
             next_due = None
             if task["recurrence"] == "daily":
                 next_due = (datetime.fromisoformat(_pg_today()) + timedelta(days=1)).date()
