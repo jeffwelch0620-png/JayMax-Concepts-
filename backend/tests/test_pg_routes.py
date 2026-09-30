@@ -413,3 +413,28 @@ def test_cors_origins_tolerate_copy_paste_variants():
     assert server._cors_origins(' "https://jaymax-concepts.onrender.com/" , https://b.example ') == [
         "https://jaymax-concepts.onrender.com", "https://b.example"]
     assert server._cors_origins("") == ["*"]
+
+
+def test_pg_pool_startup_never_hangs_and_retries_in_background(monkeypatch):
+    attempts = []
+
+    async def create_pool(url, **kwargs):
+        attempts.append(kwargs.get("timeout"))
+        if len(attempts) == 1:
+            await asyncio.sleep(3600)  # an unreachable host that never answers
+        return "pool"
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unreachable")
+    monkeypatch.setattr(db_pg.asyncpg, "create_pool", create_pool)
+    monkeypatch.setattr(db_pg, "CONNECT_TIMEOUT", 0.05)
+    monkeypatch.setattr(db_pg, "RETRY_INTERVAL", 0.01)
+    monkeypatch.setattr(db_pg, "_pool", None)
+    monkeypatch.setattr(db_pg, "_retry_task", None)
+
+    async def scenario():
+        assert await db_pg.init_pool() is None       # returns instead of hanging
+        await asyncio.wait_for(db_pg._retry_task, 2)  # background retry connects
+        return db_pg._pool
+
+    assert asyncio.run(scenario()) == "pool"
+    assert attempts[0] == 0.05
