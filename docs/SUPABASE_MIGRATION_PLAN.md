@@ -33,6 +33,9 @@ available), each paired with a `scripts/migrate_*.py` that turns the Mongo backu
 | P2.6 Activity log + Mongo retired | `activity_log`; everything else | `activity_log` (+ `user_id`) | ✅ With `USE_PG=true` Mongo is replaced by `_MongoRetired` (any access raises); sweep test calls every non-`/api/pg` route; boots without `MONGO_URL` |
 | P2.7 Cutover | -- | apply pending SQL, run migrate scripts on a fresh backup, flip flags, remove Mongo | ⏳ |
 
+Cutover schema: apply only `supabase/pending/01..05` in order. (`migrations/20260930_recurring_prep_items.sql`
+is already live -- see `supabase/README.md`.)
+
 Cutover data order (each script reads the same fresh Mongo backup; apply its SQL before
 running the next, since later ones resolve ids against earlier ones):
 1. phase-1 scripts (`migrate_items_and_invoices`, `migrate_dishes`, `migrate_prep_stock_and_logs`,

@@ -30,6 +30,12 @@ Migrations applied to the live project at snapshot time (`supabase_migrations.sc
 | 20260929210257 | add_inventory_count_submissions |
 | 20260930005411 | prep_items_recurring_schedule |
 
+`migrations/20260930_recurring_prep_items.sql` (recurring prep items) is **already
+applied** as `20260930005411 prep_items_recurring_schedule` -- do not re-run it. The
+live columns are nullable and its checks exist under other names
+(`prep_items_recur_days_range_check`, `prep_items_recurring_requires_fields_check`);
+re-running would only add two duplicate checks. `schema.sql` reflects the live state.
+
 ## Access model
 
 - The backend connects with `DATABASE_URL` as the `postgres` role (via the Supavisor
