@@ -2170,8 +2170,170 @@ def _po_total(lines):
 def _po_event(status, by, note=""):
     return {"status": status, "at": datetime.now(timezone.utc).isoformat(), "by": by or "", "note": note or ""}
 
+# ---- Purchase-order storage ----
+# Every PO route reads/writes whole order documents through these helpers, so the route
+# logic (status machine, approval rules, receiving) is identical in both modes. Mongo
+# keeps one document per order; Postgres stores the header in purchase_orders (keyed by
+# `ref`, the public "po_..." id) and the lines in purchase_order_lines, and rebuilds the
+# same document shape on read. See supabase/pending/02_purchase_orders.sql.
+_PO_COLS = {"vendor": "vendor_name", "status": "status", "createdBy": "created_by", "note": "note",
+            "total": "total", "createdAt": "created_at", "submittedAt": "submitted_at",
+            "approvedBy": "approved_by", "approvedAt": "approved_at", "rejectedReason": "rejected_reason",
+            "sentAt": "sent_at", "receivedAt": "received_at", "receiptStartedAt": "receipt_started_at",
+            "invoiceNumber": "invoice_number", "receiptMatch": "receipt_match",
+            "emailedTo": "emailed_to", "emailedAt": "emailed_at", "history": "history"}
+_PO_TS = {"createdAt", "submittedAt", "approvedAt", "sentAt", "receivedAt", "receiptStartedAt", "emailedAt"}
+_PO_OPTIONAL = ("receiptStartedAt", "invoiceNumber", "receiptMatch", "emailedTo", "emailedAt")
+_PO_SORT = {"createdAt": "created_at", "submittedAt": "submitted_at", "receivedAt": "received_at"}
+
+def _ts_in(v):
+    return datetime.fromisoformat(v) if isinstance(v, str) and v else (v or None)
+
+def _ts_out(v):
+    return v.isoformat() if v else None
+
+def _pg_po_doc(row, lines):
+    doc = {"id": row["ref"], "restaurantId": PG_STORE_TO_RESTAURANT.get(row["store_id"], row["store_id"]),
+           "lines": [{"controlNumber": l["control_number"], "name": l["name"], "vendorSku": l["vendor_sku"],
+                      "qty": f(l["qty"]), "purchaseUnit": l["unit"] or "case", "unitCost": f(l["unit_price"]),
+                      "receivedQty": f(l["received_qty"]), "lineTotal": f(l["extended"])} for l in lines]}
+    for key, col in _PO_COLS.items():
+        v = row[col]
+        doc[key] = _ts_out(v) if key in _PO_TS else (f(v) if key == "total" else v)
+    doc["createdBy"] = doc["createdBy"] or ""
+    for key in _PO_OPTIONAL:
+        if doc[key] is None:
+            doc.pop(key)
+    return doc
+
+async def _pg_po_write_lines(conn, po_uuid, rid, lines):
+    await conn.execute("DELETE FROM purchase_order_lines WHERE po_id=$1", po_uuid)
+    if lines:
+        # item_code links to the migrated catalog when the item exists (NULL otherwise, so a
+        # line for a since-deleted item never fails the FK); control_number is the source of truth.
+        await conn.executemany(
+            """INSERT INTO purchase_order_lines (po_id, position, control_number, item_code, name, vendor_sku,
+                   qty, unit, unit_price, extended, received_qty)
+               VALUES ($1, $2, $3, (SELECT code FROM items WHERE code=$4), $5, $6, $7, $8, $9, $10, $11)""",
+            [(po_uuid, i, l.get("controlNumber"), f"{rid}_{l.get('controlNumber')}", l.get("name") or "",
+              l.get("vendorSku") or "", f(l.get("qty")), l.get("purchaseUnit") or "case", f(l.get("unitCost")),
+              f(l.get("lineTotal")), f(l.get("receivedQty"))) for i, l in enumerate(lines)])
+
+async def _pg_po_fetch(where, args, order="created_at DESC", limit=2000):
+    pool = db_pg.pool()
+    rows = await pool.fetch(f"SELECT * FROM purchase_orders WHERE {where} ORDER BY {order} NULLS LAST LIMIT {int(limit)}", *args)
+    if not rows:
+        return []
+    lines = await pool.fetch("SELECT * FROM purchase_order_lines WHERE po_id = ANY($1::uuid[]) ORDER BY position",
+                             [r["id"] for r in rows])
+    by_po = {}
+    for l in lines:
+        by_po.setdefault(l["po_id"], []).append(l)
+    return [_pg_po_doc(r, by_po.get(r["id"], [])) for r in rows]
+
+async def _po_find(rid, oid):
+    if USE_PG:
+        found = await _pg_po_fetch("store_id=$1 AND ref=$2", [RESTAURANT_TO_PG_STORE.get(rid, rid), oid], limit=1)
+        return found[0] if found else None
+    return await db.purchase_orders.find_one({"restaurantId": rid, "id": oid}, {"_id": 0})
+
+async def _po_query(rid=None, status=None, vendor=None, exclude_status=None, sort="createdAt", descending=True, limit=2000):
+    if USE_PG:
+        conds, args = [], []
+        for col, op, val in (("store_id", "=", RESTAURANT_TO_PG_STORE.get(rid, rid) if rid else None),
+                             ("status", "=", status), ("vendor_name", "=", vendor), ("status", "<>", exclude_status)):
+            if val is not None:
+                args.append(val)
+                conds.append(f"{col} {op} ${len(args)}")
+        order = f"{_PO_SORT[sort]} {'DESC' if descending else 'ASC'}"
+        return await _pg_po_fetch(" AND ".join(conds) or "TRUE", args, order, limit)
+    q = {}
+    if rid:
+        q["restaurantId"] = rid
+    if status:
+        q["status"] = status
+    if vendor is not None:
+        q["vendor"] = vendor
+    if exclude_status:
+        q["status"] = {"$ne": exclude_status}
+    return await db.purchase_orders.find(q, {"_id": 0}).sort(sort, -1 if descending else 1).to_list(limit)
+
+async def _po_insert(po):
+    if not USE_PG:
+        await db.purchase_orders.insert_one(dict(po))
+        return
+    rid = po["restaurantId"]
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            po_uuid = await conn.fetchval(
+                """INSERT INTO purchase_orders (ref, store_id, vendor_name, vendor_id, status, created_by, note, total,
+                       created_at, history)
+                   VALUES ($1, $2, $3, (SELECT id FROM vendors WHERE lower(name)=lower($3) LIMIT 1), $4, $5, $6, $7, $8, $9)
+                   RETURNING id""",
+                po["id"], RESTAURANT_TO_PG_STORE.get(rid, rid), po.get("vendor") or "Unassigned", po["status"],
+                po.get("createdBy") or "", po.get("note") or "", f(po.get("total")), _ts_in(po.get("createdAt")),
+                po.get("history") or [])
+            await _pg_po_write_lines(conn, po_uuid, rid, po.get("lines") or [])
+    finally:
+        await db_pg.pool().release(conn)
+
+async def _po_update(rid, oid, set_fields=None, events=(), expect_status=None, unset=()):
+    """Apply field changes (and append history events) to one order; returns False when
+    no order matched -- including when `expect_status` no longer holds (compare-and-swap)."""
+    set_fields = dict(set_fields or {})
+    if not USE_PG:
+        update = {}
+        if set_fields:
+            update["$set"] = set_fields
+        if unset:
+            update["$unset"] = {k: "" for k in unset}
+        if events:
+            update["$push"] = {"history": {"$each": list(events)}}
+        q = {"restaurantId": rid, "id": oid}
+        if expect_status:
+            q["status"] = expect_status
+        return (await db.purchase_orders.update_one(q, update)).matched_count > 0
+    lines = set_fields.pop("lines", None)
+    args = [RESTAURANT_TO_PG_STORE.get(rid, rid), oid]
+    sets = []
+    for key, v in set_fields.items():
+        args.append(_ts_in(v) if key in _PO_TS else v)
+        sets.append(f"{_PO_COLS[key]}=${len(args)}")
+        if key == "vendor":
+            sets.append(f"vendor_id=(SELECT id FROM vendors WHERE lower(name)=lower(${len(args)}) LIMIT 1)")
+    sets += [f"{_PO_COLS[k]}=NULL" for k in unset]
+    if events:
+        args.append(list(events))
+        sets.append(f"history = history || ${len(args)}::jsonb")
+    where = "store_id=$1 AND ref=$2"
+    if expect_status:
+        args.append(expect_status)
+        where += f" AND status=${len(args)}"
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            if sets:
+                po_uuid = await conn.fetchval(f"UPDATE purchase_orders SET {', '.join(sets)} WHERE {where} RETURNING id", *args)
+            else:
+                po_uuid = await conn.fetchval(f"SELECT id FROM purchase_orders WHERE {where} FOR UPDATE", *args)
+            if po_uuid is None:
+                return False
+            if lines is not None:
+                await _pg_po_write_lines(conn, po_uuid, rid, lines)
+        return True
+    finally:
+        await db_pg.pool().release(conn)
+
+async def _po_delete(rid, oid):
+    if USE_PG:
+        await db_pg.pool().execute("DELETE FROM purchase_orders WHERE store_id=$1 AND ref=$2",
+                                   RESTAURANT_TO_PG_STORE.get(rid, rid), oid)
+    else:
+        await db.purchase_orders.delete_one({"restaurantId": rid, "id": oid})
+
 async def _get_po(rid, oid):
-    po = await db.purchase_orders.find_one({"restaurantId": rid, "id": oid})
+    po = await _po_find(rid, oid)
     if not po:
         raise HTTPException(404, "purchase order not found")
     return po
@@ -2179,10 +2341,7 @@ async def _get_po(rid, oid):
 @api_router.get("/orders/{rid}")
 async def list_orders(rid: str, status: Optional[str] = None):
     check_rid(rid)
-    q = {"restaurantId": rid}
-    if status:
-        q["status"] = status
-    pos = await db.purchase_orders.find(q).sort("createdAt", -1).to_list(2000)
+    pos = await _po_query(rid=rid, status=status or None)
     return [_po_public(p) for p in pos]
 
 @api_router.post("/orders/{rid}")
@@ -2201,7 +2360,7 @@ async def create_order(rid: str, body: POCreateIn):
         "sentAt": None, "receivedAt": None,
         "history": [_po_event("draft", body.createdBy)],
     }
-    await db.purchase_orders.insert_one(dict(po))
+    await _po_insert(po)
     return _po_public(po)
 
 @api_router.put("/orders/{rid}/{oid}")
@@ -2214,8 +2373,7 @@ async def update_order(rid: str, oid: str, body: POCreateIn):
     for l in lines:
         l["receivedQty"] = 0
         l["lineTotal"] = round(f(l.get("qty")) * f(l.get("unitCost")), 2)
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"vendor": body.vendor or po.get("vendor"), "note": body.note, "lines": lines, "total": _po_total(lines)}})
+    await _po_update(rid, oid, {"vendor": body.vendor or po.get("vendor"), "note": body.note, "lines": lines, "total": _po_total(lines)})
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/submit")
@@ -2228,8 +2386,7 @@ async def submit_order(rid: str, oid: str, payload: dict = None):
         raise HTTPException(400, "cannot submit an empty order")
     by = (payload or {}).get("by", "")
     now = datetime.now(timezone.utc).isoformat()
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "pending", "submittedAt": now}, "$push": {"history": _po_event("pending", by)}})
+    await _po_update(rid, oid, {"status": "pending", "submittedAt": now}, [_po_event("pending", by)])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/approve")
@@ -2245,8 +2402,7 @@ async def approve_order(rid: str, oid: str, payload: dict = None):
     if creator and by.lower() == creator.lower():
         raise HTTPException(403, "This order's creator cannot approve their own order — a different person must approve it")
     now = datetime.now(timezone.utc).isoformat()
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "approved", "approvedBy": by, "approvedAt": now}, "$push": {"history": _po_event("approved", by)}})
+    await _po_update(rid, oid, {"status": "approved", "approvedBy": by, "approvedAt": now}, [_po_event("approved", by)])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/reject")
@@ -2257,8 +2413,7 @@ async def reject_order(rid: str, oid: str, payload: dict = None):
         raise HTTPException(400, "only pending orders can be rejected")
     by = (payload or {}).get("by", "")
     reason = (payload or {}).get("reason", "")
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "rejected", "rejectedReason": reason}, "$push": {"history": _po_event("rejected", by, reason)}})
+    await _po_update(rid, oid, {"status": "rejected", "rejectedReason": reason}, [_po_event("rejected", by, reason)])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/reopen")
@@ -2268,8 +2423,7 @@ async def reopen_order(rid: str, oid: str, payload: dict = None):
     if po["status"] != "rejected":
         raise HTTPException(400, "only rejected orders can be reopened")
     by = (payload or {}).get("by", "")
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "draft", "rejectedReason": None}, "$push": {"history": _po_event("draft", by, "reopened")}})
+    await _po_update(rid, oid, {"status": "draft", "rejectedReason": None}, [_po_event("draft", by, "reopened")])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/send")
@@ -2280,17 +2434,14 @@ async def send_order(rid: str, oid: str, payload: dict = None):
         raise HTTPException(400, "only approved orders can be sent to the supplier")
     by = (payload or {}).get("by", "")
     now = datetime.now(timezone.utc).isoformat()
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": {"status": "sent", "sentAt": now}, "$push": {"history": _po_event("sent", by)}})
+    await _po_update(rid, oid, {"status": "sent", "sentAt": now}, [_po_event("sent", by)])
     return _po_public(await _get_po(rid, oid))
 
 @api_router.post("/orders/{rid}/{oid}/receive")
 async def receive_order(rid: str, oid: str, payload: dict = None):
     check_rid(rid)
-    po = await db.purchase_orders.find_one_and_update(
-        {"restaurantId": rid, "id": oid, "status": "sent"},
-        {"$set": {"status": "receiving", "receiptStartedAt": _now_iso()}},
-        projection={"_id": 0}, return_document=ReturnDocument.AFTER)
+    claimed = await _po_update(rid, oid, {"status": "receiving", "receiptStartedAt": _now_iso()}, expect_status="sent")
+    po = await _po_find(rid, oid) if claimed else None
     if not po:
         current = await _get_po(rid, oid)
         if current.get("status") == "receiving":
@@ -2320,9 +2471,7 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
                                 "UPDATE store_items SET current_stock = current_stock + $1 WHERE store_id=$2 AND item_code=$3",
                                 rq, store_id, f"{rid}_{cn}")
                 except Exception:
-                    await db.purchase_orders.update_one(
-                        {"restaurantId": rid, "id": oid, "status": "receiving"},
-                        {"$set": {"status": "sent"}, "$unset": {"receiptStartedAt": ""}})
+                    await _po_update(rid, oid, {"status": "sent"}, expect_status="receiving", unset=("receiptStartedAt",))
                     raise
             finally:
                 await db_pg.pool().release(conn)
@@ -2335,9 +2484,7 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
                 try:
                     await db.items.bulk_write(ops)
                 except Exception:
-                    await db.purchase_orders.update_one(
-                        {"restaurantId": rid, "id": oid, "status": "receiving"},
-                        {"$set": {"status": "sent"}, "$unset": {"receiptStartedAt": ""}})
+                    await _po_update(rid, oid, {"status": "sent"}, expect_status="receiving", unset=("receiptStartedAt",))
                     raise
     receipt_match = await _match_invoice(rid, invoice_number, lines) if invoice_number else None
     now = datetime.now(timezone.utc).isoformat()
@@ -2345,8 +2492,7 @@ async def receive_order(rid: str, oid: str, payload: dict = None):
     note = ""
     if receipt_match:
         note = f"invoice {invoice_number}: {receipt_match['flaggedCount']} discrepanc{'y' if receipt_match['flaggedCount'] == 1 else 'ies'}" if receipt_match["invoiceFound"] else f"invoice {invoice_number} not found in Invoice Master"
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid, "status": "receiving"},
-        {"$set": set_fields, "$push": {"history": _po_event("received", by, note)}})
+    await _po_update(rid, oid, set_fields, [_po_event("received", by, note)], expect_status="receiving")
     return _po_public(await _get_po(rid, oid))
 
 @api_router.delete("/orders/{rid}/{oid}")
@@ -2355,12 +2501,12 @@ async def delete_order(rid: str, oid: str):
     po = await _get_po(rid, oid)
     if po["status"] not in ("draft", "rejected"):
         raise HTTPException(400, "only draft or rejected orders can be deleted")
-    await db.purchase_orders.delete_one({"restaurantId": rid, "id": oid})
+    await _po_delete(rid, oid)
     return {"ok": True}
 
 @api_router.get("/owner/orders")
 async def owner_orders():
-    pos = await db.purchase_orders.find({"status": "pending"}).sort("submittedAt", 1).to_list(2000)
+    pos = await _po_query(status="pending", sort="submittedAt", descending=False)
     name_by_rid = {r["id"]: r["short"] for r in RESTAURANTS}
     out = []
     for p in pos:
@@ -2566,11 +2712,37 @@ async def _match_invoice(rid, invoice_number, po_lines):
     return {"invoiceNumber": str(invoice_number), "invoiceFound": len(plines) > 0,
             "matchedAt": datetime.now(timezone.utc).isoformat(), "flaggedCount": flagged, "lines": result_lines}
 
+# Supplier order emails, per store and vendor name (Postgres: store_vendor_contacts).
+async def _vc_list(rid):
+    if USE_PG:
+        rows = await db_pg.pool().fetch(
+            "SELECT vendor, order_email FROM store_vendor_contacts WHERE store_id=$1 ORDER BY vendor",
+            RESTAURANT_TO_PG_STORE.get(rid, rid))
+        return [{"vendor": r["vendor"], "orderEmail": r["order_email"]} for r in rows]
+    return await db.vendor_contacts.find({"restaurantId": rid}, {"_id": 0, "restaurantId": 0}).to_list(200)
+
+async def _vc_email(rid, vendor):
+    if USE_PG:
+        return await db_pg.pool().fetchval(
+            "SELECT order_email FROM store_vendor_contacts WHERE store_id=$1 AND vendor=$2",
+            RESTAURANT_TO_PG_STORE.get(rid, rid), vendor) or ""
+    vc = await db.vendor_contacts.find_one({"restaurantId": rid, "vendor": vendor}, {"_id": 0})
+    return (vc or {}).get("orderEmail", "")
+
+async def _vc_put(rid, vendor, email):
+    if USE_PG:
+        await db_pg.pool().execute(
+            """INSERT INTO store_vendor_contacts (store_id, vendor, order_email) VALUES ($1, $2, $3)
+               ON CONFLICT (store_id, vendor) DO UPDATE SET order_email=$3, updated_at=now()""",
+            RESTAURANT_TO_PG_STORE.get(rid, rid), vendor, email)
+        return
+    await db.vendor_contacts.update_one({"restaurantId": rid, "vendor": vendor},
+        {"$set": {"restaurantId": rid, "vendor": vendor, "orderEmail": email}}, upsert=True)
+
 @api_router.get("/vendor-contacts/{rid}")
 async def list_vendor_contacts(rid: str):
     check_rid(rid)
-    vcs = await db.vendor_contacts.find({"restaurantId": rid}, {"_id": 0, "restaurantId": 0}).to_list(200)
-    return vcs
+    return await _vc_list(rid)
 
 @api_router.put("/vendor-contacts/{rid}")
 async def put_vendor_contact(rid: str, payload: dict):
@@ -2581,8 +2753,7 @@ async def put_vendor_contact(rid: str, payload: dict):
         raise HTTPException(400, "vendor is required")
     if email and not EMAIL_RE.match(email):
         raise HTTPException(400, "that doesn't look like a valid email")
-    await db.vendor_contacts.update_one({"restaurantId": rid, "vendor": vendor},
-        {"$set": {"restaurantId": rid, "vendor": vendor, "orderEmail": email}}, upsert=True)
+    await _vc_put(rid, vendor, email)
     return {"ok": True, "vendor": vendor, "orderEmail": email}
 
 class OrderEmailIn(BaseModel):
@@ -2614,8 +2785,7 @@ async def email_order(rid: str, oid: str, body: OrderEmailIn):
     if override:
         to = override
     else:
-        vc = await db.vendor_contacts.find_one({"restaurantId": rid, "vendor": vendor}, {"_id": 0})
-        to = (vc or {}).get("orderEmail", "")
+        to = await _vc_email(rid, vendor)
     if not to:
         raise HTTPException(400, "no supplier email on file for this vendor — add one first")
     rname = next((r["name"] for r in RESTAURANTS if r["id"] == rid), rid)
@@ -2625,8 +2795,7 @@ async def email_order(rid: str, oid: str, body: OrderEmailIn):
     await send_email(to=to, subject=subject, html=html, from_name=rname)
     # only persist the recipient after a successful send
     if override:
-        await db.vendor_contacts.update_one({"restaurantId": rid, "vendor": vendor},
-            {"$set": {"restaurantId": rid, "vendor": vendor, "orderEmail": override}}, upsert=True)
+        await _vc_put(rid, vendor, override)
     now = datetime.now(timezone.utc).isoformat()
     set_fields = {"emailedTo": to, "emailedAt": now}
     events = [_po_event("emailed", body.by, f"emailed to {to}")]
@@ -2634,8 +2803,7 @@ async def email_order(rid: str, oid: str, body: OrderEmailIn):
         set_fields["status"] = "sent"
         set_fields["sentAt"] = now
         events.append(_po_event("sent", body.by, "sent via email"))
-    await db.purchase_orders.update_one({"restaurantId": rid, "id": oid},
-        {"$set": set_fields, "$push": {"history": {"$each": events}}})
+    await _po_update(rid, oid, set_fields, events)
     return _po_public(await _get_po(rid, oid))
 
 class ReorderIn(BaseModel):
@@ -2645,7 +2813,8 @@ class ReorderIn(BaseModel):
 @api_router.post("/orders/{rid}/reorder-last")
 async def reorder_last(rid: str, body: ReorderIn):
     check_rid(rid)
-    last = await db.purchase_orders.find_one({"restaurantId": rid, "vendor": body.vendor, "status": {"$ne": "rejected"}}, sort=[("createdAt", -1)])
+    recent = await _po_query(rid=rid, vendor=body.vendor, exclude_status="rejected", limit=1)
+    last = recent[0] if recent else None
     if not last:
         raise HTTPException(404, "no previous order for this vendor to reorder")
     lines = [{"controlNumber": l.get("controlNumber"), "name": l.get("name", ""), "vendorSku": l.get("vendorSku", ""),
@@ -2657,7 +2826,7 @@ async def reorder_last(rid: str, body: ReorderIn):
           "lines": lines, "total": _po_total(lines), "createdAt": now.isoformat(),
           "submittedAt": None, "approvedBy": None, "approvedAt": None, "rejectedReason": None,
           "sentAt": None, "receivedAt": None, "history": [_po_event("draft", body.createdBy, "reorder from history")]}
-    await db.purchase_orders.insert_one(dict(po))
+    await _po_insert(po)
     return _po_public(po)
 
 @api_router.get("/orders/{rid}/{oid}/pdf")
@@ -2674,7 +2843,7 @@ async def owner_discrepancies():
     name_by_rid = {r["id"]: r["short"] for r in RESTAURANTS}
     out = []
     for r in RESTAURANTS:
-        pos = await db.purchase_orders.find({"restaurantId": r["id"], "status": "received"}).sort("receivedAt", -1).to_list(5000)
+        pos = await _po_query(rid=r["id"], status="received", sort="receivedAt", limit=5000)
         for po in pos:
             rm = po.get("receiptMatch")
             if rm and rm.get("invoiceFound") and rm.get("flaggedCount", 0) > 0:
@@ -2708,7 +2877,7 @@ async def owner_vendor_scorecard():
 
     agg = {}
     for r in RESTAURANTS:
-        pos = await db.purchase_orders.find({"restaurantId": r["id"], "status": "received"}).to_list(5000)
+        pos = await _po_query(rid=r["id"], status="received", limit=5000)
         for po in pos:
             v = po.get("vendor", "")
             s = agg.setdefault(v, {"receivedOrders": 0, "leadDays": [], "matchedLines": 0, "priceAccurate": 0,
