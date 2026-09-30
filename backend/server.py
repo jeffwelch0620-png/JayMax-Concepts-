@@ -434,6 +434,10 @@ def _workweek():
     return start.isoformat(), (start + timedelta(days=6)).isoformat()
 
 async def ensure_seed(rid):
+    if USE_PG:
+        # Postgres mode: items/purchases/dishes live in Postgres, and missing areas /
+        # sales period fall back to defaults in _pg_get_store_state -- nothing to seed.
+        return
     if await db.items.count_documents({"restaurantId": rid}) > 0:
         return
     seed = SEEDS[rid]
@@ -446,7 +450,49 @@ async def ensure_seed(rid):
         {"$setOnInsert": {"restaurantId": rid, "periodStart": ws, "periodEnd": we, "dishSales": {}, "itemCounts": {}}}, upsert=True)
     await db.areas.update_one({"restaurantId": rid}, {"$setOnInsert": {"restaurantId": rid, "list": DEFAULT_AREAS}}, upsert=True)
 
+def _pg_state_store_id(rid):
+    return RESTAURANT_TO_PG_STORE.get(rid, rid)
+
+async def _pg_get_store_state(rid):
+    row = await db_pg.pool().fetchrow(
+        "SELECT revision, areas, sales_period FROM store_state WHERE store_id=$1", _pg_state_store_id(rid))
+    ws, we = _workweek()
+    return {
+        "revision": row["revision"] if row else 0,
+        "areas": row["areas"] if row and row["areas"] is not None else DEFAULT_AREAS,
+        "salesPeriod": row["sales_period"] if row and row["sales_period"] is not None
+            else {"periodStart": ws, "periodEnd": we, "dishSales": {}, "itemCounts": {}},
+    }
+
+async def _pg_check_and_bump_revision(rid, request: Request):
+    # Same contract as the Mongo version below: an If-Match header must equal the
+    # current revision (409 otherwise); the bump itself is an atomic compare-and-swap.
+    store_id = _pg_state_store_id(rid)
+    raw = request.headers.get("if-match")
+    pool = db_pg.pool()
+    if raw:
+        expected = raw.strip('"')
+        new = None
+        if expected.isdigit():
+            new = await pool.fetchval(
+                "UPDATE store_state SET revision=revision+1, updated_at=now() WHERE store_id=$1 AND revision=$2 RETURNING revision",
+                store_id, int(expected))
+            if new is None and int(expected) == 0:
+                new = await pool.fetchval(
+                    "INSERT INTO store_state (store_id, revision) VALUES ($1, 1) ON CONFLICT (store_id) DO NOTHING RETURNING revision",
+                    store_id)
+        if new is None:
+            latest = await pool.fetchval("SELECT revision FROM store_state WHERE store_id=$1", store_id) or 0
+            raise HTTPException(409, f"State changed by another collaborator; reload before saving (revision {latest})")
+        return new
+    return await pool.fetchval(
+        """INSERT INTO store_state (store_id, revision) VALUES ($1, 1)
+           ON CONFLICT (store_id) DO UPDATE SET revision=store_state.revision+1, updated_at=now()
+           RETURNING revision""", store_id)
+
 async def _check_and_bump_revision(rid, request: Request):
+    if USE_PG:
+        return await _pg_check_and_bump_revision(rid, request)
     raw = request.headers.get("if-match")
     current = await db.state_versions.find_one({"restaurantId": rid}, {"_id": 0, "revision": 1})
     revision = (current or {}).get("revision", 0)
@@ -493,23 +539,49 @@ def _clean_user(doc):
     return {"id": doc["id"], "email": doc["email"], "role": doc["role"],
             "locations": doc.get("locations", [])}
 
+# Postgres home of the Mongo `users` collection (table app_users). Same account model,
+# same PBKDF2 hashes and user ids, so migrated users keep their passwords and any
+# session token issued before cutover stays valid. `locations` keeps the Mongo-side
+# restaurant ids (berts/rudds/papa_leonis) because that's what tokens and the
+# collaboration_security middleware compare against.
+def _pg_user_row(row):
+    return {"id": row["id"], "email": row["email"], "role": row["role"],
+            "locations": list(row["locations"] or []), "passwordHash": row["password_hash"]}
+
+async def _pg_insert_user(user):
+    try:
+        await db_pg.pool().execute(
+            "INSERT INTO app_users (id, email, password_hash, role, locations) VALUES ($1,$2,$3,$4,$5)",
+            user["id"], user["email"], user["passwordHash"], user["role"], user["locations"])
+    except asyncpg.UniqueViolationError:
+        raise HTTPException(409, "A user with that email already exists")
+
 @api_router.post("/auth/bootstrap")
 async def auth_bootstrap(body: BootstrapIn):
     if not BOOTSTRAP_TOKEN or not hmac.compare_digest(body.bootstrapToken, BOOTSTRAP_TOKEN):
         raise HTTPException(403, "Invalid bootstrap token")
-    if await db.users.count_documents({}):
+    existing = (await db_pg.pool().fetchval("SELECT count(*) FROM app_users")) if USE_PG else await db.users.count_documents({})
+    if existing:
         raise HTTPException(409, "Bootstrap has already been completed")
     if body.role != "owner" or not body.email.strip() or len(body.password) < 12:
         raise HTTPException(400, "The first account must be an owner with a 12-character password")
     user = {"id": "usr_" + uuid.uuid4().hex[:12], "email": body.email.strip().lower(),
             "passwordHash": _password_hash(body.password), "role": "owner",
             "locations": sorted(RIDS), "createdAt": _now_iso()}
-    await db.users.insert_one(user)
+    if USE_PG:
+        await _pg_insert_user(user)
+    else:
+        await db.users.insert_one(user)
     return {"user": _clean_user(user), "token": _token(user)}
 
 @api_router.post("/auth/login")
 async def auth_login(body: LoginIn):
-    user = await db.users.find_one({"email": body.email.strip().lower()})
+    email = body.email.strip().lower()
+    if USE_PG:
+        row = await db_pg.pool().fetchrow("SELECT * FROM app_users WHERE email=$1", email)
+        user = _pg_user_row(row) if row else None
+    else:
+        user = await db.users.find_one({"email": email})
     if not user or not _password_ok(body.password, user.get("passwordHash", "")):
         raise HTTPException(401, "Invalid email or password")
     return {"user": _clean_user(user), "token": _token(user)}
@@ -536,6 +608,9 @@ async def auth_create_user(body: UserIn, request: Request):
     user = {"id": "usr_" + uuid.uuid4().hex[:12], "email": body.email.strip().lower(),
             "passwordHash": _password_hash(body.password), "role": body.role,
             "locations": locations, "createdAt": _now_iso()}
+    if USE_PG:
+        await _pg_insert_user(user)
+        return _clean_user(user)
     try:
         await db.users.insert_one(user)
     except Exception:
@@ -553,6 +628,9 @@ async def get_state(rid: str):
     state = {}
     for name, coll in COLL_MAP.items():
         state[name] = await db[coll].find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
+    if USE_PG:
+        state.update(await _pg_get_store_state(rid))
+        return state
     sp = await db.sales_periods.find_one({"restaurantId": rid}, {"_id": 0})
     ws, we = _workweek()
     state["salesPeriod"] = sp or {"periodStart": ws, "periodEnd": we, "dishSales": {}, "itemCounts": {}}
@@ -568,6 +646,13 @@ async def put_sales_period(rid: str, payload: dict, request: Request):
     check_rid(rid)
     revision = await _check_and_bump_revision(rid, request)
     payload = dict(payload)
+    if USE_PG:
+        payload.pop("restaurantId", None)
+        await db_pg.pool().execute(
+            """INSERT INTO store_state (store_id, sales_period) VALUES ($1, $2)
+               ON CONFLICT (store_id) DO UPDATE SET sales_period=$2, updated_at=now()""",
+            _pg_state_store_id(rid), payload)
+        return {"ok": True, "revision": revision}
     payload["restaurantId"] = rid
     await db.sales_periods.replace_one({"restaurantId": rid}, payload, upsert=True)
     return {"ok": True, "revision": revision}
@@ -576,6 +661,12 @@ async def put_sales_period(rid: str, payload: dict, request: Request):
 async def put_areas(rid: str, payload: List[Any], request: Request):
     check_rid(rid)
     revision = await _check_and_bump_revision(rid, request)
+    if USE_PG:
+        await db_pg.pool().execute(
+            """INSERT INTO store_state (store_id, areas) VALUES ($1, $2)
+               ON CONFLICT (store_id) DO UPDATE SET areas=$2, updated_at=now()""",
+            _pg_state_store_id(rid), payload)
+        return {"ok": True, "revision": revision}
     await db.areas.update_one({"restaurantId": rid}, {"$set": {"restaurantId": rid, "list": payload}}, upsert=True)
     return {"ok": True, "revision": revision}
 

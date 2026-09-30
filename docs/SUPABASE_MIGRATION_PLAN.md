@@ -12,6 +12,30 @@ flipping both `USE_PG` flags to `true` is what a real cutover would look like. T
 is the reference for that work as
 it continues across sessions.
 
+## Phase 2 -- finish the migration (Supabase-only deployment)
+
+Decision (2026-09-30): deploy on Supabase alone, not Mongo + Supabase side by side.
+Chunks 1-6 above moved Items/Invoices/Dishes/Prep/Counts/Staff PIN, but with both
+`USE_PG` flags on, the backend still needed MongoDB for everything below. Auth decision:
+**keep the current email/password + HMAC session tokens**, stored in Postgres
+(`app_users`) -- Supabase Auth is deferred, not part of this phase.
+
+New tables are written first as `supabase/pending/*.sql` (applied when DB access is
+available), each paired with a `scripts/migrate_*.py` that turns the Mongo backup into SQL.
+
+| Chunk | Mongo collections | Postgres home | Status |
+|---|---|---|---|
+| P2.1 Login + per-store state | `users`, `state_versions`, `areas`, `sales_periods` | new `app_users`, `store_state` | ✅ Code + tests; SQL pending apply |
+| P2.2 Purchase orders | `purchase_orders`, `vendor_contacts` | `purchase_orders`/`purchase_order_lines` (needs columns: note, total, submitted_at, history, vendor name), vendor emails | ⏳ |
+| P2.3 State blob leftovers | `adjustments`, `reporting_periods` (still loaded by `GET /state`) | existing `adjustments`, `reporting_periods` | ⏳ |
+| P2.4 Manager counts + prep extras | `/counts/{rid}/submit`+history, `/prep/{rid}/complete`, `/reports/{rid}/prep` | existing tables | ⏳ |
+| P2.5 AI + planning | `chat_messages`, `projected_sales`, `par_recommendations` | `ai_chat_messages` + new tables | ⏳ |
+| P2.6 Activity log + owner rollups | `activity_log`, owner summary/discrepancies/scorecard reads | `activity_log` | ⏳ |
+| P2.7 Cutover | -- | apply pending SQL, run migrate scripts on a fresh backup, flip flags, remove Mongo | ⏳ |
+
+Done means: with `USE_PG=true`, `grep "await db\." backend/server.py` has no hit that
+is reachable, and the backend starts without `MONGO_URL`.
+
 ## Frontend wiring plan
 
 The two backend areas have genuinely different API shapes on the frontend today,
