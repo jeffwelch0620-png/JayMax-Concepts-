@@ -2091,7 +2091,10 @@ def _ai_error_message(e):
         return "Sous is busy right now (rate limit). Try again in a minute."
     if isinstance(e, anthropic.APIConnectionError):
         return "The server couldn't reach Anthropic. Try again shortly."
-    return "The assistant hit an error. Please try again."
+    # Anything else: pass Anthropic's own explanation through (it never contains the key).
+    status = getattr(e, "status_code", None)
+    detail = str(getattr(e, "message", "") or "").strip()[:300]
+    return "The assistant hit an error" + (f" ({status})" if status else "") + (f": {detail}" if detail else ". Please try again.")
 
 PAR_ADVISOR_SCHEMA = {
     "type": "object",

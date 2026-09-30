@@ -457,7 +457,8 @@ def test_ai_errors_explain_the_setup_problem(monkeypatch):
         (status_error(anthropic.BadRequestError, 400, "Your credit balance is too low"), "out of credits"),
         (status_error(anthropic.NotFoundError, 404, "model not found"), "isn't available"),
         (status_error(anthropic.RateLimitError, 429, "slow down"), "rate limit"),
-        (status_error(anthropic.InternalServerError, 500, "boom"), "Please try again"),
+        (status_error(anthropic.InternalServerError, 500, "boom"), "(500): boom"),
+        (status_error(anthropic.BadRequestError, 400, "fallbacks: unknown field"), "(400): fallbacks: unknown field"),
     ]
     for err, expected in cases:
         assert expected in server._ai_error_message(err)
