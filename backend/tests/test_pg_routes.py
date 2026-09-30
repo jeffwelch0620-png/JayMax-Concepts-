@@ -438,3 +438,26 @@ def test_pg_pool_startup_never_hangs_and_retries_in_background(monkeypatch):
 
     assert asyncio.run(scenario()) == "pool"
     assert attempts[0] == 0.05
+
+
+def test_ai_errors_explain_the_setup_problem(monkeypatch):
+    import anthropic
+    import httpx2
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        server._ai()
+    assert exc.value.status_code == 503 and "ANTHROPIC_API_KEY is missing" in exc.value.detail
+
+    def status_error(cls, status, message):
+        req = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+        resp = httpx2.Response(status, request=req, json={"type": "error", "error": {"message": message}})
+        return cls(message, response=resp, body=None)
+    cases = [
+        (status_error(anthropic.AuthenticationError, 401, "invalid x-api-key"), "wrong or was revoked"),
+        (status_error(anthropic.BadRequestError, 400, "Your credit balance is too low"), "out of credits"),
+        (status_error(anthropic.NotFoundError, 404, "model not found"), "isn't available"),
+        (status_error(anthropic.RateLimitError, 429, "slow down"), "rate limit"),
+        (status_error(anthropic.InternalServerError, 500, "boom"), "Please try again"),
+    ]
+    for err, expected in cases:
+        assert expected in server._ai_error_message(err)

@@ -440,13 +440,22 @@ async function pgPutDishes(rid, arr, revision) {
 }
 
 export async function streamChat(rid, message, { onDelta, onError, onDone }) {
-  const res = await fetch(`${API}/ai/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(session()?.token ? { Authorization: ["Bearer", session().token].join(" ") } : {}) },
-    body: JSON.stringify({ restaurantId: rid, message }),
-  });
+  let res;
+  try {
+    res = await fetch(`${API}/ai/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(session()?.token ? { Authorization: ["Bearer", session().token].join(" ") } : {}) },
+      body: JSON.stringify({ restaurantId: rid, message }),
+    });
+  } catch {
+    onError?.("Can't reach the server. Check your connection, or the API may still be starting up.");
+    onDone?.();
+    return;
+  }
   if (!res.ok || !res.body) {
-    onError?.(`Request failed (${res.status})`);
+    let detail = "";
+    try { detail = (await res.json())?.detail || ""; } catch { /* not JSON */ }
+    onError?.(detail || `Request failed (${res.status})`);
     onDone?.();
     return;
   }
