@@ -15,11 +15,38 @@ export const isPostgres = USE_PG;
 const MONGO_TO_PG_STORE = { berts: "berts", rudds: "rudds", papa_leonis: "papa" };
 const pgStoreId = (rid) => MONGO_TO_PG_STORE[rid] || rid;
 const TOKEN_KEY = "jaymax_session";
-const session = () => { try { return JSON.parse(localStorage.getItem(TOKEN_KEY) || "null"); } catch { return null; } };
+// Session tokens are "<base64url JSON payload>.<signature>" with an `exp` (unix seconds).
+function tokenExpired(token) {
+  try {
+    const raw = token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    const { exp } = JSON.parse(atob(raw + "=".repeat((4 - (raw.length % 4)) % 4)));
+    return !exp || exp * 1000 <= Date.now();
+  } catch { return true; }
+}
+const session = () => {
+  try {
+    const s = JSON.parse(localStorage.getItem(TOKEN_KEY) || "null");
+    if (s?.token && tokenExpired(s.token)) { localStorage.removeItem(TOKEN_KEY); return null; }
+    return s;
+  } catch { return null; }
+};
+// Fired when the server rejects the stored session (expired, or the server's AUTH_SECRET
+// changed). App.js listens and returns to the login screen instead of retrying forever.
+export const SESSION_EXPIRED_EVENT = "jaymax:session-expired";
+export function endSession() {
+  if (!localStorage.getItem(TOKEN_KEY)) return;
+  localStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+}
 axios.interceptors.request.use((config) => {
   const token = session()?.token;
   if (token) config.headers.Authorization = ["Bearer", token].join(" ");
   return config;
+});
+axios.interceptors.response.use(undefined, (error) => {
+  const sentToken = String(error?.config?.headers?.Authorization || "").startsWith("Bearer ");
+  if (error?.response?.status === 401 && sentToken) endSession();
+  return Promise.reject(error);
 });
 
 export const authLogin = (email, password) => axios.post(`${API}/auth/login`, { email, password }).then((r) => {
@@ -452,6 +479,7 @@ export async function streamChat(rid, message, { onDelta, onError, onDone }) {
     onDone?.();
     return;
   }
+  if (res.status === 401) endSession();
   if (!res.ok || !res.body) {
     let detail = "";
     try { detail = (await res.json())?.detail || ""; } catch { /* not JSON */ }

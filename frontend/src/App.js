@@ -49,6 +49,12 @@ const EMPTY_STATE = { items: [], purchases: [], dishes: [], adjustments: [], rep
 
 export default function App() {
   const [session, setSession] = useState(() => api.currentSession());
+  const [loginNotice, setLoginNotice] = useState("");
+  useEffect(() => {
+    const onExpired = () => { setSession(null); setLoginNotice("Your session expired. Please sign in again."); };
+    window.addEventListener(api.SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(api.SESSION_EXPIRED_EVENT, onExpired);
+  }, []);
   const [loc, setLoc] = useState(() => api.currentSession()?.user?.role === "owner" ? "owner" : (api.currentSession()?.user?.locations || [])[0] || "berts");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [S, setS] = useState(null);
@@ -191,7 +197,7 @@ export default function App() {
   if (!session) {
     return staffOpen
       ? <StaffSheet onClose={() => setStaffOpen(false)} onElevate={(sess) => { api.storeSession(sess); setSession(sess); setStaffOpen(false); }} />
-      : <Login onLogin={setSession} onOpenStaff={() => setStaffOpen(true)} />;
+      : <Login onLogin={(sess) => { setLoginNotice(""); setSession(sess); }} onOpenStaff={() => setStaffOpen(true)} notice={loginNotice} />;
   }
   return (
     <div className="min-h-screen bg-[#0B0F17] text-slate-100" style={{ "--acc": current.accent }}>

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { authLogin } from "../lib/api";
 
-export function Login({ onLogin, onOpenStaff }) {
+export function Login({ onLogin, onOpenStaff, notice }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,6 +24,7 @@ export function Login({ onLogin, onOpenStaff }) {
         </div>
         <input className="w-full rounded-lg bg-[#0B0F17] border border-[#334155] p-3" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" autoComplete="email" />
         <input className="w-full rounded-lg bg-[#0B0F17] border border-[#334155] p-3" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" autoComplete="current-password" />
+        {notice && !error && <p className="text-sm text-amber-300" data-testid="login-notice">{notice}</p>}
         {error && <p className="text-sm text-red-300">{error}</p>}
         <button className="w-full rounded-lg bg-orange-500 text-slate-950 font-bold p-3" type="submit">Sign in</button>
         {onOpenStaff && (
