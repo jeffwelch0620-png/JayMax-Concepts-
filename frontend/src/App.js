@@ -89,7 +89,9 @@ export default function App() {
     const requestedLoc = loc;
     api.fetchState(loc)
       .then((data) => { if (locRef.current === requestedLoc) setS({ ...EMPTY_STATE, ...data }); })
-      .catch(() => toast.error("Couldn't load location data — is the backend up?"));
+      .catch((err) => toast.error(err?.response?.data?.detail
+        ? `Couldn't load location data: ${err.response.data.detail}`
+        : "Couldn't reach the server. Check your connection, or the API may still be starting."));
   }, [loc, isOwner, session]);
 
   useEffect(() => {
