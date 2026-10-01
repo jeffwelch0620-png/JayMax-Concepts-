@@ -549,7 +549,11 @@ async def _check_and_bump_revision(rid, request: Request, conn=None):
 # ---------------- Routes ----------------
 @api_router.get("/health")
 async def health():
-    return {"status": "ok"}
+    # Stays 200 so Render keeps the service up while db_pg retries the connection in the
+    # background; "database" says whether data routes can actually work right now.
+    if not USE_PG:
+        return {"status": "ok"}
+    return {"status": "ok", "database": "connected" if db_pg._pool is not None else "not connected"}
 
 class LoginIn(BaseModel):
     email: str

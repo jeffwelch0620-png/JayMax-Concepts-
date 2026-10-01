@@ -475,3 +475,11 @@ def test_ai_client_sends_workspace_header_when_configured(monkeypatch):
     monkeypatch.setattr(server, "_ai_client", None)
     assert "anthropic-workspace-id" not in server._ai().default_headers
     monkeypatch.setattr(server, "_ai_client", None)
+
+
+def test_health_reports_database_connection(monkeypatch):
+    monkeypatch.setattr(server, "USE_PG", True)
+    monkeypatch.setattr(server.db_pg, "_pool", None)
+    assert asyncio.run(server.health()) == {"status": "ok", "database": "not connected"}
+    monkeypatch.setattr(server.db_pg, "_pool", object())
+    assert asyncio.run(server.health()) == {"status": "ok", "database": "connected"}
