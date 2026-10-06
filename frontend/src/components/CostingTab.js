@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { Plus, Trash2, Save } from "lucide-react";
 import { MENU_CATEGORIES, UOM_OPTIONS, nextMenuCode, normalizeRecipeSchema, recipeCostSummary, itemDerived, uid, fmtMoney, num, FREQS } from "../lib/calc";
 import { PageTitle, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
@@ -7,23 +8,29 @@ function emptyDish(type = "menu") {
   return { id: null, recipeType: type, name: "", menuCategory: MENU_CATEGORIES[0].name, menuCode: "", description: "", photoUrl: "", price: "", targetPct: 30, yieldQty: type === "prep" ? "" : 1, yieldUOM: type === "prep" ? "fl oz" : "each", procedure: "", equipment: "", shelfLife: "", portionNote: "", prepPar: 0, frequency: "daily", lines: [] };
 }
 
-export function CostingTab({ items, dishes, persist, showToast, focusDish }) {
+export function CostingTab({ items, dishes, persist, showToast, showError = () => {}, rid, drafts, focusDish }) {
   const normalizedRecipes = useMemo(() => dishes.map(normalizeRecipeSchema), [dishes]);
-  const [dish, setDish] = useState(emptyDish());
+  const [dish, setDish, clearDish] = useRetainedDraft(`recipe:${rid}`, emptyDish(), drafts);
+  const focusSeen = useRef(drafts?.get(`recipe-focus:${rid}`));
+  const [error, setError] = useState("");
+  const fail = message => { setError(message); showError(message); };
   const [pickType, setPickType] = useState("item");
   const [pickCN, setPickCN] = useState(items[0]?.controlNumber || "");
   const [pickRecipeId, setPickRecipeId] = useState("");
   const [pickQty, setPickQty] = useState(1);
 
-  const prepRecipes = normalizedRecipes.filter((r) => r.recipeType === "prep" && r.id !== dish.id);
+  const prepRecipes = useMemo(() => normalizedRecipes.filter(r => r.recipeType === "prep" && r.id !== dish.id), [normalizedRecipes, dish.id]);
   useEffect(() => { if (!pickCN && items.length) setPickCN(items[0].controlNumber); }, [items, pickCN]);
-  useEffect(() => { if (!pickRecipeId && prepRecipes.length) setPickRecipeId(prepRecipes[0].id); }, [prepRecipes.length, pickRecipeId]);
+  useEffect(() => { if (!pickRecipeId && prepRecipes.length) setPickRecipeId(prepRecipes[0].id); }, [prepRecipes, pickRecipeId]);
 
   useEffect(() => {
-    if (!focusDish) return;
+    if (!focusDish || focusSeen.current === focusDish) return;
+    focusSeen.current = focusDish;
+    if (drafts) drafts.set(`recipe-focus:${rid}`, focusDish);
     if (focusDish.id) { const found = dishes.find((d) => d.id === focusDish.id); if (found) setDish(normalizeRecipeSchema(found)); }
     else setDish(emptyDish("menu"));
-  }, [focusDish, dishes]);
+  // A polling refresh must not reload the focused recipe over its draft.
+  }, [focusDish]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function switchType(type) { setDish((d) => ({ ...emptyDish(type), id: d.id && d.recipeType === type ? d.id : null })); }
   function onCategoryChange(catName) {
@@ -75,14 +82,14 @@ export function CostingTab({ items, dishes, persist, showToast, focusDish }) {
     const saved = normalizeRecipeSchema({ ...dish, id: dish.id || uid(dish.recipeType === "prep" ? "prep" : "dish"), name: dish.name.trim(), menuCode: code, price: dish.recipeType === "menu" ? Number(dish.price) || 0 : 0, yieldQty: dish.recipeType === "prep" ? Number(dish.yieldQty) || 0 : 1, prepPar: Number(dish.prepPar) || 0 });
     const exists = dishes.some((d) => d.id === saved.id);
     const next = exists ? dishes.map((d) => d.id === saved.id ? saved : d) : [...dishes, saved];
-    await persist(next);
+    if (!(await confirmSave(() => persist(next), fail))) return;
     showToast(saved.recipeType === "prep" ? "Prep recipe saved" : "Menu item saved");
-    setDish(saved);
+    clearDish(dish, saved); setError("");
   }
   async function deleteDish(id) {
     const usedBy = dishes.filter((r) => (r.lines || []).some((l) => l.sourceType === "prep" && l.recipeId === id));
     if (usedBy.length) { showToast(`Can't delete — used by ${usedBy.length} recipe${usedBy.length !== 1 ? "s" : ""}`); return; }
-    await persist(dishes.filter((d) => d.id !== id));
+    if (!(await confirmSave(() => persist(dishes.filter((d) => d.id !== id)), fail))) return;
     if (dish.id === id) setDish(emptyDish());
     showToast("Recipe deleted");
   }
@@ -92,6 +99,7 @@ export function CostingTab({ items, dishes, persist, showToast, focusDish }) {
   return (
     <div className="fade-slide-in" data-testid="costing-tab">
       <PageTitle>Recipe & Menu Costing</PageTitle>
+      {error && <p role="alert">{error}</p>}
       <div className={`${cardCls} p-5 mb-5`}>
         <SectionLabel>Recipe Type</SectionLabel>
         <div className="flex gap-2 mb-4">

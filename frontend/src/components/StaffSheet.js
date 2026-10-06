@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Lock, X, Check, ChevronDown, ChevronUp, ChefHat, ClipboardList, Inbox, Bell, BellOff, Save } from "lucide-react";
 import { RESTAURANTS, num, fmtDate, isCountActive, todayISO } from "../lib/calc";
 import * as api from "../lib/api";
+import { StaffCountDrafts } from "./StaffCountDrafts";
 import { enablePushNotifications, disablePushNotifications, pushSupported } from "../lib/push";
 import { inpCls, btnAcc, btnGhost, cardCls, Pill } from "./common";
 import { useCountSheet, CountSheetControls, CountSheetBanner, CountSheetList, SaveAllCountsButton } from "./CountSheet";
@@ -165,7 +166,7 @@ export function StaffSheet({ onClose, onElevate }) {
     } catch { /* keep current */ }
   }
   useEffect(() => {
-    if (unlocked && view === "counts") loadCounts();
+    if (unlocked && view === "counts" && !api.actualInventoryEnabled) loadCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unlocked, view]);
 
@@ -249,6 +250,10 @@ export function StaffSheet({ onClose, onElevate }) {
             </div>
 
             {err && <div className="text-red-400 text-xs mb-3" data-testid="staff-error">{err}</div>}
+            {api.nativePurchasesEnabled && <div className={`${cardCls} p-4 mb-4`} data-testid="staff-purchase-handoff">
+              <p className="font-semibold">Deliveries and purchase receipts</p>
+              <p className="text-sm">Give all supplier invoices, receipts and credits to your manager for Invoice Master. Your manager retains the complete source, verifies what arrived and the date received, then posts the purchase. Prep and task completion do not record a purchase.</p>
+            </div>}
 
             {view === "tasks" && (
               <TasksView restaurant={restaurant} tasks={tasks} onRefresh={refreshTasks}
@@ -263,7 +268,7 @@ export function StaffSheet({ onClose, onElevate }) {
             )}
 
             {view === "counts" && (
-              <CountsView restaurant={restaurant} counts={counts} onRefresh={loadCounts}
+              api.actualInventoryEnabled ? <StaffCountDrafts key={rid} restaurantId={rid} pin={pin} counterName={staffName || countsName} /> : <CountsView restaurant={restaurant} counts={counts} onRefresh={loadCounts}
                 name={countsName} setName={setCountsName} onSave={saveCounts} setErr={setErr} />
             )}
           </>

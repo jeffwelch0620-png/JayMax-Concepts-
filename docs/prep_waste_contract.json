@@ -1,0 +1,593 @@
+{
+  "version": "prep-waste-design-1",
+  "status": "Proposed relationships only; no schema or runtime installed",
+  "schema": "prep_inventory",
+  "schema_status": "proposed private schema",
+  "track1": {
+    "scope": "Purchased inventory only",
+    "usage": "opening quantity + net received purchases - closing quantity",
+    "food_cost": "explicit opening value + net received food cost - explicit closing value",
+    "date_of_record": "received date",
+    "prep_sales_writeback": false,
+    "taxes_fees": "retained separately"
+  },
+  "cost_policy": {
+    "status": "awaiting user selection",
+    "default": null,
+    "options": [
+      "weighted_received_cost",
+      "latest_received_cost",
+      "manager_confirmed_ingredient_cost"
+    ],
+    "snapshot_at_batch": true,
+    "changes_track1_values": false,
+    "unknown_cost": null
+  },
+  "tables": {
+    "products": {
+      "fields": [
+        "id",
+        "store_id",
+        "name",
+        "identity_kind",
+        "created_at"
+      ],
+      "relationships": [
+        "store_id -> public.stores"
+      ],
+      "required_guards": [
+        "Prepared identities are distinct from purchased item identities; no duplicate raw master"
+      ]
+    },
+    "product_versions": {
+      "fields": [
+        "id",
+        "store_id",
+        "product_id",
+        "revision",
+        "base_unit",
+        "dimension",
+        "predecessor_id",
+        "source_snapshot",
+        "confirmed_by",
+        "confirmed_at"
+      ],
+      "relationships": [
+        "(store_id, product_id) -> products",
+        "base_unit -> purchasing.base_units"
+      ],
+      "required_guards": [
+        "Immutable reviewed identity/unit basis; identity changes require explicit reconciliation, never silent conversion"
+      ]
+    },
+    "unit_profiles": {
+      "fields": [
+        "id",
+        "store_id",
+        "product_version_id",
+        "source_unit",
+        "base_units_per_source_unit",
+        "container_capacity",
+        "fill_basis",
+        "evidence",
+        "revision",
+        "confirmed_by"
+      ],
+      "relationships": [
+        "(store_id, product_version_id) -> product_versions"
+      ],
+      "required_guards": [
+        "Finite positive verified factor; fill and container count separate; nominal capacity alone is insufficient"
+      ]
+    },
+    "recipe_versions": {
+      "fields": [
+        "id",
+        "store_id",
+        "output_product_version_id",
+        "standard_usable_yield",
+        "yield_unit",
+        "method",
+        "predecessor_id",
+        "revision",
+        "source_snapshot",
+        "recorded_at"
+      ],
+      "relationships": [
+        "(store_id, output_product_version_id) -> product_versions"
+      ],
+      "required_guards": [
+        "Append-only version; positive finite output; frozen inputs; one effective successor"
+      ]
+    },
+    "recipe_lines": {
+      "fields": [
+        "id",
+        "store_id",
+        "recipe_version_id",
+        "raw_item_code",
+        "prepared_product_version_id",
+        "prepared_recipe_version_id",
+        "entered_quantity",
+        "entered_unit",
+        "base_quantity",
+        "base_unit",
+        "conversion_snapshot",
+        "measurement_basis"
+      ],
+      "relationships": [
+        "(store_id, recipe_version_id) -> recipe_versions",
+        "(store_id, raw_item_code, base_unit) -> purchasing.item_bases when raw",
+        "(store_id, prepared_product_version_id) -> product_versions when prepared",
+        "prepared_recipe_version_id -> producing recipe version matching prepared identity"
+      ],
+      "required_guards": [
+        "Exactly one raw/prepared identity; positive finite quantities; explicit approved conversion; no defaults for missing yield/unit; no late inserts into sealed version"
+      ]
+    },
+    "promotion_decisions": {
+      "fields": [
+        "id",
+        "store_id",
+        "recipe_version_id",
+        "graph_snapshot",
+        "unit_profile_ids",
+        "source_fingerprint",
+        "decision",
+        "reviewer",
+        "reason",
+        "recorded_at"
+      ],
+      "relationships": [
+        "recipe_version_id -> recipe_versions"
+      ],
+      "required_guards": [
+        "Review graph acyclic, same store, all mappings complete; seal children atomically; rejected/unresolved versions cannot post"
+      ]
+    },
+    "event_headers": {
+      "fields": [
+        "id",
+        "store_id",
+        "kind",
+        "performed_at",
+        "business_date",
+        "timezone_policy_version",
+        "recorded_at",
+        "actor",
+        "request_key",
+        "request_fingerprint",
+        "source_task_id",
+        "predecessor_id",
+        "reverses_id",
+        "evidence"
+      ],
+      "relationships": [
+        "store_id -> public.stores",
+        "(store_id, predecessor_id/reverses_id) -> event_headers"
+      ],
+      "required_guards": [
+        "Immutable atomic header and children; unique store/request key; exact payload replay only; one current successor; complete exact reversal/replacement; no fork"
+      ]
+    },
+    "batch_events": {
+      "fields": [
+        "event_id",
+        "store_id",
+        "recipe_version_id",
+        "quantity_basis",
+        "usable_output_quantity",
+        "usable_output_unit",
+        "yield_evidence"
+      ],
+      "relationships": [
+        "(store_id, event_id) -> event_headers",
+        "(store_id, recipe_version_id) -> recipe_versions"
+      ],
+      "required_guards": [
+        "Only approved frozen recipe; measured vs estimated explicit; task progress commits with event"
+      ]
+    },
+    "batch_lines": {
+      "fields": [
+        "id",
+        "event_id",
+        "store_id",
+        "line_kind",
+        "raw_item_code",
+        "prepared_product_version_id",
+        "source_lot_id",
+        "entered_quantity",
+        "entered_unit",
+        "base_quantity",
+        "base_unit",
+        "conversion_snapshot",
+        "measurement_basis",
+        "included_in_input_line_id"
+      ],
+      "relationships": [
+        "(store_id, event_id) -> batch_events",
+        "Same-store raw/prepared identity as recipe lines",
+        "source_lot_id -> produced output line, when assigned"
+      ],
+      "required_guards": [
+        "Gross inputs, usable/byproduct outputs, included process loss and unexplained remainder distinct; exactly one identity; process loss included in gross input creates no second withdrawal; mixture dimensions never summed"
+      ]
+    },
+    "movements": {
+      "fields": [
+        "id",
+        "event_id",
+        "store_id",
+        "identity_kind",
+        "raw_item_code",
+        "prepared_product_version_id",
+        "location_id",
+        "signed_base_quantity",
+        "base_unit",
+        "batch_line_id",
+        "waste_event_id",
+        "transfer_group_id",
+        "source_lot_id"
+      ],
+      "relationships": [
+        "(store_id, event_id) -> event_headers",
+        "Same-store purchased/prepared identity",
+        "batch_line_id -> batch_lines when batch"
+      ],
+      "required_guards": [
+        "Operational explanation only; no Track 1 writes; prepared input consumes existing stock once; raw ancestry is attribution only; transfer balances same identity/base unit; no clamping shortage to zero"
+      ]
+    },
+    "waste_events": {
+      "fields": [
+        "event_id",
+        "store_id",
+        "identity_kind",
+        "raw_item_code",
+        "prepared_product_version_id",
+        "stage",
+        "reason",
+        "base_quantity",
+        "base_unit",
+        "conversion_snapshot",
+        "included_in_batch_line_id",
+        "source_lot_id",
+        "evidence"
+      ],
+      "relationships": [
+        "(store_id, event_id) -> event_headers",
+        "included_in_batch_line_id -> gross input batch line when included"
+      ],
+      "required_guards": [
+        "Included trim is evidence only; standalone raw waste one raw movement; prepared waste one prepared movement; never an additional Food Cost deduction"
+      ]
+    },
+    "prep_count_scopes": {
+      "fields": [
+        "id",
+        "store_id",
+        "revision",
+        "product_version_ids",
+        "location_ids",
+        "boundary_policy",
+        "source_fingerprint",
+        "confirmed_by"
+      ],
+      "relationships": [
+        "store_id -> public.stores",
+        "All product/location IDs same store"
+      ],
+      "required_guards": [
+        "Complete reviewed product/location scope; frozen members; include service stock or explicitly disclose excluded boundary"
+      ]
+    },
+    "prep_counts": {
+      "fields": [
+        "id",
+        "store_id",
+        "scope_id",
+        "performed_at",
+        "business_date",
+        "recorded_at",
+        "predecessor_id",
+        "request_key",
+        "request_fingerprint",
+        "confirmed_by"
+      ],
+      "relationships": [
+        "(store_id, scope_id) -> prep_count_scopes"
+      ],
+      "required_guards": [
+        "Immutable full-scope count; one successor; no accounting count writes; aligned boundary/timezone policy"
+      ]
+    },
+    "prep_count_lines": {
+      "fields": [
+        "id",
+        "store_id",
+        "count_id",
+        "product_version_id",
+        "location_id",
+        "entered_quantity",
+        "entered_unit",
+        "base_quantity",
+        "conversion_snapshot",
+        "measurement_status",
+        "evidence"
+      ],
+      "relationships": [
+        "(store_id, count_id) -> prep_counts",
+        "Same-store product and location in frozen scope"
+      ],
+      "required_guards": [
+        "Blank is unknown; zero explicitly measured; count all scope members; conversions frozen; no later inserts"
+      ]
+    },
+    "cost_snapshots": {
+      "fields": [
+        "id",
+        "store_id",
+        "batch_event_id",
+        "generation",
+        "policy_version",
+        "source_cutoff",
+        "currency",
+        "total_cost",
+        "usable_output_quantity",
+        "cost_per_output_unit",
+        "completeness",
+        "predecessor_id",
+        "fingerprint"
+      ],
+      "relationships": [
+        "(store_id, batch_event_id) -> batch_events"
+      ],
+      "required_guards": [
+        "Analytical only; unknown stays null; frozen policy/source set; no live catalog prices; late recost appends generation; prepared lot lineage required"
+      ]
+    },
+    "cost_source_lines": {
+      "fields": [
+        "id",
+        "store_id",
+        "cost_snapshot_id",
+        "batch_input_line_id",
+        "source_kind",
+        "source_fact_kind",
+        "source_fact_id",
+        "mapping_id",
+        "source_lot_cost_snapshot_id",
+        "included_base_quantity",
+        "included_food_cost",
+        "allocation_rule",
+        "source_snapshot"
+      ],
+      "relationships": [
+        "cost_snapshot_id -> cost_snapshots",
+        "batch_input_line_id -> batch_lines",
+        "Native purchase mapping or exact producing lot snapshot, same store"
+      ],
+      "required_guards": [
+        "actual_purchase_facts is a view: do not invent FK to view; typed source identity resolved to its underlying immutable table; preserve signed receipt/correction fact-set; no tax/fees; zero-quantity credits need reviewed net-cost rule"
+      ]
+    },
+    "report_generations": {
+      "fields": [
+        "id",
+        "store_id",
+        "raw_open_count_id",
+        "raw_close_count_id",
+        "prep_open_count_id",
+        "prep_close_count_id",
+        "purchase_fact_set",
+        "event_set",
+        "recipe_mapping_versions",
+        "effective_cutoff",
+        "recorded_cutoff",
+        "expectation_basis",
+        "completeness",
+        "predecessor_id",
+        "report_hash"
+      ],
+      "relationships": [
+        "Read-only references to native actual counts and purchase facts",
+        "Same-store prep count IDs"
+      ],
+      "required_guards": [
+        "Immutable generations; partial coverage labeled; separate actual/observed/expected quantities; no summing parallel consumption bases; late entries create new report"
+      ]
+    },
+    "legacy_crosswalks": {
+      "fields": [
+        "id",
+        "store_id",
+        "legacy_source_type",
+        "legacy_source_id",
+        "source_snapshot",
+        "source_fingerprint",
+        "native_identity_id",
+        "native_version_id",
+        "mapping_revision",
+        "status",
+        "reviewer",
+        "reason"
+      ],
+      "relationships": [
+        "Store-scoped reviewed native identity/version only when approved"
+      ],
+      "required_guards": [
+        "Unverified legacy history never automatically becomes posted event; preserve every source field and unresolved relationship"
+      ]
+    }
+  },
+  "authorization": {
+    "public_client_grants": false,
+    "manager": "identity/unit/recipe approval, corrections, report review",
+    "staff": "assigned quantity/evidence entry; no recipe/cost/accounting edits",
+    "ownership": {
+      "Inventory": "Jeff",
+      "Scheduling": "Jay",
+      "Operations": "Rudd"
+    },
+    "login_redesign": "deferred"
+  },
+  "posting_contract": [
+    "one transaction for event, lines, movements and related task progress",
+    "request identity and payload fingerprint",
+    "store locking and same-store composite FKs",
+    "reviewed finite quantities, units, yield and acyclic recipe graph",
+    "append exact signed reversal plus full replacement",
+    "seal child rows at commit",
+    "no dual writes to legacy stock",
+    "Track 3 expected consumption never mutates measured stock or Track 1"
+  ],
+  "variance_contract": {
+    "raw": "opening + received - gross raw inputs - standalone raw waste - direct raw use +/- reviewed transfers - measured closing",
+    "prepared_depletion": "opening prepared count + usable output + net transfers - closing prepared count",
+    "prepared_residual": "prepared depletion - nested prepared inputs - prepared waste - selected consumption expectation",
+    "carryover": "closing prepared quantity - opening prepared quantity",
+    "unknown": "partial or unavailable, never silently zero",
+    "time": "aligned half-open physical boundaries and explicit store business-day policy"
+  },
+  "source_findings": [
+    {
+      "id": "T2-01",
+      "priority": "high",
+      "claim": "Recipe API omits stored ingredient uom",
+      "anchors": [
+        {
+          "file": "backend/server.py",
+          "line": 3837,
+          "symbol": "class DishLineIn"
+        },
+        {
+          "file": "backend/server.py",
+          "line": 3864,
+          "symbol": "def _dish_row_to_api"
+        },
+        {
+          "file": "backend/server.py",
+          "line": 3904,
+          "symbol": "async def _pg_save_dish"
+        },
+        {
+          "file": "supabase/schema.sql",
+          "line": 196,
+          "symbol": "CREATE TABLE public.dish_lines"
+        }
+      ]
+    },
+    {
+      "id": "T2-02",
+      "priority": "high",
+      "claim": "Legacy portion denominator and current supplier cost differ from frozen physical units and batch cost",
+      "anchors": [
+        {
+          "file": "backend/server.py",
+          "line": 4022,
+          "symbol": "async def _pg_item_derived"
+        }
+      ]
+    },
+    {
+      "id": "T2-03",
+      "priority": "high",
+      "claim": "Recursive raw ancestry and mutable clamped stock can duplicate nested production consumption",
+      "anchors": [
+        {
+          "file": "backend/server.py",
+          "line": 4036,
+          "symbol": "async def _pg_raw_portions"
+        },
+        {
+          "file": "backend/server.py",
+          "line": 4088,
+          "symbol": "async def _pg_deduct_and_stock"
+        }
+      ]
+    },
+    {
+      "id": "T2-04",
+      "priority": "high",
+      "claim": "Container movement and independent sales deduction can treat service stock as consumed twice",
+      "anchors": [
+        {
+          "file": "backend/server.py",
+          "line": 4187,
+          "symbol": "async def pg_apply_sales"
+        },
+        {
+          "file": "backend/server.py",
+          "line": 4229,
+          "symbol": "async def pg_use_container"
+        }
+      ]
+    },
+    {
+      "id": "T2-05",
+      "priority": "high",
+      "claim": "Mutable recipe/history references and collection-replaced adjustments cannot establish frozen versions",
+      "anchors": [
+        {
+          "file": "backend/server.py",
+          "line": 3904,
+          "symbol": "async def _pg_save_dish"
+        },
+        {
+          "file": "backend/server.py",
+          "line": 729,
+          "symbol": "async def _pg_replace_adjustments"
+        },
+        {
+          "file": "supabase/schema.sql",
+          "line": 450,
+          "symbol": "CREATE TABLE public.prep_logs"
+        }
+      ]
+    },
+    {
+      "id": "T2-06",
+      "priority": "medium",
+      "claim": "Direct prep paths need atomic idempotent service; task completion already has transaction/locks; vessel task violates current check",
+      "anchors": [
+        {
+          "file": "backend/server.py",
+          "line": 4170,
+          "symbol": "async def pg_complete_prep"
+        },
+        {
+          "file": "backend/server.py",
+          "line": 4603,
+          "symbol": "async def _pg_complete_task_core"
+        },
+        {
+          "file": "backend/server.py",
+          "line": 4635,
+          "symbol": "async def pg_complete_task"
+        },
+        {
+          "file": "supabase/schema.sql",
+          "line": 425,
+          "symbol": "CONSTRAINT prep_list_lines_task_type_check"
+        }
+      ]
+    }
+  ],
+  "evidence_status": "Source inspection; invented scenario arithmetic; no production runtime proof",
+  "implementation_sequence": [
+    "Identity and frozen unit/recipe versions plus read-only mapping review",
+    "Atomic batch service",
+    "Waste, prepared counts and variance",
+    "All prep/task/container writer cutover under one flag",
+    "Whole-database new-schema restore and roles rehearsal",
+    "Versioned idempotent Toast facts and projections"
+  ],
+  "not_implemented": [
+    "All proposed tables, migrations, APIs and writer cutover",
+    "Cost-source default selection",
+    "Business-day timezone posting policy",
+    "Cross-store transfer accounting policy",
+    "Operational rollout and Toast integration"
+  ]
+}

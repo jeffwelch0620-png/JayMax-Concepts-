@@ -1,0 +1,32 @@
+import React,{act} from 'react';
+import {createRoot} from 'react-dom/client';
+import {PrepOpeningStock} from './PrepOpeningStock';
+import * as api from '../lib/api';
+jest.mock('../lib/api');
+let root,container;
+const counted={id:'count',performed_at:'2026-10-05T13:00:00+00:00',review_snapshot:{scope:['protein','sauce']}};
+const lots=[{product_id:'protein',quantity:'50.000000000001',base_unit:'lb'}];
+const data={store_id:'berts',counts:[counted],decisions:[]};
+const button=t=>[...container.querySelectorAll('button')].find(b=>b.textContent===t);
+const click=async el=>act(async()=>el.click());
+const input=async(label,value)=>act(async()=>{const el=container.querySelector(`[aria-label="${label}"]`);Object.getOwnPropertyDescriptor(el.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(el,value);el.dispatchEvent(new Event(el.tagName==='SELECT'?'change':'input',{bubbles:true}));});
+async function enter(){await act(async()=>root.render(<PrepOpeningStock restaurantId="berts"/>));await input('Opening physical prep count','count');await input('Opening evidence or correction reason','Invented complete physical opening');await click(container.querySelector('[aria-label="Confirm opening before activity"]'));}
+async function approve(){await click(button('Review opening stock'));await click(container.querySelector('[aria-label="Approve opening stock review"]'));}
+beforeEach(()=>{jest.clearAllMocks();global.IS_REACT_ACT_ENVIRONMENT=true;Object.defineProperty(global,'crypto',{configurable:true,value:{randomUUID:jest.fn(()=>'opening-key')}});
+  api.nativePrepOpeningSetup.mockResolvedValue(data);api.previewNativePrepOpening.mockResolvedValue({reviewHash:'hash',review:{kind:'initial',count:counted,lots}});
+  api.saveNativePrepOpening.mockResolvedValue({event:{id:'event',store_id:'berts',kind:'initial',review_hash:'hash',predecessor_id:null}});
+  container=document.createElement('div');document.body.appendChild(container);root=createRoot(container);});
+afterEach(async()=>{await act(async()=>root.unmount());container.remove();});
+test('opening amounts come from reviewed counts and cannot be edited',async()=>{
+  await enter();expect(container.querySelectorAll('input:not([type="checkbox"])')).toHaveLength(1);await click(button('Review opening stock'));expect(button('Save reviewed opening stock').disabled).toBe(true);
+  expect(container.textContent).toContain('50.000000000001 lb');expect(container.textContent).toContain('Complete scope: 2 items');expect(container.textContent).toContain('Original producing recipe and analytical costs remain unknown');
+  await click(container.querySelector('[aria-label="Approve opening stock review"]'));await click(button('Save reviewed opening stock'));
+  expect(api.saveNativePrepOpening).toHaveBeenCalledWith('berts',{opening:{count_id:'count',before_activity_confirmed:true,note:'Invented complete physical opening'},expected_review_hash:'hash',reviewed:true},'opening-key');expect(container.textContent).toContain('No production or Food Cost was added');
+});
+test('zero scope creates no artificial source quantities',async()=>{api.previewNativePrepOpening.mockResolvedValue({reviewHash:'hash',review:{kind:'initial',count:counted,lots:[]}});await enter();await click(button('Review opening stock'));expect(container.textContent).toContain('no artificial source lots');});
+test('confirmation is required and editing after preview clears approval',async()=>{await enter();await click(container.querySelector('[aria-label="Confirm opening before activity"]'));await click(button('Review opening stock'));expect(api.previewNativePrepOpening).not.toHaveBeenCalled();await click(container.querySelector('[aria-label="Confirm opening before activity"]'));await approve();await input('Opening evidence or correction reason','Changed measurement evidence');expect(container.querySelector('[aria-label="Opening stock review"]')).toBeNull();});
+test('uncertain saves freeze changes and exact retry retains body and key',async()=>{api.saveNativePrepOpening.mockRejectedValueOnce(new Error('Uncertain acknowledgment'));await enter();await approve();await click(button('Save reviewed opening stock'));expect(container.querySelector('[aria-label="Opening action"]').closest('fieldset').disabled).toBe(true);expect(button('Refresh opening stock').disabled).toBe(true);await click(button('Retry same opening decision'));expect(api.saveNativePrepOpening.mock.calls[0]).toEqual(api.saveNativePrepOpening.mock.calls[1]);});
+test('foreign acknowledgment is held and definite conflict clears review',async()=>{api.saveNativePrepOpening.mockResolvedValueOnce({event:{id:'event',store_id:'rudds',kind:'initial',review_hash:'hash'}});await enter();await approve();await click(button('Save reviewed opening stock'));expect(container.textContent).toContain('not confirmed');api.saveNativePrepOpening.mockRejectedValueOnce({response:{status:409,data:{detail:'Opening count changed'}}});await click(button('Retry same opening decision'));expect(container.querySelector('[aria-label="Opening stock review"]')).toBeNull();expect(button('Refresh opening stock').disabled).toBe(false);});
+test('void uses its own reviewed decision route and reason',async()=>{api.nativePrepOpeningSetup.mockResolvedValue({...data,decisions:[{id:'opening',kind:'initial',count_id:'count',reason:'Opening',predecessor_id:null,review_snapshot:{lots}}]});api.previewNativePrepOpeningVoid.mockResolvedValue({reviewHash:'voidhash',review:{kind:'void',count:counted,lots:[{...lots[0],quantity:'0'}]}});api.voidNativePrepOpening.mockResolvedValue({event:{id:'void',store_id:'berts',kind:'void',review_hash:'voidhash',predecessor_id:'opening'}});
+  await enter();await input('Opening action','void');await input('Current opening decision','opening');await input('Opening evidence or correction reason','Erroneous source');await approve();await click(button('Save reviewed opening stock'));expect(api.voidNativePrepOpening).toHaveBeenCalledWith('berts','opening',{change:{reason:'Erroneous source'},expected_review_hash:'voidhash',reviewed:true},'opening-key');expect(api.saveNativePrepOpening).not.toHaveBeenCalled();});
+test('a saved decision remains acknowledged when refresh fails',async()=>{await enter();await approve();api.nativePrepOpeningSetup.mockRejectedValueOnce(new Error('Refresh unavailable'));await click(button('Save reviewed opening stock'));expect(container.textContent).toContain('Decision saved; refresh failed');expect(button('Refresh opening stock').disabled).toBe(false);});

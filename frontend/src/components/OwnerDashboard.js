@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ArrowRight, AlertTriangle, TrendingDown, RefreshCw, Check, X, ClipboardCheck, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import * as api from "../lib/api";
@@ -20,14 +20,22 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
   const [disc, setDisc] = useState([]);
   const [score, setScore] = useState([]);
   const [err, setErr] = useState("");
+  const request = useRef(0);
 
   function load() {
-    setErr("");
-    api.ownerSummary().then(setData).catch(() => setErr("Couldn't load the ownership rollup. Check that the backend is running."));
-    api.ownerPrepSummary().then(setPrep).catch(() => {});
-    api.ownerOrders().then(setPending).catch(() => {});
-    api.ownerDiscrepancies().then(setDisc).catch(() => {});
-    api.ownerVendorScorecard().then(setScore).catch(() => {});
+    const id = ++request.current;
+    const apply = setter => result => { if (request.current === id) setter(result); };
+    setErr(""); setData(null);
+    api.ownerSummary().then(result => {
+      if (!Array.isArray(result?.stores) || !result.totals || (api.nativePurchasesEnabled && result.inventoryBasis !== "native_received_purchases_and_explicit_counts")) throw new Error("Native ownership figures were not confirmed.");
+      apply(setData)(result);
+    }).catch(() => { if (request.current === id) setErr("Couldn't confirm the ownership rollup. Refresh to retry."); });
+    api.ownerPrepSummary().then(apply(setPrep)).catch(() => {});
+    api.ownerOrders().then(apply(setPending)).catch(() => {});
+    if (!api.nativePurchasesEnabled) {
+      api.ownerDiscrepancies().then(apply(setDisc)).catch(() => {});
+      api.ownerVendorScorecard().then(apply(setScore)).catch(() => {});
+    }
   }
   useEffect(load, []);
 
@@ -39,10 +47,12 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
     try { await api.rejectOrder(po.restaurantId, po.id, "Ownership", reason); setPending((p) => p.filter((x) => x.id !== po.id)); } catch { /* noop */ }
   }
 
-  if (err) return <div className="text-red-400 text-sm p-8" data-testid="owner-error">{err}</div>;
+  if (err) return <div className="text-red-400 text-sm p-8" data-testid="owner-error">{err}<button className={btnGhost} onClick={load}>Retry ownership summary</button></div>;
   if (!data) return <div className="text-slate-500 text-sm p-8" data-testid="owner-loading">Loading ownership rollup…</div>;
 
   const { stores, totals } = data;
+  const native = data.inventoryBasis === "native_received_purchases_and_explicit_counts";
+  const inventoryMoney = value => value == null ? "Count unavailable" : fmtMoney(value);
   const chartData = stores.map((s) => ({ name: s.short, "Inventory Value": s.inventoryValue, "30-Day Purchases": s.spend30 }));
 
   return (
@@ -53,10 +63,10 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
       <div className="text-xs text-slate-500 -mt-3 mb-5">Consolidated view across Bert's Hometown Grill & Pizzeria, Rudd's Pies and Fries, and Papa Leoni's Pizza · ~$8M combined annual sales.</div>
 
       <div className="grid gap-3 mb-6" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))" }}>
-        <MetricCard testId="owner-total-inv" label="Total Inventory Value" value={fmtMoney(totals.inventoryValue)} sub="all three locations" />
-        <MetricCard testId="owner-total-spend" label="Purchases — Last 30 Days" value={fmtMoney(totals.spend30)} sub="group-wide" />
-        <MetricCard testId="owner-total-alerts" label="Items Below Par" value={totals.orderAlerts} sub="need ordering" tone={totals.orderAlerts > 0 ? "warn" : "good"} />
-        <MetricCard testId="owner-total-waste" label="Waste — Last 30 Days" value={fmtMoney(totals.waste30)} sub="logged removals" tone={totals.waste30 > 0 ? "warn" : "good"} />
+        <MetricCard testId="owner-total-inv" label={native ? "Last Count Values" : "Total Inventory Value"} value={native ? inventoryMoney(totals.inventoryValue) : fmtMoney(totals.inventoryValue)} sub={native ? "Sum of dated counts; see each location" : "all three locations"} />
+        <MetricCard testId="owner-total-spend" label={native ? "Net Received Food — 30 Days" : "Purchases — Last 30 Days"} value={fmtMoney(totals.spend30)} sub={native ? "Credits/corrections included; tax/fees separate" : "group-wide"} />
+        <MetricCard testId="owner-total-alerts" label="Items Below Par" value={native ? "Needs on-hand review" : totals.orderAlerts} sub={native ? "Dated counts do not establish live stock" : "need ordering"} tone={!native && totals.orderAlerts > 0 ? "warn" : "normal"} />
+        <MetricCard testId="owner-total-waste" label={native ? "Estimated Waste — 30 Days" : "Waste — Last 30 Days"} value={fmtMoney(totals.waste30)} sub={native ? "Explanation only; not an accounting deduction" : "logged removals"} tone={totals.waste30 > 0 ? "warn" : "good"} />
       </div>
 
       {pending.length > 0 && (
@@ -82,7 +92,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
         </div>
       )}
 
-      {disc.length > 0 && (
+      {!native && disc.length > 0 && (
         <div className={`${cardCls} p-5 mb-6`} data-testid="owner-discrepancies" style={{ borderTopWidth: 2, borderTopColor: "#EF4444" }}>
           <div className="flex items-center gap-2 mb-3">
             <TrendingDown size={16} className="text-red-400" />
@@ -112,7 +122,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
         </div>
       )}
 
-      {score.length > 0 && (
+      {!native && score.length > 0 && (
         <div className={`${cardCls} p-5 mb-6`} data-testid="owner-vendor-scorecard">
           <div className="text-[11px] uppercase tracking-[0.08em] text-slate-500 font-bold mb-3">Vendor Scorecard — received orders across all locations</div>
           <div className="overflow-x-auto">
@@ -148,11 +158,12 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
               <span className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: s.accent }} />
             </div>
             <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">Inventory</div><div className="num font-bold text-slate-200">{fmtMoney(s.inventoryValue)}</div></div>
-              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">30d Purchases</div><div className="num font-bold text-slate-200">{fmtMoney(s.spend30)}</div></div>
-              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">Avg Food Cost</div><div className="num font-bold" style={{ color: s.avgFoodCost !== null && s.avgFoodCost > 32 ? "#EF4444" : "#10B981" }}>{s.avgFoodCost !== null ? `${num(s.avgFoodCost, 1)}%` : "—"}</div></div>
-              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">Below Par</div><div className="num font-bold" style={{ color: s.orderAlerts > 0 ? "#F59E0B" : "#10B981" }}>{s.orderAlerts} items</div></div>
+              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Last count value" : "Inventory"}</div><div className="num font-bold text-slate-200">{native ? inventoryMoney(s.inventoryValue) : fmtMoney(s.inventoryValue)}</div></div>
+              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "30d received food" : "30d Purchases"}</div><div className="num font-bold text-slate-200">{fmtMoney(s.spend30)}</div></div>
+              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Estimated recipe cost %" : "Avg Food Cost"}</div><div className="num font-bold" style={{ color: s.avgFoodCost !== null && s.avgFoodCost > 32 ? "#EF4444" : "#10B981" }}>{s.avgFoodCost !== null ? `${num(s.avgFoodCost, 1)}%` : "—"}</div></div>
+              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">Below Par</div><div className="num font-bold text-slate-200">{native ? "Review on-hand" : `${s.orderAlerts} items`}</div></div>
             </div>
+            {native && <p className="text-xs mb-3" data-testid={`native-count-status-${s.id}`}>Count: {s.nativeInventory?.count?.count_date || "Not available"} · {s.nativeInventory?.countStatus?.replaceAll("_", " ")} · {s.nativeInventory?.count?.timing?.replaceAll("_", " ") || ""}. Received food window: {s.nativeInventory?.receivedFrom} to before {s.nativeInventory?.receivedBefore}. Counts are historical measurements; actual Food Cost is on the location's Actual Inventory dashboard.</p>}
             {prep && (() => { const p = prep.stores.find((x) => x.id === s.id); return p ? (
               <div className="flex gap-1.5 flex-wrap mb-3" data-testid={`prep-summary-${s.id}`}>
                 <Pill color={p.countStatus === "submitted" ? "#10B981" : "#64748B"} bg={p.countStatus === "submitted" ? "rgba(16,185,129,0.12)" : "#1E293B"}>Tonight's count: {p.countStatus}</Pill>
@@ -169,7 +180,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
             )}
             {s.topCostDishes.length > 0 && (
               <div className="mb-3">
-                <div className="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-1">Highest Food Cost</div>
+                <div className="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-1">{native ? "Highest estimated recipe cost %" : "Highest Food Cost"}</div>
                 {s.topCostDishes.map((d) => (
                   <div key={d.code + d.name} className="flex justify-between text-xs py-1 border-b border-[#22304A] last:border-0">
                     <span className="text-slate-300">{d.code} {d.name}</span>
@@ -186,7 +197,8 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
       </div>
 
       <div className={`${cardCls} p-5`} data-testid="owner-comparison-chart">
-        <div className="text-[11px] uppercase tracking-[0.08em] text-slate-500 font-bold mb-3">Location Comparison — Inventory on Hand vs. 30-Day Purchases</div>
+        <div className="text-[11px] uppercase tracking-[0.08em] text-slate-500 font-bold mb-3">{native ? "Location Comparison — Net Received Food Purchases" : "Location Comparison — Inventory on Hand vs. 30-Day Purchases"}</div>
+        {native && <p className="text-xs">Delivery comparisons are available in each Purchase Order. Supplier scorecards await native comparison reporting.</p>}
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={240}>
             <BarChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
@@ -195,7 +207,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
               <YAxis stroke="#64748B" tick={{ fill: "#94A3B8", fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`} />
               <Tooltip contentStyle={{ background: "#161F30", border: "1px solid #28354A", borderRadius: 8, fontSize: 12 }} formatter={(v) => fmtMoney(v)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="Inventory Value" fill="#06B6D4" radius={[4, 4, 0, 0]} />
+              {!native && <Bar dataKey="Inventory Value" fill="#06B6D4" radius={[4, 4, 0, 0]} />}
               <Bar dataKey="30-Day Purchases" fill="#F97316" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>

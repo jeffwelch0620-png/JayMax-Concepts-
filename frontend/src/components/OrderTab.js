@@ -3,8 +3,13 @@ import { Copy, Download, ClipboardCheck } from "lucide-react";
 import { isOrderEnabled, vendorPack, vendorUnitsForShortfall, todayISO, fmtDate, fmtMoney, num, downloadCSV } from "../lib/calc";
 import { PageTitle, EmptyState, Banner, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 import * as api from "../lib/api";
+import { NativeOrderPlanner } from "./NativeOrderPlanner";
 
-export function OrderTab({ items, showToast, restaurantName, rid, onCreatedPO }) {
+export function OrderTab(props) {
+  return api.actualInventoryEnabled ? <NativeOrderPlanner key={props.rid} {...props} /> : <LegacyOrderTab {...props} />;
+}
+
+function LegacyOrderTab({ items, showToast, restaurantName, rid, onCreatedPO }) {
   const orderItems = useMemo(() => items.filter((it) => isOrderEnabled(it) && (Number(it.currentStock) || 0) < (Number(it.par) || 0)), [items]);
   const [selectedSkuByItem, setSelectedSkuByItem] = useState({});
 
@@ -51,7 +56,7 @@ export function OrderTab({ items, showToast, restaurantName, rid, onCreatedPO })
     setCreatingPO(vendor);
     try {
       const lines = vendorRows.map((r) => ({
-        controlNumber: r.item.controlNumber, name: r.item.name, vendorSku: r.vendorSku || "",
+        controlNumber: r.item.controlNumber, itemCode: r.item.itemCode, name: r.item.name, vendorSku: r.vendorSku || "",
         qty: r.suggestedQty, purchaseUnit: r.purchaseUnit, unitCost: r.unitCost,
       }));
       await api.createOrder(rid, { vendor, createdBy: "", note: "", lines });

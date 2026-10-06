@@ -18,6 +18,7 @@ from pymongo.errors import DuplicateKeyError
 import asyncpg
 import anthropic
 import db_pg
+import catalog_mapping
 try:
     from pywebpush import webpush, WebPushException
 except ImportError:  # pragma: no cover - optional dependency, push notifications no-op without it
@@ -195,7 +196,8 @@ async def collaboration_security(request: Request, call_next):
     if request.method != "GET":
         if role == "readonly":
             return JSONResponse({"detail": "Read-only access"}, status_code=403)
-        if role == "staff" and not route_path.startswith(STAFF_WRITE_PATHS):
+        count_draft_path = bool(re.fullmatch(r'/staff/[^/]+/count-drafts(?:/[^/]+/submit)?', route_path))
+        if role == "staff" and not (route_path.startswith(STAFF_WRITE_PATHS) or count_draft_path):
             return JSONResponse({"detail": "Staff access is limited to prep workflow"}, status_code=403)
         if route_path.startswith(STAFF_PATHS) and role not in ("owner", "manager", "staff"):
             return JSONResponse({"detail": "Insufficient role"}, status_code=403)
@@ -857,6 +859,8 @@ async def put_areas(rid: str, payload: List[Any], request: Request):
 @api_router.put("/state/{rid}/{collection}")
 async def put_collection(rid: str, collection: str, payload: List[Any], request: Request):
     check_rid(rid)
+    if collection == "purchases" and purchase_api.enabled():
+        raise HTTPException(410, "Use Invoice Master to retain and review purchases before posting")
     if collection not in WRITABLE:
         raise HTTPException(400, "collection not writable")
     if USE_PG:
@@ -902,6 +906,8 @@ async def _prep_stock_list(rid):
     return await db.prep_stock.find({"restaurantId": rid}, {"_id": 0}).to_list(5000)
 
 async def _deduct_and_stock(rid, recipe, batches, containers, kind, name):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     items = await db.items.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
     dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
     by_id = {d["id"]: d for d in dishes}
@@ -941,6 +947,8 @@ async def _deduct_and_stock(rid, recipe, batches, containers, kind, name):
     return {"items": items, "prepStock": await _prep_stock_list(rid), "log": log.model_dump()}
 
 async def _deduct_item_and_stock(rid, pitem, vessels):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     items = await db.items.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
     item = next((i for i in items if i["controlNumber"] == pitem.get("controlNumber")), None)
     if not item:
@@ -971,6 +979,8 @@ async def _deduct_item_and_stock(rid, pitem, vessels):
 
 @api_router.post("/prep/{rid}/complete")
 async def complete_prep(rid: str, body: PrepCompleteIn):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     check_rid(rid)
     if body.batches <= 0:
         raise HTTPException(400, "batches must be greater than zero")
@@ -985,6 +995,8 @@ class ApplySalesIn(BaseModel):
 
 @api_router.post("/prep/{rid}/apply-sales")
 async def apply_sales(rid: str, body: ApplySalesIn):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     check_rid(rid)
     dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
     by_id = {d["id"]: d for d in dishes}
@@ -1022,6 +1034,8 @@ class UseContainerIn(BaseModel):
 
 @api_router.post("/prep/{rid}/use-container")
 async def use_container(rid: str, body: UseContainerIn):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     check_rid(rid)
     stock = await db.prep_stock.find_one({"restaurantId": rid, "recipeId": body.recipeId}, {"_id": 0})
     if not stock:
@@ -1286,6 +1300,8 @@ async def release_prep_list(rid: str, list_id: str, body: dict):
     return {"ok": True}
 
 async def _complete_task_core(rid, list_id, task_id, batches, done_by, containers):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     plist = await db.prep_lists.find_one({"restaurantId": rid, "id": list_id}, {"_id": 0})
     if not plist:
         raise HTTPException(404, "prep list not found")
@@ -1680,6 +1696,8 @@ def _is_count_active(item):
 @api_router.post("/staff/{rid}/counts")
 async def staff_counts(rid: str, body: dict, request: Request):
     check_rid(rid)
+    if actual_inventory_api.enabled():
+        raise HTTPException(410, "Ask your manager to use Actual Inventory for reviewed purchased-item counts")
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
     if not user and str((body or {}).get("pin", "")) != await _get_pin(rid):
@@ -1753,6 +1771,8 @@ async def _apply_and_record_counts(rid, submitted_by, counts, source, count_date
 @api_router.post("/staff/{rid}/counts/save")
 async def staff_counts_save(rid: str, body: StaffCountsSaveIn, request: Request):
     check_rid(rid)
+    if actual_inventory_api.enabled():
+        raise HTTPException(410, "Use Actual Inventory with verified units and explicit count values")
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
     if not user and body.pin != await _get_pin(rid):
@@ -1773,6 +1793,8 @@ class CountSubmitIn(BaseModel):
 @api_router.post("/counts/{rid}/submit")
 async def submit_count(rid: str, body: CountSubmitIn, request: Request):
     check_rid(rid)
+    if actual_inventory_api.enabled():
+        raise HTTPException(410, "Use Actual Inventory with verified units and explicit count values")
     submitted_by = body.submittedBy.strip()
     if not submitted_by:
         raise HTTPException(400, "Enter your name so the count is attributed")
@@ -2324,12 +2346,12 @@ async def _pg_owner_view(rid):
         for r2 in item_rows:
             it = await _item_row_to_api(conn, store_id, r2, r2, skus_by_code.get(r2["code"], []))
             code = it["code"]
-            it["controlNumber"] = code[len(prefix):] if code.startswith(prefix) else code
+            it["controlNumber"] = it.get("controlNumber") or (code[len(prefix):] if code.startswith(prefix) else code)
             it["purchaseUnit"] = (next((s["purchaseUnit"] for s in it["vendorSkus"] if s["preferred"]), None)
                                    or (it["vendorSkus"][0]["purchaseUnit"] if it["vendorSkus"] else "case"))
             items.append(it)
 
-        purchases = [
+        purchases = [] if purchase_api.enabled() else [
             {"extendedCost": float(l["extended"] or 0), "invoiceDate": l["invoice_date"].isoformat()}
             for l in await conn.fetch(
                 """SELECT il.extended, i.invoice_date FROM invoice_lines il
@@ -2377,10 +2399,14 @@ async def store_summary(r):
     adjustments = await _adjustments_for(rid)
     items_by_cn = {i["controlNumber"]: i for i in items}
     by_id = {d["id"]: d for d in dishes}
-    inv_value = sum(f(i.get("currentStock")) * item_derived(i)["price"] for i in items)
-    alerts = sum(1 for i in items if i.get("orderEnabled", True) and f(i.get("currentStock")) < f(i.get("par")))
+    native_summary = None
+    if purchase_api.enabled():
+        from native_inventory_views import read_operating_summary
+        native_summary = await read_operating_summary(db_pg.pool(), RESTAURANT_TO_PG_STORE[rid])
+    inv_value = None if native_summary else sum(f(i.get("currentStock")) * item_derived(i)["price"] for i in items)
+    alerts = None if native_summary else sum(1 for i in items if i.get("orderEnabled", True) and f(i.get("currentStock")) < f(i.get("par")))
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
-    spend30 = sum(f(p.get("extendedCost")) for p in purchases if (p.get("invoiceDate") or "") >= cutoff)
+    spend30 = native_summary['netFoodPurchases30'] if native_summary else round(sum(f(p.get("extendedCost")) for p in purchases if (p.get("invoiceDate") or "") >= cutoff), 2)
     waste30 = sum(adj_value(a, items_by_cn[a["controlNumber"]]) for a in adjustments
                   if (a.get("date") or "") >= cutoff and a.get("controlNumber") in items_by_cn
                   and ADJ_DIRECTIONS.get(a.get("reason"), "remove") == "remove")
@@ -2398,7 +2424,8 @@ async def store_summary(r):
     stock_by_recipe = {s["recipeId"]: s for s in prep_stock}
     prep_low = sum(1 for d in dishes if d.get("recipeType") == "prep" and f(d.get("prepPar")) > 0
                    and f((stock_by_recipe.get(d["id"]) or {}).get("onHand")) < f(d.get("prepPar")))
-    return {**r, "inventoryValue": round(inv_value, 2), "orderAlerts": alerts, "spend30": round(spend30, 2),
+    return {**r, "inventoryValue": native_summary['inventoryValue'] if native_summary else round(inv_value, 2), "orderAlerts": alerts, "spend30": spend30,
+            "nativeInventory": native_summary,
             "waste30": round(waste30, 2), "avgFoodCost": round(sum(pcts) / len(pcts), 1) if pcts else None,
             "dishCount": len(dish_rows), "itemCount": len(items), "prepLow": prep_low,
             "topCostDishes": sorted(dish_rows, key=lambda x: -(x["pct"] or 0))[:3]}
@@ -2406,6 +2433,15 @@ async def store_summary(r):
 @api_router.get("/owner/summary")
 async def owner_summary():
     stores = [await store_summary(r) for r in RESTAURANTS]
+    if purchase_api.enabled():
+        from decimal import localcontext, Inexact
+        with localcontext() as ctx:
+            ctx.prec=80;ctx.traps[Inexact]=True
+            values=[s['inventoryValue'] for s in stores]
+            totals={"inventoryValue":str(sum((Decimal(v) for v in values),Decimal(0))) if all(v is not None for v in values) else None,
+                    "orderAlerts":None,"spend30":str(sum((Decimal(s['spend30']) for s in stores),Decimal(0))),
+                    "waste30":round(sum(s['waste30'] for s in stores),2)}
+        return {"stores":stores,"totals":totals,"inventoryBasis":"native_received_purchases_and_explicit_counts"}
     totals = {"inventoryValue": round(sum(s["inventoryValue"] for s in stores), 2),
               "orderAlerts": sum(s["orderAlerts"] for s in stores),
               "spend30": round(sum(s["spend30"] for s in stores), 2),
@@ -2413,14 +2449,25 @@ async def owner_summary():
     return {"stores": stores, "totals": totals}
 
 # ---------------- AI assistant (OpenAI via Emergent universal key) ----------------
-def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock):
+def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock, native_summary=None):
     rname = next((r["name"] for r in RESTAURANTS if r["id"] == rid), rid)
     items_by_cn = {i["controlNumber"]: i for i in items}
     by_id = {d["id"]: d for d in dishes}
     lines = [f"RESTAURANT: {rname}"]
-    inv_value = sum(f(i.get("currentStock")) * item_derived(i)["price"] for i in items)
-    lines.append(f"Live inventory value: ${inv_value:,.2f} across {len(items)} items")
-    low = [i for i in items if i.get("orderEnabled", True) and f(i.get("currentStock")) < f(i.get("par"))]
+    if purchase_api.enabled() and native_summary is None:
+        raise HTTPException(503,'Native inventory context is unavailable; legacy values cannot be substituted')
+    if native_summary:
+        count=native_summary['count']
+        lines.append(f"TRACK 1: explicit-value purchased-item counts; count status {native_summary['countStatus']}; scope {native_summary['scope']}")
+        lines.append(f"Last counted inventory value: {native_summary['inventoryValue'] if native_summary['inventoryValue'] is not None else 'unknown'} USD; count date {count['count_date'] if count else 'not available'}; timing {count['timing'] if count else 'not available'}. This is not live inventory value.")
+        lines.append(f"Net received food purchases {native_summary['receivedFrom']} through before {native_summary['receivedBefore']}: {native_summary['netFoodPurchases30']} USD. Supplier dates, taxes and fees excluded; corrections and credits remain signed.")
+        lines.append("Live raw on-hand and automatic ordering shortfalls are unknown. Do not infer them from a dated count or add receipts without knowing subsequent usage. Do not infer actual Food Cost from menu recipe percentages. Prep/waste and sales are independent explanations; no accounting writeback.")
+        if native_summary['countStatus']=='complete':
+            lines.append("DATED PHYSICAL COUNT: "+"; ".join(f"{r['item_code']} {r['base_quantity']} {r['base_unit']} explicit value {r['inventory_value']} USD" for r in native_summary['items'][:60]))
+    else:
+        inv_value = sum(f(i.get("currentStock")) * item_derived(i)["price"] for i in items)
+        lines.append(f"Live inventory value: ${inv_value:,.2f} across {len(items)} items")
+    low = [] if native_summary else [i for i in items if i.get("orderEnabled", True) and f(i.get("currentStock")) < f(i.get("par"))]
     if low:
         lines.append("BELOW PAR: " + "; ".join(f"{i['controlNumber']} {i.get('name','')} stock {f(i.get('currentStock')):g}/{f(i.get('par')):g} {i.get('purchaseUnit','')}" for i in low[:25]))
     lines.append("ITEMS (cost per portion): " + "; ".join(
@@ -2443,11 +2490,11 @@ def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock):
             for p in preps))
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
     spend30 = sum(f(p.get("extendedCost")) for p in purchases if (p.get("invoiceDate") or "") >= cutoff)
-    lines.append(f"Purchases last 30 days: ${spend30:,.2f} ({len(purchases)} invoice lines total on file)")
+    if not native_summary:lines.append(f"Purchases last 30 days: ${spend30:,.2f} ({len(purchases)} invoice lines total on file)")
     waste30 = sum(adj_value(a, items_by_cn[a["controlNumber"]]) for a in adjustments
                   if (a.get("date") or "") >= cutoff and a.get("controlNumber") in items_by_cn
                   and ADJ_DIRECTIONS.get(a.get("reason"), "remove") == "remove")
-    lines.append(f"Waste/removals last 30 days: ${waste30:,.2f}")
+    lines.append(f"{'Track 2 legacy estimated waste/removals (not accounting deductions)' if native_summary else 'Waste/removals'} last 30 days: ${waste30:,.2f}")
     return "\n".join(lines)
 
 class ChatIn(BaseModel):
@@ -2492,7 +2539,11 @@ async def ai_chat(body: ChatIn, request: Request):
         dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         prep_stock = await _prep_stock_list(rid)
     adjustments = await _adjustments_for(rid)
-    context = build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock)
+    native_summary=None
+    if purchase_api.enabled():
+        from native_inventory_views import read_operating_summary
+        native_summary=await read_operating_summary(db_pg.pool(),RESTAURANT_TO_PG_STORE[rid])
+    context = build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock,native_summary)
     history = await _chat_history(rid, 10)
     system = ("You are Sous, an expert restaurant operations copilot for a multi-unit restaurant group. "
               "You answer questions about inventory, food costing, recipes, prep planning, waste, and margins. "
@@ -2557,6 +2608,7 @@ PO_FLOW = {
 
 class POLineIn(BaseModel):
     controlNumber: str
+    itemCode: Optional[str] = None
     name: str = ""
     vendorSku: str = ""
     qty: float = 0
@@ -2608,6 +2660,8 @@ def _pg_po_doc(row, lines):
            "lines": [{"controlNumber": l["control_number"], "name": l["name"], "vendorSku": l["vendor_sku"],
                       "qty": f(l["qty"]), "purchaseUnit": l["unit"] or "case", "unitCost": f(l["unit_price"]),
                       "receivedQty": f(l["received_qty"]), "lineTotal": f(l["extended"])} for l in lines]}
+    for public_line,source_line in zip(doc['lines'],lines):
+        public_line['itemCode']=source_line['item_code']
     for key, col in _PO_COLS.items():
         v = row[col]
         doc[key] = _ts_out(v) if key in _PO_TS else (f(v) if key == "total" else v)
@@ -2618,6 +2672,22 @@ def _pg_po_doc(row, lines):
     return doc
 
 async def _pg_po_write_lines(conn, po_uuid, rid, lines):
+    await catalog_mapping.reject_legacy_schema(conn)
+    if purchase_api.enabled():
+        for line in lines:
+            if catalog_mapping.enabled() and not line.get('itemCode'):
+                raise HTTPException(422,'Choose the canonical purchased product for this order line')
+            code=line.get('itemCode') or f"{rid}_{line.get('controlNumber')}"
+            if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM store_items WHERE store_id=$1 AND item_code=$2 AND active AND order_enabled)',RESTAURANT_TO_PG_STORE.get(rid,rid),code):
+                raise HTTPException(422,'Order item must be registered, active and enabled for ordering at this location; review its catalog settings')
+            if catalog_mapping.enabled():
+                await catalog_mapping.ready(conn)
+                if not await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM purchasing.store_vendor_items s
+                    JOIN public.vendor_items vi ON vi.id=s.vendor_item_id
+                    JOIN public.purchase_orders po ON po.id=$4 AND po.vendor_id=vi.vendor_id
+                    WHERE s.store_id=$1 AND s.item_code=$2 AND vi.vendor_sku=$3 AND s.available)''',
+                    RESTAURANT_TO_PG_STORE.get(rid,rid),code,line.get('vendorSku'),po_uuid):
+                    raise HTTPException(422,'This supplier SKU is not available for ordering this product at this location')
     await conn.execute("DELETE FROM purchase_order_lines WHERE po_id=$1", po_uuid)
     if lines:
         # item_code links to the migrated catalog when the item exists (NULL otherwise, so a
@@ -2626,7 +2696,7 @@ async def _pg_po_write_lines(conn, po_uuid, rid, lines):
             """INSERT INTO purchase_order_lines (po_id, position, control_number, item_code, name, vendor_sku,
                    qty, unit, unit_price, extended, received_qty)
                VALUES ($1, $2, $3, (SELECT code FROM items WHERE code=$4), $5, $6, $7, $8, $9, $10, $11)""",
-            [(po_uuid, i, l.get("controlNumber"), f"{rid}_{l.get('controlNumber')}", l.get("name") or "",
+            [(po_uuid, i, l.get("controlNumber"), l.get('itemCode') or f"{rid}_{l.get('controlNumber')}", l.get("name") or "",
               l.get("vendorSku") or "", f(l.get("qty")), l.get("purchaseUnit") or "case", f(l.get("unitCost")),
               f(l.get("lineTotal")), f(l.get("receivedQty"))) for i, l in enumerate(lines)])
 
@@ -2677,14 +2747,20 @@ async def _po_insert(po):
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            if purchase_api.enabled():
+                matches=await conn.fetch('SELECT id FROM vendors WHERE lower(name)=lower($1) AND active',po.get('vendor') or 'Unassigned')
+                if len(matches)!=1:raise HTTPException(422,'Choose one registered supplier with an unambiguous name for this order')
+                order_vendor_id=matches[0]['id']
+            else:
+                order_vendor_id=await conn.fetchval('SELECT id FROM vendors WHERE lower(name)=lower($1) LIMIT 1',po.get('vendor') or 'Unassigned')
             po_uuid = await conn.fetchval(
                 """INSERT INTO purchase_orders (ref, store_id, vendor_name, vendor_id, status, created_by, note, total,
                        created_at, history)
-                   VALUES ($1, $2, $3, (SELECT id FROM vendors WHERE lower(name)=lower($3) LIMIT 1), $4, $5, $6, $7, $8, $9)
+                   VALUES ($1, $2, $3, $10, $4, $5, $6, $7, $8, $9)
                    RETURNING id""",
                 po["id"], RESTAURANT_TO_PG_STORE.get(rid, rid), po.get("vendor") or "Unassigned", po["status"],
                 po.get("createdBy") or "", po.get("note") or "", f(po.get("total")), _ts_in(po.get("createdAt")),
-                po.get("history") or [])
+                po.get("history") or [], order_vendor_id)
             await _pg_po_write_lines(conn, po_uuid, rid, po.get("lines") or [])
     finally:
         await db_pg.pool().release(conn)
@@ -2711,7 +2787,7 @@ async def _po_update(rid, oid, set_fields=None, events=(), expect_status=None, u
     for key, v in set_fields.items():
         args.append(_ts_in(v) if key in _PO_TS else v)
         sets.append(f"{_PO_COLS[key]}=${len(args)}")
-        if key == "vendor":
+        if key == "vendor" and not purchase_api.enabled():
             sets.append(f"vendor_id=(SELECT id FROM vendors WHERE lower(name)=lower(${len(args)}) LIMIT 1)")
     sets += [f"{_PO_COLS[k]}=NULL" for k in unset]
     if events:
@@ -2724,6 +2800,10 @@ async def _po_update(rid, oid, set_fields=None, events=(), expect_status=None, u
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            if "vendor" in set_fields and purchase_api.enabled():
+                matches=await conn.fetch('SELECT id FROM vendors WHERE lower(name)=lower($1) AND active',set_fields['vendor'])
+                if len(matches)!=1:raise HTTPException(422,'Choose one registered supplier with an unambiguous name for this order')
+                args.append(matches[0]['id']);sets.append(f"vendor_id=${len(args)}")
             if sets:
                 po_uuid = await conn.fetchval(f"UPDATE purchase_orders SET {', '.join(sets)} WHERE {where} RETURNING id", *args)
             else:
@@ -2772,6 +2852,10 @@ async def create_order(rid: str, body: POCreateIn):
         "history": [_po_event("draft", body.createdBy)],
     }
     await _po_insert(po)
+    if purchase_api.enabled():
+        # Confirm the committed native draft, including its location and canonical
+        # line IDs, rather than acknowledging only the incoming request.
+        return await _get_po(rid, po['id'])
     return _po_public(po)
 
 @api_router.put("/orders/{rid}/{oid}")
@@ -2851,6 +2935,8 @@ async def send_order(rid: str, oid: str, payload: dict = None):
 @api_router.post("/orders/{rid}/{oid}/receive")
 async def receive_order(rid: str, oid: str, payload: dict = None):
     check_rid(rid)
+    if purchase_api.enabled():
+        raise HTTPException(409,'Receive this order through native invoice review. Legacy stock additions would duplicate or mislabel purchases.')
     claimed = await _po_update(rid, oid, {"status": "receiving", "receiptStartedAt": _now_iso()}, expect_status="sent")
     po = await _po_find(rid, oid) if claimed else None
     if not po:
@@ -3350,6 +3436,8 @@ async def _pg_apply_prices(rid, vendor_name, lines):
     updated = 0
     try:
         async with conn.transaction():
+            await catalog_mapping.reject_legacy_schema(conn)
+            if catalog_mapping.enabled():raise HTTPException(409,'Review location catalog prices separately from order receiving')
             vendor_row = await conn.fetchrow("SELECT id FROM vendors WHERE name=$1", vendor_name)
             for ln in lines:
                 cn = ln.get("controlNumber")
@@ -3377,6 +3465,8 @@ async def _pg_apply_prices(rid, vendor_name, lines):
 @api_router.post("/orders/{rid}/{oid}/apply-prices")
 async def apply_prices(rid: str, oid: str, body: ApplyPricesIn):
     check_rid(rid)
+    if purchase_api.enabled():
+        raise HTTPException(409,'Native received-date costs are retained per invoice. Review supplier prices separately from PO receiving.')
     po = await _get_po(rid, oid)
     vendor = po.get("vendor", "")
     if USE_PG:
@@ -3456,16 +3546,17 @@ class VendorSkuIn(BaseModel):
     vendor_sku: str
     vendor_description: Optional[str] = None
     purchase_unit: str = "case"
-    base_per_purchase_unit: Optional[float] = None
-    pack_count: Optional[float] = None
-    unit_qty: Optional[float] = None
+    base_per_purchase_unit: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    pack_count: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    unit_qty: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     unit_uom: Optional[str] = None
-    price: Optional[float] = None
+    price: Optional[Decimal] = Field(default=None, ge=0, allow_inf_nan=False)
     preferred: bool = False
     available: bool = True
 
 class ItemIn(BaseModel):
     code: str
+    control_number: Optional[str] = Field(default=None, min_length=1, max_length=100)
     name: str
     category: Optional[str] = None
     base_unit: str = "each"
@@ -3476,17 +3567,17 @@ class ItemIn(BaseModel):
     # which the frontend's itemDerived() needs to compute portionsPerUnit/costPerPortion the
     # same way it does today; see docs/SUPABASE_MIGRATION_PLAN.md)
     costing_type: str = "portion"  # "portion" | "usage" -- unrelated to item_type above
-    pack_count: Optional[float] = None
-    unit_qty: Optional[float] = None
+    pack_count: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    unit_qty: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     unit_uom: Optional[str] = None
-    portion_size: Optional[float] = None
+    portion_size: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     portion_uom: Optional[str] = None
     # store_items fields
     count_unit: str = "case"
-    base_per_count_unit: float = 1
+    base_per_count_unit: float = Field(default=1, gt=0, allow_inf_nan=False)
     storage_area: Optional[str] = None
     counted_nightly: bool = False
-    par: float = 0
+    par: float = Field(default=0, ge=0, allow_inf_nan=False)
     active: bool = True
     order_enabled: bool = True
     sales_tracked: bool = True
@@ -3494,12 +3585,18 @@ class ItemIn(BaseModel):
     vendor_skus: List[VendorSkuIn] = []
 
 async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None):
-    if skus is None:
+    await catalog_mapping.reject_legacy_schema(conn)
+    shared = catalog_mapping.enabled()
+    if shared:
+        skus = await catalog_mapping.supplier_rows(conn, store_id, item_row["code"])
+    elif skus is None:
         skus = await conn.fetch(
             """SELECT vi.*, v.name AS vendor_name FROM vendor_items vi
                JOIN vendors v ON v.id = vi.vendor_id WHERE vi.item_code = $1""", item_row["code"])
     return {
         "code": item_row["code"], "name": item_row["name"], "category": item_row["category"],
+        "controlNumber": (await conn.fetchval('SELECT control_number FROM store_items WHERE store_id=$1 AND item_code=$2',store_id,item_row['code'])) if shared else None,
+        "sharedStoreCount": (await conn.fetchval('SELECT count(*) FROM store_items WHERE item_code=$1',item_row['code'])) if shared else None,
         "baseUnit": item_row["base_unit"], "itemType": item_row["item_type"],
         "isHighValue": item_row["is_high_value"], "notes": item_row["notes"],
         "costingType": item_row["costing_type"],
@@ -3512,15 +3609,17 @@ async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None):
         "basePerCountUnit": float(store_item_row["base_per_count_unit"]) if store_item_row else None,
         "storageArea": store_item_row["storage_area"] if store_item_row else None,
         "countedNightly": store_item_row["counted_nightly"] if store_item_row else False,
+        "catalogActive": item_row["active"],
         "active": store_item_row["store_active"] if store_item_row else True,
         "countActive": store_item_row["counted_nightly"] if store_item_row else False,
         "orderEnabled": store_item_row["order_enabled"] if store_item_row else True,
         "salesTracked": store_item_row["sales_tracked"] if store_item_row else True,
         "needsReview": store_item_row["needs_review"] if store_item_row else False,
-        "currentStock": float(store_item_row["current_stock"]) if store_item_row else 0,
+        "currentStock": None if actual_inventory_api.enabled() else float(store_item_row["current_stock"]) if store_item_row else 0,
+        "stockBasis": "native_dated_counts" if actual_inventory_api.enabled() else "legacy_on_hand",
         "par": float(store_item_row["par"]) if store_item_row else 0,
-        "lastCounted": store_item_row["last_counted"].isoformat() if store_item_row and store_item_row["last_counted"] else None,
-        "lastCountedBy": store_item_row["last_counted_by"] if store_item_row else None,
+        "lastCounted": None if actual_inventory_api.enabled() else store_item_row["last_counted"].isoformat() if store_item_row and store_item_row["last_counted"] else None,
+        "lastCountedBy": None if actual_inventory_api.enabled() else store_item_row["last_counted_by"] if store_item_row else None,
         "vendorSkus": [{
             "id": str(s["id"]), "vendor": s["vendor_id"], "vendorName": s["vendor_name"],
             "vendorSku": s["vendor_sku"], "vendorDescription": s["vendor_description"],
@@ -3529,7 +3628,7 @@ async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None):
             "packCount": float(s["pack_count"]) if s["pack_count"] is not None else None,
             "unitQty": float(s["unit_qty"]) if s["unit_qty"] is not None else None,
             "unitUOM": s["unit_uom"],
-            "price": float(s["price"]) if s["price"] is not None else None,
+            "price": str(s["price"]) if s["price"] is not None else None,
             "priceUpdatedAt": s["price_updated_at"].isoformat() if s["price_updated_at"] else None,
             "priceSource": s["price_source"], "preferred": s["preferred"], "available": s["available"],
         } for s in skus],
@@ -3550,6 +3649,27 @@ async def pg_list_items(store_id: str):
     finally:
         await db_pg.pool().release(conn)
 
+@pg_router.get('/catalog/{store_id}')
+async def pg_shared_catalog(store_id: str, request: Request):
+    check_store_id(store_id); _purchase_actor(request,store_id,False)
+    if not catalog_mapping.enabled():raise HTTPException(404,'Shared catalog is not enabled')
+    async with db_pg.pool().acquire() as conn:
+        async with conn.transaction(isolation='repeatable_read',readonly=True):
+            return {'products':await catalog_mapping.shared_choices(conn,store_id),
+                'revision':await conn.fetchval('SELECT COALESCE((SELECT revision FROM store_state WHERE store_id=$1),0)',store_id)}
+
+@pg_router.post('/catalog/{store_id}/links')
+async def pg_link_shared_item(store_id: str, body: catalog_mapping.LinkItem, request: Request):
+    check_store_id(store_id); _purchase_actor(request,store_id,True)
+    if not catalog_mapping.enabled():raise HTTPException(404,'Shared catalog is not enabled')
+    if not request.headers.get('if-match'):raise HTTPException(428,'Load the current location catalog before linking a product')
+    async with db_pg.pool().acquire() as conn:
+        async with conn.transaction():
+            await catalog_mapping.lock_catalog(conn)
+            revision=await _check_and_bump_revision(PG_STORE_TO_RESTAURANT[store_id],request,conn)
+            result=await catalog_mapping.link(conn,store_id,body)
+            return {**result,'revision':revision}
+
 # Suppliers the frontend maps names onto (VENDOR_NAME_TO_ID in frontend/src/lib/api.js; an
 # unrecognized supplier name falls back to "other"). They're created on first use so an
 # invoice or SKU never fails on a missing vendors row.
@@ -3563,6 +3683,17 @@ async def _pg_ensure_vendor(conn, vendor_id):
         raise HTTPException(400, f"Unknown supplier '{vendor_id}'")
 
 async def _pg_save_item(conn, store_id, body):
+    shared = catalog_mapping.enabled()
+    if shared:
+        await catalog_mapping.ready(conn)
+        await catalog_mapping.hold_shared_changes(conn, store_id, body)
+        if body.control_number is not None:
+            if not body.control_number.strip(): raise HTTPException(422,'Enter a nonblank location control number')
+            if await conn.fetchval('SELECT EXISTS(SELECT 1 FROM store_items WHERE store_id=$1 AND control_number=$2 AND item_code<>$3)',store_id,body.control_number,body.code):
+                raise HTTPException(409,'This location control number already belongs to another product')
+    if purchase_api.enabled():
+        from native_units import lock_store
+        await lock_store(conn,store_id)
     await conn.execute(
                 """INSERT INTO items (code, name, category, base_unit, item_type, is_high_value, notes,
                        costing_type, pack_count, unit_qty, unit_uom, portion_size, portion_uom)
@@ -3601,39 +3732,57 @@ async def _pg_save_item(conn, store_id, body):
         if existing and existing["item_code"] != body.code:
             raise HTTPException(409, "Vendor SKU is already linked to another item")
         if existing:
-            await conn.execute(
+            if shared:
+                await conn.execute('''UPDATE vendor_items SET vendor_description=$2,purchase_unit=$3,base_per_purchase_unit=$4,
+                    pack_count=$5,unit_qty=$6,unit_uom=$7 WHERE id=$1''',existing['id'],sk.vendor_description,sk.purchase_unit,
+                    sk.base_per_purchase_unit,sk.pack_count,sk.unit_qty,sk.unit_uom)
+                await catalog_mapping.save_supplier(conn,store_id,body.code,existing['id'],sk)
+            else:
+                await conn.execute(
                         """UPDATE vendor_items SET vendor_description=$2, purchase_unit=$3,
                                base_per_purchase_unit=$4, pack_count=$5, unit_qty=$6, unit_uom=$7,
-                               price=$8::numeric, price_updated_at=CASE WHEN $8::numeric IS NOT NULL THEN now() ELSE price_updated_at END,
-                               price_source=CASE WHEN $8::numeric IS NOT NULL THEN 'manual' ELSE price_source END,
+                               price=$8::numeric, price_updated_at=CASE WHEN price IS DISTINCT FROM $8::numeric THEN now() ELSE price_updated_at END,
+                               price_source=CASE WHEN price IS DISTINCT FROM $8::numeric THEN 'manual' ELSE price_source END,
                                preferred=$9, available=$10 WHERE id=$1""",
                         existing["id"], sk.vendor_description, sk.purchase_unit, sk.base_per_purchase_unit,
                         sk.pack_count, sk.unit_qty, sk.unit_uom, sk.price, sk.preferred, sk.available)
         else:
-            await conn.execute(
+            if shared:
+                new_id=await conn.fetchval('''INSERT INTO vendor_items(vendor_id,vendor_sku,vendor_description,item_code,purchase_unit,
+                    base_per_purchase_unit,pack_count,unit_qty,unit_uom) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id''',
+                    sk.vendor_id,sk.vendor_sku,sk.vendor_description,body.code,sk.purchase_unit,sk.base_per_purchase_unit,sk.pack_count,sk.unit_qty,sk.unit_uom)
+                await catalog_mapping.save_supplier(conn,store_id,body.code,new_id,sk)
+            else:
+                await conn.execute(
                         """INSERT INTO vendor_items (vendor_id, vendor_sku, vendor_description, item_code,
                                purchase_unit, base_per_purchase_unit, pack_count, unit_qty, unit_uom,
                                price, price_updated_at, price_source, preferred, available)
-                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::numeric, CASE WHEN $10::numeric IS NOT NULL THEN now() END, 'manual', $11, $12)""",
+                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::numeric, CASE WHEN $10::numeric IS NOT NULL THEN now() END, CASE WHEN $10::numeric IS NOT NULL THEN 'manual' END, $11, $12)""",
                         sk.vendor_id, sk.vendor_sku, sk.vendor_description, body.code, sk.purchase_unit,
                         sk.base_per_purchase_unit, sk.pack_count, sk.unit_qty, sk.unit_uom, sk.price,
                         sk.preferred, sk.available)
     for sku in existing_skus:
         if (sku["vendor_id"], sku["vendor_sku"]) not in desired_skus:
-            referenced = await conn.fetchval(
-                        "SELECT EXISTS(SELECT 1 FROM invoice_lines WHERE vendor_item_id=$1)", sku["id"])
-            if not referenced:
-                await conn.execute("DELETE FROM vendor_items WHERE id=$1", sku["id"])
+            # Keep supplier identities and all invoice/recipe/history references.
+            if shared:
+                await conn.execute('UPDATE purchasing.store_vendor_items SET available=false,preferred=false WHERE store_id=$1 AND vendor_item_id=$2',store_id,sku['id'])
+            else:
+                await conn.execute("UPDATE vendor_items SET available=false, preferred=false WHERE id=$1", sku["id"])
+    if shared and body.control_number is not None:
+        await conn.execute('UPDATE store_items SET control_number=$3 WHERE store_id=$1 AND item_code=$2',store_id,body.code,body.control_number)
     item_row = await conn.fetchrow("SELECT * FROM items WHERE code=$1", body.code)
     return await _item_row_to_api(conn, store_id, item_row, si)
 
 @pg_router.post("/items/{store_id}")
-async def pg_create_item(store_id: str, body: ItemIn):
+async def pg_create_item(store_id: str, body: ItemIn, request: Request):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
-            return await _pg_save_item(conn, store_id, body)
+            await catalog_mapping.lock_catalog(conn)
+            revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
+            result = await _pg_save_item(conn, store_id, body)
+            return {**result, "revision": revision}
     finally:
         await db_pg.pool().release(conn)
 
@@ -3644,6 +3793,7 @@ async def pg_replace_items(store_id: str, body: List[ItemIn], request: Request):
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await catalog_mapping.lock_catalog(conn)
             revision = await _check_and_bump_revision(revision_rid, request, conn)
             existing = await conn.fetch("SELECT item_code FROM store_items WHERE store_id=$1 FOR UPDATE", store_id)
             next_codes = {item.code for item in body}
@@ -3657,21 +3807,26 @@ async def pg_replace_items(store_id: str, body: List[ItemIn], request: Request):
         await db_pg.pool().release(conn)
 
 async def _pg_delete_item_in_conn(conn, store_id, code):
-    await conn.execute("DELETE FROM store_items WHERE store_id=$1 AND item_code=$2", store_id, code)
-    other_stores = await conn.fetchval("SELECT count(*) FROM store_items WHERE item_code=$1", code)
-    if other_stores == 0:
-        await conn.execute("DELETE FROM vendor_items WHERE item_code=$1", code)
-        await conn.execute("DELETE FROM items WHERE code=$1", code)
+    # Retire buying/sales use at this store without deleting catalog, supplier,
+    # physical counts or legacy stock. Count participation is independent: a
+    # retired product can still have stock to physically count.
+    if purchase_api.enabled():
+        from native_units import lock_store
+        await lock_store(conn, store_id)
+    await conn.execute("""UPDATE store_items SET active=false, order_enabled=false, sales_tracked=false
+                        WHERE store_id=$1 AND item_code=$2""", store_id, code)
 
 @pg_router.delete("/items/{store_id}/{code}")
-async def pg_delete_item(store_id: str, code: str):
+async def pg_delete_item(store_id: str, code: str, request: Request):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await catalog_mapping.lock_catalog(conn)
+            revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
             exists = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM store_items WHERE store_id=$1 AND item_code=$2)", store_id, code)
             await _pg_delete_item_in_conn(conn, store_id, code)
-            return {"ok": True, "deleted": bool(exists)}
+            return {"ok": True, "retired": bool(exists), "deleted": False, "revision": revision}
     finally:
         await db_pg.pool().release(conn)
 
@@ -3730,11 +3885,14 @@ async def pg_list_invoices(store_id: str, date_from: str = Query(None, alias="fr
 @pg_router.post("/invoices/{store_id}")
 async def pg_create_invoice(store_id: str, body: InvoiceIn):
     check_store_id(store_id)
+    if purchase_api.enabled():
+        raise HTTPException(410, 'Use the reviewed purchase import workflow for invoices')
     if not body.lines:
         raise HTTPException(400, "Invoice needs at least one line")
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await catalog_mapping.reject_legacy_schema(conn)
             total = sum((ln.qty or 0) * (ln.unit_price or 0) for ln in body.lines)
             await _pg_ensure_vendor(conn, body.vendor_id)
             inv = await conn.fetchrow(
@@ -4016,6 +4174,8 @@ async def pg_prep_state(store_id: str):
         await db_pg.pool().release(conn)
 
 async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind, name):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     store_items = await conn.fetch(
         "SELECT item_code, current_stock, count_unit FROM store_items WHERE store_id=$1 ORDER BY item_code FOR UPDATE",
         store_id)
@@ -4054,6 +4214,8 @@ async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind
     return {"prepStock": await _pg_prep_stock_list(conn, store_id), "log": _pg_log_to_api(log_row)}
 
 async def _pg_deduct_item_and_stock(conn, store_id, pitem, vessels):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     if not pitem["item_code"]:
         raise HTTPException(400, "prep item has no linked inventory item")
     si = await conn.fetchrow(
@@ -4098,6 +4260,8 @@ class PgPrepCompleteIn(BaseModel):
 
 @pg_router.post("/prep/{store_id}/complete")
 async def pg_complete_prep(store_id: str, body: PgPrepCompleteIn):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     check_store_id(store_id)
     if body.batches <= 0:
         raise HTTPException(400, "batches must be greater than zero")
@@ -4115,6 +4279,8 @@ class PgApplySalesIn(BaseModel):
 
 @pg_router.post("/prep/{store_id}/apply-sales")
 async def pg_apply_sales(store_id: str, body: PgApplySalesIn):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
@@ -4157,6 +4323,8 @@ class PgUseContainerIn(BaseModel):
 
 @pg_router.post("/prep/{store_id}/use-container")
 async def pg_use_container(store_id: str, body: PgUseContainerIn):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
@@ -4531,6 +4699,8 @@ async def pg_release_prep_list(store_id: str, list_id: str, body: dict):
     return {"ok": True}
 
 async def _pg_complete_task_core(conn, store_id, list_id, task_id, batches, done_by, containers):
+    from prep_batches import reject_legacy_write
+    reject_legacy_write()
     plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE id=$1 AND store_id=$2 FOR UPDATE", list_id, store_id)
     if not plist:
         raise HTTPException(404, "prep list not found")
@@ -4996,6 +5166,8 @@ async def pg_staff_complete(store_id: str, body: PgStaffCompleteIn, request: Req
 @pg_router.post("/staff/{store_id}/counts")
 async def pg_staff_counts(store_id: str, body: PgPinBodyIn, request: Request):
     check_store_id(store_id)
+    if actual_inventory_api.enabled():
+        raise HTTPException(410, "Ask your manager to use Actual Inventory for reviewed purchased-item counts")
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
     conn = await db_pg.pool().acquire()
@@ -5065,6 +5237,8 @@ async def _pg_apply_and_record_counts(conn, store_id, submitted_by, counts, sour
 @pg_router.post("/staff/{store_id}/counts/save")
 async def pg_staff_counts_save(store_id: str, body: PgStaffCountsSaveIn, request: Request):
     check_store_id(store_id)
+    if actual_inventory_api.enabled():
+        raise HTTPException(410, "Use Actual Inventory with verified units and explicit count values")
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
     done_by = body.doneBy.strip() or (user or {}).get("email", "")
@@ -5265,6 +5439,42 @@ async def pg_push_unsubscribe(store_id: str, body: PgPushUnsubscribeIn, request:
 
 app.include_router(api_router)
 app.include_router(pg_router)
+
+# Purchase authorization is explicit even when development disables blanket auth.
+import purchase_api
+
+def _purchase_actor(request, store_id, write):
+    token = (request.headers.get('authorization') or '').removeprefix('Bearer ').strip()
+    user = _decode_token(token) if token else None
+    if not user:
+        raise HTTPException(401, 'Authentication required')
+    role = user.get('role')
+    if role not in ('owner', 'manager', 'readonly') or (write and role == 'readonly'):
+        raise HTTPException(403, 'Purchase review requires manager or owner access')
+    if role != 'owner' and PG_STORE_TO_RESTAURANT[store_id] not in user.get('locations', []):
+        raise HTTPException(403, 'Location access denied')
+    return user.get('sub') or user.get('email') or role
+
+app.include_router(purchase_api.create_router(db_pg.pool, check_store_id, _purchase_actor))
+import actual_inventory_api
+app.include_router(actual_inventory_api.create_router(db_pg.pool, check_store_id, _purchase_actor))
+
+async def _staff_count_actor(request, conn, store_id, pin):
+    token = (request.headers.get('authorization') or '').removeprefix('Bearer ').strip()
+    user = _decode_token(token) if token else None
+    if token and not user: raise HTTPException(401, 'Authentication required')
+    if user:
+        if user.get('role') not in ('owner','manager','staff'):
+            raise HTTPException(403, 'Staff count entry requires staff or manager access')
+        if user.get('role') != 'owner' and PG_STORE_TO_RESTAURANT[store_id] not in user.get('locations', []):
+            raise HTTPException(403, 'Location access denied')
+        return user.get('sub') or user.get('email') or user['role'], 'bearer'
+    if not pin or pin != await _pg_get_staff_pin(conn, store_id):
+        raise HTTPException(403, 'Invalid staff PIN')
+    return 'shared-pin', 'shared_pin'
+
+import staff_count_drafts
+app.include_router(staff_count_drafts.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 
 def _cors_origins(raw):
     # Browsers send the Origin with no trailing slash; tolerate the usual copy-paste
