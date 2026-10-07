@@ -1,6 +1,6 @@
 {
-  "version": "inventory-foundation-draft-pr-2026-10-06",
-  "checkpoint_date": "2026-10-06",
+  "version": "inventory-foundation-local-prep-progress-continuation-2026-10-07",
+  "checkpoint_date": "2026-10-07",
   "baseline": "1a5e97243009a922d38596d6559c6d9be7f6b5f3",
   "original_review": {
     "file": "JayMax-review-findings.json",
@@ -17,16 +17,37 @@
     "open": "A part of the original supported write/read/UI/schema contract remains unfixed or its acceptance is incomplete. Native partial fixes/guards are recorded without closing the whole finding.",
     "intentionally_deferred": "Directly reserved by the user for future work; interim native controls and missing acceptance are explicit."
   },
-  "evidence_limits": "226 frontend checks/28 suites; production build with three existing warnings; 32 catalog/receiving/entry checks, two final targeted guard/constraint reruns, 23 offline checks. Fresh whole synthetic restore verifies independent store settings and equal actual report. Earlier prep proof retained separately. No live, production/browser or managed-platform proof.",
+  "evidence_limits": "Local source/component/build, 30 selected disposable PostgreSQL/backend functions and 23 offline checks. Includes dated-draft/execution regressions, partial progress, explicit finish, reconciliation, direct SQL guards, old-command upgrade and whole SQL restore; two initially failing main-run cases passed focused rechecks. Prior evidence remains unchanged in nested snapshots. No real invoice import, supplier message, operational change or live-browser proof.",
   "latest_implementation_evidence": {
-    "frontend": 226,
-    "frontend_suites": 28,
-    "new_frontend_cases": 9,
-    "native_backend_checks": 32,
-    "new_shared_catalog_backend_checks": 9,
-    "focused_reruns": 2,
+    "frontend_checks": 329,
+    "frontend_suites": 40,
+    "selected_backend_functions": 30,
     "offline_checks": 23,
-    "production_build": "passed with three existing warnings"
+    "backend_case_groups": {
+      "PrepProgress": 26,
+      "ProgressValidation": 1,
+      "ProgressUpgrade": 1,
+      "ObservationBoundary": 2
+    },
+    "production_build": "passed with three existing hook warnings",
+    "progress_restore": "verified immutable links, multiple-batch totals, reconciliations and exact retry readback",
+    "old_schema_upgrade": "preserved original command records/review hashes/request digests with connections recycled after DDL",
+    "main_run": "28 passed; connection timeout and test cached-statement error rechecked successfully",
+    "backend_rechecks": 2,
+    "frontend_test_flags": {
+      "REACT_APP_NATIVE_PURCHASES": "true",
+      "REACT_APP_ACTUAL_INVENTORY": "true",
+      "REACT_APP_CATALOG_MAPPING": "true",
+      "REACT_APP_ORDER_WORKFLOW": "true",
+      "REACT_APP_SUPPLIER_CONTACTS": "true",
+      "REACT_APP_PREP_SETUP": "true",
+      "REACT_APP_PREP_PLANNING": "true",
+      "REACT_APP_PREP_BATCHES": "true",
+      "REACT_APP_PREP_OBSERVATIONS": "true",
+      "REACT_APP_PREP_DAY_TASKS": "true",
+      "REACT_APP_PREP_EXECUTION": "true"
+    },
+    "result_files": "Local October 7 execution review package outside Git; no production/browser proof"
   },
   "findings": [
     {
@@ -35,7 +56,7 @@
       "original_title": "Item-sourced prep tasks violate the checked-in task-type constraint",
       "status": "open",
       "conclusion": "The legacy vessel-task schema conflict remains.",
-      "current_assessment": "Native batch entry supplies a separate reviewed production path, but the old generator still inserts vessel tasks into a baseline constraint permitting only batch/task. No additive migration in the snapshot repairs that constraint.",
+      "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Full staff access, prep count submissions, container execution and operating cutover remain pending.",
       "next_step_or_limit": "Fix the constraint and prove the complete retained task workflow, or retire the generator and supply an equivalent native task workflow without old stock writes.",
       "original_acceptance": "Load the baseline schema into disposable Postgres; generate, edit, release and complete an item-sourced task successfully.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -47,8 +68,8 @@
         },
         {
           "path": "backend/server.py",
-          "line": 4628,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 4671,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         }
       ]
     },
@@ -58,7 +79,7 @@
       "original_title": "Daily and bulk prep lists collide on the same date",
       "status": "open",
       "conclusion": "The legacy daily/bulk prep-list key conflict remains.",
-      "current_assessment": "The generator distinguishes count_type, while the baseline still uniquely constrains store_id/prep_date. The new journals do not repair this legacy list key.",
+      "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Full staff access, prep count submissions, container execution and operating cutover remain pending.",
       "next_step_or_limit": "Backfill an explicit track, migrate the unique key and keep locking consistent; test both tracks and simultaneous same-track generation, or retire this list storage.",
       "original_acceptance": "Both tracks coexist on one date; concurrent creation of the same track produces exactly one list.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -70,8 +91,8 @@
         },
         {
           "path": "backend/server.py",
-          "line": 4521,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 4564,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         }
       ]
     },
@@ -81,7 +102,7 @@
       "original_title": "Direct prep stock changes and audit logs are not one transaction",
       "status": "open",
       "conclusion": "Native production/waste are atomic; the legacy workflow cutover is incomplete.",
-      "current_assessment": "Reviewed native events use transactions, immutable movements, exact request replay and shared lot limits. Legacy direct completion/sales/container functions retain their old multi-statement stock code and are blocked only when the native prep pilot is enabled. The main Prep tab remains the legacy component.",
+      "current_assessment": "Native production and waste remain atomic immutable journals. Manager task links, finish and reconciliation append references/decisions only, creating no production events, movements or Track 1 deductions. Partial progress sums current native production exactly; correction/void review never applies analytical movements a second time. Legacy dated writers are held after schema installation even with flags off. Direct legacy sales/container surfaces and the full operating reader/writer cutover remain unfinished.",
       "next_step_or_limit": "Route or deliberately retire every legacy prep/task/container writer and reader; leave Track 1 independent and verify failures/concurrent use through the actual operating workflow.",
       "original_acceptance": "Injected failure at every statement leaves all balances and logs unchanged; parallel deductions preserve both movements.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -93,8 +114,8 @@
         },
         {
           "path": "backend/server.py",
-          "line": 4262,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 4304,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "frontend/src/App.js",
@@ -116,8 +137,8 @@
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 2939,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 2958,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "backend/native_order_receiving.py",
@@ -131,8 +152,8 @@
       "original_priority": "P1",
       "original_title": "Count units, supplier units, base units and portions are mixed",
       "status": "open",
-      "conclusion": "Canonical native quantities are fixed; the full legacy unit/cost surface is not.",
-      "current_assessment": "Native purchase/count/unit profiles and prep recipes freeze explicit physical conversions, with Decimal quantities and explicit Track 1 values. Catalog adapters now preserve canonical count fields. Legacy prep and costing/report helpers still use preferred packs and portions, and their operational replacement is incomplete.",
+      "conclusion": "Planning readers reject mixed unit families and explicit line basis conflicts; full physical/menu cutover remains open.",
+      "current_assessment": "Recipe planning requires compatible positive pack/portion metadata. Raw menu lines explicitly use portions; prep lines use the child yield unit. Non-null mismatched units are held and unknown conversions do not create trusted cost. Canonical native physical facts remain independent. Full reviewed physical/menu contracts and legacy backend quantity/cost parity remain unfinished.",
       "next_step_or_limit": "Finish the canonical field contract and remaining costing/prep/screen cutover; prove independent supplier, count and portion units on every supported path. Catalog numeric metadata must never override reviewed physical facts.",
       "original_acceptance": "Table-driven round trips for case/bag/lb/oz/each and different supplier packs; changing supplier preference leaves physical stock invariant. Frontend and backend return the same quantities and costs.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -144,13 +165,28 @@
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 423,
-          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+          "line": 444,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
         },
         {
           "path": "frontend/src/lib/calc.js",
-          "line": 404,
-          "sha256": "9c63d92748744f3bcc679d7a7b6b8534b361b97889175118567ad9ba64e40381"
+          "line": 457,
+          "sha256": "49dddc70b7c274f8a2f0c7ecb25af48bc68a33ca4de229d332f1557a9df87083"
+        },
+        {
+          "path": "backend/menu_contract.py",
+          "line": 93,
+          "sha256": "934cd62f492493328faaa9d49f07935350bb8ca89ad96739b0d5febaa0e1a688"
+        },
+        {
+          "path": "frontend/src/lib/calc.js",
+          "line": 363,
+          "sha256": "49dddc70b7c274f8a2f0c7ecb25af48bc68a33ca4de229d332f1557a9df87083"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 567,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
         }
       ]
     },
@@ -168,17 +204,17 @@
         {
           "path": "backend/purchase_api.py",
           "line": 283,
-          "sha256": "dc19c853aac335e854c3a335101455f19ebca85a0ecce279160f0c3f3e273433"
+          "sha256": "6b659e9e3451125aa467ece5917690d7b7ee0dcae43b451d255520d0b970d921"
         },
         {
           "path": "backend/purchase_api.py",
           "line": 344,
-          "sha256": "dc19c853aac335e854c3a335101455f19ebca85a0ecce279160f0c3f3e273433"
+          "sha256": "6b659e9e3451125aa467ece5917690d7b7ee0dcae43b451d255520d0b970d921"
         },
         {
           "path": "backend/server.py",
-          "line": 3889,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 3946,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         }
       ]
     },
@@ -188,7 +224,7 @@
       "original_title": "Failed saves clear user input and announce success",
       "status": "open",
       "conclusion": "Collection saves and principal forms fixed locally; legacy operating surface remains open.",
-      "current_assessment": "App applies saved state only after a valid acknowledgement. Item/area save, delete, adjustments, recipes, working sales periods, reporting snapshots and all three legacy invoice entry modes check confirmation. Drafts remain on failure; acknowledgements cannot erase newer typing. Supplier contacts check their specific response. Legacy split invoice saves disclose partial failure and block resubmission. Prep par/frequency uses retained drafts and explicit save. Broader direct task/count/container/projection APIs still need their own acknowledgement/draft contract as part of operational cutover.",
+      "current_assessment": "App applies saved state only after a valid acknowledgement. Item/area save, delete, adjustments, recipes, working sales periods, reporting snapshots and all three legacy invoice entry modes check confirmation. Drafts remain on failure; acknowledgements cannot erase newer typing. Supplier contacts check their specific response. Legacy split invoice saves disclose partial failure and block resubmission. Prep par/frequency uses retained drafts and explicit save. Broader direct task/count/container/projection APIs still need their own acknowledgement/draft contract as part of operational cutover. Native order drafts/transitions now retain exact request keys and payloads after uncertain saves, validate acknowledgements and ignore late location results; replay distinguishes current state from the original result. Covered store supplier contacts now retain drafts per supplier and location, preserve exact uncertain retry requests across signed-in tab remount, require matching acknowledgements and display the current replay state. Confirmed save versus failed catalog refresh is reported separately. Prep planning retains exact retry requests and per-product/location entries, validates acknowledgements, requires explicit refresh/review after conflicts, and displays current replay state. A held legacy standing deletion no longer announces success. Task/list/override/count save contracts remain open. Dated prep drafts retain reviewed previews and exact uncertain retry requests per store/date/track. Edits invalidate preview; stale conflicts require refresh/review; current replay and late-day response handling are tested. Staff count and container save contracts remain unfinished. Manager execution now retains exact uncertain command requests, validates command/hash/location/day/track/history acknowledgements, requires fresh review after conflicts, ignores late day callbacks and distinguishes the original retry acknowledgement from current release/reopen state. This does not provide durable browser reload recovery or staff task authorization. Partial-link/finish/reconciliation requests now retain exact extra evidence and strict outcomes, invalidate previews on changed inputs, and validate current task progress. Voids visibly reopen tasks after review; late navigation responses cannot apply elsewhere. Staff counts, containers and durable reload recovery remain open.",
       "next_step_or_limit": "Carry the same contract through direct legacy operating APIs during Step 4; supply native equivalents or retire those paths. Do not treat split legacy invoice/restore requests as an atomic transaction. In-memory drafts do not survive logout/reload.",
       "original_acceptance": "Simulated 409, 422, 500 and connection failures retain entries, produce no success message and do not contaminate saved state.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -205,8 +241,8 @@
         },
         {
           "path": "frontend/src/components/SetupTab.js",
-          "line": 113,
-          "sha256": "5b65d0b5993e1fd1af9455bb3253112074020737d7c3f65233aeb992d77a58e2"
+          "line": 116,
+          "sha256": "2b1cabf449adf5e66749911a8c6fd545cf6e711a819a09ce7daa2724cf7e1eeb"
         },
         {
           "path": "frontend/src/components/AdjustmentsTab.js",
@@ -220,8 +256,8 @@
         },
         {
           "path": "frontend/src/components/PrepTab.js",
-          "line": 719,
-          "sha256": "a63ac6156056aaa9782a0b57566a669735e52be717b4b25b5125a7de09ac1867"
+          "line": 724,
+          "sha256": "215957eda2ad10efa9bfac07f5347e131d4598fd21adc276b6a186c5e9bf81dc"
         }
       ]
     },
@@ -231,7 +267,7 @@
       "original_title": "The in-app backup/restore is not a complete restore",
       "status": "fixed",
       "conclusion": "The incomplete app restore is replaced/blocked in native mode; local recovery is proven.",
-      "current_assessment": "Native mode disables the partial app backup/restore. The native recovery tool captures the whole database and schema/ACL manifests from one exported snapshot, restores only into a verified empty disposable database, and verifies hashes/references. The latest proof includes all 16 private prep tables and saved/handoff/reopening history.",
+      "current_assessment": "Native mode disables the partial app backup/restore. The native recovery tool captures the whole database and schema/ACL manifests from one exported snapshot, restores only into a verified empty disposable database, and verifies hashes/references. The latest proof includes all 16 private prep tables and saved/handoff/reopening history. The local price continuation also fixes sequence next-value inspection and verifies price events, projections and candidates through a whole disposable SQL backup/restore.",
       "next_step_or_limit": "Production backup scheduling, storage, operator access and managed-platform restoration still require deployment rehearsal under R19. The legacy app export is not a disaster-recovery backup.",
       "original_acceptance": "Export to an isolated DB, change data, restore and reconcile every included entity, balance and reference. Reject a wrong-store file. Inject failures and prove atomicity or a clearly resumable staged import.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -248,8 +284,13 @@
         },
         {
           "path": "backend/native_backup.py",
-          "line": 157,
-          "sha256": "3c9bbeb4d6e207f879dc5a5b68397aec4a2f95febad374d0e6fe79f539535cc6"
+          "line": 162,
+          "sha256": "99800b6f6fa6ac9380803a6ae5277ada24c7d7ea455e1de449d3942f99a266b8"
+        },
+        {
+          "path": "backend/native_backup.py",
+          "line": 90,
+          "sha256": "99800b6f6fa6ac9380803a6ae5277ada24c7d7ea455e1de449d3942f99a266b8"
         }
       ]
     },
@@ -266,8 +307,8 @@
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 4281,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 4323,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "backend/prep_batches.py",
@@ -294,13 +335,13 @@
       "current_source_evidence": [
         {
           "path": "backend/catalog_mapping.py",
-          "line": 115,
-          "sha256": "9808a9241447ca7772b10eca98fe68713423f3c39ba43e4174a3a01b39d70ff6"
+          "line": 148,
+          "sha256": "ca293e4c0f759ffd81289ba000dff94ea3abd54c8c835246ee622676a44a2749"
         },
         {
           "path": "backend/catalog_mapping.py",
-          "line": 61,
-          "sha256": "9808a9241447ca7772b10eca98fe68713423f3c39ba43e4174a3a01b39d70ff6"
+          "line": 94,
+          "sha256": "ca293e4c0f759ffd81289ba000dff94ea3abd54c8c835246ee622676a44a2749"
         },
         {
           "path": "migrations/20261006_shared_catalog.sql",
@@ -309,8 +350,8 @@
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 387,
-          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+          "line": 408,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
         }
       ]
     },
@@ -319,8 +360,8 @@
       "original_priority": "P1",
       "original_title": "Incomplete recipes and invalid quantities can become apparently valid stock/cost data",
       "status": "open",
-      "conclusion": "Strict native validation exists; legacy menu/catalog validation and unknown costs remain gaps.",
-      "current_assessment": "Native recipes enforce physical units, positive yields, store membership, source exclusivity and cycle checks; native counts reject invalid amounts and costs stay unknown. The active legacy DishIn/DishLineIn models still accept unconstrained floats/optional sources, and legacy cost recursion returns zero for missing/cyclic sources.",
+      "conclusion": "Covered menu commands and planning displays are validated; remaining legacy operating readers remain open.",
+      "current_assessment": "Covered PostgreSQL menu create/replace/delete commands resolve one store-owned graph before writing, with positive finite quantities, one source, explicit prep yields, retained references, temporary-ID resolution and cycle checks. UI totals, suggested prices, recipe cards and menu profitability remain unknown for incomplete costs. Valid unpriced definitions may be saved without asserting complete cost. Legacy backend cost/stock recursion and broad operating cutover remain open. Covered native order commands validate finite positive quantities, nullable nonnegative planning prices and bounded totals before atomic writes.",
       "next_step_or_limit": "Apply the same complete validation contract to supported menu/catalog endpoints and costing screens. Display unknown/incomplete cost rather than a trusted zero; preserve explicit valid purchase credits.",
       "original_acceptance": "Invalid commands return actionable 4xx errors before any writes. Valid credits remain supported. Incomplete recipes cannot mutate stock or report a trusted zero cost.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -332,13 +373,34 @@
         },
         {
           "path": "backend/server.py",
-          "line": 3931,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 3943,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16",
+          "previous_checkpoint_anchor": {
+            "path": "backend/server.py",
+            "line": 3931,
+            "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          },
+          "anchor_refresh": "Original statement changed; current function entry retained with prior checkpoint anchor."
         },
         {
           "path": "frontend/src/lib/calc.js",
-          "line": 368,
-          "sha256": "9c63d92748744f3bcc679d7a7b6b8534b361b97889175118567ad9ba64e40381"
+          "line": 421,
+          "sha256": "49dddc70b7c274f8a2f0c7ecb25af48bc68a33ca4de229d332f1557a9df87083"
+        },
+        {
+          "path": "backend/menu_contract.py",
+          "line": 93,
+          "sha256": "934cd62f492493328faaa9d49f07935350bb8ca89ad96739b0d5febaa0e1a688"
+        },
+        {
+          "path": "frontend/src/lib/calc.js",
+          "line": 363,
+          "sha256": "49dddc70b7c274f8a2f0c7ecb25af48bc68a33ca4de229d332f1557a9df87083"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 567,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
         }
       ]
     },
@@ -347,31 +409,46 @@
       "original_priority": "P1",
       "original_title": "Invoice financial facts and exact supplier identity are lost or overwritten",
       "status": "open",
-      "conclusion": "Catalog provenance round trips fixed locally; effective-dated price policy remains open.",
-      "current_assessment": "Native invoice facts remain retained and independent of current catalog prices. Shared mode now stores exact planning prices and their provenance per restaurant; unchanged prices keep invoice dates/source, changes/clears are local manual events and new links have unknown prices. Exact supplier descriptions remain. Effective-dated history and unusual invoice/discount/adjustment policy remain open.",
-      "next_step_or_limit": "Finish effective-dated price history and outstanding invoice policy without using mutable catalog prices to value Track 1.",
+      "conclusion": "Append-only planning price history and reviewed received-date adoption implemented locally; wider invoice policy remains open.",
+      "current_assessment": "Store/SKU planning prices retain exact decimals, unknown/zero distinction, actor, pack and provenance history. Native invoice posting is independent. Explicit price adoption validates current corrected source and physical units, received-date ordering, preview hash and idempotent request. Corrected invoices or replaced/stale conversions make planning costs unknown pending review. Baseline effective dates remain uncertified. Unusual discount/allowance allocation and full multi-pack invoice acceptance remain open.",
+      "next_step_or_limit": "Complete broader invoice policy and multi-pack end-to-end acceptance, then location business-date policy, without mutable catalog valuation of Track 1.",
       "original_acceptance": "Invoices with credits, discounts and two packs of the same item reconcile to their source totals. Reload preserves supplier SKU and provenance; importing older invoices does not overwrite a newer effective price.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 3744,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 3797,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 366,
-          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+          "line": 387,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 378,
-          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+          "line": 399,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
         },
         {
           "path": "backend/catalog_mapping.py",
-          "line": 46,
-          "sha256": "9808a9241447ca7772b10eca98fe68713423f3c39ba43e4174a3a01b39d70ff6"
+          "line": 70,
+          "sha256": "ca293e4c0f759ffd81289ba000dff94ea3abd54c8c835246ee622676a44a2749"
+        },
+        {
+          "path": "backend/supplier_prices.py",
+          "line": 34,
+          "sha256": "98482df9afbc17d3f161819df9dedb6c4afed241b8a9227a388de079e2d2295b"
+        },
+        {
+          "path": "migrations/20261006_supplier_price_history.sql",
+          "line": 1,
+          "sha256": "310fc7b05f83508341b3927a4ba6d73f215ec64e9f61a9ea12f3061ccb0d9091"
+        },
+        {
+          "path": "backend/tests/test_supplier_prices.py",
+          "line": 1,
+          "sha256": "c277012467e0537ff6021b8caf7a31ef108ab37f416cc139dc31188035cc618d"
         }
       ]
     },
@@ -416,8 +493,8 @@
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 1047,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 1053,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "backend/prep_batches.py",
@@ -431,26 +508,41 @@
       "original_priority": "P2",
       "original_title": "Adapter round trips lose independent item settings and metadata",
       "status": "open",
-      "conclusion": "Identified flag/text/price/actor losses fixed locally; full mapping contract remains open.",
-      "current_assessment": "Independent active/count/order controls, stable canonical IDs, local aliases, supplier text, exact price/null and supplied count actor survive tested adapter/editor paths. Empty pack/portion metadata is now retained as null. Shared product fields are disabled in store editing while local price/flags stay editable. Full all-field/unit/menu mapping and legacy reader contract remain open; native mode deliberately hides legacy on-hand/count attribution.",
+      "conclusion": "Shared menu product identity and null yield/unit round trips fixed locally; full mapping contract remains open.",
+      "current_assessment": "Menu lines retain canonical product codes and resolve store-local aliases independently; new recipe saves do not fabricate store-prefixed identities. Line unit fields and unknown prep yield/unit/price survive the covered adapter paths. Full all-field/null/precision contracts and remaining legacy readers still require work. Covered orders preserve canonical identity and exact decimal strings, with unknown/null distinct from known zero. Store supplier contacts use stable supplier IDs independently of names; all old contact fields are retained as immutable raw JSON pending explicit source mapping/correction. Planning attaches to reviewed native prep products and pinned recipe/unit versions instead of reconstructed item codes or implicit container conversions. Original standing metadata is retained in full raw JSON; no automatic physical-unit or par adoption. Day tasks retain exact standing/recipe/unit versions and immutable prior-day physical count evidence. Separate day overrides do not overwrite usual pars; all original legacy day fields remain immutable raw JSON without adoption. Execution pins exact saved draft, task and production-root identities. Planned and measured output remain separate, including unequal quantities; opening stock cannot be mistaken for production. Corrections/voids retain original linkage and expose current effective batch plus a review flag. Multiple whole batches can accumulate against one pinned task in exact fixed base units, without guessed partial allocations. Original link, current production root/version and reviewed acknowledgement remain separate. Effective and reviewed output differ while a correction is pending; void contribution is zero. Old command review snapshots and fingerprints survive an additive upgrade unchanged.",
       "next_step_or_limit": "Finish the full field/null/unit and menu contract; do not treat targeted lossless fields as proof for every legacy reader.",
       "original_acceptance": "Round-trip property tests cover all fields, nulls, independent flags and supplier metadata without changes to untouched values.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
       "current_source_evidence": [
         {
           "path": "frontend/src/components/SetupTab.js",
-          "line": 101,
-          "sha256": "5b65d0b5993e1fd1af9455bb3253112074020737d7c3f65233aeb992d77a58e2"
+          "line": 104,
+          "sha256": "2b1cabf449adf5e66749911a8c6fd545cf6e711a819a09ce7daa2724cf7e1eeb"
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 377,
-          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+          "line": 398,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 402,
-          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+          "line": 423,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+        },
+        {
+          "path": "backend/menu_contract.py",
+          "line": 93,
+          "sha256": "934cd62f492493328faaa9d49f07935350bb8ca89ad96739b0d5febaa0e1a688"
+        },
+        {
+          "path": "frontend/src/lib/calc.js",
+          "line": 363,
+          "sha256": "49dddc70b7c274f8a2f0c7ecb25af48bc68a33ca4de229d332f1557a9df87083"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 567,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
         }
       ]
     },
@@ -467,13 +559,13 @@
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 4368,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 4410,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "backend/server.py",
-          "line": 4438,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 4480,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "backend/prep_observations.py",
@@ -487,31 +579,127 @@
       "original_priority": "P2",
       "original_title": "Concurrency checks cover only part of the write surface",
       "status": "open",
-      "conclusion": "New journals serialize/replay; legacy shared metadata and status transitions remain uncovered.",
-      "current_assessment": "Native fact commands serialize/replay. Catalog create/replace/retire/link serialize before store revisions; link requires current revision/hash and invalidates stale collection replacements. Shared product/pack edits are held in the ordinary store API, preventing cross-store metadata overwrite. Granular dish/global vendor edits, general draft-order idempotency and racing order/list state transitions remain uncovered.",
-      "next_step_or_limit": "Apply consistent versioning to every supported shared metadata mutation and lock/conditionally update order/list state in the same transaction as dependent lines. Include durable draft-order request identities.",
+      "conclusion": "Covered metadata, orders, dated prep drafts and manager production/reconciliation serialize; staff counts and container execution remain open.",
+      "current_assessment": "Prior catalog, metadata, contacts, order and prep-definition safeguards remain. Manager execution now permits multiple once-per-root production links per task, explicit finish and immutable original-link reconciliation. Catalog/store locks, mandatory execution revisions, review hashes and exact actor/request digests protect transactions. PostgreSQL numeric projections preserve planned, effective and reviewed totals without floating-point math. Changed linked production blocks additional links/finish until reviewed; void must reopen the task and cannot be reused elsewhere. Reconciliation cannot hide other changed links. A pinned released list stays locked once any production history exists. Direct SQL guards reject fabricated totals, empty finish, stale/wrong original evidence and void closure. Additive old-schema upgrade and whole SQL restore retain original request/review hashes and exact retries. Staff count submissions, verified containers, staff execution access, arbitrary fractional allocations, supplier outbox and durable reload recovery remain unfinished.",
+      "next_step_or_limit": "Native staff prep count submissions and verified containers, then staff execution authorization/assignment and remaining integration contracts before Toast. Arbitrary fractional allocations and durable browser reload recovery remain separate.",
       "original_acceptance": "A stale whole-list save conflicts after every metadata mutation; racing submit/edit or release/edit cannot alter approved/released content.",
-      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "evidence_limit": "20 selected backend functions (10 dated-draft, 8 standing-planning, 2 observation-boundary), one overlapping direct-guard rerun, 312 frontend tests/38 suites, 23 offline checks and build with three existing warnings. Prior 42-function definition/contact/planning and 50-function order/menu/price/contact evidence is nested separately. No operational/browser/managed-platform proof.",
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 3777,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 3830,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "backend/server.py",
-          "line": 3983,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 4013,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16",
+          "previous_checkpoint_anchor": {
+            "path": "backend/server.py",
+            "line": 3983,
+            "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          },
+          "anchor_refresh": "Original statement changed; current function entry retained with prior checkpoint anchor."
         },
         {
           "path": "backend/server.py",
-          "line": 4663,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 4706,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "backend/server.py",
-          "line": 2925,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 2944,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+        },
+        {
+          "path": "backend/menu_contract.py",
+          "line": 93,
+          "sha256": "934cd62f492493328faaa9d49f07935350bb8ca89ad96739b0d5febaa0e1a688"
+        },
+        {
+          "path": "frontend/src/lib/calc.js",
+          "line": 363,
+          "sha256": "49dddc70b7c274f8a2f0c7ecb25af48bc68a33ca4de229d332f1557a9df87083"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 567,
+          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+        },
+        {
+          "path": "backend/order_commands.py",
+          "line": 113,
+          "sha256": "ba002e74663d717105eac95d3a7c19103394a6213e8879840a07d2ce27a2743f"
+        },
+        {
+          "path": "migrations/20261006_order_commands.sql",
+          "line": 20,
+          "sha256": "111edf7ff4e2882f1bc332b0f73b6f31c907eaac5789238a093ba846d0511391"
+        },
+        {
+          "path": "backend/tests/test_order_commands.py",
+          "line": 92,
+          "sha256": "f3ea25267e2a8bd4e44181576287dde5384c4ce92179101cd87dc7d0422d49b9"
+        },
+        {
+          "path": "backend/supplier_contacts.py",
+          "line": 79,
+          "sha256": "9c66acabd506f8b466cf19b516ea9e15e8a13ae33e6b8c2082aa5c1ed7120089"
+        },
+        {
+          "path": "migrations/20261006_supplier_contacts.sql",
+          "line": 1,
+          "sha256": "cc8e3f27b0954811acd7b227b5f305eeddc07a56ca27e6a04767299c85dd54ac"
+        },
+        {
+          "path": "backend/tests/test_supplier_contacts.py",
+          "line": 1,
+          "sha256": "eb1dd34fb7977788746eba6b4e874830cd0522e4d40abf9b3b13ca14de065edc"
+        },
+        {
+          "path": "frontend/src/components/SupplierContacts.js",
+          "line": 1,
+          "sha256": "c06f170067a9bba79d5b7b1f7a31a80e9a0f75ad04e033e0bc1b89b63157a2c2"
+        },
+        {
+          "path": "backend/prep_planning.py",
+          "line": 1,
+          "sha256": "a8068313defb36ecfd6227ab6c1cbdb713223d5c889ab35d263556a9af47bac5"
+        },
+        {
+          "path": "migrations/20261007_prep_planning.sql",
+          "line": 1,
+          "sha256": "7877b8b15121ed5d9d89b81bc385c0c126e815419de8593ea23437e815b26888"
+        },
+        {
+          "path": "backend/tests/test_prep_planning.py",
+          "line": 1,
+          "sha256": "fdaa54c63887790aa764eef10222397a15a6094d8d2e2796ae8f57a9c48aaf0d"
+        },
+        {
+          "path": "frontend/src/components/PrepPlanning.js",
+          "line": 1,
+          "sha256": "17f2ebe89929017bedfe67c727296c3b6594e1eb0bb20faabbcc9708654c6882"
+        },
+        {
+          "path": "backend/prep_day_tasks.py",
+          "line": 1,
+          "sha256": "2247d541126959dc9fa2034b4ca47243b63250d6e74226b07fbe527f2a70dae3"
+        },
+        {
+          "path": "migrations/20261007_prep_day_tasks.sql",
+          "line": 1,
+          "sha256": "800e605da2b7fea81dca30694a64b6a2647bee6034cec3e4c585b5d171bc0c0c"
+        },
+        {
+          "path": "backend/tests/test_prep_day_tasks.py",
+          "line": 1,
+          "sha256": "35b6e2183f6cd4faf36b47b0b2a0f7a7483a9872723f309b6a2752448dfb5ae1"
+        },
+        {
+          "path": "frontend/src/components/PrepDayDrafts.js",
+          "line": 1,
+          "sha256": "b8fd0f6d5c01d96486e67ef786a80822c3d43480089f32e7d6bf26207333f743"
         }
       ]
     },
@@ -520,36 +708,41 @@
       "original_priority": "P2",
       "original_title": "Hard deletion conflicts with retained inventory and purchasing history",
       "status": "open",
-      "conclusion": "Purchased catalog/store retirement implemented locally; broader retirement remains open.",
-      "current_assessment": "Purchased-item store retirement retains references, stock/count participation and unchanged actual reports. Supplier removal/availability is now local in shared mode and does not change another store. New order lines check local item and matching supplier availability. Shared global product retirement, racing order/retirement transitions and prep scope removal remain separate open workflows.",
-      "next_step_or_limit": "Complete independent store/global availability and reviewed prep count-scope retirement. Coordinate racing catalog/order commands under R17. Do not drop physically counted stock solely because a product is retired.",
+      "conclusion": "Purchased catalog/store retirement and covered order archive retention implemented locally; broader retirement remains open.",
+      "current_assessment": "Purchased-item retirement retains references, stock/count participation and actual reports. Covered order transitions validate current local item/SKU and supplier availability under the catalog lock. Draft/rejected order removal archives headers and retains lines/history; physical deletion and archived-content edits are held. Shared global product retirement and prep scope removal remain separate open workflows. Planning retirement now appends inactive metadata with history; it does not retire the prep product identity, remove count scope, alter historical lots or complete global product amendments/retirement.",
+      "next_step_or_limit": "Complete global product amendment/availability and reviewed prep count-scope retirement. Do not drop physically counted stock solely because a product is retired.",
       "original_acceptance": "Retiring a purchased item hides it from new operations while historical reports remain resolvable. Removing a referenced SKU consistently changes availability without deleting history.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 3809,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 3866,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "backend/server.py",
-          "line": 3770,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 3823,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "backend/server.py",
-          "line": 2682,
-          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+          "line": 2696,
+          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
         },
         {
           "path": "frontend/src/components/SetupTab.js",
-          "line": 119,
-          "sha256": "5b65d0b5993e1fd1af9455bb3253112074020737d7c3f65233aeb992d77a58e2"
+          "line": 122,
+          "sha256": "2b1cabf449adf5e66749911a8c6fd545cf6e711a819a09ce7daa2724cf7e1eeb"
         },
         {
           "path": "backend/prep_period_journal.py",
           "line": 63,
           "sha256": "e740e3f48506d8f28906bbbd657f3c7e3d5dacc88e7f9770be6e889ea16b91cb"
+        },
+        {
+          "path": "migrations/20261006_order_commands.sql",
+          "line": 30,
+          "sha256": "111edf7ff4e2882f1bc332b0f73b6f31c907eaac5789238a093ba846d0511391"
         }
       ]
     },
@@ -559,7 +752,7 @@
       "original_title": "Database/bootstrap documentation and migration assets do not fully reproduce the current deployment",
       "status": "open",
       "conclusion": "Local migrations/recovery are substantially improved; production bootstrap/docs remain incomplete.",
-      "current_assessment": "Versioned native migrations and disposable restore tests now cover the implementation. The public schema remains a reference snapshot; private Toast deployment assets and a complete supported bootstrap/seed/grant sequence are not delivered. DATABASE_SCHEMA/KNOWN_GAPS still describe older Mongo/no-auth behavior, and old migration/import scripts still use name joins or Mongo writes.",
+      "current_assessment": "Versioned native migrations and disposable restore tests now cover the implementation. The public schema remains a reference snapshot; private Toast deployment assets and a complete supported bootstrap/seed/grant sequence are not delivered. DATABASE_SCHEMA/KNOWN_GAPS still describe older Mongo/no-auth behavior, and old migration/import scripts still use name joins or Mongo writes. The additive order-command migration and feature gates are tested locally; examples remain disabled and installed schemas hold legacy order writers even with the new flag off. The additive supplier-contact migration freezes legacy name-based contacts after preserving all raw rows; native dependency flags remain disabled in examples. Switching flags off does not reopen the old writer or name-based email lookup. The planning migration preserves and freezes all legacy standing metadata. New planning and dependency flags remain disabled in examples; flags off do not reopen legacy writes. Operating cutover remains pending. The dated draft migration freezes legacy lists, lines and overrides after raw preservation; dependencies remain false in examples and flag-off does not reopen writers. Whole SQL restore preserves draft/task seals and exact retry evidence. The additive execution migration follows the production/opening boundary and dated drafts, adds immutable command evidence and prevents released edits even with execution disabled. Whole SQL restore preserves release/completion history, task/batch root links and exact retries. All new example flags remain false; supported managed-platform bootstrap and operating cutover remain unfinished. The additive progress migration extends immutable execution evidence without rewriting historical commands or production. Partial root reservation and reconciled task projections survive whole SQL restore. Old command serialization and exact retry are preserved after upgrade; the rehearsal recycles fixture connections after DDL, while the application pool already disables statement caching. Existing execution flags remain false in examples; managed-platform bootstrap/cutover is still pending.",
       "next_step_or_limit": "Produce a supported baseline plus ordered migrations/seeds/grants, guard/archive legacy loaders, refresh canonical docs and rehearse managed-platform recovery and flags/roles/storage. Synthetic tests are not live deployment inspection.",
       "original_acceptance": "A fresh disposable database bootstraps reproducibly, including private schemas. Import tooling refuses the wrong backend and produces a reconciliation report with no unexplained skipped records.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -660,7 +853,7 @@
       ],
       "deliverable": "Stable product versus store identity, supplier-product relationships, independent flags, lossless descriptions, validated units/menu recipes, price-change provenance and retirement.",
       "completion": "Two stores share a supplier product safely; every supported field survives a UI round trip; catalog edits do not change historical quantities/values/provenance; invalid recipes/costs are held.",
-      "status": "Shared product/SKU identity milestone completed locally; remaining unit/menu and price policy work open"
+      "status": "Shared product/SKU identity and covered menu graph/unknown-cost milestone completed locally; full unit/menu precision contract and effective-dated prices remain open"
     },
     {
       "step": 3,
@@ -725,5 +918,129 @@
     "sha256": "20ba0f8ec5fbfe4bfa3629f21adf441766eecc861d653adc0a9eae90eac6fb96",
     "source_paths_verified": 143
   },
-  "publication_boundary": "Draft PR review checkpoint. No merge, operational migration, real invoice import, feature enablement, or deployment authorized. Historical local evidence retained outside Git."
+  "publication_boundary": "PR #14 remains draft at a472c8674a7e3f173e838907e1b9d13d7665a028. Cumulative menu, price, order, supplier-contact, prep-planning and dated-draft changes remain local and uncommitted; no new push, merge, enablement or deployment.",
+  "published_checkpoint": {
+    "url": "https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/14",
+    "commit": "a472c8674a7e3f173e838907e1b9d13d7665a028",
+    "readme": "docs/INVENTORY_FOUNDATION_README.md"
+  },
+  "published_checkpoint_evidence": {
+    "frontend": 226,
+    "frontend_suites": 28,
+    "new_frontend_cases": 9,
+    "native_backend_checks": 32,
+    "new_shared_catalog_backend_checks": 9,
+    "focused_reruns": 2,
+    "offline_checks": 23,
+    "production_build": "passed with three existing warnings"
+  },
+  "local_continuation_evidence": {
+    "baseline": "a472c8674a7e3f173e838907e1b9d13d7665a028",
+    "document": "docs/PREP_DAY_DRAFT_INTEGRITY.md",
+    "archive": "JayMax-prep-day-tasks-2026-10-07-review-package.zip",
+    "scope": "Cumulative unpublished continuation plus reviewed dated Track 2 drafts, separate daily/bulk identity, sealed tasks, explicit day overrides, physical-count provenance and legacy day holds",
+    "new_migration": "20261007_prep_day_tasks.sql"
+  },
+  "prior_local_menu_evidence": {
+    "baseline": "a472c8674a7e3f173e838907e1b9d13d7665a028",
+    "document": "docs/MENU_RECIPE_INTEGRITY.md",
+    "archive": "JayMax-menu-integrity-2026-10-06-review-package.zip",
+    "scope": "Canonical menu ingredients, atomic definition graph validation and incomplete planning costs; no new migration"
+  },
+  "prior_local_price_evidence": {
+    "frontend_checks": 271,
+    "frontend_suites": 32,
+    "selected_backend_functions": 34,
+    "supplier_price_functions_included": 9,
+    "menu_validation_subcases": 21,
+    "final_supplier_component_reruns": 7,
+    "offline_checks": 23,
+    "production_build": "passed with three existing hook warnings",
+    "price_history_restore": "verified with equal projection, history and candidates",
+    "result_files": "Local supplier-price review package outside Git; no production/browser proof"
+  },
+  "prior_price_continuation": {
+    "baseline": "a472c8674a7e3f173e838907e1b9d13d7665a028",
+    "document": "docs/SUPPLIER_PRICE_HISTORY.md",
+    "archive": "JayMax-supplier-prices-2026-10-06-review-package.zip",
+    "scope": "Cumulative menu integrity plus supplier planning price events, reviewed invoice adoption, stale-source holds and sequence-aware recovery verification",
+    "new_migration": "20261006_supplier_price_history.sql"
+  },
+  "prior_local_order_evidence": {
+    "frontend_checks": 282,
+    "frontend_suites": 35,
+    "selected_backend_functions": 43,
+    "order_command_functions_included": 9,
+    "menu_validation_subcases": 21,
+    "final_order_reruns_overlapping": 9,
+    "offline_checks": 23,
+    "production_build": "passed with three existing hook warnings",
+    "order_command_restore": "verified ledger, headers, lines, versions and unknown prices",
+    "result_files": "Local order-command review package outside Git; no production/browser proof"
+  },
+  "prior_order_continuation": {
+    "baseline": "a472c8674a7e3f173e838907e1b9d13d7665a028",
+    "document": "docs/ORDER_COMMAND_INTEGRITY.md",
+    "archive": "JayMax-order-commands-2026-10-06-review-package.zip",
+    "scope": "Cumulative menu and supplier price integrity plus versioned order commands, retained archive/retry evidence and global vendor metadata versions",
+    "new_migration": "20261006_order_commands.sql"
+  },
+  "prior_local_contact_evidence": {
+    "frontend_checks": 292,
+    "frontend_suites": 36,
+    "selected_backend_functions": 50,
+    "supplier_contact_functions_included": 7,
+    "menu_validation_subcases": 21,
+    "offline_checks": 23,
+    "production_build": "passed with three existing hook warnings",
+    "supplier_contact_restore": "verified raw sources, resolutions, events, projections and retry read-back",
+    "frontend_test_flags": {
+      "REACT_APP_NATIVE_PURCHASES": "true",
+      "REACT_APP_ACTUAL_INVENTORY": "true",
+      "REACT_APP_CATALOG_MAPPING": "true",
+      "REACT_APP_ORDER_WORKFLOW": "true",
+      "REACT_APP_SUPPLIER_CONTACTS": "true"
+    },
+    "result_files": "Local supplier-contact review package outside Git; no production/browser proof"
+  },
+  "prior_contact_continuation": {
+    "baseline": "a472c8674a7e3f173e838907e1b9d13d7665a028",
+    "document": "docs/SUPPLIER_CONTACT_INTEGRITY.md",
+    "archive": "JayMax-supplier-contacts-2026-10-06-review-package.zip",
+    "scope": "Cumulative menu, price and order integrity plus stable store supplier contacts, reviewed legacy source mapping, retained retries and versioned immutable evidence",
+    "new_migration": "20261006_supplier_contacts.sql"
+  },
+  "prior_local_planning_evidence": {
+    "frontend_checks": 304,
+    "frontend_suites": 37,
+    "selected_backend_functions": 42,
+    "prep_planning_functions_included": 8,
+    "prep_mapping_conversion_functions_included": 27,
+    "supplier_contact_functions_included": 7,
+    "offline_checks": 23,
+    "production_build": "passed with three existing hook warnings",
+    "prep_planning_restore": "verified planning history, retained legacy records and exact retry read-back",
+    "frontend_test_flags": {
+      "REACT_APP_NATIVE_PURCHASES": "true",
+      "REACT_APP_ACTUAL_INVENTORY": "true",
+      "REACT_APP_CATALOG_MAPPING": "true",
+      "REACT_APP_ORDER_WORKFLOW": "true",
+      "REACT_APP_SUPPLIER_CONTACTS": "true",
+      "REACT_APP_PREP_SETUP": "true",
+      "REACT_APP_PREP_PLANNING": "true"
+    },
+    "result_files": "Local October 7 prep-planning review package outside Git; no production/browser proof"
+  },
+  "prior_planning_continuation": {
+    "baseline": "a472c8674a7e3f173e838907e1b9d13d7665a028",
+    "document": "docs/PREP_PLANNING_INTEGRITY.md",
+    "archive": "JayMax-prep-planning-2026-10-07-review-package.zip",
+    "scope": "Cumulative unpublished continuation plus reviewed Track 2 planning versions, exact separate pars, explicit tracks, retained retirement history and legacy metadata holds",
+    "new_migration": "20261007_prep_planning.sql"
+  },
+  "local_continuation": {
+    "status": "Local, uncommitted and unpublished",
+    "description": "Multiple whole-batch progress, explicit task finish and reviewed correction/void reconciliation; no accounting movements",
+    "new_migration": "20261007_prep_progress.sql"
+  }
 }

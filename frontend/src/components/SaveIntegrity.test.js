@@ -8,10 +8,10 @@ import { PrepTab } from "./PrepTab";
 import { InvoicesTab } from "./InvoicesTab";
 import * as api from "../lib/api";
 
-jest.mock("../lib/api", () => ({ listVendorContacts: jest.fn(() => Promise.resolve([])), putVendorContact: jest.fn(), listPrepItems: jest.fn(), getPrepList: jest.fn() }));
+jest.mock("../lib/api", () => ({ __esModule: true, prepPlanningEnabled: false, listVendorContacts: jest.fn(() => Promise.resolve([])), putVendorContact: jest.fn(), listPrepItems: jest.fn(), getPrepList: jest.fn(), deletePrepItem: jest.fn() }));
 const item = { controlNumber: "F01", name: "Invented food", storageArea: "Freezer", purchaseUnit: "case", packCount: 1, unitQty: 10, unitUOM: "lb", portionSize: 4, portionUOM: "oz", salesTracked: true, vendorSkus: [{ id: "sku", vendor: "PFG", price: 10, preferred: true }] };
 const period = { periodStart: "2026-10-01", periodEnd: "2026-10-07", dishSales: { dish: "2" }, itemCounts: {} };
-const recipe = { id: "dish", name: "Invented dish", recipeType: "menu", menuCategory: "Appetizers", menuCode: "A1", description: "", photoUrl: "", price: 0, targetPct: 30, procedure: "", equipment: "", shelfLife: "", portionNote: "", lines: [] };
+const recipe = { id: "dish", name: "Invented dish", recipeType: "menu", menuCategory: "Appetizers", menuCode: "A1", description: "", photoUrl: "", price: 0, targetPct: 30, procedure: "", equipment: "", shelfLife: "", portionNote: "", lines: [{ sourceType: "item", controlNumber: "F01", qty: 1 }] };
 const deferred = () => { let resolve; const promise = new Promise(a => { resolve = a; }); return { promise, resolve }; };
 let root, container, save, periods, success, errors, drafts;
 const render = element => act(async () => root.render(element));
@@ -31,6 +31,7 @@ const costing = overrides => <CostingTab rid="berts" drafts={drafts} items={[ite
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true; jest.useFakeTimers(); jest.clearAllMocks();
   api.listVendorContacts.mockResolvedValue([]); api.listPrepItems.mockResolvedValue([]); api.getPrepList.mockResolvedValue({ list: null });
+  api.prepPlanningEnabled = false;
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
   save = jest.fn().mockResolvedValue({ revision: 11 }); periods = jest.fn().mockResolvedValue({ revision: 12 }); success = jest.fn(); errors = jest.fn(); drafts = new Map();
   jest.spyOn(window, "confirm").mockReturnValue(true);
@@ -122,6 +123,7 @@ test("recipe failure and polling preserve draft; deletion never claims unconfirm
   await render(costing({ focusDish: focus })); await input("recipe-name-input", "Edited recipe");
   await render(costing({ focusDish: focus, dishes: [{ ...recipe, name: "Polling value" }] })); expect(find("recipe-name-input").value).toBe("Edited recipe");
   await click(find("save-recipe-button")); expect(find("recipe-name-input").value).toBe("Edited recipe"); expect(success).not.toHaveBeenCalled();
+  expect(save).toHaveBeenCalledTimes(1);
   await click(find("delete-recipe-dish")); expect(find("recipe-row-dish")).not.toBeNull(); expect(success).not.toHaveBeenCalled();
 });
 
@@ -156,6 +158,16 @@ test("prep setting edits send no per-keystroke write and failure retains draft a
   save.mockResolvedValueOnce(null); await click(find("prep-save-meta-dish")); expect(find("prep-par-dish").value).toBe("17"); expect(success).not.toHaveBeenCalled();
   await render(<p>Other tab</p>); await render(prep()); await click(find("prep-subtab-inventory")); expect(find("prep-par-dish").value).toBe("17");
   await click(find("prep-save-meta-dish")); expect(save.mock.calls[1][0][0].prepPar).toBe(17); expect(success).toHaveBeenCalledTimes(1);
+});
+test("held standing prep removal does not report a successful deletion", async () => {
+  api.listPrepItems.mockResolvedValue([{id:"standing",name:"Invented portions",sourceType:"item",vesselName:"bag",schedule:"daily"}]);
+  api.deletePrepItem.mockRejectedValue({response:{status:409,data:{detail:"Legacy standing metadata retained"}}});
+  await render(prep()); await click(find("delete-prep-item-standing"));
+  expect(success).toHaveBeenCalledWith("Legacy standing metadata retained"); expect(success).not.toHaveBeenCalledWith("Prep item removed"); expect(find("standing-item-standing")).not.toBeNull();
+});
+test("native prep planning keeps legacy standing metadata controls read-only", async () => {
+  api.prepPlanningEnabled = true; api.listPrepItems.mockResolvedValue([{id:"standing",name:"Invented portions",sourceType:"item",vesselName:"bag",schedule:"daily"}]);
+  await render(prep()); expect(find("add-prep-item-button").disabled).toBe(true); expect(find("delete-prep-item-standing").disabled).toBe(true); expect(find("schedule-daily-standing").disabled).toBe(true);
 });
 test("prep acknowledgement cannot erase settings typed while saving", async () => {
   const pending = deferred(); save.mockReturnValueOnce(pending.promise);

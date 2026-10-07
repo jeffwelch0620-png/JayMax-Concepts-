@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { Plus, Trash2, Save } from "lucide-react";
-import { MENU_CATEGORIES, UOM_OPTIONS, nextMenuCode, normalizeRecipeSchema, recipeCostSummary, itemDerived, uid, fmtMoney, num, FREQS } from "../lib/calc";
+import { MENU_CATEGORIES, UOM_OPTIONS, nextMenuCode, normalizeRecipeSchema, recipeCostSummary, uid, fmtPlanningCost, num, FREQS } from "../lib/calc";
 import { PageTitle, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
 
 function emptyDish(type = "menu") {
@@ -39,47 +39,34 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
     setDish((d) => ({ ...d, menuCategory: catName, menuCode: cat ? nextMenuCode(cat.code, menuOnly) : d.menuCode }));
   }
   function addLine() {
-    const qty = Number(pickQty) || 0;
-    if (!qty) return;
+    const qty = Number(pickQty);
+    if (!Number.isFinite(qty) || qty <= 0) { fail("Ingredient quantity must be finite and greater than zero"); return; }
     if (pickType === "prep") {
       const sub = prepRecipes.find((r) => r.id === pickRecipeId);
       if (!sub) return;
-      setDish((d) => ({ ...d, lines: [...d.lines, { sourceType: "prep", recipeId: sub.id, qty }] }));
+      setDish((d) => ({ ...d, lines: [...d.lines, { sourceType: "prep", recipeId: sub.id, qty, uom: sub.yieldUOM }] }));
     } else {
       const item = items.find((i) => i.controlNumber === pickCN);
       if (!item) return;
-      setDish((d) => ({ ...d, lines: [...d.lines, { sourceType: "item", controlNumber: pickCN, qty }] }));
+      setDish((d) => ({ ...d, lines: [...d.lines, { sourceType: "item", controlNumber: pickCN, itemCode: item.itemCode || null, qty, uom: "portion" }] }));
     }
   }
   function removeLine(idx) { setDish((d) => ({ ...d, lines: d.lines.filter((_, i) => i !== idx) })); }
 
-  const lineDetails = (dish.lines || []).map((rawLine) => {
-    const l = rawLine.sourceType ? rawLine : { ...rawLine, sourceType: "item", qty: rawLine.qty ?? rawLine.qtyPortions ?? 0 };
-    const qty = Number(l.qty ?? l.qtyPortions) || 0;
-    if (l.sourceType === "prep") {
-      const sub = normalizedRecipes.find((r) => r.id === l.recipeId);
-      const s = recipeCostSummary(sub, items, normalizedRecipes);
-      return { ...l, qty, name: sub ? `PREP — ${sub.name}` : "Deleted prep recipe", usageUOM: sub?.yieldUOM || "units", unitCost: s.costPerYieldUnit, cost: s.costPerYieldUnit * qty, cycle: s.cycle };
-    }
-    const item = items.find((i) => i.controlNumber === l.controlNumber);
-    const cpp = item ? itemDerived(item).costPerPortion : 0;
-    return { ...l, qty, name: item ? `${item.controlNumber} — ${item.name}` : "Deleted item", usageUOM: item?.portionUOM ? `${item.portionUOM} portions` : "portions", unitCost: cpp, cost: cpp * qty };
-  });
-  const totalCost = lineDetails.reduce((s, l) => s + l.cost, 0);
-  const yieldQty = dish.recipeType === "prep" ? Number(dish.yieldQty) || 0 : 1;
-  const costPerYieldUnit = dish.recipeType === "prep" && yieldQty > 0 ? totalCost / yieldQty : totalCost;
+  const summary = recipeCostSummary(dish, items, normalizedRecipes.map(r => r.id === dish.id ? dish : r));
+  const lineDetails = summary.lines;
+  const { totalCost, costPerYieldUnit } = summary;
   const targetPct = Number(dish.targetPct) || 0;
-  const suggestedPrice = dish.recipeType === "menu" && targetPct > 0 ? totalCost / (targetPct / 100) : 0;
-  const cycleDetected = lineDetails.some((l) => l.cycle);
+  const suggestedPrice = dish.recipeType === "menu" && summary.complete && targetPct > 0 ? totalCost / (targetPct / 100) : null;
+  const cycleDetected = summary.cycle;
 
   async function saveDish() {
-    if (!dish.name.trim()) return;
-    if (dish.recipeType === "prep" && !(Number(dish.yieldQty) > 0)) { showToast("Prep recipes need a batch yield greater than zero"); return; }
-    if (cycleDetected) { showToast("Recipe cycle detected — remove the circular prep-recipe reference"); return; }
+    if (!dish.name.trim()) { fail("Recipe name is required"); return; }
+    if (!summary.valid) { fail(summary.validationIssues.join("; ")); return; }
     const menuOnly = dishes.filter((x) => (x.recipeType || "menu") !== "prep");
     const cat = MENU_CATEGORIES.find((c) => c.name === dish.menuCategory);
     const code = dish.recipeType === "menu" ? (String(dish.menuCode || "").trim() || (cat ? nextMenuCode(cat.code, menuOnly) : "")) : "";
-    const saved = normalizeRecipeSchema({ ...dish, id: dish.id || uid(dish.recipeType === "prep" ? "prep" : "dish"), name: dish.name.trim(), menuCode: code, price: dish.recipeType === "menu" ? Number(dish.price) || 0 : 0, yieldQty: dish.recipeType === "prep" ? Number(dish.yieldQty) || 0 : 1, prepPar: Number(dish.prepPar) || 0 });
+    const saved = normalizeRecipeSchema({ ...dish, id: dish.id || uid(dish.recipeType === "prep" ? "prep" : "dish"), name: dish.name.trim(), menuCode: code, price: dish.price === "" || dish.price == null ? null : Number(dish.price), yieldQty: dish.recipeType === "prep" ? Number(dish.yieldQty) : 1, prepPar: dish.prepPar === "" || dish.prepPar == null ? null : Number(dish.prepPar) });
     const exists = dishes.some((d) => d.id === saved.id);
     const next = exists ? dishes.map((d) => d.id === saved.id ? saved : d) : [...dishes, saved];
     if (!(await confirmSave(() => persist(next), fail))) return;
@@ -161,22 +148,23 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
             <thead><tr><th>Ingredient / Sub-Recipe</th><th>Qty</th><th>Unit Cost</th><th>Extended Cost</th><th></th></tr></thead>
             <tbody>
               {lineDetails.map((l, i) => (
-                <tr key={i}><td>{l.name}</td><td className="num">{num(l.qty, 2)} {l.usageUOM}</td><td className="num">{fmtMoney(l.unitCost)}</td><td className="num">{fmtMoney(l.cost)}</td>
+                <tr key={i}><td>{l.name}</td><td className="num">{num(l.qty, 2)} {l.usageUOM}</td><td className="num">{fmtPlanningCost(l.unitCost)}</td><td className="num">{fmtPlanningCost(l.cost)}</td>
                   <td><button aria-label={`Remove ${l.name}`} className="text-red-400 hover:text-red-300" onClick={() => removeLine(i)}><Trash2 size={13} /></button></td></tr>
               ))}
             </tbody>
           </table>
         )}
         {cycleDetected && <div className="p-2.5 bg-red-500/10 text-red-400 rounded-lg mb-3 font-bold border border-red-500/30">Circular recipe reference detected. A prep recipe cannot ultimately contain itself.</div>}
+        {!summary.complete && lineDetails.length > 0 && <div role="status" className="text-amber-300 mb-3" data-testid="recipe-cost-incomplete">Planning cost is incomplete: {summary.issues.join("; ")}. Actual Food Cost is calculated separately from received purchases and physical count values.</div>}
         {lineDetails.length > 0 && (
           <div className="flex gap-7 flex-wrap px-3.5 py-3 bg-[#0F1626] rounded-lg mb-3.5 border border-[#28354A]" data-testid="cost-summary">
-            <div><div className="text-[11px] text-slate-500 uppercase">{dish.recipeType === "prep" ? "Batch Cost" : "Total Plate Cost"}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtMoney(totalCost)}</div></div>
+            <div><div className="text-[11px] text-slate-500 uppercase">{dish.recipeType === "prep" ? "Planning Batch Cost" : "Estimated Plate Cost"}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(totalCost)}</div></div>
             {dish.recipeType === "prep" ? (
-              <div><div className="text-[11px] text-slate-500 uppercase">Cost per {dish.yieldUOM}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtMoney(costPerYieldUnit)}</div></div>
+              <div><div className="text-[11px] text-slate-500 uppercase">Cost per {dish.yieldUOM}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(costPerYieldUnit)}</div></div>
             ) : (
               <>
-                <div><div className="text-[11px] text-slate-500 uppercase">Food Cost %</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{Number(dish.price) > 0 ? num((totalCost / Number(dish.price)) * 100, 1) + "%" : "—"}</div></div>
-                <div><div className="text-[11px] text-slate-500 uppercase">Suggested Price ({targetPct || 0}% FC)</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtMoney(suggestedPrice)}</div></div>
+                <div><div className="text-[11px] text-slate-500 uppercase">Estimated Food Cost %</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{summary.complete && Number(dish.price) > 0 ? num((totalCost / Number(dish.price)) * 100, 1) + "%" : "Unknown"}</div></div>
+                <div><div className="text-[11px] text-slate-500 uppercase">Suggested Price ({targetPct || 0}% FC)</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(suggestedPrice)}</div></div>
               </>
             )}
           </div>
@@ -199,8 +187,8 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
                         <td>{r.recipeType === "prep" ? <Pill color="#EAB308" bg="rgba(234,179,8,0.12)">PREP</Pill> : <Pill color="#10B981" bg="rgba(16,185,129,0.12)">MENU</Pill>}</td>
                         <td>{r.menuCode || "—"}</td>
                         <td className="font-semibold text-slate-200">{r.name}</td>
-                        <td className="num">{r.recipeType === "prep" ? `${num(r.yieldQty, 2)} ${r.yieldUOM}` : fmtMoney(r.price)}</td>
-                        <td className="num">{r.recipeType === "prep" ? `${fmtMoney(s.costPerYieldUnit)} / ${r.yieldUOM}` : fmtMoney(s.totalCost)}</td>
+                        <td className="num">{r.recipeType === "prep" ? `${num(r.yieldQty, 2)} ${r.yieldUOM || "Unknown unit"}` : fmtPlanningCost(r.price)}</td>
+                        <td className="num" title={s.issues.join("; ")}>{r.recipeType === "prep" ? `${fmtPlanningCost(s.costPerYieldUnit)} / ${r.yieldUOM || "Unknown unit"}` : fmtPlanningCost(s.totalCost)}</td>
                         <td>
                           <div className="flex gap-1.5">
                             <button className={btnGhost} data-testid={`load-recipe-${r.id}`} onClick={() => setDish(r)}>Load</button>

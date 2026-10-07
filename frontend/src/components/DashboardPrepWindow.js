@@ -1,44 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, Clock3, MinusCircle } from "lucide-react";
 import * as api from "../lib/api";
-import { fmtDate, fmtMoney, itemDerived, normalizeRecipeSchema, preferredSku, recipeCostSummary, todayISO } from "../lib/calc";
+import { fmtDate, fmtMoney, itemPlanningCost, normalizeRecipeSchema, recipeCostSummary, todayISO } from "../lib/calc";
 import { EmptyState, Field, MetricCard, Pill, SectionLabel, cardCls, inpCls, btnAcc, btnGhost } from "./common";
-
-function recipeCostIsCalculable(recipe, itemsByCN, recipesById, stack = new Set()) {
-  if (!recipe || stack.has(recipe.id) || !recipe.lines?.length) return false;
-  const nextStack = new Set(stack);
-  nextStack.add(recipe.id);
-  let hasCostedInput = false;
-
-  for (const line of recipe.lines) {
-    const qty = Number(line.qty ?? line.qtyPortions) || 0;
-    if (qty <= 0) continue;
-    if (line.sourceType === "prep") {
-      if (!recipeCostIsCalculable(recipesById.get(line.recipeId), itemsByCN, recipesById, nextStack)) return false;
-      hasCostedInput = true;
-      continue;
-    }
-    const item = itemsByCN.get(line.controlNumber);
-    const sku = item && preferredSku(item);
-    const derived = item && itemDerived(item);
-    if (!sku || sku.price == null || sku.price === "" || !Number.isFinite(Number(sku.price)) || derived.portionsPerUnit <= 0) return false;
-    hasCostedInput = true;
-  }
-  return hasCostedInput;
-}
 
 function taskCostPerUnit(task, itemsByCN, recipes, recipesById) {
   if (task.recipeId) {
     const recipe = recipesById.get(task.recipeId);
-    if (!recipeCostIsCalculable(recipe, itemsByCN, recipesById)) return null;
     return recipeCostSummary(recipe, [...itemsByCN.values()], recipes).totalCost;
   }
   const item = itemsByCN.get(task.controlNumber);
-  const sku = item && preferredSku(item);
-  const derived = item && itemDerived(item);
+  const cost = itemPlanningCost(item).cost;
   const capacity = Number(task.vesselCapacity) || 0;
-  if (!item || !sku || sku.price == null || sku.price === "" || !Number.isFinite(Number(sku.price)) || derived.portionsPerUnit <= 0 || capacity <= 0) return null;
-  return capacity * derived.costPerPortion;
+  if (cost == null || capacity <= 0) return null;
+  return capacity * cost;
 }
 
 function listCostSummary(list, items, recipes) {

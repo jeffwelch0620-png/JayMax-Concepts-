@@ -83,8 +83,9 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
                   <div className="text-[11px] text-slate-500">{po.lines.length} line{po.lines.length !== 1 ? "s" : ""} · {fmtMoney(po.total)}{po.createdBy ? ` · submitted by ${po.createdBy}` : ""}</div>
                 </div>
                 <div className="flex gap-1.5">
+                  {api.orderWorkflowEnabled ? <button className={btnAcc} onClick={()=>onOpenOrder?.(po.restaurantId,po.id)}>Review current order</button> : <>
                   <button className={btnAcc} data-testid={`owner-approve-${po.id}`} onClick={() => approve(po)}><Check size={13} /> Approve</button>
-                  <button className={btnDanger} data-testid={`owner-reject-${po.id}`} onClick={() => reject(po)}><X size={13} /> Reject</button>
+                  <button className={btnDanger} data-testid={`owner-reject-${po.id}`} onClick={() => reject(po)}><X size={13} /> Reject</button></>}
                 </div>
               </div>
             ))}

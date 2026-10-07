@@ -2,6 +2,23 @@
 
 ## Inventory foundation review checkpoint — October 6, 2026
 
+Local continuation: [menu recipe integrity](docs/MENU_RECIPE_INTEGRITY.md) and
+[supplier price history](docs/SUPPLIER_PRICE_HISTORY.md) record the subsequent unpublished
+canonical ingredient mapping, definition validation, incomplete planning costs and reviewed prices.
+[Order command integrity](docs/ORDER_COMMAND_INTEGRITY.md) records the following local
+versioned order/retry/archive and supplier metadata milestone.
+[Supplier contact integrity](docs/SUPPLIER_CONTACT_INTEGRITY.md) records stable supplier
+relationships, reviewed legacy contact mapping, version checks and retained save retries.
+[Prep planning integrity](docs/PREP_PLANNING_INTEGRITY.md) records the October 7 local
+standing planning versions, separate pars, explicit tracks and retained retirement history.
+[Dated prep drafts](docs/PREP_DAY_DRAFT_INTEGRITY.md) connects those plans to sealed daily/bulk
+task drafts, prior-day physical counts and reviewed day overrides.
+[Prep execution integrity](docs/PREP_EXECUTION_INTEGRITY.md) adds manager release/reopen commands
+and exactly-once links to measured production.
+[Prep progress and reconciliation](docs/PREP_PROGRESS_INTEGRITY.md) adds multiple-batch progress,
+explicit task finish and reviewed corrections/voids; staff access and container execution remain pending.
+PR #14 remains the earlier checkpoint; these local changes are reserved for a later PR.
+
 This branch is a **draft PR checkpoint** of the cumulative PostgreSQL inventory work. Read
 [`docs/INVENTORY_FOUNDATION_README.md`](docs/INVENTORY_FOUNDATION_README.md) for completed work,
 the three inventory tracks, validation, all 20 review findings, and the remaining build sequence.

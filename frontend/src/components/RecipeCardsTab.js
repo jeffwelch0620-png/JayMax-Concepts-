@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Printer } from "lucide-react";
-import { normalizeRecipeSchema, recipeCostSummary, itemDerived, fmtMoney, num } from "../lib/calc";
+import { normalizeRecipeSchema, recipeCostSummary, fmtPlanningCost, num } from "../lib/calc";
 import { PageTitle, EmptyState, Field, SectionLabel, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 
 export function RecipeCardsTab({ items, dishes }) {
@@ -16,21 +16,10 @@ export function RecipeCardsTab({ items, dishes }) {
 
   const safeScale = Math.max(0.01, Number(scale) || 1);
   const summary = selected ? recipeCostSummary(selected, items, recipes) : { totalCost: 0, costPerYieldUnit: 0 };
-  const scaledCost = summary.totalCost * safeScale;
+  const scaledCost = summary.totalCost == null ? null : summary.totalCost * safeScale;
   const scaledYield = selected?.recipeType === "prep" ? (Number(selected.yieldQty) || 0) * safeScale : safeScale;
 
-  const ingredientRows = selected ? (selected.lines || []).map((rawLine, idx) => {
-    const l = rawLine.sourceType ? rawLine : { ...rawLine, sourceType: "item", qty: rawLine.qty ?? rawLine.qtyPortions ?? 0 };
-    const qty = (Number(l.qty ?? l.qtyPortions) || 0) * safeScale;
-    if (l.sourceType === "prep") {
-      const sub = recipes.find((r) => r.id === l.recipeId);
-      const subSummary = recipeCostSummary(sub, items, recipes);
-      return { key: idx, code: "PREP", name: sub?.name || "Missing prep recipe", qty, uom: sub?.yieldUOM || "units", cost: subSummary.costPerYieldUnit * qty };
-    }
-    const item = items.find((it) => it.controlNumber === l.controlNumber);
-    const d = item ? itemDerived(item) : { costPerPortion: 0 };
-    return { key: idx, code: l.controlNumber || "—", name: item?.name || "Missing inventory item", qty, uom: item?.portionUOM || "portion", cost: d.costPerPortion * qty };
-  }) : [];
+  const ingredientRows = selected ? summary.lines.map((line, key) => ({ key, code: line.sourceType === "prep" ? "PREP" : line.controlNumber || "—", name: line.name, qty: line.qty == null ? null : line.qty * safeScale, uom: line.usageUOM, cost: line.cost == null ? null : line.cost * safeScale })) : [];
 
   if (!recipes.length) return <EmptyState text="No recipes yet. Build recipes in Menu Costing, then print production cards here." />;
 
@@ -65,10 +54,11 @@ export function RecipeCardsTab({ items, dishes }) {
             <div className="text-right"><div className="text-[11px] text-[#0B0F17]/70 font-bold">BATCH SCALE</div><div className="text-[22px] font-extrabold num text-[#0B0F17]">{num(safeScale, 2)}×</div></div>
           </div>
           <div className="p-6">
+            {!summary.complete && <div role="status" className="text-amber-300 mb-3">Planning cost is incomplete: {summary.issues.join("; ")}</div>}
             <div className="grid gap-2.5 mb-4" style={{ gridTemplateColumns: "repeat(4,minmax(0,1fr))" }}>
               <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Yield</span><strong className="text-sm text-slate-200 num">{selected.recipeType === "prep" ? `${num(scaledYield, 2)} ${selected.yieldUOM}` : `${num(safeScale, 2)} serving${safeScale === 1 ? "" : "s"}`}</strong></div>
-              <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Batch Cost</span><strong className="text-sm text-slate-200 num">{fmtMoney(scaledCost)}</strong></div>
-              <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">{selected.recipeType === "prep" ? `Cost / ${selected.yieldUOM}` : "Food Cost"}</span><strong className="text-sm text-slate-200 num">{selected.recipeType === "prep" ? fmtMoney(summary.costPerYieldUnit) : (Number(selected.price) > 0 ? `${num((summary.totalCost / Number(selected.price)) * 100, 1)}%` : "—")}</strong></div>
+              <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Planning Batch Cost</span><strong className="text-sm text-slate-200 num">{fmtPlanningCost(scaledCost)}</strong></div>
+              <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">{selected.recipeType === "prep" ? `Cost / ${selected.yieldUOM}` : "Estimated Food Cost"}</span><strong className="text-sm text-slate-200 num">{selected.recipeType === "prep" ? fmtPlanningCost(summary.costPerYieldUnit) : (summary.complete && Number(selected.price) > 0 ? `${num((summary.totalCost / Number(selected.price)) * 100, 1)}%` : "Unknown")}</strong></div>
               <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">{selected.recipeType === "prep" ? "Shelf Life / Hold" : "Portion / Plate"}</span><strong className="text-sm text-slate-200">{selected.recipeType === "prep" ? (selected.shelfLife || "—") : (selected.portionNote || "—")}</strong></div>
             </div>
             {selected.equipment && <div className="mb-3.5 text-[13px] text-slate-300"><strong>Equipment / Station:</strong> {selected.equipment}</div>}
@@ -78,7 +68,7 @@ export function RecipeCardsTab({ items, dishes }) {
                 <thead><tr><th>Control #</th><th>Ingredient</th><th>Scaled Qty</th><th>Unit</th><th className="recipe-cost-col">Cost</th></tr></thead>
                 <tbody>
                   {ingredientRows.map((r) => (
-                    <tr key={r.key}><td className="font-bold" style={{ color: "var(--acc)" }}>{r.code}</td><td className="font-semibold text-slate-200">{r.name}</td><td className="num">{num(r.qty, 2)}</td><td>{r.uom}</td><td className="num recipe-cost-col">{fmtMoney(r.cost)}</td></tr>
+                    <tr key={r.key}><td className="font-bold" style={{ color: "var(--acc)" }}>{r.code}</td><td className="font-semibold text-slate-200">{r.name}</td><td className="num">{num(r.qty, 2)}</td><td>{r.uom}</td><td className="num recipe-cost-col">{fmtPlanningCost(r.cost)}</td></tr>
                   ))}
                 </tbody>
               </table>

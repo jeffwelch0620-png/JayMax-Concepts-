@@ -40,10 +40,43 @@ async def supplier_rows(conn,store,code):
         FROM public.vendor_items vi JOIN public.vendors v ON v.id=vi.vendor_id
         LEFT JOIN purchasing.store_vendor_items s ON s.vendor_item_id=vi.id AND s.store_id=$1
         WHERE vi.item_code=$2 ORDER BY vi.vendor_id,vi.vendor_sku,vi.id''',store,code)
-    return [{**dict(r),**{key:r['store_'+key] for key in ('price','price_updated_at','price_source','preferred','available')}} for r in rows]
+    result=[{**dict(r),**{key:r['store_'+key] for key in ('price','price_updated_at','price_source','preferred','available')}} for r in rows]
+    if await conn.fetchval("SELECT to_regclass('purchasing.supplier_price_events') IS NOT NULL"):
+        events=await conn.fetch('''SELECT e.*,e.pack_snapshot IS DISTINCT FROM purchasing.supplier_pack(e.vendor_item_id) AS pack_stale,
+            (e.source='invoice' AND NOT EXISTS(SELECT 1 FROM purchasing.current_posting_lines pl
+                WHERE pl.line_id::text=e.basis_snapshot->>'line_id' AND pl.mapping_id::text=e.basis_snapshot->>'mapping_id')) AS invoice_stale
+            FROM purchasing.store_vendor_items s JOIN purchasing.supplier_price_events e ON e.id=s.price_event_id
+            WHERE s.store_id=$1 AND s.item_code=$2''',store,code)
+        by_id={e['vendor_item_id']:e for e in events}
+        invoice_events=[e for e in events if e['source']=='invoice']
+        reviewed_profiles=[]
+        if invoice_events:
+            from native_units import profiles
+            reviewed_profiles=await profiles(conn,store)
+        for row in result:
+            event=by_id.get(row['id'])
+            row['price_issues']=[]
+            if event:
+                if event['pack_stale']:row['price_issues'].append('Supplier pack changed; review the planning price')
+                if event['invoice_stale']:row['price_issues'].append('Source invoice was corrected; review the planning price')
+                if event['source']=='invoice':
+                    profile=next((p for p in reviewed_profiles if p['profile_kind']=='purchase' and p['vendor_item_id']==row['id']),None)
+                    if not profile or profile['stale'] or str(profile['id'])!=event['basis_snapshot'].get('profile',{}).get('id'):
+                        row['price_issues'].append('Purchase conversion changed; review the planning price')
+                if row['price_issues']:row['price']=None
+    return result
 
 
 async def save_supplier(conn,store,code,sku_id,sku):
+    if await conn.fetchval("SELECT to_regclass('purchasing.supplier_price_events') IS NOT NULL"):
+        # Avoid INSERT..ON CONFLICT firing an unused INSERT history event.
+        exists=await conn.fetchval('SELECT EXISTS(SELECT 1 FROM purchasing.store_vendor_items WHERE store_id=$1 AND vendor_item_id=$2)',store,sku_id)
+        if exists:
+            await conn.execute('UPDATE purchasing.store_vendor_items SET preferred=$3,available=$4,price=$5 WHERE store_id=$1 AND vendor_item_id=$2',store,sku_id,sku.preferred,sku.available,sku.price)
+        else:
+            await conn.execute('''INSERT INTO purchasing.store_vendor_items(store_id,item_code,vendor_item_id,preferred,available,price)
+                VALUES($1,$2,$3,$4,$5,$6)''',store,code,sku_id,sku.preferred,sku.available,sku.price)
+        return
     await conn.execute('''INSERT INTO purchasing.store_vendor_items(store_id,item_code,vendor_item_id,preferred,available,
         price,price_updated_at,price_source) VALUES($1,$2,$3,$4,$5,$6,CASE WHEN $6::numeric IS NOT NULL THEN now() END,
         CASE WHEN $6::numeric IS NOT NULL THEN 'manual' END)

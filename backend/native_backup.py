@@ -87,7 +87,12 @@ async def snapshot_manifest(conn):
         name=r['nspname']+'.'+r['relname'];sha=hashlib.sha256();count=0
         table=quoted(r['nspname'])+'.'+quoted(r['relname'])
         # Sequence state is not MVCC; included for comparison but separately disclosed.
-        sql=f'SELECT to_jsonb(t)::text AS value FROM {table} t ORDER BY to_jsonb(t)::text'
+        if r['relkind']=='S':
+            # Sequences have no composite row type. WAL log_cnt is an internal
+            # cache, not restored business state; compare the next-value state.
+            sql=f"SELECT jsonb_build_object('last_value',last_value,'is_called',is_called)::text AS value FROM {table}"
+        else:
+            sql=f'SELECT to_jsonb(t)::text AS value FROM {table} t ORDER BY to_jsonb(t)::text'
         async for row in conn.cursor(sql,prefetch=100):
             sha.update(row['value'].encode());sha.update(b'\n');count+=1
         tables[name]={'rows':count,'sha256':sha.hexdigest(),'kind':r['relkind']}

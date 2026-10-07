@@ -3,6 +3,7 @@ import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { ChefHat, Play, PackageCheck, Layers, X, Plus, Trash2, Check, Sparkles, ClipboardList, Send, Package } from "lucide-react";
 import { normalizeRecipeSchema, recipeCostSummary, fmtDate, fmtMoney, num, todayISO, FREQS, VESSELS } from "../lib/calc";
 import * as api from "../lib/api";
+import { PrepDayDrafts } from "./PrepDayDrafts";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
 
 function tomorrowISO() {
@@ -66,7 +67,7 @@ export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, pers
     <div className="fade-slide-in" data-testid="prep-tab">
       <PageTitle>Prep Production</PageTitle>
       <div className="text-xs text-slate-500 -mt-3 mb-4">
-        Nightly cycle: the closing manager records the evening prep count, the system builds tomorrow's prep list (par − counted = prep quantity), staff mark tasks prepped, and raw inventory is deducted automatically.
+        {api.nativePurchasesEnabled ? "Prep counts and production explain inventory usage. Track 1 physical counts and received purchases remain the accounting baseline." : "Nightly cycle: the closing manager records the evening prep count, the system builds tomorrow's prep list (par − counted = prep quantity), staff mark tasks prepped, and raw inventory is deducted automatically."}
       </div>
       <div className="flex gap-2 mb-4 flex-wrap" data-testid="prep-track-selector">
         {TRACKS.map((t) => (
@@ -78,7 +79,7 @@ export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, pers
       <div className="text-xs text-slate-500 -mt-2 mb-4">
         {track === "daily"
           ? "On-site prep, replenished to par every day."
-          : "Commissary-kitchen prep — its own standing items, evening count, and daily list, separate from Daily Prep."}
+          : api.prepPlanningEnabled ? "Bulk prep planning, separate from Daily Prep. Production location and transfers are tracked separately." : "Commissary-kitchen prep — its own standing items, evening count, and daily list, separate from Daily Prep."}
       </div>
       <div className="flex gap-2 mb-5 flex-wrap" data-testid="prep-subtabs">
         {SUBS.map((s) => {
@@ -90,7 +91,7 @@ export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, pers
           );
         })}
       </div>
-      {sub === "list" && <PrepListView rid={rid} track={track} items={items} dishes={dishes} prepItems={prepItems} reloadPrepItems={reloadPrepItems} applyPrepResult={applyPrepResult} showToast={showToast} />}
+      {sub === "list" && (api.prepDayTasksEnabled ? <PrepDayDrafts rid={rid} track={track} drafts={drafts} showToast={showToast}/> : <PrepListView rid={rid} track={track} items={items} dishes={dishes} prepItems={prepItems} reloadPrepItems={reloadPrepItems} applyPrepResult={applyPrepResult} showToast={showToast} />)}
       {sub === "count" && <EveningCount rid={rid} track={track} showToast={showToast} />}
       {sub === "inventory" && <InventoryLog drafts={drafts} showError={showError} rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />}
       {sub === "planning" && <Planning showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} persistDishes={persistDishes} showToast={showToast} />}
@@ -506,9 +507,12 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
 
   async function removePrepItem(p) {
     if (!window.confirm(`Remove "${p.name}" from the standing prep items?`)) return;
-    await api.deletePrepItem(rid, p.id).catch(() => {});
-    reloadPrepItems();
-    showToast("Prep item removed");
+    try {
+      const result = await api.deletePrepItem(rid, p.id);
+      if (result?.ok !== true) throw new Error("Prep item removal was not confirmed.");
+      reloadPrepItems();
+      showToast("Prep item removed");
+    } catch (e) { showToast(e?.response?.data?.detail || e.message || "Couldn't remove the prep item"); }
   }
 
   async function addToDay(p) {
@@ -526,6 +530,7 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
 
   return (
     <div data-testid="prep-list-view">
+      {api.prepPlanningEnabled && <p>Standing prep settings are retained for reference. Edit reviewed planning settings in Setup; task execution cutover is pending.</p>}
       <div className={`${cardCls} p-4 mb-4 flex gap-3 flex-wrap items-end`}>
         <Field label="Prep-For Date"><input type="date" className={inpCls} data-testid="prep-list-date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         {!list && loaded && <button className={btnAcc} onClick={generate} data-testid="generate-prep-list-button"><Plus size={14} /> Generate from Latest Count</button>}
@@ -544,7 +549,7 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
             )}
           </>
         )}
-        <button className={btnGhost} onClick={() => setShowAdd(true)} data-testid="add-prep-item-button"><Package size={14} /> Add Prep Item</button>
+        <button className={btnGhost} disabled={api.prepPlanningEnabled} onClick={() => setShowAdd(true)} data-testid="add-prep-item-button"><Package size={14} /> Add Prep Item</button>
       </div>
 
       {!list && loaded && (
@@ -624,9 +629,9 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
                       </td>
                       <td>
                         <div className="flex gap-1">
-                          <button className={p.schedule === "daily" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => toggleSchedule(p, "daily")} data-testid={`schedule-daily-${p.id}`}>Daily</button>
-                          <button className={p.schedule === "oneoff" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => toggleSchedule(p, "oneoff")} data-testid={`schedule-oneoff-${p.id}`}>One-off</button>
-                          {api.isPostgres && <button className={p.schedule === "recurring" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => setEditingRecurring(p)} data-testid={`schedule-recurring-${p.id}`}>Recurring</button>}
+                          <button className={p.schedule === "daily" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} disabled={api.prepPlanningEnabled} onClick={() => toggleSchedule(p, "daily")} data-testid={`schedule-daily-${p.id}`}>Daily</button>
+                          <button className={p.schedule === "oneoff" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} disabled={api.prepPlanningEnabled} onClick={() => toggleSchedule(p, "oneoff")} data-testid={`schedule-oneoff-${p.id}`}>One-off</button>
+                          {api.isPostgres && <button className={p.schedule === "recurring" ? btnAcc : btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} disabled={api.prepPlanningEnabled} onClick={() => setEditingRecurring(p)} data-testid={`schedule-recurring-${p.id}`}>Recurring</button>}
                         </div>
                       </td>
                       <td>
@@ -634,7 +639,7 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
                           {p.schedule === "oneoff" && list && !onListIds.has(p.id) && (
                             <button className={btnGhost} style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => addToDay(p)} data-testid={`add-to-day-${p.id}`}>+ Add to {fmtDate(date)}</button>
                           )}
-                          <button aria-label={`Delete ${p.name}`} className={btnDanger} onClick={() => removePrepItem(p)} data-testid={`delete-prep-item-${p.id}`}><Trash2 size={13} /></button>
+                          <button aria-label={`Delete ${p.name}`} className={btnDanger} disabled={api.prepPlanningEnabled} onClick={() => removePrepItem(p)} data-testid={`delete-prep-item-${p.id}`}><Trash2 size={13} /></button>
                         </div>
                       </td>
                     </tr>

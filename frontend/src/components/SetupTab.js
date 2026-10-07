@@ -11,6 +11,9 @@ import { PrepPeriodComparison } from "./PrepPeriodComparison";
 import { PrepOpeningStock } from "./PrepOpeningStock";
 import { PrepPeriodJournal } from "./PrepPeriodJournal";
 import { SharedCatalogLink } from "./SharedCatalogLink";
+import { SupplierPriceHistory } from "./SupplierPriceHistory";
+import { SupplierContacts } from "./SupplierContacts";
+import { PrepPlanning } from "./PrepPlanning";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
 
 function emptyForm(areas) {
@@ -35,7 +38,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
   const optionalNumber = value => value === "" || value == null ? null : Number(value);
 
   useEffect(() => {
-    if (!rid) return;
+    if (!rid || api.supplierContactsEnabled) return;
     let active = true;
     api.listVendorContacts(rid).then((list) => {
       if (!active) return;
@@ -140,11 +143,13 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
       {error && <p role="alert">{error}</p>}
       {api.actualInventoryEnabled && <NativeInventoryPosition key={rid} restaurantId={rid} />}
       {api.prepSetupEnabled && <PreparedItemSetup key={`prep-${rid}`} restaurantId={rid} />}
+      {api.prepPlanningEnabled && <PrepPlanning rid={rid} drafts={drafts} showToast={showToast}/>}
       {api.prepBatchesEnabled && <PreparedBatchLedger key={`prep-batches-${rid}`} restaurantId={rid} />}
       {api.prepObservationsEnabled && <PrepObservations key={`prep-observations-${rid}`} restaurantId={rid} />}
       {api.prepObservationsEnabled && <PrepPeriodComparison key={`prep-periods-${rid}`} restaurantId={rid} />}
       {api.prepObservationsEnabled && <PrepPeriodJournal key={`prep-journal-${rid}`} restaurantId={rid} />}
       {api.prepObservationsEnabled && <PrepOpeningStock key={`prep-openings-${rid}`} restaurantId={rid} />}
+      {api.catalogMappingEnabled && !editingCN && <SupplierPriceHistory key={`supplier-prices-${rid}`} restaurantId={rid} items={items} drafts={drafts} onSaved={onCatalogLinked} showToast={showToast} />}
       <form onSubmit={submit} className={`${cardCls} p-5 mb-6`}>
         {sharedProduct && <p>This product is shared across locations. Product and pack changes require shared catalog review; location flags, pars and supplier prices remain editable.</p>}
         <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
@@ -215,7 +220,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
               <Field label="Qty / Pack"><input type="number" step="0.01" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.unitQty ?? ""} onChange={(e) => updateVendorRow(v.id, "unitQty", e.target.value)} /></Field>
               <Field label="Pack UOM"><select className={inpCls} disabled={sharedProduct} value={v.unitUOM || form.unitUOM} onChange={(e) => updateVendorRow(v.id, "unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
               <Field label="Price ($)"><input aria-label={`Supplier price ${v.id}`} type="number" step="0.01" className={`${inpCls} w-24`} value={v.price ?? ""} onChange={(e) => updateVendorRow(v.id, "price", e.target.value)} /></Field>
-              <Field label="Price Date"><input type="date" className={inpCls} value={(v.priceUpdatedAt || "").slice(0, 10)} readOnly /></Field>
+              <Field label="Price Recorded"><input type="date" className={inpCls} value={(v.priceUpdatedAt || "").slice(0, 10)} readOnly /></Field>
               <label className="text-xs flex items-center gap-1 pb-2 text-slate-400"><input type="checkbox" checked={v.available !== false} onChange={(e) => updateVendorRow(v.id, "available", e.target.checked)} /> Available</label>
               <button type="button" aria-label={`Remove vendor SKU${v.vendor ? ` for ${v.vendor}` : ""}`} className={`${btnDanger} mb-0.5`} onClick={() => removeVendorRow(v.id)} disabled={form.vendorSkus.length === 1}><Trash2 size={14} /></button>
             </div>
@@ -239,7 +244,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
         </div>
       </div>
 
-      <div className={`${cardCls} p-4 mb-6`} data-testid="vendor-emails-card">
+      {api.supplierContactsEnabled ? <SupplierContacts key={rid} rid={rid} drafts={drafts} onSaved={onCatalogLinked} showToast={showToast}/> : <div className={`${cardCls} p-4 mb-6`} data-testid="vendor-emails-card">
         <SectionLabel>Supplier Order Emails</SectionLabel>
         <div className="text-[11px] text-slate-500 mb-3">Saved addresses are used as the default recipient when emailing a Purchase Order to a supplier (editable at send time).</div>
         <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))" }}>
@@ -252,7 +257,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
       {items.length === 0 ? <EmptyState text="No items yet — add your first one above." /> : (
         <>

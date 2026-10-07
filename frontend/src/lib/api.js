@@ -15,9 +15,29 @@ export const isPostgres = USE_PG;
 export const nativePurchasesEnabled = USE_PG && process.env.REACT_APP_NATIVE_PURCHASES === "true";
 export const actualInventoryEnabled = nativePurchasesEnabled && process.env.REACT_APP_ACTUAL_INVENTORY === "true";
 export const catalogMappingEnabled = actualInventoryEnabled && process.env.REACT_APP_CATALOG_MAPPING === "true";
+export const orderWorkflowEnabled = catalogMappingEnabled && process.env.REACT_APP_ORDER_WORKFLOW === "true";
+export const supplierContactsEnabled = orderWorkflowEnabled && process.env.REACT_APP_SUPPLIER_CONTACTS === "true";
+export const supplierContacts = rid => axios.get(`${PG_API}/purchases/${pgStoreId(rid)}/supplier-contacts`).then(r => r.data);
+export const saveSupplierContact = (rid, vendor, body, version, key) => axios.put(`${PG_API}/purchases/${pgStoreId(rid)}/supplier-contacts/${encodeURIComponent(vendor)}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const createVersionedOrder = (rid, body, key) => axios.post(`${PG_API}/purchases/${pgStoreId(rid)}/order-drafts`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const orderCommand = (rid, ref, body, version, key) => axios.post(`${PG_API}/purchases/${pgStoreId(rid)}/orders/${ref}/commands`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const editVersionedOrder = (rid, ref, body, version, key) => axios.put(`${PG_API}/purchases/${pgStoreId(rid)}/order-drafts/${ref}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const supplierPriceReview = (rid, sku, offset = 0) => axios.get(`${PG_API}/purchases/${pgStoreId(rid)}/supplier-prices/${sku}`, { params: { offset } }).then(r => r.data);
+export const adoptSupplierPrice = (rid, sku, body, key) => axios.post(`${PG_API}/purchases/${pgStoreId(rid)}/supplier-prices/${sku}/adoptions`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const sharedCatalog = rid => axios.get(`${PG_API}/catalog/${pgStoreId(rid)}`).then(r => r.data);
 export const linkSharedItem = (rid, body, revision) => axios.post(`${PG_API}/catalog/${pgStoreId(rid)}/links`, body, { headers: revisionHeaders(revision) }).then(r => r.data);
 export const prepSetupEnabled = nativePurchasesEnabled && process.env.REACT_APP_PREP_SETUP === "true";
+export const prepPlanningEnabled = prepSetupEnabled && catalogMappingEnabled && process.env.REACT_APP_PREP_PLANNING === "true";
+export const prepDayTasksEnabled = prepPlanningEnabled && process.env.REACT_APP_PREP_BATCHES === "true" && process.env.REACT_APP_PREP_OBSERVATIONS === "true" && process.env.REACT_APP_PREP_DAY_TASKS === "true";
+export const prepExecutionEnabled = prepDayTasksEnabled && process.env.REACT_APP_PREP_EXECUTION === "true";
+export const prepExecution = (rid, day, track) => axios.get(`${purchaseUrl(rid)}/prep-execution/${day}`, { params: { track } }).then(r => r.data);
+export const previewPrepExecution = (rid, day, track, body, version) => axios.post(`${purchaseUrl(rid)}/prep-execution/${day}/preview`, body, { params: { track }, headers: revisionHeaders(version) }).then(r => r.data);
+export const savePrepExecution = (rid, day, track, body, version, key) => axios.post(`${purchaseUrl(rid)}/prep-execution/${day}/commands`, body, { params: { track }, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const prepDayDraft = (rid, day, track) => axios.get(`${purchaseUrl(rid)}/prep-day-drafts/${day}`, { params: { track } }).then(r => r.data);
+export const previewPrepDayDraft = (rid, day, body, version) => axios.post(`${purchaseUrl(rid)}/prep-day-drafts/${day}/preview`, body, { headers: revisionHeaders(version) }).then(r => r.data);
+export const savePrepDayDraft = (rid, day, body, version, key) => axios.put(`${purchaseUrl(rid)}/prep-day-drafts/${day}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const prepPlanning = rid => axios.get(`${purchaseUrl(rid)}/prep-planning`).then(r => r.data);
+export const savePrepPlan = (rid, product, body, version, key) => axios.put(`${purchaseUrl(rid)}/prep-planning/${encodeURIComponent(product)}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const prepBatchesEnabled = prepSetupEnabled && process.env.REACT_APP_PREP_BATCHES === "true";
 export const prepObservationsEnabled = prepBatchesEnabled && process.env.REACT_APP_PREP_OBSERVATIONS === "true";
 const retiredWorkflow = message => Promise.reject(Object.assign(new Error(message), { response: { status: 410, data: { detail: message } } }));
@@ -156,7 +176,7 @@ export const storeSession = (data) => { localStorage.setItem(TOKEN_KEY, JSON.str
 
 export const fetchState = (rid) => axios.get(`${API}/state/${rid}`).then((r) => USE_PG
   ? Promise.all([pgFetchItemsAndPurchases(rid), pgFetchDishes(rid), pgFetchPrepState(rid)])
-    .then(([pg, dishes, prep]) => ({ ...r.data, ...pg, ...prep, dishes }))
+    .then(([pg, dishes, prep]) => ({ ...r.data, ...pg, ...prep, dishes: dishes.map(d => pgDishToMongoDish(d, rid, pg.items)) }))
   : r.data);
 const revisionHeaders = (revision) => revision == null ? {} : { "If-Match": `"${revision}"` };
 export const putCollection = (rid, name, arr, revision) => {
@@ -270,7 +290,7 @@ export const addItemToList = (rid, listId, body) => USE_PG ? pgAddItemToList(pgS
 // ---- Vendors (global, not store-scoped) ----
 export const pgListVendors = () => axios.get(`${PG_API}/vendors`).then((r) => r.data);
 export const pgCreateVendor = (body) => axios.post(`${PG_API}/vendors`, body).then((r) => r.data);
-export const pgUpdateVendor = (vendorId, body) => axios.put(`${PG_API}/vendors/${vendorId}`, body).then((r) => r.data);
+export const pgUpdateVendor = (vendorId, body, version) => axios.put(`${PG_API}/vendors/${vendorId}`, body, { headers: revisionHeaders(version) }).then((r) => r.data);
 
 // ---- Items (global catalog + per-store tracking + per-vendor SKUs, flattened) ----
 export const pgListItems = (storeId) => axios.get(`${PG_API}/items/${storeId}`).then((r) => r.data);
@@ -359,6 +379,7 @@ const VENDOR_NAME_TO_ID = { "US Foods": "us_foods", "PFG": "pfg", "Sysco": "sysc
 const VENDOR_ID_TO_NAME = Object.fromEntries(Object.entries(VENDOR_NAME_TO_ID).map(([k, v]) => [v, k]));
 const numOrNull = v => {
   if (v === "" || v == null) return null;
+  if (typeof v === "boolean") throw new Error("Enter a numeric value, not a boolean.");
   const value = Number(v);
   if (!Number.isFinite(value)) throw new Error("Enter a finite numeric value before saving.");
   return value;
@@ -377,7 +398,7 @@ function pgSkuToMongoSku(s) {
     vendorDescription: s.vendorDescription ?? null,
     packDescription: s.vendorDescription ?? "",
     purchaseUnit: s.purchaseUnit, packCount: s.packCount ?? "", unitQty: s.unitQty ?? "", unitUOM: s.unitUOM || "",
-    price: s.price ?? null, priceUpdatedAt: s.priceUpdatedAt || "", priceSource: s.priceSource ?? null,
+    price: s.price ?? null, priceUpdatedAt: s.priceUpdatedAt || "", priceSource: s.priceSource ?? null, priceIssues: s.priceIssues || [],
     available: s.available, preferred: s.preferred,
   };
 }
@@ -531,60 +552,64 @@ async function pgPutPurchases(rid, arr, revision) {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (s) => typeof s === "string" && UUID_RE.test(s);
 
-function pgLineToMongoLine(l, rid) {
+function pgLineToMongoLine(l, rid, items) {
   const prefix = `${rid}_`;
+  const item = items.find(it => it.itemCode === l.itemCode);
   return {
     sourceType: l.sourceType,
-    controlNumber: l.sourceType === "item" && l.itemCode ? (l.itemCode.startsWith(prefix) ? l.itemCode.slice(prefix.length) : l.itemCode) : null,
+    itemCode: l.sourceType === "item" ? l.itemCode : null,
+    controlNumber: l.sourceType === "item" && l.itemCode ? (item?.controlNumber || (l.itemCode.startsWith(prefix) ? l.itemCode.slice(prefix.length) : l.itemCode)) : null,
     recipeId: l.sourceType === "prep" ? l.prepDishId : null,
-    qty: l.qty,
+    qty: l.qty, uom: l.uom ?? null,
   };
 }
 
-function mongoLineToPgBody(l, rid) {
+function mongoLineToPgBody(l, rid, items) {
+  const item = l.sourceType === "item" ? items.find(it => l.itemCode ? it.itemCode === l.itemCode : it.controlNumber === l.controlNumber) : null;
+  if (l.sourceType === "item" && !item) throw new Error("Ingredient is not linked to this restaurant. Reload and review the recipe mapping.");
   return {
     source_type: l.sourceType,
-    item_code: l.sourceType === "item" ? `${rid}_${l.controlNumber}` : null,
+    item_code: item?.itemCode || null,
     prep_dish_id: l.sourceType === "prep" ? l.recipeId : null,
-    qty: Number(l.qty ?? l.qtyPortions) || 0,
+    qty: numOrNull(l.qty ?? l.qtyPortions), uom: l.uom ?? null,
   };
 }
 
-function pgDishToMongoDish(d, rid) {
+function pgDishToMongoDish(d, rid, items) {
   return {
     id: d.id, name: d.name, menuCode: d.menuCode || "", recipeType: d.recipeType,
-    price: d.price ?? "", targetPct: d.targetPct ?? "", yieldQty: d.yieldQty ?? 1, yieldUOM: d.yieldUOM || "each",
+    price: d.price ?? "", targetPct: d.targetPct ?? "", yieldQty: d.yieldQty ?? (d.recipeType === "prep" ? null : 1), yieldUOM: d.yieldUOM ?? (d.recipeType === "prep" ? null : "each"),
     prepPar: d.prepPar ?? 0, procedure: d.procedure || "", equipment: d.equipment || "", shelfLife: d.shelfLife || "",
     menuCategory: d.menuCategory || "", description: d.description || "", photoUrl: d.photoUrl || "",
     portionNote: d.portionNote || "", frequency: d.frequency || "daily",
-    lines: (d.lines || []).map((l) => pgLineToMongoLine(l, rid)),
+    lines: (d.lines || []).map((l) => pgLineToMongoLine(l, rid, items)),
   };
 }
 
-function mongoDishToPgBody(dish, rid) {
+function mongoDishToPgBody(dish, rid, items) {
   return {
     id: isUuid(dish.id) ? dish.id : null,
     name: dish.name, menu_code: dish.menuCode || null, recipe_type: dish.recipeType || "menu",
-    price: numOrNull(dish.price), target_pct: numOrNull(dish.targetPct), yield_qty: numOrNull(dish.yieldQty) ?? 1,
-    yield_uom: dish.yieldUOM || "each", prep_par: numOrNull(dish.prepPar),
+    price: numOrNull(dish.price), target_pct: numOrNull(dish.targetPct), yield_qty: numOrNull(dish.yieldQty),
+    yield_uom: dish.yieldUOM || null, prep_par: numOrNull(dish.prepPar),
     procedure: dish.procedure || null, equipment: dish.equipment || null, shelf_life: dish.shelfLife || null,
     menu_category: dish.menuCategory || null, description: dish.description || null, photo_url: dish.photoUrl || null,
     portion_note: dish.portionNote || null, frequency: dish.frequency || null,
-    lines: (dish.lines || []).map((l) => mongoLineToPgBody(l, rid)),
+    lines: (dish.lines || []).map((l) => mongoLineToPgBody(l, rid, items)),
   };
 }
 
 async function pgFetchDishes(rid) {
   const storeId = pgStoreId(rid);
-  const pgDishes = await pgListDishes(storeId);
-  return pgDishes.map((d) => pgDishToMongoDish(d, rid));
+  return pgListDishes(storeId);
 }
 
 async function pgPutDishes(rid, arr, revision) {
+  const items = (await pgListItems(pgStoreId(rid))).map(it => pgItemToMongoItem(it, rid));
   const saved = await pgReplaceDishes(pgStoreId(rid), arr.map((dish) => ({
-    ...mongoDishToPgBody(dish, rid), client_id: isUuid(dish.id) ? null : dish.id,
+    ...mongoDishToPgBody(dish, rid, items), client_id: isUuid(dish.id) ? null : dish.id,
   })), revision);
-  return { revision: saved.revision, dishes: saved.dishes.map((dish) => pgDishToMongoDish(dish, rid)) };
+  return { revision: saved.revision, dishes: saved.dishes.map((dish) => pgDishToMongoDish(dish, rid, items)) };
 }
 
 export async function streamChat(rid, message, { onDelta, onError, onDone }) {
