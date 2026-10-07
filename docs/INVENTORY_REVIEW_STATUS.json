@@ -1,5 +1,5 @@
 {
-  "version": "inventory-foundation-local-staff-production-2026-10-07",
+  "version": "inventory-foundation-published-staff-workflows-2026-10-07",
   "checkpoint_date": "2026-10-07",
   "baseline": "1a5e97243009a922d38596d6559c6d9be7f6b5f3",
   "original_review": {
@@ -2354,7 +2354,7 @@
     "sha256": "20ba0f8ec5fbfe4bfa3629f21adf441766eecc861d653adc0a9eae90eac6fb96",
     "source_paths_verified": 143
   },
-  "publication_boundary": "Published PR #14 and #15 branches are unchanged. PR #15 remains at ae10c8cab319b7f1ed842711076bacd132653f43. Cumulative continuation remains local, uncommitted and unpublished; no push, merge, operational migration or enablement.",
+  "publication_boundary": "Draft PR #16 publishes only the verified staff workflow continuation, stacked on unchanged PR #15. Drafts remain unmerged; no deployment, operational migration, real import or enablement. Subsequent work starts locally from this checkpoint for a later PR.",
   "published_checkpoint": {
     "url": "https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/14",
     "commit": "a472c8674a7e3f173e838907e1b9d13d7665a028",
@@ -2475,7 +2475,7 @@
     "new_migration": "20261007_prep_planning.sql"
   },
   "local_continuation": {
-    "status": "Local, uncommitted and unpublished",
+    "status": "Published in draft PR #16; pre-publication local evidence retained separately",
     "branch": "codex/staff-prep-count-continuation",
     "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
     "description": "Cumulative staff counts, containers/waste, assignments and staff production acceptance; Track 1 independent",
@@ -2721,5 +2721,66 @@
       "new_migration": "20261007_container_waste.sql"
     },
     "archive_sha256": "5d543dae04e10a04d35e670c67401588dedf7e0cc43aa386322f6e90b71cf09e"
+  },
+  "prior_local_staff_production_evidence": {
+    "implementation_evidence": {
+      "frontend_checks": 404,
+      "frontend_suites": 49,
+      "selected_backend_functions": 36,
+      "offline_checks": 23,
+      "backend_case_groups": {
+        "StaffProductionValidationTests": 1,
+        "StaffProductionTests": 9,
+        "PrepProgressTests": 26
+      },
+      "backend_coverage": "35 regression passes plus two corrected rechecks, one repeated; 36 distinct passing checks",
+      "production_build": "passed with three existing hook warnings",
+      "staff_production_restore": "verified original accepted batch/link and current corrected progress, original retry and private ACLs",
+      "frontend_test_flags": {
+        "REACT_APP_NATIVE_PURCHASES": "true",
+        "REACT_APP_ACTUAL_INVENTORY": "true",
+        "REACT_APP_CATALOG_MAPPING": "true",
+        "REACT_APP_ORDER_WORKFLOW": "true",
+        "REACT_APP_SUPPLIER_CONTACTS": "true",
+        "REACT_APP_PREP_SETUP": "true",
+        "REACT_APP_PREP_PLANNING": "true",
+        "REACT_APP_PREP_BATCHES": "true",
+        "REACT_APP_PREP_OBSERVATIONS": "true",
+        "REACT_APP_PREP_DAY_TASKS": "true",
+        "REACT_APP_PREP_EXECUTION": "true",
+        "REACT_APP_STAFF_PREP_COUNTS": "true",
+        "REACT_APP_PREP_CONTAINERS": "true",
+        "REACT_APP_STAFF_PREP_TASKS": "true",
+        "REACT_APP_STAFF_PREP_PRODUCTION": "true"
+      },
+      "result_files": "JayMax-staff-production-2026-10-07-review-package.zip outside Git"
+    },
+    "continuation": {
+      "status": "Published in draft PR #16; pre-publication local evidence retained separately",
+      "branch": "codex/staff-prep-count-continuation",
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "description": "Cumulative staff counts, containers/waste, assignments and staff production acceptance; Track 1 independent",
+      "new_migration": "20261007_staff_prep_production.sql"
+    },
+    "checkpoint": {
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "document": "docs/STAFF_PREP_PRODUCTION_INTEGRITY.md",
+      "archive": "JayMax-staff-production-2026-10-07-review-package.zip",
+      "scope": "Immutable claimed staff production submissions and manager acceptance atomically creating one measured batch, task link and optional explicit finish; Track 1 independent",
+      "new_migration": "20261007_staff_prep_production.sql"
+    },
+    "archive_sha256": "a189a44e007f1fab1653e5b2b3784f8ecf357d4a22df87d9a614d3f7cf1f3045"
+  },
+  "published_staff_workflow_checkpoint": {
+    "pull_request": "https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/16",
+    "number": 16,
+    "is_draft": true,
+    "state": "OPEN",
+    "base_branch": "codex/inventory-workflow-continuation",
+    "base_commit": "ae10c8cab319b7f1ed842711076bacd132653f43",
+    "head_branch": "codex/staff-prep-count-continuation",
+    "implementation_commit": "0c3be1819cba1782d7a29d42294e569fde624bb0",
+    "document": "docs/STAFF_WORKFLOW_CHECKPOINT_README.md",
+    "operationally_enabled": false
   }
 }

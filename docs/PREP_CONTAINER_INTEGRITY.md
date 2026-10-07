@@ -1,5 +1,11 @@
 # Measured prep containers and internal service transfers — October 7, 2026
 
+Publication note: this document preserves its pre-publication local milestone.
+The verified continuation is now published in [draft PR #16](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/16);
+see the [checkpoint README](STAFF_WORKFLOW_CHECKPOINT_README.md). No operational
+migration or enablement occurred. Historical local-status statements below refer
+to the original snapshot, which is preserved unchanged.
+
 This document records the earlier container checkpoint. The subsequent
 [paired direct waste milestone](CONTAINER_WASTE_INTEGRITY.md) supersedes its
 manual unpack/standalone-waste workaround. Native staff reads and assignments

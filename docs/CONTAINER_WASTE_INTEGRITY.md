@@ -1,5 +1,11 @@
 # Paired measured container waste — October 7, 2026
 
+Publication note: this document preserves its pre-publication local milestone.
+The verified continuation is now published in [draft PR #16](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/16);
+see the [checkpoint README](STAFF_WORKFLOW_CHECKPOINT_README.md). No operational
+migration or enablement occurred. Historical local-status statements below refer
+to the original snapshot, which is preserved unchanged.
+
 This local continuation adds direct measured storage/service waste and paired
 reversal to the [container ledger](PREP_CONTAINER_INTEGRITY.md). It remains
 uncommitted and unpublished on `codex/staff-prep-count-continuation`, starting

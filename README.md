@@ -1,6 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local continuation — staff production acceptance, October 7, 2026
+## Published staff workflow checkpoint — October 7, 2026
+
+[Draft PR #16 — staff counts, containers, waste and production](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/16)
+publishes the verified continuation based on PR #15. It remains a draft and
+unmerged. Read the [detailed checkpoint README](docs/STAFF_WORKFLOW_CHECKPOINT_README.md)
+for the five workflow milestones, additive schema, validation evidence, remaining
+limits and stacked review sequence (#14, then #15, then #16).
+
+Latest evidence: **404 frontend tests / 49 suites**, **36 distinct backend checks**,
+**23 offline checks**, production build and whole SQL restore. Track 1 Food Cost
+remains independent. All fifteen native feature pairs remain false in examples;
+no operational migration, enablement, real import or deployment occurred.
+The verified pre-publication snapshot and prior review notes remain unchanged.
+
+Next work continues locally on a separate branch: remaining legacy operating
+endpoint and historical correction review, then combined cutover/recovery trial.
+
+## Previous local checkpoint — staff production acceptance, October 7, 2026
 
 Staff now submit measured production against current native assignments. Immutable
 revisions, withdrawals and manager rejections record no inventory. Reviewed

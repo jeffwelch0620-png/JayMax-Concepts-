@@ -1,5 +1,11 @@
 # Staff prep access and assignments — local checkpoint, October 7, 2026
 
+Publication note: this document preserves its pre-publication local milestone.
+The verified continuation is now published in [draft PR #16](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/16);
+see the [checkpoint README](STAFF_WORKFLOW_CHECKPOINT_README.md). No operational
+migration or enablement occurred. Historical local-status statements below refer
+to the original snapshot, which is preserved unchanged.
+
 Managers can review and assign included, positive tasks from the currently
 released native dated plan. Staff can read that plan using a location-authorized
 bearer credential or the existing location PIN. Every read selects a date and
