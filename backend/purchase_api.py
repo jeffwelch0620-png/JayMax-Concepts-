@@ -522,4 +522,6 @@ def create_router(pool_factory, store_check, authorize):
     install_day_task_routes(router,context)
     from prep_execution import install_routes as install_execution_routes
     install_execution_routes(router,context)
+    from prep_containers import install_routes as install_container_routes
+    install_container_routes(router,context)
     return router

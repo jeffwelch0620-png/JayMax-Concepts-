@@ -1,5 +1,5 @@
 {
-  "version": "inventory-foundation-local-prep-progress-continuation-2026-10-07",
+  "version": "inventory-foundation-local-staff-production-2026-10-07",
   "checkpoint_date": "2026-10-07",
   "baseline": "1a5e97243009a922d38596d6559c6d9be7f6b5f3",
   "original_review": {
@@ -8,8 +8,8 @@
     "findings": 20
   },
   "status_totals": {
-    "open": 13,
-    "fixed": 6,
+    "open": 12,
+    "fixed": 7,
     "intentionally_deferred": 1
   },
   "status_definitions": {
@@ -17,23 +17,20 @@
     "open": "A part of the original supported write/read/UI/schema contract remains unfixed or its acceptance is incomplete. Native partial fixes/guards are recorded without closing the whole finding.",
     "intentionally_deferred": "Directly reserved by the user for future work; interim native controls and missing acceptance are explicit."
   },
-  "evidence_limits": "Local source/component/build, 30 selected disposable PostgreSQL/backend functions and 23 offline checks. Includes dated-draft/execution regressions, partial progress, explicit finish, reconciliation, direct SQL guards, old-command upgrade and whole SQL restore; two initially failing main-run cases passed focused rechecks. Prior evidence remains unchanged in nested snapshots. No real invoice import, supplier message, operational change or live-browser proof.",
+  "evidence_limits": "Local synthetic component/adapter, source/build, disposable PostgreSQL and whole restore checks only. Prior packages, initial fixture errors and the caught bearer-route allowlist gap are retained with their corrected results. No live-browser, production, managed-platform, operational migration, real import or enablement proof. Independent submission roots require physical duplicate review; historical dependency correction, verified employee mapping, sales consumption and full legacy cutover remain pending.",
   "latest_implementation_evidence": {
-    "frontend_checks": 329,
-    "frontend_suites": 40,
-    "selected_backend_functions": 30,
+    "frontend_checks": 404,
+    "frontend_suites": 49,
+    "selected_backend_functions": 36,
     "offline_checks": 23,
     "backend_case_groups": {
-      "PrepProgress": 26,
-      "ProgressValidation": 1,
-      "ProgressUpgrade": 1,
-      "ObservationBoundary": 2
+      "StaffProductionValidationTests": 1,
+      "StaffProductionTests": 9,
+      "PrepProgressTests": 26
     },
+    "backend_coverage": "35 regression passes plus two corrected rechecks, one repeated; 36 distinct passing checks",
     "production_build": "passed with three existing hook warnings",
-    "progress_restore": "verified immutable links, multiple-batch totals, reconciliations and exact retry readback",
-    "old_schema_upgrade": "preserved original command records/review hashes/request digests with connections recycled after DDL",
-    "main_run": "28 passed; connection timeout and test cached-statement error rechecked successfully",
-    "backend_rechecks": 2,
+    "staff_production_restore": "verified original accepted batch/link and current corrected progress, original retry and private ACLs",
     "frontend_test_flags": {
       "REACT_APP_NATIVE_PURCHASES": "true",
       "REACT_APP_ACTUAL_INVENTORY": "true",
@@ -45,9 +42,13 @@
       "REACT_APP_PREP_BATCHES": "true",
       "REACT_APP_PREP_OBSERVATIONS": "true",
       "REACT_APP_PREP_DAY_TASKS": "true",
-      "REACT_APP_PREP_EXECUTION": "true"
+      "REACT_APP_PREP_EXECUTION": "true",
+      "REACT_APP_STAFF_PREP_COUNTS": "true",
+      "REACT_APP_PREP_CONTAINERS": "true",
+      "REACT_APP_STAFF_PREP_TASKS": "true",
+      "REACT_APP_STAFF_PREP_PRODUCTION": "true"
     },
-    "result_files": "Local October 7 execution review package outside Git; no production/browser proof"
+    "result_files": "JayMax-staff-production-2026-10-07-review-package.zip outside Git"
   },
   "findings": [
     {
@@ -56,7 +57,7 @@
       "original_title": "Item-sourced prep tasks violate the checked-in task-type constraint",
       "status": "open",
       "conclusion": "The legacy vessel-task schema conflict remains.",
-      "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Full staff access, prep count submissions, container execution and operating cutover remain pending.",
+      "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Measured native container fills, partial storage/service transfers and unpacking are now implemented locally. Native staff read/assignment access is now implemented locally with stable task/roster IDs, explicit dates/tracks and immutable manager assignment history. Paired direct container waste/reversal is now implemented locally. Staff production submissions/decisions are now implemented locally; sales consumption and full operating cutover remain pending. Native staff production submissions and reviewed manager acceptance/partial progress are now implemented locally. Full legacy operating cutover remains pending.",
       "next_step_or_limit": "Fix the constraint and prove the complete retained task workflow, or retire the generator and supply an equivalent native task workflow without old stock writes.",
       "original_acceptance": "Load the baseline schema into disposable Postgres; generate, edit, release and complete an item-sourced task successfully.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -68,10 +69,143 @@
         },
         {
           "path": "backend/server.py",
-          "line": 4671,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 4681,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 4671,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 4674,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 4679,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 4679,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
+        },
+        {
+          "path": "backend/staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "bd63842be910d18ccef5176861f421bd63a32ffcd33449072e04d0808000fce5"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_tasks.sql",
+          "line": 1,
+          "sha256": "a4acf809888e332496bd995550caa0feb382c24521bf20c27a68ab0a8ac6a36a"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepTasks.js",
+          "line": 1,
+          "sha256": "710da9ecf24055d2a48aeecead3e7666cdf0b21fb11d49e16268afdf9dda9aef",
+          "prior_container_waste_anchor": {
+            "line": 1,
+            "sha256": "2455141bbd540f19fd7a93213eddfa60b745e79330514f19c0eba6d9dfbc0608"
+          }
+        },
+        {
+          "path": "backend/tests/test_staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "5a8aefff6715c1035a9b97dbeebb9ea780ac4f3274bb5992ff9f767ad351cc9e"
+        },
+        {
+          "path": "backend/prep_containers.py",
+          "line": 1,
+          "sha256": "1a63d9e7e5618c6c5a71024be923d43ef169445946d14b22bec0d0255d09b3f8"
+        },
+        {
+          "path": "backend/prep_observations.py",
+          "line": 1,
+          "sha256": "8bdf8ed0b7e79efeb013806d4465b19839b22e5cbecc7206cc7d428f0150625f"
+        },
+        {
+          "path": "migrations/20261007_container_waste.sql",
+          "line": 1,
+          "sha256": "00df4208c913dbedbab60466a08af6fa136d280643c8691cdf7767849821a5ab"
+        },
+        {
+          "path": "frontend/src/components/PrepContainers.js",
+          "line": 1,
+          "sha256": "da8b89b36ca8c71a5fac01011d5cdefecafc71925ab574c8ec532aee6e3a6eca"
+        },
+        {
+          "path": "frontend/src/components/PrepObservations.js",
+          "line": 1,
+          "sha256": "88d6d8c392f93387cc1dad6c0128d1c6470084cb2a9de8a1de862a02f722cfc5"
+        },
+        {
+          "path": "backend/tests/test_container_waste.py",
+          "line": 1,
+          "sha256": "e56a2123593e83b2d30adc22c01b7ff71428b35d2baa6defcf546c052ddfa8e7"
+        },
+        {
+          "path": "frontend/src/components/ContainerWaste.test.js",
+          "line": 1,
+          "sha256": "f63c727eb90fd31712555f35a3331be1495a9509d05fa3e127e06adf2feec6af"
+        },
+        {
+          "path": "backend/staff_prep_production.py",
+          "line": 1,
+          "sha256": "7a324e085215a1aedd82fac4275cc96d5f020223c2de8ac0f3f8b12e04feae89"
+        },
+        {
+          "path": "backend/prep_execution.py",
+          "line": 1,
+          "sha256": "adf7153a89aa20659f0cd7a50b51756c1b3f7b0fbb8a7d3fee84ec2a80411688"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_production.sql",
+          "line": 1,
+          "sha256": "207b7a2159cd332941c8fb778aea5f5e866d2e1006ba0e82ed8c7c2447c1906b"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.js",
+          "line": 1,
+          "sha256": "0a485736d9a82b1aece21e72d86ef79abe8c4329c4c2c73ddf371744b5e4d474"
+        },
+        {
+          "path": "backend/tests/test_staff_prep_production.py",
+          "line": 1,
+          "sha256": "4e1e7443941b64678f1f790d1a37cb850c89481903f47f183de08122635e2d76"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.test.js",
+          "line": 1,
+          "sha256": "df5b3444255c6423bb74be1559f3aedcb3557a63023157f8a2183b9788d211bc"
         }
-      ]
+      ],
+      "prior_staff_count_assessment": {
+        "status": "open",
+        "conclusion": "The legacy vessel-task schema conflict remains.",
+        "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Full staff task access, container execution and operating cutover remain pending.",
+        "next_step_or_limit": "Fix the constraint and prove the complete retained task workflow, or retire the generator and supply an equivalent native task workflow without old stock writes.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_assessment": {
+        "status": "open",
+        "conclusion": "The legacy vessel-task schema conflict remains.",
+        "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Measured native container fills, partial storage/service transfers and unpacking are now implemented locally. Full staff task access, direct container waste/consumption integration and operating cutover remain pending.",
+        "next_step_or_limit": "Fix the constraint and prove the complete retained task workflow, or retire the generator and supply an equivalent native task workflow without old stock writes.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_staff_task_assessment": {
+        "status": "open",
+        "conclusion": "The legacy vessel-task schema conflict remains.",
+        "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Measured native container fills, partial storage/service transfers and unpacking are now implemented locally. Native staff read/assignment access is now implemented locally with stable task/roster IDs, explicit dates/tracks and immutable manager assignment history. Staff production submissions/completion decisions, direct container waste/consumption integration and full operating cutover remain pending.",
+        "next_step_or_limit": "Fix the constraint and prove the complete retained task workflow, or retire the generator and supply an equivalent native task workflow without old stock writes.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_waste_assessment": {
+        "status": "open",
+        "conclusion": "The legacy vessel-task schema conflict remains.",
+        "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Measured native container fills, partial storage/service transfers and unpacking are now implemented locally. Native staff read/assignment access is now implemented locally with stable task/roster IDs, explicit dates/tracks and immutable manager assignment history. Paired direct container waste/reversal is now implemented locally. Staff production submissions/completion decisions, sales consumption integration and full operating cutover remain pending.",
+        "next_step_or_limit": "Fix the constraint and prove the complete retained task workflow, or retire the generator and supply an equivalent native task workflow without old stock writes.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      }
     },
     {
       "id": "R02",
@@ -79,7 +213,7 @@
       "original_title": "Daily and bulk prep lists collide on the same date",
       "status": "open",
       "conclusion": "The legacy daily/bulk prep-list key conflict remains.",
-      "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Full staff access, prep count submissions, container execution and operating cutover remain pending.",
+      "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Measured native container fills, partial storage/service transfers and unpacking are now implemented locally. Native staff read/assignment access is now implemented locally with stable task/roster IDs, explicit dates/tracks and immutable manager assignment history. Paired direct container waste/reversal is now implemented locally. Staff production submissions/decisions are now implemented locally; sales consumption and full operating cutover remain pending. Native staff production submissions and reviewed manager acceptance/partial progress are now implemented locally. Full legacy operating cutover remains pending.",
       "next_step_or_limit": "Backfill an explicit track, migrate the unique key and keep locking consistent; test both tracks and simultaneous same-track generation, or retire this list storage.",
       "original_acceptance": "Both tracks coexist on one date; concurrent creation of the same track produces exactly one list.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -91,10 +225,143 @@
         },
         {
           "path": "backend/server.py",
-          "line": 4564,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 4574,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 4564,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 4567,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 4572,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 4572,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
+        },
+        {
+          "path": "backend/staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "bd63842be910d18ccef5176861f421bd63a32ffcd33449072e04d0808000fce5"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_tasks.sql",
+          "line": 1,
+          "sha256": "a4acf809888e332496bd995550caa0feb382c24521bf20c27a68ab0a8ac6a36a"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepTasks.js",
+          "line": 1,
+          "sha256": "710da9ecf24055d2a48aeecead3e7666cdf0b21fb11d49e16268afdf9dda9aef",
+          "prior_container_waste_anchor": {
+            "line": 1,
+            "sha256": "2455141bbd540f19fd7a93213eddfa60b745e79330514f19c0eba6d9dfbc0608"
+          }
+        },
+        {
+          "path": "backend/tests/test_staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "5a8aefff6715c1035a9b97dbeebb9ea780ac4f3274bb5992ff9f767ad351cc9e"
+        },
+        {
+          "path": "backend/prep_containers.py",
+          "line": 1,
+          "sha256": "1a63d9e7e5618c6c5a71024be923d43ef169445946d14b22bec0d0255d09b3f8"
+        },
+        {
+          "path": "backend/prep_observations.py",
+          "line": 1,
+          "sha256": "8bdf8ed0b7e79efeb013806d4465b19839b22e5cbecc7206cc7d428f0150625f"
+        },
+        {
+          "path": "migrations/20261007_container_waste.sql",
+          "line": 1,
+          "sha256": "00df4208c913dbedbab60466a08af6fa136d280643c8691cdf7767849821a5ab"
+        },
+        {
+          "path": "frontend/src/components/PrepContainers.js",
+          "line": 1,
+          "sha256": "da8b89b36ca8c71a5fac01011d5cdefecafc71925ab574c8ec532aee6e3a6eca"
+        },
+        {
+          "path": "frontend/src/components/PrepObservations.js",
+          "line": 1,
+          "sha256": "88d6d8c392f93387cc1dad6c0128d1c6470084cb2a9de8a1de862a02f722cfc5"
+        },
+        {
+          "path": "backend/tests/test_container_waste.py",
+          "line": 1,
+          "sha256": "e56a2123593e83b2d30adc22c01b7ff71428b35d2baa6defcf546c052ddfa8e7"
+        },
+        {
+          "path": "frontend/src/components/ContainerWaste.test.js",
+          "line": 1,
+          "sha256": "f63c727eb90fd31712555f35a3331be1495a9509d05fa3e127e06adf2feec6af"
+        },
+        {
+          "path": "backend/staff_prep_production.py",
+          "line": 1,
+          "sha256": "7a324e085215a1aedd82fac4275cc96d5f020223c2de8ac0f3f8b12e04feae89"
+        },
+        {
+          "path": "backend/prep_execution.py",
+          "line": 1,
+          "sha256": "adf7153a89aa20659f0cd7a50b51756c1b3f7b0fbb8a7d3fee84ec2a80411688"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_production.sql",
+          "line": 1,
+          "sha256": "207b7a2159cd332941c8fb778aea5f5e866d2e1006ba0e82ed8c7c2447c1906b"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.js",
+          "line": 1,
+          "sha256": "0a485736d9a82b1aece21e72d86ef79abe8c4329c4c2c73ddf371744b5e4d474"
+        },
+        {
+          "path": "backend/tests/test_staff_prep_production.py",
+          "line": 1,
+          "sha256": "4e1e7443941b64678f1f790d1a37cb850c89481903f47f183de08122635e2d76"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.test.js",
+          "line": 1,
+          "sha256": "df5b3444255c6423bb74be1559f3aedcb3557a63023157f8a2183b9788d211bc"
         }
-      ]
+      ],
+      "prior_staff_count_assessment": {
+        "status": "open",
+        "conclusion": "The legacy daily/bulk prep-list key conflict remains.",
+        "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Full staff task access, container execution and operating cutover remain pending.",
+        "next_step_or_limit": "Backfill an explicit track, migrate the unique key and keep locking consistent; test both tracks and simultaneous same-track generation, or retire this list storage.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_assessment": {
+        "status": "open",
+        "conclusion": "The legacy daily/bulk prep-list key conflict remains.",
+        "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Measured native container fills, partial storage/service transfers and unpacking are now implemented locally. Full staff task access, direct container waste/consumption integration and operating cutover remain pending.",
+        "next_step_or_limit": "Backfill an explicit track, migrate the unique key and keep locking consistent; test both tracks and simultaneous same-track generation, or retire this list storage.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_staff_task_assessment": {
+        "status": "open",
+        "conclusion": "The legacy daily/bulk prep-list key conflict remains.",
+        "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Measured native container fills, partial storage/service transfers and unpacking are now implemented locally. Native staff read/assignment access is now implemented locally with stable task/roster IDs, explicit dates/tracks and immutable manager assignment history. Staff production submissions/completion decisions, direct container waste/consumption integration and full operating cutover remain pending.",
+        "next_step_or_limit": "Backfill an explicit track, migrate the unique key and keep locking consistent; test both tracks and simultaneous same-track generation, or retire this list storage.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_waste_assessment": {
+        "status": "open",
+        "conclusion": "The legacy daily/bulk prep-list key conflict remains.",
+        "current_assessment": "The retained legacy task schema/key is unchanged and legacy writers are frozen. The native manager workflow now supplies separate daily/bulk dated lists, sealed tasks, versioned release/reopen, multiple whole-batch production links, explicit task finish and reviewed correction/void reconciliation. Exact retry, current source evidence, concurrent writes, direct SQL guards, additive old-command upgrade and whole SQL restore are tested locally. Native staff prep count submissions and reviewed physical observation acceptance are implemented locally. Measured native container fills, partial storage/service transfers and unpacking are now implemented locally. Native staff read/assignment access is now implemented locally with stable task/roster IDs, explicit dates/tracks and immutable manager assignment history. Paired direct container waste/reversal is now implemented locally. Staff production submissions/completion decisions, sales consumption integration and full operating cutover remain pending.",
+        "next_step_or_limit": "Backfill an explicit track, migrate the unique key and keep locking consistent; test both tracks and simultaneous same-track generation, or retire this list storage.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      }
     },
     {
       "id": "R03",
@@ -102,7 +369,7 @@
       "original_title": "Direct prep stock changes and audit logs are not one transaction",
       "status": "open",
       "conclusion": "Native production/waste are atomic; the legacy workflow cutover is incomplete.",
-      "current_assessment": "Native production and waste remain atomic immutable journals. Manager task links, finish and reconciliation append references/decisions only, creating no production events, movements or Track 1 deductions. Partial progress sums current native production exactly; correction/void review never applies analytical movements a second time. Legacy dated writers are held after schema installation even with flags off. Direct legacy sales/container surfaces and the full operating reader/writer cutover remain unfinished.",
+      "current_assessment": "Native production and waste remain atomic immutable journals. Manager task links, finish and reconciliation append references/decisions only, creating no production events, movements or Track 1 deductions. Partial progress sums current native production exactly; correction/void review never applies analytical movements a second time. Legacy dated writers are held after schema installation even with flags off. The complete operating reader/writer cutover remains unfinished. Staff prep count acceptance atomically appends an observation and immutable decision, without accounting writes or analytical movements. Native container fills reserve existing prep output; send/return preserve it and unpack releases it without production, waste, consumption or accounting entries. Legacy PostgreSQL stock/log and sales/container writes are held after installation even with flags off. Recorded service presence is not consumption; direct waste/consumption integration and complete operating cutover remain open. Manager staff assignments and staff plan reads are reference-only. Explicit date/track reads never fall back to prior released lists; no assignment or staff read changes measured production or Track 1. Direct measured container waste releases exactly its matching reservation withdrawal in one transaction, preserving source allocation without double loss; Track 1 remains untouched. Staff submissions/resubmissions/withdrawals/rejections create no production or allocation. Acceptance creates one measured batch and task link in the same transaction; optional explicit finish creates no further movement. Track 1 counts and accounting remain independent.",
       "next_step_or_limit": "Route or deliberately retire every legacy prep/task/container writer and reader; leave Track 1 independent and verify failures/concurrent use through the actual operating workflow.",
       "original_acceptance": "Injected failure at every statement leaves all balances and logs unchanged; parallel deductions preserve both movements.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -110,19 +377,178 @@
         {
           "path": "backend/prep_batches.py",
           "line": 89,
-          "sha256": "a3b9919538e5e07231ee1a11b050ac52b412f99eadaa0a4a66e038f91d843c65"
+          "sha256": "67005d0936ec81557d89da17a784af78cde03a4a21325188f50623611cfdac17",
+          "prior_staff_count_anchor": {
+            "line": 89,
+            "sha256": "a3b9919538e5e07231ee1a11b050ac52b412f99eadaa0a4a66e038f91d843c65"
+          }
         },
         {
           "path": "backend/server.py",
-          "line": 4304,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 4308,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 4304,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 4304,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 4306,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 4306,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "frontend/src/App.js",
           "line": 263,
-          "sha256": "b4b519cdeda6650652afe06f013754df1c6bf8cd81321cf28ebd160f11294bf8"
+          "sha256": "2898dc57e7779ed0ba3b8c4e093b88f83b9d655864979719d32e0fc5eb22652e",
+          "prior_published_anchor": {
+            "line": 263,
+            "sha256": "b4b519cdeda6650652afe06f013754df1c6bf8cd81321cf28ebd160f11294bf8"
+          }
+        },
+        {
+          "path": "backend/prep_containers.py",
+          "line": 1,
+          "sha256": "1a63d9e7e5618c6c5a71024be923d43ef169445946d14b22bec0d0255d09b3f8",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "a3ba4bbe5133dca3708406e97c08dc617cf15ad3e5cc3d5a6450cd3325294425"
+          }
+        },
+        {
+          "path": "migrations/20261007_prep_containers.sql",
+          "line": 1,
+          "sha256": "0a7990d436f3c3ee074e124206663caf22bc9904a23241d782b3ee2b7a68817c"
+        },
+        {
+          "path": "frontend/src/components/PrepContainers.js",
+          "line": 1,
+          "sha256": "da8b89b36ca8c71a5fac01011d5cdefecafc71925ab574c8ec532aee6e3a6eca",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "aab62234922e8bb9c728eab3d8df0c9964baa303fd2349ddd8a3dac1385d17be"
+          }
+        },
+        {
+          "path": "backend/tests/test_prep_containers.py",
+          "line": 1,
+          "sha256": "a208041dcf3412ba5f878a789f14f18af492162bb4834168691388f68a99a7e7"
+        },
+        {
+          "path": "backend/staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "bd63842be910d18ccef5176861f421bd63a32ffcd33449072e04d0808000fce5"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_tasks.sql",
+          "line": 1,
+          "sha256": "a4acf809888e332496bd995550caa0feb382c24521bf20c27a68ab0a8ac6a36a"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepTasks.js",
+          "line": 1,
+          "sha256": "710da9ecf24055d2a48aeecead3e7666cdf0b21fb11d49e16268afdf9dda9aef",
+          "prior_container_waste_anchor": {
+            "line": 1,
+            "sha256": "2455141bbd540f19fd7a93213eddfa60b745e79330514f19c0eba6d9dfbc0608"
+          }
+        },
+        {
+          "path": "backend/tests/test_staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "5a8aefff6715c1035a9b97dbeebb9ea780ac4f3274bb5992ff9f767ad351cc9e"
+        },
+        {
+          "path": "backend/prep_observations.py",
+          "line": 1,
+          "sha256": "8bdf8ed0b7e79efeb013806d4465b19839b22e5cbecc7206cc7d428f0150625f"
+        },
+        {
+          "path": "migrations/20261007_container_waste.sql",
+          "line": 1,
+          "sha256": "00df4208c913dbedbab60466a08af6fa136d280643c8691cdf7767849821a5ab"
+        },
+        {
+          "path": "frontend/src/components/PrepObservations.js",
+          "line": 1,
+          "sha256": "88d6d8c392f93387cc1dad6c0128d1c6470084cb2a9de8a1de862a02f722cfc5"
+        },
+        {
+          "path": "backend/tests/test_container_waste.py",
+          "line": 1,
+          "sha256": "e56a2123593e83b2d30adc22c01b7ff71428b35d2baa6defcf546c052ddfa8e7"
+        },
+        {
+          "path": "frontend/src/components/ContainerWaste.test.js",
+          "line": 1,
+          "sha256": "f63c727eb90fd31712555f35a3331be1495a9509d05fa3e127e06adf2feec6af"
+        },
+        {
+          "path": "backend/staff_prep_production.py",
+          "line": 1,
+          "sha256": "7a324e085215a1aedd82fac4275cc96d5f020223c2de8ac0f3f8b12e04feae89"
+        },
+        {
+          "path": "backend/prep_execution.py",
+          "line": 1,
+          "sha256": "adf7153a89aa20659f0cd7a50b51756c1b3f7b0fbb8a7d3fee84ec2a80411688"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_production.sql",
+          "line": 1,
+          "sha256": "207b7a2159cd332941c8fb778aea5f5e866d2e1006ba0e82ed8c7c2447c1906b"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.js",
+          "line": 1,
+          "sha256": "0a485736d9a82b1aece21e72d86ef79abe8c4329c4c2c73ddf371744b5e4d474"
+        },
+        {
+          "path": "backend/tests/test_staff_prep_production.py",
+          "line": 1,
+          "sha256": "4e1e7443941b64678f1f790d1a37cb850c89481903f47f183de08122635e2d76"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.test.js",
+          "line": 1,
+          "sha256": "df5b3444255c6423bb74be1559f3aedcb3557a63023157f8a2183b9788d211bc"
         }
-      ]
+      ],
+      "prior_staff_count_assessment": {
+        "status": "open",
+        "conclusion": "Native production/waste are atomic; the legacy workflow cutover is incomplete.",
+        "current_assessment": "Native production and waste remain atomic immutable journals. Manager task links, finish and reconciliation append references/decisions only, creating no production events, movements or Track 1 deductions. Partial progress sums current native production exactly; correction/void review never applies analytical movements a second time. Legacy dated writers are held after schema installation even with flags off. Direct legacy sales/container surfaces and the full operating reader/writer cutover remain unfinished. Staff prep count acceptance atomically appends an observation and immutable decision, without accounting writes or analytical movements.",
+        "next_step_or_limit": "Route or deliberately retire every legacy prep/task/container writer and reader; leave Track 1 independent and verify failures/concurrent use through the actual operating workflow.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_assessment": {
+        "status": "open",
+        "conclusion": "Native production/waste are atomic; the legacy workflow cutover is incomplete.",
+        "current_assessment": "Native production and waste remain atomic immutable journals. Manager task links, finish and reconciliation append references/decisions only, creating no production events, movements or Track 1 deductions. Partial progress sums current native production exactly; correction/void review never applies analytical movements a second time. Legacy dated writers are held after schema installation even with flags off. The complete operating reader/writer cutover remains unfinished. Staff prep count acceptance atomically appends an observation and immutable decision, without accounting writes or analytical movements. Native container fills reserve existing prep output; send/return preserve it and unpack releases it without production, waste, consumption or accounting entries. Legacy PostgreSQL stock/log and sales/container writes are held after installation even with flags off. Recorded service presence is not consumption; direct waste/consumption integration and complete operating cutover remain open.",
+        "next_step_or_limit": "Route or deliberately retire every legacy prep/task/container writer and reader; leave Track 1 independent and verify failures/concurrent use through the actual operating workflow.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_staff_task_assessment": {
+        "status": "open",
+        "conclusion": "Native production/waste are atomic; the legacy workflow cutover is incomplete.",
+        "current_assessment": "Native production and waste remain atomic immutable journals. Manager task links, finish and reconciliation append references/decisions only, creating no production events, movements or Track 1 deductions. Partial progress sums current native production exactly; correction/void review never applies analytical movements a second time. Legacy dated writers are held after schema installation even with flags off. The complete operating reader/writer cutover remains unfinished. Staff prep count acceptance atomically appends an observation and immutable decision, without accounting writes or analytical movements. Native container fills reserve existing prep output; send/return preserve it and unpack releases it without production, waste, consumption or accounting entries. Legacy PostgreSQL stock/log and sales/container writes are held after installation even with flags off. Recorded service presence is not consumption; direct waste/consumption integration and complete operating cutover remain open. Manager staff assignments and staff plan reads are reference-only. Explicit date/track reads never fall back to prior released lists; no assignment or staff read changes measured production or Track 1.",
+        "next_step_or_limit": "Route or deliberately retire every legacy prep/task/container writer and reader; leave Track 1 independent and verify failures/concurrent use through the actual operating workflow.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_waste_assessment": {
+        "status": "open",
+        "conclusion": "Native production/waste are atomic; the legacy workflow cutover is incomplete.",
+        "current_assessment": "Native production and waste remain atomic immutable journals. Manager task links, finish and reconciliation append references/decisions only, creating no production events, movements or Track 1 deductions. Partial progress sums current native production exactly; correction/void review never applies analytical movements a second time. Legacy dated writers are held after schema installation even with flags off. The complete operating reader/writer cutover remains unfinished. Staff prep count acceptance atomically appends an observation and immutable decision, without accounting writes or analytical movements. Native container fills reserve existing prep output; send/return preserve it and unpack releases it without production, waste, consumption or accounting entries. Legacy PostgreSQL stock/log and sales/container writes are held after installation even with flags off. Recorded service presence is not consumption; direct waste/consumption integration and complete operating cutover remain open. Manager staff assignments and staff plan reads are reference-only. Explicit date/track reads never fall back to prior released lists; no assignment or staff read changes measured production or Track 1. Direct measured container waste releases exactly its matching reservation withdrawal in one transaction, preserving source allocation without double loss; Track 1 remains untouched.",
+        "next_step_or_limit": "Route or deliberately retire every legacy prep/task/container writer and reader; leave Track 1 independent and verify failures/concurrent use through the actual operating workflow.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      }
     },
     {
       "id": "R04",
@@ -137,8 +563,24 @@
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 2958,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 2960,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 2958,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 2958,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 2958,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 2958,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/native_order_receiving.py",
@@ -165,8 +607,24 @@
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 444,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 469,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 444,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 452,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 456,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 461,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
         },
         {
           "path": "frontend/src/lib/calc.js",
@@ -185,8 +643,24 @@
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 567,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 592,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 567,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 575,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 579,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 584,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
         }
       ]
     },
@@ -204,17 +678,41 @@
         {
           "path": "backend/purchase_api.py",
           "line": 283,
-          "sha256": "6b659e9e3451125aa467ece5917690d7b7ee0dcae43b451d255520d0b970d921"
+          "sha256": "11319a1b7e9472a1c5c40456e89acdd891788da7a1f78f62e72317dce3c8f2bc",
+          "prior_staff_count_anchor": {
+            "line": 283,
+            "sha256": "6b659e9e3451125aa467ece5917690d7b7ee0dcae43b451d255520d0b970d921"
+          }
         },
         {
           "path": "backend/purchase_api.py",
           "line": 344,
-          "sha256": "6b659e9e3451125aa467ece5917690d7b7ee0dcae43b451d255520d0b970d921"
+          "sha256": "11319a1b7e9472a1c5c40456e89acdd891788da7a1f78f62e72317dce3c8f2bc",
+          "prior_staff_count_anchor": {
+            "line": 344,
+            "sha256": "6b659e9e3451125aa467ece5917690d7b7ee0dcae43b451d255520d0b970d921"
+          }
         },
         {
           "path": "backend/server.py",
-          "line": 3946,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 3948,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 3946,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 3946,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 3946,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 3946,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         }
       ]
     },
@@ -224,7 +722,7 @@
       "original_title": "Failed saves clear user input and announce success",
       "status": "open",
       "conclusion": "Collection saves and principal forms fixed locally; legacy operating surface remains open.",
-      "current_assessment": "App applies saved state only after a valid acknowledgement. Item/area save, delete, adjustments, recipes, working sales periods, reporting snapshots and all three legacy invoice entry modes check confirmation. Drafts remain on failure; acknowledgements cannot erase newer typing. Supplier contacts check their specific response. Legacy split invoice saves disclose partial failure and block resubmission. Prep par/frequency uses retained drafts and explicit save. Broader direct task/count/container/projection APIs still need their own acknowledgement/draft contract as part of operational cutover. Native order drafts/transitions now retain exact request keys and payloads after uncertain saves, validate acknowledgements and ignore late location results; replay distinguishes current state from the original result. Covered store supplier contacts now retain drafts per supplier and location, preserve exact uncertain retry requests across signed-in tab remount, require matching acknowledgements and display the current replay state. Confirmed save versus failed catalog refresh is reported separately. Prep planning retains exact retry requests and per-product/location entries, validates acknowledgements, requires explicit refresh/review after conflicts, and displays current replay state. A held legacy standing deletion no longer announces success. Task/list/override/count save contracts remain open. Dated prep drafts retain reviewed previews and exact uncertain retry requests per store/date/track. Edits invalidate preview; stale conflicts require refresh/review; current replay and late-day response handling are tested. Staff count and container save contracts remain unfinished. Manager execution now retains exact uncertain command requests, validates command/hash/location/day/track/history acknowledgements, requires fresh review after conflicts, ignores late day callbacks and distinguishes the original retry acknowledgement from current release/reopen state. This does not provide durable browser reload recovery or staff task authorization. Partial-link/finish/reconciliation requests now retain exact extra evidence and strict outcomes, invalidate previews on changed inputs, and validate current task progress. Voids visibly reopen tasks after review; late navigation responses cannot apply elsewhere. Staff counts, containers and durable reload recovery remain open.",
+      "current_assessment": "Covered App state, catalog/recipe/entry, supplier contact, versioned order, prep plan/day draft, manager execution/progress, staff count and container saves validate acknowledgements and retain drafts after uncertain outcomes. Native commands bind exact request keys, payloads, reviewed evidence and original saved results alongside current history. Late navigation/session callbacks cannot clear or resurrect another draft; definitive stale rejection requires explicit revision and fresh review. Container replies additionally validate pinned fill identity, prior history and balanced exact quantities. Legacy split invoice saves still disclose partial failure and block unsafe resubmission. Other direct operating/projection APIs, full cutover and durable browser reload/logout recovery remain open. Native assignment UI validates reviewed command and immutable original history even after a draft replacement, retains exact uncertain requests through remount and ignores late scope/session callbacks. Staff read failures/mismatches are held. Legacy PostgreSQL staff prep reads/completions are held after installation even with flags off; other direct operating surfaces remain open. Container waste UI requires matching movement and observation acknowledgements, preserves original uncertain requests through remount and validates pinned source/history. Generic linked-waste corrections are held in UI, API and private SQL; paired latest reversal retains both original journals. Staff production and manager decision UI validate immutable original acknowledgements and every accepted batch/link/finish; uncertain requests survive remount without caching PINs. Conflicts retain measurements for explicit fresh review; late date/location/logout responses are ignored.",
       "next_step_or_limit": "Carry the same contract through direct legacy operating APIs during Step 4; supply native equivalents or retire those paths. Do not treat split legacy invoice/restore requests as an atomic transaction. In-memory drafts do not survive logout/reload.",
       "original_acceptance": "Simulated 409, 422, 500 and connection failures retain entries, produce no success message and do not contaminate saved state.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -256,10 +754,158 @@
         },
         {
           "path": "frontend/src/components/PrepTab.js",
-          "line": 724,
-          "sha256": "215957eda2ad10efa9bfac07f5347e131d4598fd21adc276b6a186c5e9bf81dc"
+          "line": 726,
+          "sha256": "db3ce5582b0bf770b5ed92070ef374d66484be11a9c38756670a21165fa41668",
+          "prior_published_anchor": {
+            "line": 724,
+            "sha256": "215957eda2ad10efa9bfac07f5347e131d4598fd21adc276b6a186c5e9bf81dc"
+          },
+          "prior_staff_count_anchor": {
+            "line": 725,
+            "sha256": "fea85bc38cab7eb1b397d1b9d0af75254da3052e28a3ff35af4607392b0e3081"
+          }
+        },
+        {
+          "path": "backend/staff_prep_counts.py",
+          "line": 1,
+          "sha256": "d1aa781362b403b17fb1a811e4c572df3e3b5304579fbebdd401aaada96d2602"
+        },
+        {
+          "path": "backend/prep_containers.py",
+          "line": 1,
+          "sha256": "1a63d9e7e5618c6c5a71024be923d43ef169445946d14b22bec0d0255d09b3f8",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "a3ba4bbe5133dca3708406e97c08dc617cf15ad3e5cc3d5a6450cd3325294425"
+          }
+        },
+        {
+          "path": "migrations/20261007_prep_containers.sql",
+          "line": 1,
+          "sha256": "0a7990d436f3c3ee074e124206663caf22bc9904a23241d782b3ee2b7a68817c"
+        },
+        {
+          "path": "frontend/src/components/PrepContainers.js",
+          "line": 1,
+          "sha256": "da8b89b36ca8c71a5fac01011d5cdefecafc71925ab574c8ec532aee6e3a6eca",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "aab62234922e8bb9c728eab3d8df0c9964baa303fd2349ddd8a3dac1385d17be"
+          }
+        },
+        {
+          "path": "backend/tests/test_prep_containers.py",
+          "line": 1,
+          "sha256": "a208041dcf3412ba5f878a789f14f18af492162bb4834168691388f68a99a7e7"
+        },
+        {
+          "path": "backend/staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "bd63842be910d18ccef5176861f421bd63a32ffcd33449072e04d0808000fce5"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_tasks.sql",
+          "line": 1,
+          "sha256": "a4acf809888e332496bd995550caa0feb382c24521bf20c27a68ab0a8ac6a36a"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepTasks.js",
+          "line": 1,
+          "sha256": "710da9ecf24055d2a48aeecead3e7666cdf0b21fb11d49e16268afdf9dda9aef",
+          "prior_container_waste_anchor": {
+            "line": 1,
+            "sha256": "2455141bbd540f19fd7a93213eddfa60b745e79330514f19c0eba6d9dfbc0608"
+          }
+        },
+        {
+          "path": "backend/tests/test_staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "5a8aefff6715c1035a9b97dbeebb9ea780ac4f3274bb5992ff9f767ad351cc9e"
+        },
+        {
+          "path": "backend/prep_observations.py",
+          "line": 1,
+          "sha256": "8bdf8ed0b7e79efeb013806d4465b19839b22e5cbecc7206cc7d428f0150625f"
+        },
+        {
+          "path": "migrations/20261007_container_waste.sql",
+          "line": 1,
+          "sha256": "00df4208c913dbedbab60466a08af6fa136d280643c8691cdf7767849821a5ab"
+        },
+        {
+          "path": "frontend/src/components/PrepObservations.js",
+          "line": 1,
+          "sha256": "88d6d8c392f93387cc1dad6c0128d1c6470084cb2a9de8a1de862a02f722cfc5"
+        },
+        {
+          "path": "backend/tests/test_container_waste.py",
+          "line": 1,
+          "sha256": "e56a2123593e83b2d30adc22c01b7ff71428b35d2baa6defcf546c052ddfa8e7"
+        },
+        {
+          "path": "frontend/src/components/ContainerWaste.test.js",
+          "line": 1,
+          "sha256": "f63c727eb90fd31712555f35a3331be1495a9509d05fa3e127e06adf2feec6af"
+        },
+        {
+          "path": "backend/staff_prep_production.py",
+          "line": 1,
+          "sha256": "7a324e085215a1aedd82fac4275cc96d5f020223c2de8ac0f3f8b12e04feae89"
+        },
+        {
+          "path": "backend/prep_execution.py",
+          "line": 1,
+          "sha256": "adf7153a89aa20659f0cd7a50b51756c1b3f7b0fbb8a7d3fee84ec2a80411688"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_production.sql",
+          "line": 1,
+          "sha256": "207b7a2159cd332941c8fb778aea5f5e866d2e1006ba0e82ed8c7c2447c1906b"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.js",
+          "line": 1,
+          "sha256": "0a485736d9a82b1aece21e72d86ef79abe8c4329c4c2c73ddf371744b5e4d474"
+        },
+        {
+          "path": "backend/tests/test_staff_prep_production.py",
+          "line": 1,
+          "sha256": "4e1e7443941b64678f1f790d1a37cb850c89481903f47f183de08122635e2d76"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.test.js",
+          "line": 1,
+          "sha256": "df5b3444255c6423bb74be1559f3aedcb3557a63023157f8a2183b9788d211bc"
         }
-      ]
+      ],
+      "prior_staff_count_assessment": {
+        "status": "open",
+        "conclusion": "Collection saves and principal forms fixed locally; legacy operating surface remains open.",
+        "current_assessment": "App applies saved state only after a valid acknowledgement. Item/area save, delete, adjustments, recipes, working sales periods, reporting snapshots and all three legacy invoice entry modes check confirmation. Drafts remain on failure; acknowledgements cannot erase newer typing. Supplier contacts check their specific response. Legacy split invoice saves disclose partial failure and block resubmission. Prep par/frequency uses retained drafts and explicit save. Broader direct task/count/container/projection APIs still need their own acknowledgement/draft contract as part of operational cutover. Native order drafts/transitions now retain exact request keys and payloads after uncertain saves, validate acknowledgements and ignore late location results; replay distinguishes current state from the original result. Covered store supplier contacts now retain drafts per supplier and location, preserve exact uncertain retry requests across signed-in tab remount, require matching acknowledgements and display the current replay state. Confirmed save versus failed catalog refresh is reported separately. Prep planning retains exact retry requests and per-product/location entries, validates acknowledgements, requires explicit refresh/review after conflicts, and displays current replay state. A held legacy standing deletion no longer announces success. Task/list/override/count save contracts remain open. Dated prep drafts retain reviewed previews and exact uncertain retry requests per store/date/track. Edits invalidate preview; stale conflicts require refresh/review; current replay and late-day response handling are tested. Staff count and container save contracts remain unfinished. Manager execution now retains exact uncertain command requests, validates command/hash/location/day/track/history acknowledgements, requires fresh review after conflicts, ignores late day callbacks and distinguishes the original retry acknowledgement from current release/reopen state. This does not provide durable browser reload recovery or staff task authorization. Partial-link/finish/reconciliation requests now retain exact extra evidence and strict outcomes, invalidate previews on changed inputs, and validate current task progress. Voids visibly reopen tasks after review; late navigation responses cannot apply elsewhere. Native staff prep counts now retain exact requests, distinguish original saved revisions from current history, validate acknowledgements and block stale or cleared-session callbacks. Containers, other direct operating APIs and durable reload recovery remain open.",
+        "next_step_or_limit": "Carry the same contract through direct legacy operating APIs during Step 4; supply native equivalents or retire those paths. Do not treat split legacy invoice/restore requests as an atomic transaction. In-memory drafts do not survive logout/reload.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_assessment": {
+        "status": "open",
+        "conclusion": "Collection saves and principal forms fixed locally; legacy operating surface remains open.",
+        "current_assessment": "Covered App state, catalog/recipe/entry, supplier contact, versioned order, prep plan/day draft, manager execution/progress, staff count and container saves validate acknowledgements and retain drafts after uncertain outcomes. Native commands bind exact request keys, payloads, reviewed evidence and original saved results alongside current history. Late navigation/session callbacks cannot clear or resurrect another draft; definitive stale rejection requires explicit revision and fresh review. Container replies additionally validate pinned fill identity, prior history and balanced exact quantities. Legacy split invoice saves still disclose partial failure and block unsafe resubmission. Other direct operating/projection APIs, full cutover and durable browser reload/logout recovery remain open.",
+        "next_step_or_limit": "Carry the same contract through direct legacy operating APIs during Step 4; supply native equivalents or retire those paths. Do not treat split legacy invoice/restore requests as an atomic transaction. In-memory drafts do not survive logout/reload.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_staff_task_assessment": {
+        "status": "open",
+        "conclusion": "Collection saves and principal forms fixed locally; legacy operating surface remains open.",
+        "current_assessment": "Covered App state, catalog/recipe/entry, supplier contact, versioned order, prep plan/day draft, manager execution/progress, staff count and container saves validate acknowledgements and retain drafts after uncertain outcomes. Native commands bind exact request keys, payloads, reviewed evidence and original saved results alongside current history. Late navigation/session callbacks cannot clear or resurrect another draft; definitive stale rejection requires explicit revision and fresh review. Container replies additionally validate pinned fill identity, prior history and balanced exact quantities. Legacy split invoice saves still disclose partial failure and block unsafe resubmission. Other direct operating/projection APIs, full cutover and durable browser reload/logout recovery remain open. Native assignment UI validates reviewed command and immutable original history even after a draft replacement, retains exact uncertain requests through remount and ignores late scope/session callbacks. Staff read failures/mismatches are held. Legacy PostgreSQL staff prep reads/completions are held after installation even with flags off; other direct operating surfaces remain open.",
+        "next_step_or_limit": "Carry the same contract through direct legacy operating APIs during Step 4; supply native equivalents or retire those paths. Do not treat split legacy invoice/restore requests as an atomic transaction. In-memory drafts do not survive logout/reload.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_waste_assessment": {
+        "status": "open",
+        "conclusion": "Collection saves and principal forms fixed locally; legacy operating surface remains open.",
+        "current_assessment": "Covered App state, catalog/recipe/entry, supplier contact, versioned order, prep plan/day draft, manager execution/progress, staff count and container saves validate acknowledgements and retain drafts after uncertain outcomes. Native commands bind exact request keys, payloads, reviewed evidence and original saved results alongside current history. Late navigation/session callbacks cannot clear or resurrect another draft; definitive stale rejection requires explicit revision and fresh review. Container replies additionally validate pinned fill identity, prior history and balanced exact quantities. Legacy split invoice saves still disclose partial failure and block unsafe resubmission. Other direct operating/projection APIs, full cutover and durable browser reload/logout recovery remain open. Native assignment UI validates reviewed command and immutable original history even after a draft replacement, retains exact uncertain requests through remount and ignores late scope/session callbacks. Staff read failures/mismatches are held. Legacy PostgreSQL staff prep reads/completions are held after installation even with flags off; other direct operating surfaces remain open. Container waste UI requires matching movement and observation acknowledgements, preserves original uncertain requests through remount and validates pinned source/history. Generic linked-waste corrections are held in UI, API and private SQL; paired latest reversal retains both original journals.",
+        "next_step_or_limit": "Carry the same contract through direct legacy operating APIs during Step 4; supply native equivalents or retire those paths. Do not treat split legacy invoice/restore requests as an atomic transaction. In-memory drafts do not survive logout/reload.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      }
     },
     {
       "id": "R08",
@@ -275,7 +921,11 @@
         {
           "path": "frontend/src/App.js",
           "line": 122,
-          "sha256": "b4b519cdeda6650652afe06f013754df1c6bf8cd81321cf28ebd160f11294bf8"
+          "sha256": "2898dc57e7779ed0ba3b8c4e093b88f83b9d655864979719d32e0fc5eb22652e",
+          "prior_published_anchor": {
+            "line": 122,
+            "sha256": "b4b519cdeda6650652afe06f013754df1c6bf8cd81321cf28ebd160f11294bf8"
+          }
         },
         {
           "path": "frontend/src/components/BackupControls.js",
@@ -307,13 +957,33 @@
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 4323,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 4328,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 4323,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 4323,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 4326,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 4326,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/prep_batches.py",
           "line": 89,
-          "sha256": "a3b9919538e5e07231ee1a11b050ac52b412f99eadaa0a4a66e038f91d843c65"
+          "sha256": "67005d0936ec81557d89da17a784af78cde03a4a21325188f50623611cfdac17",
+          "prior_staff_count_anchor": {
+            "line": 89,
+            "sha256": "a3b9919538e5e07231ee1a11b050ac52b412f99eadaa0a4a66e038f91d843c65"
+          }
         },
         {
           "path": "docs/TOAST_COMPARISON_RULES.md",
@@ -350,8 +1020,24 @@
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 408,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 433,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 408,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 416,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 420,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 425,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
         }
       ]
     },
@@ -373,14 +1059,30 @@
         },
         {
           "path": "backend/server.py",
-          "line": 3943,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16",
+          "line": 3945,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
           "previous_checkpoint_anchor": {
             "path": "backend/server.py",
             "line": 3931,
             "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
           },
-          "anchor_refresh": "Original statement changed; current function entry retained with prior checkpoint anchor."
+          "anchor_refresh": "Original statement changed; current function entry retained with prior checkpoint anchor.",
+          "prior_published_anchor": {
+            "line": 3943,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 3943,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 3943,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 3943,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "frontend/src/lib/calc.js",
@@ -399,8 +1101,24 @@
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 567,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 592,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 567,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 575,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 579,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 584,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
         }
       ]
     },
@@ -417,18 +1135,66 @@
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 3797,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 3799,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 3797,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 3797,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 3797,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 3797,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 387,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 412,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 387,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 395,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 399,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 404,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 399,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 424,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 399,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 407,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 411,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 416,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
         },
         {
           "path": "backend/catalog_mapping.py",
@@ -493,13 +1259,33 @@
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 1053,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 1055,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 1053,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 1053,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 1053,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 1053,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/prep_batches.py",
           "line": 89,
-          "sha256": "a3b9919538e5e07231ee1a11b050ac52b412f99eadaa0a4a66e038f91d843c65"
+          "sha256": "67005d0936ec81557d89da17a784af78cde03a4a21325188f50623611cfdac17",
+          "prior_staff_count_anchor": {
+            "line": 89,
+            "sha256": "a3b9919538e5e07231ee1a11b050ac52b412f99eadaa0a4a66e038f91d843c65"
+          }
         }
       ]
     },
@@ -509,7 +1295,7 @@
       "original_title": "Adapter round trips lose independent item settings and metadata",
       "status": "open",
       "conclusion": "Shared menu product identity and null yield/unit round trips fixed locally; full mapping contract remains open.",
-      "current_assessment": "Menu lines retain canonical product codes and resolve store-local aliases independently; new recipe saves do not fabricate store-prefixed identities. Line unit fields and unknown prep yield/unit/price survive the covered adapter paths. Full all-field/null/precision contracts and remaining legacy readers still require work. Covered orders preserve canonical identity and exact decimal strings, with unknown/null distinct from known zero. Store supplier contacts use stable supplier IDs independently of names; all old contact fields are retained as immutable raw JSON pending explicit source mapping/correction. Planning attaches to reviewed native prep products and pinned recipe/unit versions instead of reconstructed item codes or implicit container conversions. Original standing metadata is retained in full raw JSON; no automatic physical-unit or par adoption. Day tasks retain exact standing/recipe/unit versions and immutable prior-day physical count evidence. Separate day overrides do not overwrite usual pars; all original legacy day fields remain immutable raw JSON without adoption. Execution pins exact saved draft, task and production-root identities. Planned and measured output remain separate, including unequal quantities; opening stock cannot be mistaken for production. Corrections/voids retain original linkage and expose current effective batch plus a review flag. Multiple whole batches can accumulate against one pinned task in exact fixed base units, without guessed partial allocations. Original link, current production root/version and reviewed acknowledgement remain separate. Effective and reviewed output differ while a correction is pending; void contribution is zero. Old command review snapshots and fingerprints survive an additive upgrade unchanged.",
+      "current_assessment": "Menu lines retain canonical product codes and resolve store-local aliases independently; new recipe saves do not fabricate store-prefixed identities. Line unit fields and unknown prep yield/unit/price survive the covered adapter paths. Full all-field/null/precision contracts and remaining legacy readers still require work. Covered orders preserve canonical identity and exact decimal strings, with unknown/null distinct from known zero. Store supplier contacts use stable supplier IDs independently of names; all old contact fields are retained as immutable raw JSON pending explicit source mapping/correction. Planning attaches to reviewed native prep products and pinned recipe/unit versions instead of reconstructed item codes or implicit container conversions. Original standing metadata is retained in full raw JSON; no automatic physical-unit or par adoption. Day tasks retain exact standing/recipe/unit versions and immutable prior-day physical count evidence. Separate day overrides do not overwrite usual pars; all original legacy day fields remain immutable raw JSON without adoption. Execution pins exact saved draft, task and production-root identities. Planned and measured output remain separate, including unequal quantities; opening stock cannot be mistaken for production. Corrections/voids retain original linkage and expose current effective batch plus a review flag. Multiple whole batches can accumulate against one pinned task in exact fixed base units, without guessed partial allocations. Original link, current production root/version and reviewed acknowledgement remain separate. Effective and reviewed output differ while a correction is pending; void contribution is zero. Old command review snapshots and fingerprints survive an additive upgrade unchanged. Staff prep sheets pin complete prepared scope and exact product/profile/unit/factor values; raw legacy count fields are retained independently. Scope/unit changes require a new review; unknown is distinct from measured zero. Container capacity definitions separate stated, brimful and usable values. Measured product fill profiles pin approved food unit conversions; nominal volume never implies food weight or actual contents. New versions hold stale fills while old contents retain original units. Raw legacy stock/log fields are preserved without becoming measured balances. Direct container waste pins the original measured fill unit/product/profile factor, including approved historical versions; exact scientific decimal responses are validated without quantity float conversion. Monetary waste valuation is not inferred. Staff production pins assigned native recipe/date/units, gross inputs, measured usable output and included loss evidence. Input recipe estimates remain identified, pending output is not available recorded inventory, and no monetary waste/production valuation is guessed.",
       "next_step_or_limit": "Finish the full field/null/unit and menu contract; do not treat targeted lossless fields as proof for every legacy reader.",
       "original_acceptance": "Round-trip property tests cover all fields, nulls, independent flags and supplier metadata without changes to untouched values.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -521,13 +1307,45 @@
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 398,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 423,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 398,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 406,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 410,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 415,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 423,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 448,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 423,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 431,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 435,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 440,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
         },
         {
           "path": "backend/menu_contract.py",
@@ -541,75 +1359,336 @@
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 567,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 592,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 567,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 575,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 579,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 584,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
+        },
+        {
+          "path": "backend/staff_prep_counts.py",
+          "line": 1,
+          "sha256": "d1aa781362b403b17fb1a811e4c572df3e3b5304579fbebdd401aaada96d2602"
+        },
+        {
+          "path": "backend/prep_containers.py",
+          "line": 1,
+          "sha256": "1a63d9e7e5618c6c5a71024be923d43ef169445946d14b22bec0d0255d09b3f8",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "a3ba4bbe5133dca3708406e97c08dc617cf15ad3e5cc3d5a6450cd3325294425"
+          }
+        },
+        {
+          "path": "migrations/20261007_prep_containers.sql",
+          "line": 1,
+          "sha256": "0a7990d436f3c3ee074e124206663caf22bc9904a23241d782b3ee2b7a68817c"
+        },
+        {
+          "path": "frontend/src/components/PrepContainers.js",
+          "line": 1,
+          "sha256": "da8b89b36ca8c71a5fac01011d5cdefecafc71925ab574c8ec532aee6e3a6eca",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "aab62234922e8bb9c728eab3d8df0c9964baa303fd2349ddd8a3dac1385d17be"
+          }
+        },
+        {
+          "path": "backend/tests/test_prep_containers.py",
+          "line": 1,
+          "sha256": "a208041dcf3412ba5f878a789f14f18af492162bb4834168691388f68a99a7e7"
+        },
+        {
+          "path": "backend/prep_observations.py",
+          "line": 1,
+          "sha256": "8bdf8ed0b7e79efeb013806d4465b19839b22e5cbecc7206cc7d428f0150625f"
+        },
+        {
+          "path": "migrations/20261007_container_waste.sql",
+          "line": 1,
+          "sha256": "00df4208c913dbedbab60466a08af6fa136d280643c8691cdf7767849821a5ab"
+        },
+        {
+          "path": "frontend/src/components/PrepObservations.js",
+          "line": 1,
+          "sha256": "88d6d8c392f93387cc1dad6c0128d1c6470084cb2a9de8a1de862a02f722cfc5"
+        },
+        {
+          "path": "backend/tests/test_container_waste.py",
+          "line": 1,
+          "sha256": "e56a2123593e83b2d30adc22c01b7ff71428b35d2baa6defcf546c052ddfa8e7"
+        },
+        {
+          "path": "frontend/src/components/ContainerWaste.test.js",
+          "line": 1,
+          "sha256": "f63c727eb90fd31712555f35a3331be1495a9509d05fa3e127e06adf2feec6af"
+        },
+        {
+          "path": "backend/staff_prep_production.py",
+          "line": 1,
+          "sha256": "7a324e085215a1aedd82fac4275cc96d5f020223c2de8ac0f3f8b12e04feae89"
+        },
+        {
+          "path": "backend/prep_execution.py",
+          "line": 1,
+          "sha256": "adf7153a89aa20659f0cd7a50b51756c1b3f7b0fbb8a7d3fee84ec2a80411688"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_production.sql",
+          "line": 1,
+          "sha256": "207b7a2159cd332941c8fb778aea5f5e866d2e1006ba0e82ed8c7c2447c1906b"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.js",
+          "line": 1,
+          "sha256": "0a485736d9a82b1aece21e72d86ef79abe8c4329c4c2c73ddf371744b5e4d474"
+        },
+        {
+          "path": "backend/tests/test_staff_prep_production.py",
+          "line": 1,
+          "sha256": "4e1e7443941b64678f1f790d1a37cb850c89481903f47f183de08122635e2d76"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.test.js",
+          "line": 1,
+          "sha256": "df5b3444255c6423bb74be1559f3aedcb3557a63023157f8a2183b9788d211bc"
         }
-      ]
+      ],
+      "prior_staff_count_assessment": {
+        "status": "open",
+        "conclusion": "Shared menu product identity and null yield/unit round trips fixed locally; full mapping contract remains open.",
+        "current_assessment": "Menu lines retain canonical product codes and resolve store-local aliases independently; new recipe saves do not fabricate store-prefixed identities. Line unit fields and unknown prep yield/unit/price survive the covered adapter paths. Full all-field/null/precision contracts and remaining legacy readers still require work. Covered orders preserve canonical identity and exact decimal strings, with unknown/null distinct from known zero. Store supplier contacts use stable supplier IDs independently of names; all old contact fields are retained as immutable raw JSON pending explicit source mapping/correction. Planning attaches to reviewed native prep products and pinned recipe/unit versions instead of reconstructed item codes or implicit container conversions. Original standing metadata is retained in full raw JSON; no automatic physical-unit or par adoption. Day tasks retain exact standing/recipe/unit versions and immutable prior-day physical count evidence. Separate day overrides do not overwrite usual pars; all original legacy day fields remain immutable raw JSON without adoption. Execution pins exact saved draft, task and production-root identities. Planned and measured output remain separate, including unequal quantities; opening stock cannot be mistaken for production. Corrections/voids retain original linkage and expose current effective batch plus a review flag. Multiple whole batches can accumulate against one pinned task in exact fixed base units, without guessed partial allocations. Original link, current production root/version and reviewed acknowledgement remain separate. Effective and reviewed output differ while a correction is pending; void contribution is zero. Old command review snapshots and fingerprints survive an additive upgrade unchanged. Staff prep sheets pin complete prepared scope and exact product/profile/unit/factor values; raw legacy count fields are retained independently. Scope/unit changes require a new review; unknown is distinct from measured zero.",
+        "next_step_or_limit": "Finish the full field/null/unit and menu contract; do not treat targeted lossless fields as proof for every legacy reader.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_staff_task_assessment": {
+        "status": "open",
+        "conclusion": "Shared menu product identity and null yield/unit round trips fixed locally; full mapping contract remains open.",
+        "current_assessment": "Menu lines retain canonical product codes and resolve store-local aliases independently; new recipe saves do not fabricate store-prefixed identities. Line unit fields and unknown prep yield/unit/price survive the covered adapter paths. Full all-field/null/precision contracts and remaining legacy readers still require work. Covered orders preserve canonical identity and exact decimal strings, with unknown/null distinct from known zero. Store supplier contacts use stable supplier IDs independently of names; all old contact fields are retained as immutable raw JSON pending explicit source mapping/correction. Planning attaches to reviewed native prep products and pinned recipe/unit versions instead of reconstructed item codes or implicit container conversions. Original standing metadata is retained in full raw JSON; no automatic physical-unit or par adoption. Day tasks retain exact standing/recipe/unit versions and immutable prior-day physical count evidence. Separate day overrides do not overwrite usual pars; all original legacy day fields remain immutable raw JSON without adoption. Execution pins exact saved draft, task and production-root identities. Planned and measured output remain separate, including unequal quantities; opening stock cannot be mistaken for production. Corrections/voids retain original linkage and expose current effective batch plus a review flag. Multiple whole batches can accumulate against one pinned task in exact fixed base units, without guessed partial allocations. Original link, current production root/version and reviewed acknowledgement remain separate. Effective and reviewed output differ while a correction is pending; void contribution is zero. Old command review snapshots and fingerprints survive an additive upgrade unchanged. Staff prep sheets pin complete prepared scope and exact product/profile/unit/factor values; raw legacy count fields are retained independently. Scope/unit changes require a new review; unknown is distinct from measured zero. Container capacity definitions separate stated, brimful and usable values. Measured product fill profiles pin approved food unit conversions; nominal volume never implies food weight or actual contents. New versions hold stale fills while old contents retain original units. Raw legacy stock/log fields are preserved without becoming measured balances.",
+        "next_step_or_limit": "Finish the full field/null/unit and menu contract; do not treat targeted lossless fields as proof for every legacy reader.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_waste_assessment": {
+        "status": "open",
+        "conclusion": "Shared menu product identity and null yield/unit round trips fixed locally; full mapping contract remains open.",
+        "current_assessment": "Menu lines retain canonical product codes and resolve store-local aliases independently; new recipe saves do not fabricate store-prefixed identities. Line unit fields and unknown prep yield/unit/price survive the covered adapter paths. Full all-field/null/precision contracts and remaining legacy readers still require work. Covered orders preserve canonical identity and exact decimal strings, with unknown/null distinct from known zero. Store supplier contacts use stable supplier IDs independently of names; all old contact fields are retained as immutable raw JSON pending explicit source mapping/correction. Planning attaches to reviewed native prep products and pinned recipe/unit versions instead of reconstructed item codes or implicit container conversions. Original standing metadata is retained in full raw JSON; no automatic physical-unit or par adoption. Day tasks retain exact standing/recipe/unit versions and immutable prior-day physical count evidence. Separate day overrides do not overwrite usual pars; all original legacy day fields remain immutable raw JSON without adoption. Execution pins exact saved draft, task and production-root identities. Planned and measured output remain separate, including unequal quantities; opening stock cannot be mistaken for production. Corrections/voids retain original linkage and expose current effective batch plus a review flag. Multiple whole batches can accumulate against one pinned task in exact fixed base units, without guessed partial allocations. Original link, current production root/version and reviewed acknowledgement remain separate. Effective and reviewed output differ while a correction is pending; void contribution is zero. Old command review snapshots and fingerprints survive an additive upgrade unchanged. Staff prep sheets pin complete prepared scope and exact product/profile/unit/factor values; raw legacy count fields are retained independently. Scope/unit changes require a new review; unknown is distinct from measured zero. Container capacity definitions separate stated, brimful and usable values. Measured product fill profiles pin approved food unit conversions; nominal volume never implies food weight or actual contents. New versions hold stale fills while old contents retain original units. Raw legacy stock/log fields are preserved without becoming measured balances. Direct container waste pins the original measured fill unit/product/profile factor, including approved historical versions; exact scientific decimal responses are validated without quantity float conversion. Monetary waste valuation is not inferred.",
+        "next_step_or_limit": "Finish the full field/null/unit and menu contract; do not treat targeted lossless fields as proof for every legacy reader.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      }
     },
     {
       "id": "R16",
       "original_priority": "P2",
       "original_title": "Prep count history is mutable and concurrent session creation is unsafe",
-      "status": "open",
-      "conclusion": "Native counts are immutable; old prep sessions still mutate submissions and race creation.",
-      "current_assessment": "Manager native prep observations and purchased-item staff drafts retain immutable generations and reviewed corrections. Old prep-count GET/save endpoints remain: SELECT-then-INSERT creation and in-place submitted-line edits are still present. The main legacy Prep workflow has not been replaced.",
-      "next_step_or_limit": "Route all supported prep/staff counts to immutable native submissions, retire old writes/GET mutations, and verify concurrent creation and business-date filtering through the operating screens.",
+      "status": "fixed",
+      "conclusion": "Fixed locally for native staff prep counts and the installed legacy count hold.",
+      "current_assessment": "Native PostgreSQL prep sheets pin one physical instant, calendar date and full prepared-item scope. Immutable staff revisions preserve unknown versus zero and all prior evidence. Concurrent issuance yields one active sheet; manager acceptance creates one immutable native count and decision atomically. Exact retries, latest-submission review, scope/unit drift, forged SQL acceptance rollback and whole SQL restore are tested. Legacy nightly_prep/commissary sessions and lines are retained as raw immutable evidence and frozen after migration even with flags off; their GET/create/save/submit routes are held. Accepted observations feed dated planning without Track 1 writes.",
+      "next_step_or_limit": "Retain native sheets and installed legacy holds during cutover. Verified containers, staff task access, overnight policy, durable browser reload recovery and complete operating cutover remain separate open work.",
       "original_acceptance": "Two clients create one session/one line per source; editing requires a new revision; historical submissions remain unchanged and date filters match their displayed meaning.",
-      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "evidence_limit": "Local synthetic disposable PostgreSQL, component/adapter, route and restore proof. No live-browser, production or managed-platform acceptance; login/PIN redesign remains deferred.",
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 4410,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 4418,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 4410,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 4411,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 4416,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 4416,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/server.py",
-          "line": 4480,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 4489,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 4480,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 4482,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 4487,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 4487,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/prep_observations.py",
           "line": 76,
-          "sha256": "898225719196ffe074608877f28a292a883c3feeb7374efc1a24dbb7a273cad5"
+          "sha256": "8bdf8ed0b7e79efeb013806d4465b19839b22e5cbecc7206cc7d428f0150625f",
+          "prior_staff_count_anchor": {
+            "line": 76,
+            "sha256": "898225719196ffe074608877f28a292a883c3feeb7374efc1a24dbb7a273cad5"
+          },
+          "prior_staff_task_anchor": {
+            "line": 76,
+            "sha256": "8b818077f080603b65b62194c6c81c6c9b40080a2e78131b91bc56ec7ae55efd"
+          }
+        },
+        {
+          "path": "backend/staff_prep_counts.py",
+          "line": 1,
+          "sha256": "d1aa781362b403b17fb1a811e4c572df3e3b5304579fbebdd401aaada96d2602"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_counts.sql",
+          "line": 1,
+          "sha256": "c5767d2a7a145a98ef9aa3c45b67d40a319bee86fe2fce10f171707f19b1402f"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepCounts.js",
+          "line": 1,
+          "sha256": "9b4c62f162fac3f4b5d08e1324da763c01482d6aa0e5abed0b6f48f4252f8ed2"
+        },
+        {
+          "path": "backend/tests/test_staff_prep_counts.py",
+          "line": 1,
+          "sha256": "fa3888847fda7115e58724cfe3908475eb14dc97695b43a9300690b411c41ff1"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepCounts.test.js",
+          "line": 1,
+          "sha256": "c7d1b3f05b42075cdccf71f4d7ffc5fa07cc02f3bf3a4fd643418dcfacb3c079"
         }
-      ]
+      ],
+      "prior_published_assessment": {
+        "status": "open",
+        "conclusion": "Native counts are immutable; old prep sessions still mutate submissions and race creation.",
+        "current_assessment": "Manager native prep observations and purchased-item staff drafts retain immutable generations and reviewed corrections. Old prep-count GET/save endpoints remain: SELECT-then-INSERT creation and in-place submitted-line edits are still present. The main legacy Prep workflow has not been replaced.",
+        "next_step_or_limit": "Route all supported prep/staff counts to immutable native submissions, retire old writes/GET mutations, and verify concurrent creation and business-date filtering through the operating screens.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      }
     },
     {
       "id": "R17",
       "original_priority": "P2",
       "original_title": "Concurrency checks cover only part of the write surface",
       "status": "open",
-      "conclusion": "Covered metadata, orders, dated prep drafts and manager production/reconciliation serialize; staff counts and container execution remain open.",
-      "current_assessment": "Prior catalog, metadata, contacts, order and prep-definition safeguards remain. Manager execution now permits multiple once-per-root production links per task, explicit finish and immutable original-link reconciliation. Catalog/store locks, mandatory execution revisions, review hashes and exact actor/request digests protect transactions. PostgreSQL numeric projections preserve planned, effective and reviewed totals without floating-point math. Changed linked production blocks additional links/finish until reviewed; void must reopen the task and cannot be reused elsewhere. Reconciliation cannot hide other changed links. A pinned released list stays locked once any production history exists. Direct SQL guards reject fabricated totals, empty finish, stale/wrong original evidence and void closure. Additive old-schema upgrade and whole SQL restore retain original request/review hashes and exact retries. Staff count submissions, verified containers, staff execution access, arbitrary fractional allocations, supplier outbox and durable reload recovery remain unfinished.",
-      "next_step_or_limit": "Native staff prep count submissions and verified containers, then staff execution authorization/assignment and remaining integration contracts before Toast. Arbitrary fractional allocations and durable browser reload recovery remain separate.",
+      "conclusion": "Covered native metadata, orders, prep drafts/execution, staff counts and container commands serialize; remaining operating integration and durable recovery stay open.",
+      "current_assessment": "Prior catalog, metadata, contacts, order and prep-definition safeguards remain. Manager execution now permits multiple once-per-root production links per task, explicit finish and immutable original-link reconciliation. Catalog/store locks, mandatory execution revisions, review hashes and exact actor/request digests protect transactions. PostgreSQL numeric projections preserve planned, effective and reviewed totals without floating-point math. Changed linked production blocks additional links/finish until reviewed; void must reopen the task and cannot be reused elsewhere. Reconciliation cannot hide other changed links. A pinned released list stays locked once any production history exists. Direct SQL guards reject fabricated totals, empty finish, stale/wrong original evidence and void closure. Additive old-schema upgrade and whole SQL restore retain original request/review hashes and exact retries. Staff prep count issuance, immutable submissions and reviewed acceptance now serialize with exact retries and SQL guards. Native staff execution access and direct container waste are implemented locally. Sales consumption, remaining legacy contracts, arbitrary fractional production allocations, supplier outbox and durable reload recovery remain unfinished. Container reservations share allocation limits with prep and waste. Exact decimals, partial transfers, source dependencies, concurrent commands, atomic rollback and whole SQL restore are verified locally. Performed-time availability and SQL timeline guards prevent future unpacking from funding backdated fills/prep/waste. A separate opening-source probe confirms container dependencies still protect physical opening counts. No service consumption or full variance coverage is inferred. Staff assignment commands serialize per location and verify plan, release, progress, roster and assignment revisions. Roster history cannot be deleted. Same-key replay returns original assignment/history with current plan, including after reopening/replacement. Direct SQL guards, unchanged accounting/production and whole SQL restore are verified locally. Shared PIN and selected names remain claimed identity; native roster selection does not mint manager sessions. Immutable staff production submissions/manager acceptance are now implemented locally. Paired loss/reversal writes and links roll back together; tests cover serialization, request-key replay, later-activity correction holds, time-bound allocation, direct SQL orphan/correction guards, additive upgrade and whole restore. Staff production submissions/acceptance are now implemented locally; full historical dependency correction remains pending. Staff revision roots, one decision per revision, location serialization and actor/body/key binding prevent retry/concurrency double posting. Private transaction markers and deferred seals bind accepted batch/link/optional finish to one decision; failed effects roll back. Additive JSON compatibility, SQL orphan/forgery probes and whole restore/replay after batch correction are verified. Independent new roots may still describe overlapping physical work and require manager review; historical dependency correction remains open.",
+      "next_step_or_limit": "Review remaining legacy operating endpoints and historical dependency correction contracts, then a combined cutover/recovery trial. Explicit employee account mapping, supplier outbox, deployment and deferred Toast remain open.",
       "original_acceptance": "A stale whole-list save conflicts after every metadata mutation; racing submit/edit or release/edit cannot alter approved/released content.",
       "evidence_limit": "20 selected backend functions (10 dated-draft, 8 standing-planning, 2 observation-boundary), one overlapping direct-guard rerun, 312 frontend tests/38 suites, 23 offline checks and build with three existing warnings. Prior 42-function definition/contact/planning and 50-function order/menu/price/contact evidence is nested separately. No operational/browser/managed-platform proof.",
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 3830,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 3832,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 3830,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 3830,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 3830,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 3830,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/server.py",
-          "line": 4013,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16",
+          "line": 4015,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
           "previous_checkpoint_anchor": {
             "path": "backend/server.py",
             "line": 3983,
             "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
           },
-          "anchor_refresh": "Original statement changed; current function entry retained with prior checkpoint anchor."
+          "anchor_refresh": "Original statement changed; current function entry retained with prior checkpoint anchor.",
+          "prior_published_anchor": {
+            "line": 4013,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 4013,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 4013,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 4013,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/server.py",
-          "line": 4706,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 4716,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 4706,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 4709,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 4714,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 4714,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/server.py",
-          "line": 2944,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 2946,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 2944,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 2944,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 2944,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 2944,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/menu_contract.py",
@@ -623,8 +1702,24 @@
         },
         {
           "path": "frontend/src/lib/api.js",
-          "line": 567,
-          "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          "line": 592,
+          "sha256": "11bf833027335ae087b2adda492bc3f1b435fe3ee7c6d8af3194efeb4d5c7ab1",
+          "prior_published_anchor": {
+            "line": 567,
+            "sha256": "de683ebc4d4b51b0a3c669d99dbc99445c5b864d77da6e9eca124e0ff8620138"
+          },
+          "prior_staff_count_anchor": {
+            "line": 575,
+            "sha256": "deff49101f69ab49d3e8043492c74b6e7c6fb25558e4b86b0f40408dc44f875d"
+          },
+          "prior_container_anchor": {
+            "line": 579,
+            "sha256": "7a0c894b0c2d5002edc3ae03ec7e500fc0d682159df6e0f6fed84ebb9e5f6570"
+          },
+          "prior_container_waste_anchor": {
+            "line": 584,
+            "sha256": "b063b016cd936e4d768b1adfa387715cdfbe82b322a09c450a0df9da92be9d3d"
+          }
         },
         {
           "path": "backend/order_commands.py",
@@ -699,9 +1794,157 @@
         {
           "path": "frontend/src/components/PrepDayDrafts.js",
           "line": 1,
-          "sha256": "b8fd0f6d5c01d96486e67ef786a80822c3d43480089f32e7d6bf26207333f743"
+          "sha256": "6f6121f03d52b2c1842ce80bea6ead10a679890495e7d1ec58faa560c62f0e6d",
+          "prior_container_anchor": {
+            "line": 1,
+            "sha256": "b8fd0f6d5c01d96486e67ef786a80822c3d43480089f32e7d6bf26207333f743"
+          },
+          "prior_container_waste_anchor": {
+            "line": 1,
+            "sha256": "44ad5adfb16a075ed03cb608382709b0fd4e2fec9cc5365feac3851c37a6a184"
+          }
+        },
+        {
+          "path": "backend/staff_prep_counts.py",
+          "line": 1,
+          "sha256": "d1aa781362b403b17fb1a811e4c572df3e3b5304579fbebdd401aaada96d2602"
+        },
+        {
+          "path": "backend/prep_containers.py",
+          "line": 1,
+          "sha256": "1a63d9e7e5618c6c5a71024be923d43ef169445946d14b22bec0d0255d09b3f8",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "a3ba4bbe5133dca3708406e97c08dc617cf15ad3e5cc3d5a6450cd3325294425"
+          }
+        },
+        {
+          "path": "migrations/20261007_prep_containers.sql",
+          "line": 1,
+          "sha256": "0a7990d436f3c3ee074e124206663caf22bc9904a23241d782b3ee2b7a68817c"
+        },
+        {
+          "path": "frontend/src/components/PrepContainers.js",
+          "line": 1,
+          "sha256": "da8b89b36ca8c71a5fac01011d5cdefecafc71925ab574c8ec532aee6e3a6eca",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "aab62234922e8bb9c728eab3d8df0c9964baa303fd2349ddd8a3dac1385d17be"
+          }
+        },
+        {
+          "path": "backend/tests/test_prep_containers.py",
+          "line": 1,
+          "sha256": "a208041dcf3412ba5f878a789f14f18af492162bb4834168691388f68a99a7e7"
+        },
+        {
+          "path": "backend/staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "bd63842be910d18ccef5176861f421bd63a32ffcd33449072e04d0808000fce5"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_tasks.sql",
+          "line": 1,
+          "sha256": "a4acf809888e332496bd995550caa0feb382c24521bf20c27a68ab0a8ac6a36a"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepTasks.js",
+          "line": 1,
+          "sha256": "710da9ecf24055d2a48aeecead3e7666cdf0b21fb11d49e16268afdf9dda9aef",
+          "prior_container_waste_anchor": {
+            "line": 1,
+            "sha256": "2455141bbd540f19fd7a93213eddfa60b745e79330514f19c0eba6d9dfbc0608"
+          }
+        },
+        {
+          "path": "backend/tests/test_staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "5a8aefff6715c1035a9b97dbeebb9ea780ac4f3274bb5992ff9f767ad351cc9e"
+        },
+        {
+          "path": "backend/prep_observations.py",
+          "line": 1,
+          "sha256": "8bdf8ed0b7e79efeb013806d4465b19839b22e5cbecc7206cc7d428f0150625f"
+        },
+        {
+          "path": "migrations/20261007_container_waste.sql",
+          "line": 1,
+          "sha256": "00df4208c913dbedbab60466a08af6fa136d280643c8691cdf7767849821a5ab"
+        },
+        {
+          "path": "frontend/src/components/PrepObservations.js",
+          "line": 1,
+          "sha256": "88d6d8c392f93387cc1dad6c0128d1c6470084cb2a9de8a1de862a02f722cfc5"
+        },
+        {
+          "path": "backend/tests/test_container_waste.py",
+          "line": 1,
+          "sha256": "e56a2123593e83b2d30adc22c01b7ff71428b35d2baa6defcf546c052ddfa8e7"
+        },
+        {
+          "path": "frontend/src/components/ContainerWaste.test.js",
+          "line": 1,
+          "sha256": "f63c727eb90fd31712555f35a3331be1495a9509d05fa3e127e06adf2feec6af"
+        },
+        {
+          "path": "backend/staff_prep_production.py",
+          "line": 1,
+          "sha256": "7a324e085215a1aedd82fac4275cc96d5f020223c2de8ac0f3f8b12e04feae89"
+        },
+        {
+          "path": "backend/prep_execution.py",
+          "line": 1,
+          "sha256": "adf7153a89aa20659f0cd7a50b51756c1b3f7b0fbb8a7d3fee84ec2a80411688"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_production.sql",
+          "line": 1,
+          "sha256": "207b7a2159cd332941c8fb778aea5f5e866d2e1006ba0e82ed8c7c2447c1906b"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.js",
+          "line": 1,
+          "sha256": "0a485736d9a82b1aece21e72d86ef79abe8c4329c4c2c73ddf371744b5e4d474"
+        },
+        {
+          "path": "backend/tests/test_staff_prep_production.py",
+          "line": 1,
+          "sha256": "4e1e7443941b64678f1f790d1a37cb850c89481903f47f183de08122635e2d76"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.test.js",
+          "line": 1,
+          "sha256": "df5b3444255c6423bb74be1559f3aedcb3557a63023157f8a2183b9788d211bc"
         }
-      ]
+      ],
+      "prior_staff_count_assessment": {
+        "status": "open",
+        "conclusion": "Covered metadata, orders, dated prep drafts, manager execution and staff prep counts serialize; container execution and remaining integration contracts stay open.",
+        "current_assessment": "Prior catalog, metadata, contacts, order and prep-definition safeguards remain. Manager execution now permits multiple once-per-root production links per task, explicit finish and immutable original-link reconciliation. Catalog/store locks, mandatory execution revisions, review hashes and exact actor/request digests protect transactions. PostgreSQL numeric projections preserve planned, effective and reviewed totals without floating-point math. Changed linked production blocks additional links/finish until reviewed; void must reopen the task and cannot be reused elsewhere. Reconciliation cannot hide other changed links. A pinned released list stays locked once any production history exists. Direct SQL guards reject fabricated totals, empty finish, stale/wrong original evidence and void closure. Additive old-schema upgrade and whole SQL restore retain original request/review hashes and exact retries. Staff prep count issuance, immutable submissions and reviewed acceptance now serialize with exact retries and SQL guards. Verified containers, staff execution access, remaining direct legacy contracts, arbitrary fractional allocations, supplier outbox and durable reload recovery remain unfinished.",
+        "next_step_or_limit": "Verified containers and partial service movements, then staff task authorization/assignment and remaining integration contracts before Toast. Arbitrary fractional allocations and durable browser reload recovery remain separate.",
+        "evidence_limit": "20 selected backend functions (10 dated-draft, 8 standing-planning, 2 observation-boundary), one overlapping direct-guard rerun, 312 frontend tests/38 suites, 23 offline checks and build with three existing warnings. Prior 42-function definition/contact/planning and 50-function order/menu/price/contact evidence is nested separately. No operational/browser/managed-platform proof."
+      },
+      "prior_container_assessment": {
+        "status": "open",
+        "conclusion": "Covered native metadata, orders, prep drafts/execution, staff counts and container commands serialize; remaining operating integration and durable recovery stay open.",
+        "current_assessment": "Prior catalog, metadata, contacts, order and prep-definition safeguards remain. Manager execution now permits multiple once-per-root production links per task, explicit finish and immutable original-link reconciliation. Catalog/store locks, mandatory execution revisions, review hashes and exact actor/request digests protect transactions. PostgreSQL numeric projections preserve planned, effective and reviewed totals without floating-point math. Changed linked production blocks additional links/finish until reviewed; void must reopen the task and cannot be reused elsewhere. Reconciliation cannot hide other changed links. A pinned released list stays locked once any production history exists. Direct SQL guards reject fabricated totals, empty finish, stale/wrong original evidence and void closure. Additive old-schema upgrade and whole SQL restore retain original request/review hashes and exact retries. Staff prep count issuance, immutable submissions and reviewed acceptance now serialize with exact retries and SQL guards. Staff execution access, direct container waste/consumption, remaining legacy contracts, arbitrary fractional production allocations, supplier outbox and durable reload recovery remain unfinished. Container reservations share allocation limits with prep and waste. Exact decimals, partial transfers, source dependencies, concurrent commands, atomic rollback and whole SQL restore are verified locally. Performed-time availability and SQL timeline guards prevent future unpacking from funding backdated fills/prep/waste. A separate opening-source probe confirms container dependencies still protect physical opening counts. No service consumption or full variance coverage is inferred.",
+        "next_step_or_limit": "Staff task authorization/assignment, direct container waste and verified consumption contracts, then remaining legacy cutover, supplier outbox, deployment/recovery and deferred Toast. Durable browser reload and arbitrary fractional production allocations remain separate.",
+        "evidence_limit": "20 selected backend functions (10 dated-draft, 8 standing-planning, 2 observation-boundary), one overlapping direct-guard rerun, 312 frontend tests/38 suites, 23 offline checks and build with three existing warnings. Prior 42-function definition/contact/planning and 50-function order/menu/price/contact evidence is nested separately. No operational/browser/managed-platform proof."
+      },
+      "prior_staff_task_assessment": {
+        "status": "open",
+        "conclusion": "Covered native metadata, orders, prep drafts/execution, staff counts and container commands serialize; remaining operating integration and durable recovery stay open.",
+        "current_assessment": "Prior catalog, metadata, contacts, order and prep-definition safeguards remain. Manager execution now permits multiple once-per-root production links per task, explicit finish and immutable original-link reconciliation. Catalog/store locks, mandatory execution revisions, review hashes and exact actor/request digests protect transactions. PostgreSQL numeric projections preserve planned, effective and reviewed totals without floating-point math. Changed linked production blocks additional links/finish until reviewed; void must reopen the task and cannot be reused elsewhere. Reconciliation cannot hide other changed links. A pinned released list stays locked once any production history exists. Direct SQL guards reject fabricated totals, empty finish, stale/wrong original evidence and void closure. Additive old-schema upgrade and whole SQL restore retain original request/review hashes and exact retries. Staff prep count issuance, immutable submissions and reviewed acceptance now serialize with exact retries and SQL guards. Staff execution access, direct container waste/consumption, remaining legacy contracts, arbitrary fractional production allocations, supplier outbox and durable reload recovery remain unfinished. Container reservations share allocation limits with prep and waste. Exact decimals, partial transfers, source dependencies, concurrent commands, atomic rollback and whole SQL restore are verified locally. Performed-time availability and SQL timeline guards prevent future unpacking from funding backdated fills/prep/waste. A separate opening-source probe confirms container dependencies still protect physical opening counts. No service consumption or full variance coverage is inferred. Staff assignment commands serialize per location and verify plan, release, progress, roster and assignment revisions. Roster history cannot be deleted. Same-key replay returns original assignment/history with current plan, including after reopening/replacement. Direct SQL guards, unchanged accounting/production and whole SQL restore are verified locally. Shared PIN and selected names remain claimed identity; native roster selection does not mint manager sessions. Immutable staff production submissions/manager acceptance remain pending.",
+        "next_step_or_limit": "Atomic direct container waste and corrections, then immutable staff production submissions with manager decisions and explicit account-to-employee mapping; remaining legacy cutover, supplier outbox, deployment/recovery and deferred Toast remain open.",
+        "evidence_limit": "20 selected backend functions (10 dated-draft, 8 standing-planning, 2 observation-boundary), one overlapping direct-guard rerun, 312 frontend tests/38 suites, 23 offline checks and build with three existing warnings. Prior 42-function definition/contact/planning and 50-function order/menu/price/contact evidence is nested separately. No operational/browser/managed-platform proof."
+      },
+      "prior_container_waste_assessment": {
+        "status": "open",
+        "conclusion": "Covered native metadata, orders, prep drafts/execution, staff counts and container commands serialize; remaining operating integration and durable recovery stay open.",
+        "current_assessment": "Prior catalog, metadata, contacts, order and prep-definition safeguards remain. Manager execution now permits multiple once-per-root production links per task, explicit finish and immutable original-link reconciliation. Catalog/store locks, mandatory execution revisions, review hashes and exact actor/request digests protect transactions. PostgreSQL numeric projections preserve planned, effective and reviewed totals without floating-point math. Changed linked production blocks additional links/finish until reviewed; void must reopen the task and cannot be reused elsewhere. Reconciliation cannot hide other changed links. A pinned released list stays locked once any production history exists. Direct SQL guards reject fabricated totals, empty finish, stale/wrong original evidence and void closure. Additive old-schema upgrade and whole SQL restore retain original request/review hashes and exact retries. Staff prep count issuance, immutable submissions and reviewed acceptance now serialize with exact retries and SQL guards. Staff execution access, direct container waste/consumption, remaining legacy contracts, arbitrary fractional production allocations, supplier outbox and durable reload recovery remain unfinished. Container reservations share allocation limits with prep and waste. Exact decimals, partial transfers, source dependencies, concurrent commands, atomic rollback and whole SQL restore are verified locally. Performed-time availability and SQL timeline guards prevent future unpacking from funding backdated fills/prep/waste. A separate opening-source probe confirms container dependencies still protect physical opening counts. No service consumption or full variance coverage is inferred. Staff assignment commands serialize per location and verify plan, release, progress, roster and assignment revisions. Roster history cannot be deleted. Same-key replay returns original assignment/history with current plan, including after reopening/replacement. Direct SQL guards, unchanged accounting/production and whole SQL restore are verified locally. Shared PIN and selected names remain claimed identity; native roster selection does not mint manager sessions. Immutable staff production submissions/manager acceptance remain pending. Paired loss/reversal writes and links roll back together; tests cover serialization, request-key replay, later-activity correction holds, time-bound allocation, direct SQL orphan/correction guards, additive upgrade and whole restore. Full historical dependency correction and staff production submissions/acceptance remain pending.",
+        "next_step_or_limit": "Immutable staff production submissions with manager acceptance, then historical dependency corrections, explicit employee account mapping and remaining legacy cutover, supplier outbox, deployment/recovery and deferred Toast.",
+        "evidence_limit": "20 selected backend functions (10 dated-draft, 8 standing-planning, 2 observation-boundary), one overlapping direct-guard rerun, 312 frontend tests/38 suites, 23 offline checks and build with three existing warnings. Prior 42-function definition/contact/planning and 50-function order/menu/price/contact evidence is nested separately. No operational/browser/managed-platform proof."
+      }
     },
     {
       "id": "R18",
@@ -716,18 +1959,66 @@
       "current_source_evidence": [
         {
           "path": "backend/server.py",
-          "line": 3866,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 3868,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 3866,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 3866,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 3866,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 3866,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/server.py",
-          "line": 3823,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 3825,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 3823,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 3823,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 3823,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 3823,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "backend/server.py",
-          "line": 2696,
-          "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          "line": 2698,
+          "sha256": "01ae7a00686be44646e91754f1b39903ff8453989499795b10206f6b413c53b9",
+          "prior_published_anchor": {
+            "line": 2696,
+            "sha256": "bbbadaf1ac29cbd847d2249a9aa9bbd9c2f0d8ff8f6c121659a3af4fde3afa16"
+          },
+          "prior_staff_count_anchor": {
+            "line": 2696,
+            "sha256": "eaac0fa9df4817b50197dad338433dcc86e2cfba44c8dcf836c40325abac5f1d"
+          },
+          "prior_container_anchor": {
+            "line": 2696,
+            "sha256": "10588ca4b027c4ec1dca7d8192a90ae3f5874de7835d612dda6f67c29af293b0"
+          },
+          "prior_container_waste_anchor": {
+            "line": 2696,
+            "sha256": "cdb9069730bb9970d7abdd3a4381df1995d656fa8967ef42edd8d91cfe19c3fd"
+          }
         },
         {
           "path": "frontend/src/components/SetupTab.js",
@@ -752,7 +2043,7 @@
       "original_title": "Database/bootstrap documentation and migration assets do not fully reproduce the current deployment",
       "status": "open",
       "conclusion": "Local migrations/recovery are substantially improved; production bootstrap/docs remain incomplete.",
-      "current_assessment": "Versioned native migrations and disposable restore tests now cover the implementation. The public schema remains a reference snapshot; private Toast deployment assets and a complete supported bootstrap/seed/grant sequence are not delivered. DATABASE_SCHEMA/KNOWN_GAPS still describe older Mongo/no-auth behavior, and old migration/import scripts still use name joins or Mongo writes. The additive order-command migration and feature gates are tested locally; examples remain disabled and installed schemas hold legacy order writers even with the new flag off. The additive supplier-contact migration freezes legacy name-based contacts after preserving all raw rows; native dependency flags remain disabled in examples. Switching flags off does not reopen the old writer or name-based email lookup. The planning migration preserves and freezes all legacy standing metadata. New planning and dependency flags remain disabled in examples; flags off do not reopen legacy writes. Operating cutover remains pending. The dated draft migration freezes legacy lists, lines and overrides after raw preservation; dependencies remain false in examples and flag-off does not reopen writers. Whole SQL restore preserves draft/task seals and exact retry evidence. The additive execution migration follows the production/opening boundary and dated drafts, adds immutable command evidence and prevents released edits even with execution disabled. Whole SQL restore preserves release/completion history, task/batch root links and exact retries. All new example flags remain false; supported managed-platform bootstrap and operating cutover remain unfinished. The additive progress migration extends immutable execution evidence without rewriting historical commands or production. Partial root reservation and reconciled task projections survive whole SQL restore. Old command serialization and exact retry are preserved after upgrade; the rehearsal recycles fixture connections after DDL, while the application pool already disables statement caching. Existing execution flags remain false in examples; managed-platform bootstrap/cutover is still pending.",
+      "current_assessment": "Versioned native migrations and disposable restore tests now cover the implementation. The public schema remains a reference snapshot; private Toast deployment assets and a complete supported bootstrap/seed/grant sequence are not delivered. DATABASE_SCHEMA/KNOWN_GAPS still describe older Mongo/no-auth behavior, and old migration/import scripts still use name joins or Mongo writes. The additive order-command migration and feature gates are tested locally; examples remain disabled and installed schemas hold legacy order writers even with the new flag off. The additive supplier-contact migration freezes legacy name-based contacts after preserving all raw rows; native dependency flags remain disabled in examples. Switching flags off does not reopen the old writer or name-based email lookup. The planning migration preserves and freezes all legacy standing metadata. New planning and dependency flags remain disabled in examples; flags off do not reopen legacy writes. Operating cutover remains pending. The dated draft migration freezes legacy lists, lines and overrides after raw preservation; dependencies remain false in examples and flag-off does not reopen writers. Whole SQL restore preserves draft/task seals and exact retry evidence. The additive execution migration follows the production/opening boundary and dated drafts, adds immutable command evidence and prevents released edits even with execution disabled. Whole SQL restore preserves release/completion history, task/batch root links and exact retries. All new example flags remain false; supported managed-platform bootstrap and operating cutover remain unfinished. The additive progress migration extends immutable execution evidence without rewriting historical commands or production. Partial root reservation and reconciled task projections survive whole SQL restore. Old command serialization and exact retry are preserved after upgrade; the rehearsal recycles fixture connections after DDL, while the application pool already disables statement caching. Existing execution flags remain false in examples; managed-platform bootstrap/cutover is still pending. The additive staff prep count migration captures and freezes legacy count evidence before installing private immutable sheet/submission/decision storage. Whole SQL restore preserves exact acceptance retry, history and private ACLs. All twelve native feature pairs remain false in examples; operational bootstrap and managed-platform cutover remain pending. The additive container migration retains every original prep stock/log field, freezes competing writes, adds private immutable capacity/profile/fill/movement storage and shared performed-time allocation guards. Restore retains measured contents, transfers, source links and exact retry. All thirteen native feature pairs remain false in examples; operational bootstrap/cutover remains pending. The additive staff assignment migration pins current released tasks and active local roster snapshots with composite FKs, immutable history and private ACLs. Fifteen native feature pairs remain false in examples; no operational migration or enablement has occurred. Additive container-waste links are immutable/private and transaction sealed with store-scoped FKs. Historical ordinary command JSON, digests and pending reviews remain compatible after installation; application connections require recycling after DDL. Fifteen flag pairs remain false in examples; no operational install or enablement. Additive staff production tables are private and immutable with store-scoped relationships. Internal execution transaction metadata is omitted from old JSON; pending previews and retries survive additive installation. Fifteen native feature pairs remain false in examples; no operational install or enablement.",
       "next_step_or_limit": "Produce a supported baseline plus ordered migrations/seeds/grants, guard/archive legacy loaders, refresh canonical docs and rehearse managed-platform recovery and flags/roles/storage. Synthetic tests are not live deployment inspection.",
       "original_acceptance": "A fresh disposable database bootstraps reproducibly, including private schemas. Import tooling refuses the wrong backend and produces a reconciliation report with no unexplained skipped records.",
       "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
@@ -781,8 +2072,148 @@
           "path": "scripts/import_invoices.py",
           "line": 103,
           "sha256": "6e479f72ef324fc04d20297756734826ee4d1299b944a3721f926b5391e4f904"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_counts.sql",
+          "line": 1,
+          "sha256": "c5767d2a7a145a98ef9aa3c45b67d40a319bee86fe2fce10f171707f19b1402f"
+        },
+        {
+          "path": "backend/prep_containers.py",
+          "line": 1,
+          "sha256": "1a63d9e7e5618c6c5a71024be923d43ef169445946d14b22bec0d0255d09b3f8",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "a3ba4bbe5133dca3708406e97c08dc617cf15ad3e5cc3d5a6450cd3325294425"
+          }
+        },
+        {
+          "path": "migrations/20261007_prep_containers.sql",
+          "line": 1,
+          "sha256": "0a7990d436f3c3ee074e124206663caf22bc9904a23241d782b3ee2b7a68817c"
+        },
+        {
+          "path": "frontend/src/components/PrepContainers.js",
+          "line": 1,
+          "sha256": "da8b89b36ca8c71a5fac01011d5cdefecafc71925ab574c8ec532aee6e3a6eca",
+          "prior_staff_task_anchor": {
+            "line": 1,
+            "sha256": "aab62234922e8bb9c728eab3d8df0c9964baa303fd2349ddd8a3dac1385d17be"
+          }
+        },
+        {
+          "path": "backend/tests/test_prep_containers.py",
+          "line": 1,
+          "sha256": "a208041dcf3412ba5f878a789f14f18af492162bb4834168691388f68a99a7e7"
+        },
+        {
+          "path": "backend/staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "bd63842be910d18ccef5176861f421bd63a32ffcd33449072e04d0808000fce5"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_tasks.sql",
+          "line": 1,
+          "sha256": "a4acf809888e332496bd995550caa0feb382c24521bf20c27a68ab0a8ac6a36a"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepTasks.js",
+          "line": 1,
+          "sha256": "710da9ecf24055d2a48aeecead3e7666cdf0b21fb11d49e16268afdf9dda9aef",
+          "prior_container_waste_anchor": {
+            "line": 1,
+            "sha256": "2455141bbd540f19fd7a93213eddfa60b745e79330514f19c0eba6d9dfbc0608"
+          }
+        },
+        {
+          "path": "backend/tests/test_staff_prep_tasks.py",
+          "line": 1,
+          "sha256": "5a8aefff6715c1035a9b97dbeebb9ea780ac4f3274bb5992ff9f767ad351cc9e"
+        },
+        {
+          "path": "backend/prep_observations.py",
+          "line": 1,
+          "sha256": "8bdf8ed0b7e79efeb013806d4465b19839b22e5cbecc7206cc7d428f0150625f"
+        },
+        {
+          "path": "migrations/20261007_container_waste.sql",
+          "line": 1,
+          "sha256": "00df4208c913dbedbab60466a08af6fa136d280643c8691cdf7767849821a5ab"
+        },
+        {
+          "path": "frontend/src/components/PrepObservations.js",
+          "line": 1,
+          "sha256": "88d6d8c392f93387cc1dad6c0128d1c6470084cb2a9de8a1de862a02f722cfc5"
+        },
+        {
+          "path": "backend/tests/test_container_waste.py",
+          "line": 1,
+          "sha256": "e56a2123593e83b2d30adc22c01b7ff71428b35d2baa6defcf546c052ddfa8e7"
+        },
+        {
+          "path": "frontend/src/components/ContainerWaste.test.js",
+          "line": 1,
+          "sha256": "f63c727eb90fd31712555f35a3331be1495a9509d05fa3e127e06adf2feec6af"
+        },
+        {
+          "path": "backend/staff_prep_production.py",
+          "line": 1,
+          "sha256": "7a324e085215a1aedd82fac4275cc96d5f020223c2de8ac0f3f8b12e04feae89"
+        },
+        {
+          "path": "backend/prep_execution.py",
+          "line": 1,
+          "sha256": "adf7153a89aa20659f0cd7a50b51756c1b3f7b0fbb8a7d3fee84ec2a80411688"
+        },
+        {
+          "path": "migrations/20261007_staff_prep_production.sql",
+          "line": 1,
+          "sha256": "207b7a2159cd332941c8fb778aea5f5e866d2e1006ba0e82ed8c7c2447c1906b"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.js",
+          "line": 1,
+          "sha256": "0a485736d9a82b1aece21e72d86ef79abe8c4329c4c2c73ddf371744b5e4d474"
+        },
+        {
+          "path": "backend/tests/test_staff_prep_production.py",
+          "line": 1,
+          "sha256": "4e1e7443941b64678f1f790d1a37cb850c89481903f47f183de08122635e2d76"
+        },
+        {
+          "path": "frontend/src/components/StaffPrepProduction.test.js",
+          "line": 1,
+          "sha256": "df5b3444255c6423bb74be1559f3aedcb3557a63023157f8a2183b9788d211bc"
         }
-      ]
+      ],
+      "prior_staff_count_assessment": {
+        "status": "open",
+        "conclusion": "Local migrations/recovery are substantially improved; production bootstrap/docs remain incomplete.",
+        "current_assessment": "Versioned native migrations and disposable restore tests now cover the implementation. The public schema remains a reference snapshot; private Toast deployment assets and a complete supported bootstrap/seed/grant sequence are not delivered. DATABASE_SCHEMA/KNOWN_GAPS still describe older Mongo/no-auth behavior, and old migration/import scripts still use name joins or Mongo writes. The additive order-command migration and feature gates are tested locally; examples remain disabled and installed schemas hold legacy order writers even with the new flag off. The additive supplier-contact migration freezes legacy name-based contacts after preserving all raw rows; native dependency flags remain disabled in examples. Switching flags off does not reopen the old writer or name-based email lookup. The planning migration preserves and freezes all legacy standing metadata. New planning and dependency flags remain disabled in examples; flags off do not reopen legacy writes. Operating cutover remains pending. The dated draft migration freezes legacy lists, lines and overrides after raw preservation; dependencies remain false in examples and flag-off does not reopen writers. Whole SQL restore preserves draft/task seals and exact retry evidence. The additive execution migration follows the production/opening boundary and dated drafts, adds immutable command evidence and prevents released edits even with execution disabled. Whole SQL restore preserves release/completion history, task/batch root links and exact retries. All new example flags remain false; supported managed-platform bootstrap and operating cutover remain unfinished. The additive progress migration extends immutable execution evidence without rewriting historical commands or production. Partial root reservation and reconciled task projections survive whole SQL restore. Old command serialization and exact retry are preserved after upgrade; the rehearsal recycles fixture connections after DDL, while the application pool already disables statement caching. Existing execution flags remain false in examples; managed-platform bootstrap/cutover is still pending. The additive staff prep count migration captures and freezes legacy count evidence before installing private immutable sheet/submission/decision storage. Whole SQL restore preserves exact acceptance retry, history and private ACLs. All twelve native feature pairs remain false in examples; operational bootstrap and managed-platform cutover remain pending.",
+        "next_step_or_limit": "Produce a supported baseline plus ordered migrations/seeds/grants, guard/archive legacy loaders, refresh canonical docs and rehearse managed-platform recovery and flags/roles/storage. Synthetic tests are not live deployment inspection.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_assessment": {
+        "status": "open",
+        "conclusion": "Local migrations/recovery are substantially improved; production bootstrap/docs remain incomplete.",
+        "current_assessment": "Versioned native migrations and disposable restore tests now cover the implementation. The public schema remains a reference snapshot; private Toast deployment assets and a complete supported bootstrap/seed/grant sequence are not delivered. DATABASE_SCHEMA/KNOWN_GAPS still describe older Mongo/no-auth behavior, and old migration/import scripts still use name joins or Mongo writes. The additive order-command migration and feature gates are tested locally; examples remain disabled and installed schemas hold legacy order writers even with the new flag off. The additive supplier-contact migration freezes legacy name-based contacts after preserving all raw rows; native dependency flags remain disabled in examples. Switching flags off does not reopen the old writer or name-based email lookup. The planning migration preserves and freezes all legacy standing metadata. New planning and dependency flags remain disabled in examples; flags off do not reopen legacy writes. Operating cutover remains pending. The dated draft migration freezes legacy lists, lines and overrides after raw preservation; dependencies remain false in examples and flag-off does not reopen writers. Whole SQL restore preserves draft/task seals and exact retry evidence. The additive execution migration follows the production/opening boundary and dated drafts, adds immutable command evidence and prevents released edits even with execution disabled. Whole SQL restore preserves release/completion history, task/batch root links and exact retries. All new example flags remain false; supported managed-platform bootstrap and operating cutover remain unfinished. The additive progress migration extends immutable execution evidence without rewriting historical commands or production. Partial root reservation and reconciled task projections survive whole SQL restore. Old command serialization and exact retry are preserved after upgrade; the rehearsal recycles fixture connections after DDL, while the application pool already disables statement caching. Existing execution flags remain false in examples; managed-platform bootstrap/cutover is still pending. The additive staff prep count migration captures and freezes legacy count evidence before installing private immutable sheet/submission/decision storage. Whole SQL restore preserves exact acceptance retry, history and private ACLs. All twelve native feature pairs remain false in examples; operational bootstrap and managed-platform cutover remain pending. The additive container migration retains every original prep stock/log field, freezes competing writes, adds private immutable capacity/profile/fill/movement storage and shared performed-time allocation guards. Restore retains measured contents, transfers, source links and exact retry. All thirteen native feature pairs remain false in examples; operational bootstrap/cutover remains pending.",
+        "next_step_or_limit": "Produce a supported baseline plus ordered migrations/seeds/grants, guard/archive legacy loaders, refresh canonical docs and rehearse managed-platform recovery and flags/roles/storage. Synthetic tests are not live deployment inspection.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_staff_task_assessment": {
+        "status": "open",
+        "conclusion": "Local migrations/recovery are substantially improved; production bootstrap/docs remain incomplete.",
+        "current_assessment": "Versioned native migrations and disposable restore tests now cover the implementation. The public schema remains a reference snapshot; private Toast deployment assets and a complete supported bootstrap/seed/grant sequence are not delivered. DATABASE_SCHEMA/KNOWN_GAPS still describe older Mongo/no-auth behavior, and old migration/import scripts still use name joins or Mongo writes. The additive order-command migration and feature gates are tested locally; examples remain disabled and installed schemas hold legacy order writers even with the new flag off. The additive supplier-contact migration freezes legacy name-based contacts after preserving all raw rows; native dependency flags remain disabled in examples. Switching flags off does not reopen the old writer or name-based email lookup. The planning migration preserves and freezes all legacy standing metadata. New planning and dependency flags remain disabled in examples; flags off do not reopen legacy writes. Operating cutover remains pending. The dated draft migration freezes legacy lists, lines and overrides after raw preservation; dependencies remain false in examples and flag-off does not reopen writers. Whole SQL restore preserves draft/task seals and exact retry evidence. The additive execution migration follows the production/opening boundary and dated drafts, adds immutable command evidence and prevents released edits even with execution disabled. Whole SQL restore preserves release/completion history, task/batch root links and exact retries. All new example flags remain false; supported managed-platform bootstrap and operating cutover remain unfinished. The additive progress migration extends immutable execution evidence without rewriting historical commands or production. Partial root reservation and reconciled task projections survive whole SQL restore. Old command serialization and exact retry are preserved after upgrade; the rehearsal recycles fixture connections after DDL, while the application pool already disables statement caching. Existing execution flags remain false in examples; managed-platform bootstrap/cutover is still pending. The additive staff prep count migration captures and freezes legacy count evidence before installing private immutable sheet/submission/decision storage. Whole SQL restore preserves exact acceptance retry, history and private ACLs. All twelve native feature pairs remain false in examples; operational bootstrap and managed-platform cutover remain pending. The additive container migration retains every original prep stock/log field, freezes competing writes, adds private immutable capacity/profile/fill/movement storage and shared performed-time allocation guards. Restore retains measured contents, transfers, source links and exact retry. All thirteen native feature pairs remain false in examples; operational bootstrap/cutover remains pending. The additive staff assignment migration pins current released tasks and active local roster snapshots with composite FKs, immutable history and private ACLs. Fourteen native feature pairs remain false in examples; no operational migration or enablement has occurred.",
+        "next_step_or_limit": "Produce a supported baseline plus ordered migrations/seeds/grants, guard/archive legacy loaders, refresh canonical docs and rehearse managed-platform recovery and flags/roles/storage. Synthetic tests are not live deployment inspection.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      },
+      "prior_container_waste_assessment": {
+        "status": "open",
+        "conclusion": "Local migrations/recovery are substantially improved; production bootstrap/docs remain incomplete.",
+        "current_assessment": "Versioned native migrations and disposable restore tests now cover the implementation. The public schema remains a reference snapshot; private Toast deployment assets and a complete supported bootstrap/seed/grant sequence are not delivered. DATABASE_SCHEMA/KNOWN_GAPS still describe older Mongo/no-auth behavior, and old migration/import scripts still use name joins or Mongo writes. The additive order-command migration and feature gates are tested locally; examples remain disabled and installed schemas hold legacy order writers even with the new flag off. The additive supplier-contact migration freezes legacy name-based contacts after preserving all raw rows; native dependency flags remain disabled in examples. Switching flags off does not reopen the old writer or name-based email lookup. The planning migration preserves and freezes all legacy standing metadata. New planning and dependency flags remain disabled in examples; flags off do not reopen legacy writes. Operating cutover remains pending. The dated draft migration freezes legacy lists, lines and overrides after raw preservation; dependencies remain false in examples and flag-off does not reopen writers. Whole SQL restore preserves draft/task seals and exact retry evidence. The additive execution migration follows the production/opening boundary and dated drafts, adds immutable command evidence and prevents released edits even with execution disabled. Whole SQL restore preserves release/completion history, task/batch root links and exact retries. All new example flags remain false; supported managed-platform bootstrap and operating cutover remain unfinished. The additive progress migration extends immutable execution evidence without rewriting historical commands or production. Partial root reservation and reconciled task projections survive whole SQL restore. Old command serialization and exact retry are preserved after upgrade; the rehearsal recycles fixture connections after DDL, while the application pool already disables statement caching. Existing execution flags remain false in examples; managed-platform bootstrap/cutover is still pending. The additive staff prep count migration captures and freezes legacy count evidence before installing private immutable sheet/submission/decision storage. Whole SQL restore preserves exact acceptance retry, history and private ACLs. All twelve native feature pairs remain false in examples; operational bootstrap and managed-platform cutover remain pending. The additive container migration retains every original prep stock/log field, freezes competing writes, adds private immutable capacity/profile/fill/movement storage and shared performed-time allocation guards. Restore retains measured contents, transfers, source links and exact retry. All thirteen native feature pairs remain false in examples; operational bootstrap/cutover remains pending. The additive staff assignment migration pins current released tasks and active local roster snapshots with composite FKs, immutable history and private ACLs. Fourteen native feature pairs remain false in examples; no operational migration or enablement has occurred. Additive container-waste links are immutable/private and transaction sealed with store-scoped FKs. Historical ordinary command JSON, digests and pending reviews remain compatible after installation; application connections require recycling after DDL. Fourteen flag pairs remain false in examples; no operational install or enablement.",
+        "next_step_or_limit": "Produce a supported baseline plus ordered migrations/seeds/grants, guard/archive legacy loaders, refresh canonical docs and rehearse managed-platform recovery and flags/roles/storage. Synthetic tests are not live deployment inspection.",
+        "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim."
+      }
     },
     {
       "id": "R20",
@@ -798,7 +2229,11 @@
         {
           "path": "frontend/src/App.js",
           "line": 75,
-          "sha256": "b4b519cdeda6650652afe06f013754df1c6bf8cd81321cf28ebd160f11294bf8"
+          "sha256": "2898dc57e7779ed0ba3b8c4e093b88f83b9d655864979719d32e0fc5eb22652e",
+          "prior_published_anchor": {
+            "line": 75,
+            "sha256": "b4b519cdeda6650652afe06f013754df1c6bf8cd81321cf28ebd160f11294bf8"
+          }
         },
         {
           "path": "frontend/src/lib/useStoreState.js",
@@ -876,7 +2311,8 @@
         "R07"
       ],
       "deliverable": "Resolve retained task/list schema keys or retire those paths; connect staff/tasks/counts/containers and service semantics to native facts; remove competing stock writers/readers. Carry acknowledgement and draft protection through every direct operating API.",
-      "completion": "Daily and bulk workflows coexist; vessel tasks can complete safely or have an equivalent native workflow; submitted counts are immutable; container moves preserve identity/quantity; no prep/service/sales writeback to Track 1."
+      "completion": "Daily and bulk workflows coexist; vessel tasks can complete safely or have an equivalent native workflow; submitted counts are immutable; container moves preserve identity/quantity; no prep/service/sales writeback to Track 1.",
+      "local_progress": "Native staff counts, containers, waste, assignment, staff production submission/manager acceptance and explicit partial/finished progress complete locally. Historical dependency correction, sales consumption and remaining legacy operating cutover remain."
     },
     {
       "step": 5,
@@ -918,7 +2354,7 @@
     "sha256": "20ba0f8ec5fbfe4bfa3629f21adf441766eecc861d653adc0a9eae90eac6fb96",
     "source_paths_verified": 143
   },
-  "publication_boundary": "PR #14 remains draft at a472c8674a7e3f173e838907e1b9d13d7665a028. Cumulative menu, price, order, supplier-contact, prep-planning and dated-draft changes remain local and uncommitted; no new push, merge, enablement or deployment.",
+  "publication_boundary": "Published PR #14 and #15 branches are unchanged. PR #15 remains at ae10c8cab319b7f1ed842711076bacd132653f43. Cumulative continuation remains local, uncommitted and unpublished; no push, merge, operational migration or enablement.",
   "published_checkpoint": {
     "url": "https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/14",
     "commit": "a472c8674a7e3f173e838907e1b9d13d7665a028",
@@ -935,11 +2371,11 @@
     "production_build": "passed with three existing warnings"
   },
   "local_continuation_evidence": {
-    "baseline": "a472c8674a7e3f173e838907e1b9d13d7665a028",
-    "document": "docs/PREP_DAY_DRAFT_INTEGRITY.md",
-    "archive": "JayMax-prep-day-tasks-2026-10-07-review-package.zip",
-    "scope": "Cumulative unpublished continuation plus reviewed dated Track 2 drafts, separate daily/bulk identity, sealed tasks, explicit day overrides, physical-count provenance and legacy day holds",
-    "new_migration": "20261007_prep_day_tasks.sql"
+    "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+    "document": "docs/STAFF_PREP_PRODUCTION_INTEGRITY.md",
+    "archive": "JayMax-staff-production-2026-10-07-review-package.zip",
+    "scope": "Immutable claimed staff production submissions and manager acceptance atomically creating one measured batch, task link and optional explicit finish; Track 1 independent",
+    "new_migration": "20261007_staff_prep_production.sql"
   },
   "prior_local_menu_evidence": {
     "baseline": "a472c8674a7e3f173e838907e1b9d13d7665a028",
@@ -1040,7 +2476,250 @@
   },
   "local_continuation": {
     "status": "Local, uncommitted and unpublished",
-    "description": "Multiple whole-batch progress, explicit task finish and reviewed correction/void reconciliation; no accounting movements",
-    "new_migration": "20261007_prep_progress.sql"
+    "branch": "codex/staff-prep-count-continuation",
+    "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+    "description": "Cumulative staff counts, containers/waste, assignments and staff production acceptance; Track 1 independent",
+    "new_migration": "20261007_staff_prep_production.sql"
+  },
+  "prior_published_workflow_evidence": {
+    "url": "https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/15",
+    "commit": "ae10c8cab319b7f1ed842711076bacd132653f43",
+    "implementation_evidence": {
+      "frontend_checks": 329,
+      "frontend_suites": 40,
+      "selected_backend_functions": 30,
+      "offline_checks": 23,
+      "backend_case_groups": {
+        "PrepProgress": 26,
+        "ProgressValidation": 1,
+        "ProgressUpgrade": 1,
+        "ObservationBoundary": 2
+      },
+      "production_build": "passed with three existing hook warnings",
+      "progress_restore": "verified immutable links, multiple-batch totals, reconciliations and exact retry readback",
+      "old_schema_upgrade": "preserved original command records/review hashes/request digests with connections recycled after DDL",
+      "main_run": "28 passed; connection timeout and test cached-statement error rechecked successfully",
+      "backend_rechecks": 2,
+      "frontend_test_flags": {
+        "REACT_APP_NATIVE_PURCHASES": "true",
+        "REACT_APP_ACTUAL_INVENTORY": "true",
+        "REACT_APP_CATALOG_MAPPING": "true",
+        "REACT_APP_ORDER_WORKFLOW": "true",
+        "REACT_APP_SUPPLIER_CONTACTS": "true",
+        "REACT_APP_PREP_SETUP": "true",
+        "REACT_APP_PREP_PLANNING": "true",
+        "REACT_APP_PREP_BATCHES": "true",
+        "REACT_APP_PREP_OBSERVATIONS": "true",
+        "REACT_APP_PREP_DAY_TASKS": "true",
+        "REACT_APP_PREP_EXECUTION": "true"
+      },
+      "result_files": "Local October 7 execution review package outside Git; no production/browser proof"
+    },
+    "local_continuation": {
+      "status": "Local, uncommitted and unpublished",
+      "description": "Multiple whole-batch progress, explicit task finish and reviewed correction/void reconciliation; no accounting movements",
+      "new_migration": "20261007_prep_progress.sql"
+    },
+    "local_continuation_evidence": {
+      "baseline": "a472c8674a7e3f173e838907e1b9d13d7665a028",
+      "document": "docs/PREP_DAY_DRAFT_INTEGRITY.md",
+      "archive": "JayMax-prep-day-tasks-2026-10-07-review-package.zip",
+      "scope": "Cumulative unpublished continuation plus reviewed dated Track 2 drafts, separate daily/bulk identity, sealed tasks, explicit day overrides, physical-count provenance and legacy day holds",
+      "new_migration": "20261007_prep_day_tasks.sql"
+    }
+  },
+  "prior_local_staff_count_evidence": {
+    "implementation_evidence": {
+      "frontend_checks": 348,
+      "frontend_suites": 42,
+      "selected_backend_functions": 25,
+      "offline_checks": 23,
+      "backend_case_groups": {
+        "StaffPrep": 13,
+        "PrepDay": 10,
+        "ObservationBoundary": 2
+      },
+      "production_build": "passed with three existing hook warnings",
+      "staff_count_restore": "verified immutable history, accepted measurement, private ACLs and exact acceptance retry",
+      "backend_runs": "23 passed main; 13 passed final with two new cases; 25 distinct functions",
+      "frontend_test_flags": {
+        "REACT_APP_NATIVE_PURCHASES": "true",
+        "REACT_APP_ACTUAL_INVENTORY": "true",
+        "REACT_APP_CATALOG_MAPPING": "true",
+        "REACT_APP_ORDER_WORKFLOW": "true",
+        "REACT_APP_SUPPLIER_CONTACTS": "true",
+        "REACT_APP_PREP_SETUP": "true",
+        "REACT_APP_PREP_PLANNING": "true",
+        "REACT_APP_PREP_BATCHES": "true",
+        "REACT_APP_PREP_OBSERVATIONS": "true",
+        "REACT_APP_PREP_DAY_TASKS": "true",
+        "REACT_APP_PREP_EXECUTION": "true",
+        "REACT_APP_STAFF_PREP_COUNTS": "true"
+      },
+      "result_files": "JayMax-staff-prep-counts-2026-10-07-review-package.zip outside Git"
+    },
+    "continuation": {
+      "status": "Local, uncommitted and unpublished",
+      "branch": "codex/staff-prep-count-continuation",
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "description": "Issued prep scope, immutable staff measurements, reviewed acceptance, exact retry and preserved/frozen legacy counts; no Track 1 writes",
+      "new_migration": "20261007_staff_prep_counts.sql"
+    },
+    "checkpoint": {
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "document": "docs/STAFF_PREP_COUNT_INTEGRITY.md",
+      "archive": "JayMax-staff-prep-counts-2026-10-07-review-package.zip",
+      "scope": "Issued prep scope, immutable staff measurements, reviewed acceptance, exact retry and preserved/frozen legacy counts; no Track 1 writes",
+      "new_migration": "20261007_staff_prep_counts.sql"
+    },
+    "archive_sha256": "8694ae32b1251799376352b2ebb64846152537274bde5f2dcd1f9ab2fc1bde80"
+  },
+  "prior_local_container_evidence": {
+    "implementation_evidence": {
+      "frontend_checks": 363,
+      "frontend_suites": 44,
+      "selected_backend_functions": 56,
+      "offline_checks": 23,
+      "backend_case_groups": {
+        "PrepBatchTests": 21,
+        "ObservationBoundaryTests": 2,
+        "PrepObservationTests": 17,
+        "ContainerValidationTests": 1,
+        "PrepContainerTests": 15
+      },
+      "production_build": "passed with three existing hook warnings",
+      "container_restore": "verified measured contents, immutable transfers, private ACLs, source links and exact retry",
+      "backend_runs": {
+        "main_checks": 55,
+        "opening_source_checks": 1
+      },
+      "frontend_test_flags": {
+        "REACT_APP_NATIVE_PURCHASES": "true",
+        "REACT_APP_ACTUAL_INVENTORY": "true",
+        "REACT_APP_CATALOG_MAPPING": "true",
+        "REACT_APP_ORDER_WORKFLOW": "true",
+        "REACT_APP_SUPPLIER_CONTACTS": "true",
+        "REACT_APP_PREP_SETUP": "true",
+        "REACT_APP_PREP_PLANNING": "true",
+        "REACT_APP_PREP_BATCHES": "true",
+        "REACT_APP_PREP_OBSERVATIONS": "true",
+        "REACT_APP_PREP_DAY_TASKS": "true",
+        "REACT_APP_PREP_EXECUTION": "true",
+        "REACT_APP_STAFF_PREP_COUNTS": "true",
+        "REACT_APP_PREP_CONTAINERS": "true"
+      },
+      "result_files": "JayMax-prep-containers-2026-10-07-review-package.zip outside Git"
+    },
+    "continuation": {
+      "status": "Local, uncommitted and unpublished",
+      "branch": "codex/staff-prep-count-continuation",
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "description": "Cumulative staff prep counts plus measured container capacity/profile/fill and internal storage/service movements; accounting and consumption independent",
+      "new_migration": "20261007_prep_containers.sql"
+    },
+    "checkpoint": {
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "document": "docs/PREP_CONTAINER_INTEGRITY.md",
+      "archive": "JayMax-prep-containers-2026-10-07-review-package.zip",
+      "scope": "Cumulative staff prep counts plus measured container capacity/profile/fill and internal storage/service movements; accounting and consumption independent",
+      "new_migration": "20261007_prep_containers.sql"
+    },
+    "archive_sha256": "4577fc20ccef169df22148d5c6b2d48581efc3be979fd63b0f1688ce138fd93c"
+  },
+  "prior_local_staff_task_evidence": {
+    "implementation_evidence": {
+      "frontend_checks": 378,
+      "frontend_suites": 46,
+      "selected_backend_functions": 14,
+      "offline_checks": 23,
+      "backend_case_groups": {
+        "StaffTaskValidationTests": 1,
+        "StaffTaskTests": 10,
+        "PrepExecutionTests": 2,
+        "StaffPrepCountsTests": 1
+      },
+      "production_build": "passed with three existing hook warnings",
+      "staff_assignment_restore": "verified original assignment/history, current dated plan, private ACLs and exact retry",
+      "frontend_test_flags": {
+        "REACT_APP_NATIVE_PURCHASES": "true",
+        "REACT_APP_ACTUAL_INVENTORY": "true",
+        "REACT_APP_CATALOG_MAPPING": "true",
+        "REACT_APP_ORDER_WORKFLOW": "true",
+        "REACT_APP_SUPPLIER_CONTACTS": "true",
+        "REACT_APP_PREP_SETUP": "true",
+        "REACT_APP_PREP_PLANNING": "true",
+        "REACT_APP_PREP_BATCHES": "true",
+        "REACT_APP_PREP_OBSERVATIONS": "true",
+        "REACT_APP_PREP_DAY_TASKS": "true",
+        "REACT_APP_PREP_EXECUTION": "true",
+        "REACT_APP_STAFF_PREP_COUNTS": "true",
+        "REACT_APP_PREP_CONTAINERS": "true",
+        "REACT_APP_STAFF_PREP_TASKS": "true"
+      },
+      "result_files": "JayMax-staff-prep-tasks-2026-10-07-review-package.zip outside Git"
+    },
+    "continuation": {
+      "status": "Local, uncommitted and unpublished",
+      "branch": "codex/staff-prep-count-continuation",
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "description": "Cumulative staff prep counts, measured containers/service transfers plus native staff read/assignment access; Track 1 remains independent",
+      "new_migration": "20261007_staff_prep_tasks.sql"
+    },
+    "checkpoint": {
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "document": "docs/STAFF_PREP_TASK_INTEGRITY.md",
+      "archive": "JayMax-staff-prep-tasks-2026-10-07-review-package.zip",
+      "scope": "Local manager-reviewed immutable assignments/reassignments and explicit-date location-authorized staff prep reads; no production, consumption or accounting writes",
+      "new_migration": "20261007_staff_prep_tasks.sql"
+    },
+    "archive_sha256": "55629431cb94a0bd69dc0e349015379b2643f0493352162d8e46327b063f55a2"
+  },
+  "prior_local_container_waste_evidence": {
+    "implementation_evidence": {
+      "frontend_checks": 390,
+      "frontend_suites": 47,
+      "selected_backend_functions": 44,
+      "offline_checks": 23,
+      "backend_case_groups": {
+        "ObservationBoundaryTests": 2,
+        "PrepObservationTests": 17,
+        "ContainerWasteValidationTests": 1,
+        "ContainerWasteTests": 24
+      },
+      "production_build": "passed with three existing hook warnings",
+      "container_waste_restore": "verified paired history, exact retry, original ordinary command compatibility and private ACLs",
+      "frontend_test_flags": {
+        "REACT_APP_NATIVE_PURCHASES": "true",
+        "REACT_APP_ACTUAL_INVENTORY": "true",
+        "REACT_APP_CATALOG_MAPPING": "true",
+        "REACT_APP_ORDER_WORKFLOW": "true",
+        "REACT_APP_SUPPLIER_CONTACTS": "true",
+        "REACT_APP_PREP_SETUP": "true",
+        "REACT_APP_PREP_PLANNING": "true",
+        "REACT_APP_PREP_BATCHES": "true",
+        "REACT_APP_PREP_OBSERVATIONS": "true",
+        "REACT_APP_PREP_DAY_TASKS": "true",
+        "REACT_APP_PREP_EXECUTION": "true",
+        "REACT_APP_STAFF_PREP_COUNTS": "true",
+        "REACT_APP_PREP_CONTAINERS": "true",
+        "REACT_APP_STAFF_PREP_TASKS": "true"
+      },
+      "result_files": "JayMax-container-waste-2026-10-07-review-package.zip outside Git"
+    },
+    "continuation": {
+      "status": "Local, uncommitted and unpublished",
+      "branch": "codex/staff-prep-count-continuation",
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "description": "Cumulative staff counts, measured containers, native staff assignments and paired measured container waste/reversal; Track 1 remains independent",
+      "new_migration": "20261007_container_waste.sql"
+    },
+    "checkpoint": {
+      "baseline": "ae10c8cab319b7f1ed842711076bacd132653f43",
+      "document": "docs/CONTAINER_WASTE_INTEGRITY.md",
+      "archive": "JayMax-container-waste-2026-10-07-review-package.zip",
+      "scope": "Paired measured storage/service waste and latest reversal; immutable allocation and observation links; no Track 1 accounting or sales consumption writes",
+      "new_migration": "20261007_container_waste.sql"
+    },
+    "archive_sha256": "5d543dae04e10a04d35e670c67401588dedf7e0cc43aa386322f6e90b71cf09e"
   }
 }

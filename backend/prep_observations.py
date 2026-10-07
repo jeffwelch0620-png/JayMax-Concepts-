@@ -114,9 +114,12 @@ async def predecessor(conn, store, purpose, ident):
     return dict(row)
 
 
-async def preview(conn, store, purpose, body=None, old_id=None, change=None):
+async def preview(conn, store, purpose, body=None, old_id=None, change=None, container_fill_id=None):
     await ready(conn)
     old = await predecessor(conn, store, purpose, old_id) if old_id else None
+    linked = await conn.fetchval("SELECT to_regclass('prep_inventory.container_waste_links') IS NOT NULL")
+    if old and linked and await conn.fetchval('SELECT 1 FROM prep_inventory.container_waste_links WHERE observation_id=$1',old_id):
+        if not container_fill_id: raise HTTPException(409, 'Container waste requires its paired container reversal; use the container history')
     kind = change.kind if change else 'initial'
     if old and purpose == 'count' and await conn.fetchval("SELECT to_regclass('prep_inventory.opening_decisions') IS NOT NULL"):
         if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM prep_inventory.batch_events b JOIN prep_inventory.opening_decisions d ON d.id=b.opening_decision_id
@@ -156,8 +159,17 @@ async def preview(conn, store, purpose, body=None, old_id=None, change=None):
                 mapping.conversion(unit, source['base_unit'], body.factor)
                 p.update(raw_item_code=body.raw_item_code, base_unit=source['base_unit'], source={'raw': dict(source)})
             else:
-                product = await mapping.current_product(conn, store, body.product_version_id)
-                profile = await mapping.current_profile(conn, store, body.profile_id, body.product_version_id)
+                if container_fill_id:
+                    frozen = await conn.fetchrow('''SELECT p.product_version_id,p.unit_profile_id,f.source_batch_id,f.product_id,f.factor
+                        FROM prep_inventory.container_fills f JOIN prep_inventory.container_profiles p ON p.id=f.profile_id
+                        WHERE f.id=$1 AND f.store_id=$2''',container_fill_id,store)
+                    if not frozen or (body.product_version_id,body.profile_id,body.source_batch_id,body.factor) != (frozen['product_version_id'],frozen['unit_profile_id'],frozen['source_batch_id'],frozen['factor']):
+                        raise HTTPException(422, 'Container waste retains the original measured food conversion and lot')
+                    product = dict(await conn.fetchrow('SELECT * FROM prep_inventory.product_versions WHERE id=$1',body.product_version_id))
+                    profile = dict(await conn.fetchrow('SELECT * FROM prep_inventory.unit_profiles WHERE id=$1',body.profile_id))
+                else:
+                    product = await mapping.current_product(conn, store, body.product_version_id)
+                    profile = await mapping.current_profile(conn, store, body.profile_id, body.product_version_id)
                 if unit != profile['source_unit'] or body.factor != profile['base_units_per_source_unit']:
                     raise HTTPException(422, 'Prepared waste requires the exact verified unit conversion')
                 lot = await conn.fetchrow('''SELECT * FROM prep_inventory.batch_events e WHERE e.id=$1 AND e.store_id=$2 AND e.product_id=$3
@@ -166,7 +178,7 @@ async def preview(conn, store, purpose, body=None, old_id=None, change=None):
                     raise HTTPException(422, 'Choose a current recorded lot produced before this waste')
                 p.update(product_id=product['product_id'], base_unit=product['base_unit'], source_batch_id=lot['id'],
                          source={'product': product, 'profile': profile, 'batch': {k: lot[k] for k in ('id', 'product_id', 'product_version_id', 'recipe_version_id', 'performed_at', 'review_hash')}})
-                p['availableAfterReversal'] = batches.exact_sum([await batches.available(conn, lot['id']), released.get(lot['id'], Decimal(0))])
+                p['availableAfterReversal'] = batches.exact_sum([await batches.available(conn, lot['id'], body.performed_at), released.get(lot['id'], Decimal(0)), mapping.times(body.quantity,body.factor) if container_fill_id else Decimal(0)])
             p['factor'] = body.factor; p['baseQuantity'] = mapping.times(body.quantity, body.factor)
             if body.source_kind == 'prepared' and p['baseQuantity'] > p['availableAfterReversal']:
                 raise HTTPException(409, 'Recorded source output is insufficient for this waste; refresh and review')
@@ -195,6 +207,7 @@ async def preview(conn, store, purpose, body=None, old_id=None, change=None):
     p.update(purpose=purpose, kind=kind, predecessor_id=old_id, root_id=old['root_id'] if old else None,
              revision=old['revision']+1 if old else 1, reason=change.reason if change else body.note,
              cost={'status': 'not_calculated', 'amount': None})
+    if container_fill_id: p['container_fill_id'] = str(container_fill_id)
     for m in p['movements']: m['quantity'] = format(m['quantity'], 'f')
     for l in p['lines']:
         for k in ('quantity', 'factor', 'base_quantity'): l[k] = format(l[k], 'f')

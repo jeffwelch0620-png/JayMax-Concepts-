@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, X, Check, ChevronDown, ChevronUp, ChefHat, ClipboardList, Inbox, Bell, BellOff, Save } from "lucide-react";
 import { RESTAURANTS, num, fmtDate, isCountActive, todayISO } from "../lib/calc";
 import * as api from "../lib/api";
 import { StaffCountDrafts } from "./StaffCountDrafts";
+import { StaffPrepCountDrafts } from "./StaffPrepCounts";
+import { StaffPrepTaskPlan } from "./StaffPrepTasks";
 import { enablePushNotifications, disablePushNotifications, pushSupported } from "../lib/push";
 import { inpCls, btnAcc, btnGhost, cardCls, Pill } from "./common";
 import { useCountSheet, CountSheetControls, CountSheetBanner, CountSheetList, SaveAllCountsButton } from "./CountSheet";
@@ -21,7 +23,9 @@ const VIEWS = [
   { id: "counts", label: "Counts", icon: ClipboardList },
 ];
 
-export function StaffSheet({ onClose, onElevate }) {
+export function StaffSheet({ onClose, onElevate, drafts }) {
+  const privatePrepCountDrafts = useRef(new Map());
+  const prepCountDrafts = drafts || privatePrepCountDrafts.current;
   const [rid, setRid] = useState("");
   const [track, setTrack] = useState("daily");
   const [pin, setPin] = useState("");
@@ -36,6 +40,7 @@ export function StaffSheet({ onClose, onElevate }) {
   const [roster, setRoster] = useState(null);
   const [identifying, setIdentifying] = useState(false);
   const [staffName, setStaffName] = useState("");
+  const [staffId, setStaffId] = useState(null);
 
   // Prep view state
   const [sheet, setSheet] = useState(null);
@@ -88,6 +93,12 @@ export function StaffSheet({ onClose, onElevate }) {
     setErr("");
     setIdentifying(true);
     try {
+      if (api.staffPrepTasksEnabled) {
+        const member = roster?.find(m => m.id === staffId);
+        if (!member) throw new Error("Choose a current roster member");
+        setStaffId(member.id); setStaffName(member.name); setTaskName(member.name); setCountsName(member.name);
+        setRoster(null); setUnlocked(true); setView("tasks"); await refreshTasks(); return;
+      }
       const r = await api.identifyStaffMember(rid, pin, staffId);
       if (r.role === "owner_admin" && r.session) { onElevate?.(r.session); return; }
       setStaffName(r.name || "");
@@ -102,10 +113,12 @@ export function StaffSheet({ onClose, onElevate }) {
   }
 
   function lock() {
+    for (const key of prepCountDrafts.keys()) if (key.startsWith("staff-prep-submit:")||key.startsWith("staff-production-submit:")) prepCountDrafts.delete(key);
     setUnlocked(false);
     setPin("");
     setRoster(null);
     setStaffName("");
+    setStaffId(null);
     setSheet(null);
     setTasks(null);
     setCounts(null);
@@ -140,6 +153,7 @@ export function StaffSheet({ onClose, onElevate }) {
 
   // ---------------- Prep view ----------------
   async function loadPrep() {
+    if (api.staffPrepTasksEnabled) return;
     try { setSheet(await api.staffPrepsheet(rid, pin, track)); } catch { /* keep current */ }
   }
   useEffect(() => {
@@ -239,7 +253,7 @@ export function StaffSheet({ onClose, onElevate }) {
                 })}
               </div>
               <div className="flex gap-2">
-                {staffName && <span className="text-xs text-slate-500 self-center" data-testid="staff-identified-as">Signed in as {staffName}</span>}
+                {staffName && <span className="text-xs text-slate-500 self-center" data-testid="staff-identified-as">{api.staffPrepTasksEnabled ? "Selected roster name: " : "Signed in as "}{staffName}</span>}
                 {pushSupported() && (
                   <button className={btnGhost} onClick={togglePush} disabled={pushBusy} data-testid="staff-push-toggle">
                     {pushOn ? <Bell size={13} /> : <BellOff size={13} />} {pushOn ? "Notifications On" : "Enable Notifications"}
@@ -262,14 +276,16 @@ export function StaffSheet({ onClose, onElevate }) {
             )}
 
             {view === "prep" && (
-              <PrepView restaurant={restaurant} track={track} setTrack={setTrack} sheet={sheet} onRefresh={loadPrep}
+              api.staffPrepTasksEnabled ? <><select aria-label="Staff prep track" className={inpCls} value={track} onChange={e=>setTrack(e.target.value)}>{TRACKS.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}</select><StaffPrepTaskPlan key={rid} rid={rid} pin={pin} staffId={staffId} track={track} drafts={prepCountDrafts}/></> : <PrepView restaurant={restaurant} track={track} setTrack={setTrack} sheet={sheet} onRefresh={loadPrep}
                 expanded={expanded} setExpanded={setExpanded}
                 onComplete={(t) => { setCompleting(t); setBatches(t.remaining); setName(staffName); setErr(""); }} />
             )}
 
             {view === "counts" && (
-              api.actualInventoryEnabled ? <StaffCountDrafts key={rid} restaurantId={rid} pin={pin} counterName={staffName || countsName} /> : <CountsView restaurant={restaurant} counts={counts} onRefresh={loadCounts}
+              <><div>{api.staffPrepCountsEnabled && <StaffPrepCountDrafts key={`prep:${rid}`} rid={rid} pin={pin} counterName={staffName || countsName} drafts={prepCountDrafts}/>}</div>
+              {api.actualInventoryEnabled ? <StaffCountDrafts key={rid} restaurantId={rid} pin={pin} counterName={staffName || countsName} /> : <CountsView restaurant={restaurant} counts={counts} onRefresh={loadCounts}
                 name={countsName} setName={setCountsName} onSave={saveCounts} setErr={setErr} />
+              }</>
             )}
           </>
         )}

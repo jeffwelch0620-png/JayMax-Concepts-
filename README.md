@@ -1,5 +1,129 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local continuation — staff production acceptance, October 7, 2026
+
+Staff now submit measured production against current native assignments. Immutable
+revisions, withdrawals and manager rejections record no inventory. Reviewed
+acceptance creates one measured batch and task link atomically, with an optional
+explicit finish event. Partial output does not automatically complete a task.
+Track 1 purchased inventory and Food Cost remain independent.
+
+Read [staff production integrity](docs/STAFF_PREP_PRODUCTION_INTEGRITY.md) for
+measurement, claimed identity, source availability, correction, retry and SQL
+recovery contracts. Reassignment, roster changes, source drift and stale reviews
+are held. Shared PIN access and roster names remain claimed identities; PINs are
+excluded from retained drafts and database snapshots. Accepted corrections use
+the existing manager batch/reconciliation workflows. Independent new reports
+still require manager review for overlapping physical work.
+
+Current local evidence: **404 frontend tests / 49 suites**, **36 distinct
+backend checks**, **23 offline checks**, whole SQL restore and production build
+with three existing hook warnings. Backend coverage combines the passing regression
+checks with the corrected authorization/retry recheck, without double counting. Review totals remain **seven fixed, 12 open,
+one deferred**. All fifteen native feature pairs remain false in examples.
+The prior container-waste snapshot is retained unchanged. PR #15 remains at its
+published commit; no continuation commit, push, operational migration or enablement.
+
+Next: remaining legacy operating endpoint and historical correction review, then
+a combined cutover and recovery trial before operational publication.
+
+## Previous local checkpoint — paired container waste, October 7, 2026
+
+Measured storage/service discard now saves the contents reduction and matching
+waste journal entry together. Exact frozen fill conversions, immutable links,
+location serialization and request-key replay prevent partial saves and double
+loss. The latest erroneous waste can be reversed only together with its matching
+observation; later activity holds earlier corrections. Track 1 purchased-item
+inventory values and Food Cost remain independent.
+
+Read [container waste integrity](docs/CONTAINER_WASTE_INTEGRITY.md) for measurement,
+source allocation, correction, retry, SQL seals and additive upgrade contracts.
+The UI validates both saved effects and directs linked corrections to paired
+reversal. Staff production submissions/acceptance, sales consumption and full
+historical dependency correction remain future work. All fourteen native feature
+pairs remain false in examples; application connections must be recycled after DDL.
+
+Current local evidence: **390 frontend tests / 47 suites**, **44 selected backend
+checks**, **23 offline checks**, whole SQL restore and production build with three
+existing hook warnings. Review totals remain **seven fixed, 12 open, one deferred**.
+The prior staff-task snapshot and earlier test attempts are preserved unchanged.
+PR #15 remains at its published commit. No continuation commit, push, operational
+migration, real import or feature enablement occurred.
+
+Next: immutable staff production submissions and manager acceptance using the
+native assignments, with accepted measured production recorded once.
+
+## Previous local checkpoint — staff prep access and assignments, October 7, 2026
+
+The unpublished continuation now adds manager-reviewed assignments, reassignment
+and unassignment with immutable task/roster IDs and history. Staff read the
+released native plan for an explicit date and daily/bulk track; there is no
+fallback to an older list. Claimed roster names do not grant manager permissions.
+Assigned staff identities are archived instead of deleted. Production recording,
+completion review and Track 1 Food Cost remain independent of assignments.
+
+Read [staff task integrity](docs/STAFF_PREP_TASK_INTEGRITY.md) for scope, identities,
+SQL guards, retry and recovery contracts. Exact saved requests remain confirmable
+after reassignment or replacement of the dated draft. The installed schema holds
+legacy PostgreSQL staff prep reads/completions even with flags off. Native staff
+roster selection does not invoke legacy shared-PIN elevation. Staff production
+submissions, direct container waste and broader authentication/cutover remain open.
+All fourteen native feature pairs remain false in examples.
+
+Current local evidence: **378 frontend tests / 46 suites**, **14 selected backend
+checks**, **23 offline checks**, whole SQL restore and production build with three
+existing hook warnings. Prior 56-check container evidence is preserved separately;
+these counts describe the checks actually run for each checkpoint. Review totals
+remain **seven fixed, 12 open, one deferred**. PR #15 stays unchanged. No local
+continuation commit, push, operational migration, real import or enablement.
+
+Next: atomic direct container waste and reversals, then immutable staff production
+submissions and manager decisions using these stable assignments.
+
+## Previous local checkpoint — measured prep containers, October 7, 2026
+
+The unpublished branch `codex/staff-prep-count-continuation` now adds measured
+container capacity definitions, product-specific fill profiles and partial
+storage/service movements. Actual contents reserve recorded native prep output;
+send/return preserve it and unpack releases it to its original lot. Stated,
+brimful and usable capacities remain distinct. Future unpacking cannot fund
+backdated prep, waste or fills. No service transfer counts as consumption or
+changes Track 1 accounting.
+
+Read [container integrity](docs/PREP_CONTAINER_INTEGRITY.md) for conversion,
+history, date, migration, retry and recovery contracts. Legacy PostgreSQL prep
+stock/log writers are held after installation even with flags off. Direct
+container waste/consumption and staff task access remain open. The new gates
+remain false in examples.
+
+Current local evidence: 363 frontend tests/44 suites, 56 distinct selected
+backend checks, 23 offline checks, whole SQL restore and production build.
+Review totals remain **seven fixed, 12 open, one deferred**. PR #15 stays unchanged;
+this cumulative staff-count/container continuation is local and unpublished.
+Next: staff task access/assignment and the remaining service/waste contracts.
+
+## Previous local checkpoint — staff prep counts, October 7, 2026
+
+The unpublished branch `codex/staff-prep-count-continuation` starts from PR #15's
+publication commit `ae10c8cab319b7f1ed842711076bacd132653f43`. It adds manager-issued
+full prepared-inventory sheets, immutable staff measurement revisions, exact retries
+and reviewed acceptance into the native prep-count journal. Blank stays unknown;
+zero means measured empty. Scope, units and physical dates are pinned. Original
+legacy prep count fields are preserved and the old session/line writers are held
+after the additive migration, even with the new feature flag off.
+
+Read [staff prep count integrity](docs/STAFF_PREP_COUNT_INTEGRITY.md) for the data,
+access, migration, save/retry and recovery contracts. Track 1 quantities, values,
+purchases and Food Cost remain independent. Existing staff/PIN authorization is
+reused with honest attribution; login redesign and verified task assignment remain
+future work. The new backend/frontend gates remain false in example files.
+
+Current local evidence: 348 frontend tests/42 suites, 25 distinct selected backend
+checks across the main and final runs, 23 offline checks and whole SQL restore.
+Earlier attempts and corrected fixture/configuration issues are retained. R16 is
+now fixed within the native prep count scope: **seven fixed, 12 open, one deferred**.
+The subsequent container milestone is documented above. No new PR, operational enablement or deployment is included.
+
 ## Published workflow checkpoint — October 7, 2026
 
 [Draft PR #15 — supplier, order and prep execution workflows](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/15)
@@ -13,9 +137,9 @@ Merge, operational enablement and deployment remain separate decisions.
 The [foundation checkpoint README](docs/INVENTORY_FOUNDATION_README.md) records the original
 invoice capture, purchased-item accounting, prep analytical journals, shared catalog and recovery
 work. The [machine-readable review](docs/INVENTORY_REVIEW_STATUS.json) retains all 20 findings,
-source anchors, scoped fixes and acceptance criteria. Its status remains **six fixed within their
-stated local scope, 13 open and one deferred**. Publishing this checkpoint does not close the
-remaining findings.
+source anchors, scoped fixes and acceptance criteria. At PR #15 publication, the status was
+**six fixed within their stated local scope, 13 open and one deferred**. The local continuation
+above records the subsequent assessment. Publishing a checkpoint does not close its remaining findings.
 
 ### Work completed since PR #14
 

@@ -4,6 +4,8 @@ import {useRetainedDraft} from "../lib/saveIntegrity";
 import {todayISO} from "../lib/calc";
 import {cardCls,inpCls,btnGhost,SectionLabel} from "./common";
 import {PrepExecution} from "./PrepExecution";
+import {StaffPrepAssignments} from "./StaffPrepTasks";
+import {StaffProductionDecisions} from "./StaffPrepProduction";
 const storeId=rid=>rid==="papa_leonis"?"papa":rid;
 const decimal=value=>String(value).trim().replace(/^\+/,"").replace(/^\./,"0.").replace(/^0+(?=\d)/,"").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/,"");
 const stable=value=>JSON.stringify(value&&typeof value==="object"?Array.isArray(value)?value.map(v=>JSON.parse(stable(v))):Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(stable(value[k]))])):value);
@@ -96,5 +98,7 @@ function DraftForm({rid,day,track,drafts,showToast}){
     <button className={btnGhost} disabled={busy||reading||!!draft.pending} onClick={()=>load(epoch.current,true)}>Refresh dated draft versions</button>
     {released&&<p>Released draft is held for execution. Reopen it before editing.</p>}
     {api.prepExecutionEnabled&&<PrepExecution key={data.current?.id||"none"} rid={rid} day={day} track={track} drafts={drafts} showToast={showToast} onChange={()=>load(epoch.current,true)}/>}
+    {api.staffPrepTasksEnabled&&<StaffPrepAssignments rid={rid} day={day} track={track} drafts={drafts}/>}
+    {api.staffPrepProductionEnabled&&<StaffProductionDecisions rid={rid} day={day} track={track} drafts={drafts}/>}
   </>}</div>;
 }

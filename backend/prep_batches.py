@@ -103,7 +103,9 @@ def exact_sum(values):
         return sum(values, Decimal(0))
 
 
-async def available(conn, source_id):
+async def available(conn, source_id, instant=None):
+    if instant is not None and await conn.fetchval("SELECT to_regclass('prep_inventory.container_fills') IS NOT NULL"):
+        return await conn.fetchval('SELECT prep_inventory.container_available_since($1,$2)',source_id,instant)
     return await conn.fetchval('SELECT prep_inventory.lot_remaining($1)', source_id)
 
 
@@ -184,7 +186,7 @@ async def preview(conn, store, body=None, old_id=None, change=None):
             if source:
                 sid = source['id']
                 allocations[sid] = exact_sum([allocations.get(sid, Decimal(0)), qty])
-                remaining = exact_sum([await available(conn, sid), released.get(sid, Decimal(0))])
+                remaining = exact_sum([await available(conn, sid, body.performed_at), released.get(sid, Decimal(0))])
                 if allocations[sid] > remaining:
                     raise HTTPException(409, 'Recorded prepared lot has insufficient unallocated output. Refresh and review its quantities.')
                 # This is the recorded allocation balance, never a physical count.

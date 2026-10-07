@@ -4,6 +4,8 @@ import { ChefHat, Play, PackageCheck, Layers, X, Plus, Trash2, Check, Sparkles, 
 import { normalizeRecipeSchema, recipeCostSummary, fmtDate, fmtMoney, num, todayISO, FREQS, VESSELS } from "../lib/calc";
 import * as api from "../lib/api";
 import { PrepDayDrafts } from "./PrepDayDrafts";
+import { StaffPrepCountReview } from "./StaffPrepCounts";
+import { PrepContainers } from "./PrepContainers";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
 
 function tomorrowISO() {
@@ -92,8 +94,8 @@ export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, pers
         })}
       </div>
       {sub === "list" && (api.prepDayTasksEnabled ? <PrepDayDrafts rid={rid} track={track} drafts={drafts} showToast={showToast}/> : <PrepListView rid={rid} track={track} items={items} dishes={dishes} prepItems={prepItems} reloadPrepItems={reloadPrepItems} applyPrepResult={applyPrepResult} showToast={showToast} />)}
-      {sub === "count" && <EveningCount rid={rid} track={track} showToast={showToast} />}
-      {sub === "inventory" && <InventoryLog drafts={drafts} showError={showError} rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />}
+      {sub === "count" && (api.staffPrepCountsEnabled ? <StaffPrepCountReview key={rid} rid={rid} drafts={drafts}/> : <EveningCount rid={rid} track={track} showToast={showToast} />)}
+      {sub === "inventory" && (api.prepContainersEnabled ? <PrepContainers key={rid} rid={rid} drafts={drafts} /> : <InventoryLog drafts={drafts} showError={showError} rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />)}
       {sub === "planning" && <Planning showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} persistDishes={persistDishes} showToast={showToast} />}
     </div>
   );
