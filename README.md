@@ -1,38 +1,142 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Inventory foundation review checkpoint — October 6, 2026
+## Published workflow checkpoint — October 7, 2026
 
-Local continuation: [menu recipe integrity](docs/MENU_RECIPE_INTEGRITY.md) and
-[supplier price history](docs/SUPPLIER_PRICE_HISTORY.md) record the subsequent unpublished
-canonical ingredient mapping, definition validation, incomplete planning costs and reviewed prices.
-[Order command integrity](docs/ORDER_COMMAND_INTEGRITY.md) records the following local
-versioned order/retry/archive and supplier metadata milestone.
-[Supplier contact integrity](docs/SUPPLIER_CONTACT_INTEGRITY.md) records stable supplier
-relationships, reviewed legacy contact mapping, version checks and retained save retries.
-[Prep planning integrity](docs/PREP_PLANNING_INTEGRITY.md) records the October 7 local
-standing planning versions, separate pars, explicit tracks and retained retirement history.
-[Dated prep drafts](docs/PREP_DAY_DRAFT_INTEGRITY.md) connects those plans to sealed daily/bulk
-task drafts, prior-day physical counts and reviewed day overrides.
-[Prep execution integrity](docs/PREP_EXECUTION_INTEGRITY.md) adds manager release/reopen commands
-and exactly-once links to measured production.
-[Prep progress and reconciliation](docs/PREP_PROGRESS_INTEGRITY.md) adds multiple-batch progress,
-explicit task finish and reviewed corrections/voids; staff access and container execution remain pending.
-PR #14 remains the earlier checkpoint; these local changes are reserved for a later PR.
+[Draft PR #15 — supplier, order and prep execution workflows](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/15)
+publishes the continuation on `codex/inventory-workflow-continuation`. It is based on
+`codex/postgres-invoice-capture`, the branch of
+[draft PR #14 — PostgreSQL inventory foundation](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/14),
+so its diff contains only work added since that checkpoint. Both PRs remain unmerged.
+When ready, review and merge #14 first, retarget #15 to `main`, and revalidate the combined result.
+Merge, operational enablement and deployment remain separate decisions.
 
-This branch is a **draft PR checkpoint** of the cumulative PostgreSQL inventory work. Read
-[`docs/INVENTORY_FOUNDATION_README.md`](docs/INVENTORY_FOUNDATION_README.md) for completed work,
-the three inventory tracks, validation, all 20 review findings, and the remaining build sequence.
-The checkpoint has six findings fixed within their stated local scope, 13 open, and one deferred.
+The [foundation checkpoint README](docs/INVENTORY_FOUNDATION_README.md) records the original
+invoice capture, purchased-item accounting, prep analytical journals, shared catalog and recovery
+work. The [machine-readable review](docs/INVENTORY_REVIEW_STATUS.json) retains all 20 findings,
+source anchors, scoped fixes and acceptance criteria. Its status remains **six fixed within their
+stated local scope, 13 open and one deferred**. Publishing this checkpoint does not close the
+remaining findings.
 
-Actual Food Cost uses purchased-item physical counts with explicit count values and received-date
-purchases. Prep/waste and future Toast sales explain that baseline; they do not change accounting
-inventory. Native workflows remain gated, and the broader legacy operating cutover is unfinished.
-This PR does not apply migrations, import real invoices, enable features, or authorize deployment.
+### Work completed since PR #14
 
-The deployment overview below describes the earlier application configuration. It is not evidence
-that this checkpoint is deployed or that a clean target reproduces every new workflow. Earlier
-milestone documents retain their original local/unpublished status as historical records; this
-checkpoint README is the current publication and remaining-work guide.
+| Area | Implemented and tested locally | Contract and evidence |
+|---|---|---|
+| Menu recipes | Canonical ingredient identities, strict definition validation and explicit incomplete/null planning costs. Missing mappings cannot silently become zero cost. | [Menu recipe integrity](docs/MENU_RECIPE_INTEGRITY.md) |
+| Supplier prices | Immutable source observations and reviewed price adoption, retaining purchase provenance without rewriting original invoice facts. | [Supplier price history](docs/SUPPLIER_PRICE_HISTORY.md) |
+| Orders | Versioned creation, edits, transitions and archive history; exact retries, current-state acknowledgements and retained uncertain drafts. | [Order command integrity](docs/ORDER_COMMAND_INTEGRITY.md) |
+| Supplier contacts | Stable supplier relationships, reviewed legacy contact mapping, raw-field preservation and versioned saves. | [Supplier contact integrity](docs/SUPPLIER_CONTACT_INTEGRITY.md) |
+| Standing prep | Immutable planning versions, explicit daily/bulk tracks, weekday/weekend pars, schedules and retirement history. | [Prep planning integrity](docs/PREP_PLANNING_INTEGRITY.md) |
+| Dated prep drafts | Prior-day physical counts, explicit units/unknown stock, reviewed day overrides and sealed daily/bulk task sets. | [Dated prep drafts](docs/PREP_DAY_DRAFT_INTEGRITY.md) |
+| Manager execution | Reviewed release/reopen commands and once-per-production-root links to measured production. | [Prep execution integrity](docs/PREP_EXECUTION_INTEGRITY.md) |
+| Progress and corrections | Multiple whole batches per task, exact decimal totals, explicit finish and reviewed corrections/voids. | [Prep progress and reconciliation](docs/PREP_PROGRESS_INTEGRITY.md) |
+
+For example, a task can accumulate multiple measured batches while remaining in progress.
+Finishing requires an explicit reviewed decision, even if output exceeds its planned quantity.
+A corrected batch is visible but requires renewed review; a void contributes zero and reopens
+the task. Its production root remains reserved to the original task. Any linked production
+history keeps the released list pinned. Fractional allocation and reassignment are future work.
+
+### Inventory and accounting boundaries
+
+- **Track 1 — actual purchased inventory:** opening physical count plus received purchases minus
+  closing physical count determines actual usage. Counts include purchased items only, with
+  explicit opening/closing count values for actual Food Cost. **Date received is the purchase
+  date of record.** Taxes and fees remain separate and retained for future accounting modules.
+- **Track 2 — prep and waste:** measured batches, physical prep counts, waste and expected usage
+  explain the purchased-inventory baseline and support planning/variance analysis. They do not
+  deduct or revalue Track 1.
+- **Track 3 — sales:** future Toast portions provide theoretical usage and demand evidence.
+  They do not change Track 1's accounting quantities or values.
+
+All original invoice fields remain preserved by the foundation, including fields without a
+current mapped output. No real invoices were imported for these checkpoints. Incomplete
+analytics must disclose missing coverage before claiming an unexplained variance.
+
+### Latest verification and preserved snapshot
+
+| Check | Recorded result and limit |
+|---|---|
+| Frontend | 329 tests passed across 40 suites with native paths enabled for testing; component tests, not a live browser walkthrough. |
+| Selected backend | 30 distinct checks passed across the main run and two focused rechecks; not the full backend suite. |
+| Offline contracts | 23 checks passed. |
+| Recovery and upgrade | Whole SQL restore and an actual old-schema additive upgrade preserved immutable history, old request hashes and exact retries. |
+| Production frontend build | Passed with three existing hook warnings in PurchaseOrdersTab, SchedulingTab and StaffTab. |
+| Source checkpoint | Compilation/whitespace checks and all 70 prepublication source hashes verified; publication documentation updated separately. |
+
+The backend main run passed 28 checks and encountered a connection timeout and a test-fixture
+cached-statement error after DDL. Both cases passed focused rechecks. The upgrade fixture now
+recycles connections after DDL, matching a stopped-app migration/restart rehearsal; the
+application pool already disables statement caching. All attempts are retained.
+
+The unchanged local prepublication archive is
+`JayMax-prep-progress-2026-10-07-review-package.zip` (92 entries, 70 verified source paths),
+SHA-256 `4687a6c254fb4eb4f9e3e1268788098a1e10db6002eb54c213c4f55acd9f33c5`.
+It preserves the cumulative patch against foundation commit
+`a472c8674a7e3f173e838907e1b9d13d7665a028`, review notes, source hashes, all test attempts and
+earlier nested snapshots. Application implementation was published in commit
+`d64dea4bbb4e42bb8f6e7c70acba7e516867c751`; this README records the subsequent publication update.
+Local archives, runtime files and raw invoice samples are outside Git.
+
+Tests used invented fixtures and disposable loopback PostgreSQL outside synced Documents/Drive.
+These results are local evidence, not managed-platform or production acceptance proof. Earlier
+milestone documents retain their original local/unpublished wording as historical records;
+this README is the current publication and remaining-work guide.
+
+### Schema and feature status
+
+The continuation adds these migrations to the foundation dependency chain:
+
+- `20261006_supplier_price_history.sql`
+- `20261006_order_commands.sql`
+- `20261006_supplier_contacts.sql`
+- `20261007_prep_planning.sql`
+- `20261007_prep_day_tasks.sql`
+- `20261007_prep_execution.sql`
+- `20261007_prep_progress.sql`
+
+Consult each linked contract for prerequisites; this list is not a complete bootstrap command.
+The progress migration follows execution and preserves old command serialization and retries.
+All eleven native backend/frontend feature pairs remain false in repository examples, including
+the new order, contact, planning, dated-task and execution gates. Price history uses the existing
+purchase/accounting/catalog gates. Installed database guards continue holding covered legacy
+writers even with a new flag off; flag toggles alone are not a rollback plan.
+
+No operational migrations, feature enablement or deployment were performed. New execution
+writes retain existing owner/manager authorization. Staff identity/assignment and login/PIN
+redesign remain future work. Draft retention currently covers signed-in navigation; persistence
+through browser reload or logout is not promised.
+
+### Next build sequence and completion checks
+
+1. **Native staff prep count submissions.** Define location/date/product/count scope and actor
+   evidence; distinguish unknown from zero; preserve immutable submissions and manager review
+   before counts feed dated planning. Complete when duplicates, concurrent conflicts, access
+   boundaries and uncertain-save recovery are tested without changing Track 1.
+2. **Verified container execution.** Normalize dimensions, units and capacity; distinguish
+   stated, brimful and usable-fill measurements. Require reviewed recipe/output conversions.
+   Complete when partial containers and service movements preserve exact identity/quantity
+   without the legacy whole-group deletion behavior.
+3. **Staff task access and assignment.** Connect verified identities to permitted stores and
+   tasks. Complete when assignment, authorization, acknowledgements and retained drafts are
+   tested; shared-PIN name selection alone must not confer elevated access.
+4. **Finish the remaining integrity and operating cutover.** Close direct legacy API gaps,
+   full canonical-unit/menu/price contracts, broader retirement and scope policy, invoice edge
+   cases, durable recovery and supplier delivery/outbox behavior. Rehearse a supported baseline,
+   ordered migrations, seeds/grants and native backup/restore before any enablement. The
+   [foundation review](docs/INVENTORY_FOUNDATION_README.md) and machine-readable finding criteria
+   remain the full acceptance list.
+5. **Reserved integrations.** Add Toast, Scheduling, Operations and Analytics against stable
+   identities and versioned contracts. Retain external event/revision IDs, date/unit/recipe
+   evidence, corrections and completeness; compare common physical-count boundaries and avoid
+   duplicate theoretical usage. Toast remains analytical evidence, separate from accounting.
+
+Continue the next milestone on a separate local branch from this published checkpoint.
+Keep #15 stable for review; publish the next draft PR only when authorized. If #15 changes,
+reconcile those changes into the local continuation before its later publication.
+
+The deployment overview below describes the earlier application configuration. It is not
+evidence that these workflows are deployed or that a clean target reproduces them. Supported
+managed-platform bootstrap and the broader operating cutover remain unfinished.
 
 A multi-location restaurant operations platform for Bert's Hometown Grill & Pizzeria, Rudd's Pies
 and Fries, and Papa Leoni's Pizza. It covers:
@@ -40,7 +144,7 @@ and Fries, and Papa Leoni's Pizza. It covers:
 - inventory counts
 - purchasing/par guidance
 - recipe costing
-- prep planning with automatic inventory deduction
+- prep planning and measured production with separate analytical inventory evidence
 - a purchase-order approval chain, with supplier email and PDF
 - an ownership rollup dashboard
 - an AI assistant ("Sous") and an AI par advisor
