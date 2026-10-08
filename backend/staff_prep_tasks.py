@@ -10,6 +10,7 @@ from pydantic import Field
 import prep_execution as execution
 import prep_mapping as mapping
 from staff_prep_counts import Reviewed, Credentials
+from staff_response import staff_view
 from native_units import lock_store
 from purchase_api import serial
 from purchase_parser import fingerprint
@@ -127,12 +128,16 @@ async def staff_state(conn, store, body, kind):
     if e['status'] == 'released':
         for t in e['tasks']:
             if not t['included'] or t['planned_quantity'] is None or Decimal(t['planned_quantity']) <= 0: continue
-            a = next(a for a in s['assignments'] if a['task_id'] == t['id'])
+            a = next((a for a in s['assignments'] if a['task_id'] == t['id']), None)
+            if a is None:
+                raise HTTPException(409, 'Task assignment state is incomplete; manager must review the current plan')
             if body.staff_member_id and (not a['current'] or a['current']['staff_member_id'] != str(body.staff_member_id)): continue
             tasks.append(dict(id=t['id'],name=t['task_snapshot']['name'],quantity=t['planned_quantity'],
                 source_unit=t['task_snapshot']['source_unit'],base_unit=t['task_snapshot']['base_unit'],product_id=t['product_id'],recipe_version_id=t['recipe_version_id'],
                 assignment=a['current']['id'] if a['current'] else None,assigned_member=a['current_member'],roster_changed=a['roster_changed'],
-                progress=next(p for p in e['task_progress'] if p['task_id']==t['id'])))
+                progress=next((p for p in e['task_progress'] if p['task_id']==t['id']), None)))
+            if tasks[-1]['progress'] is None:
+                raise HTTPException(409, 'Task progress is incomplete; manager must review the current plan')
     return dict(store_id=store,day=str(body.day),track=body.track,status=e['status'],draft_version_id=e['draft_version_id'],
         execution_revision=e['revision'],selected_member_id=str(body.staff_member_id) if body.staff_member_id else None,
         credential_kind=kind,identity_verified=False,tasks=tasks,
@@ -163,6 +168,6 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
         store_check(store)
         async with pool_factory().acquire() as conn, conn.transaction(isolation='repeatable_read',readonly=True):
             await ready(conn); _,kind=await staff_authorize(request,conn,store,body.pin)
-            return await staff_state(conn,store,body,kind)
+            return staff_view(await staff_state(conn,store,body,kind))
 
     return router

@@ -72,6 +72,35 @@ class StaffProductionTests(fixtures.StaffTaskTests):
         self.assertEqual(accepted.status_code, 200, accepted.text)
         self.assertEqual(accepted.json()['history']['events'][0]['id'], first_event['id'])
 
+    async def test_history_review_staff_production_projection_retains_private_hashes_and_retry(self):
+        from staff_response import staff_view
+        token = server._token(dict(id='production-audit@example.invalid',email='production-audit@example.invalid',role='staff',locations=['berts']))
+        body = await self.submission()
+        preview = await self.staff_preview(body,token)
+        self.assertEqual(preview.status_code,200,preview.text)
+        self.assertNotIn('production-audit@example.invalid',preview.text)
+        payload = dict(pin='',submission=body,expected_review_hash=preview.json()['reviewHash'],reviewed=True)
+        key = str(uuid4())
+        submitted = await self.submit(payload=payload,key=key,token=token)
+        self.assertEqual(submitted.status_code,200,submitted.text)
+        self.assertNotIn('production-audit@example.invalid',submitted.text)
+        async with self.pool.acquire() as c:
+            private = await production.history(c,UUID(body['root_id']),'berts')
+        self.assertEqual(private['events'][0]['submitted_by'],'production-audit@example.invalid')
+        self.assertEqual(submitted.json()['submission']['review_hash'],preview.json()['reviewHash'])
+        self.assertEqual(submitted.json()['history'],staff_view(private))
+        accepted = await self.decide(self.decision(private['events'][0],complete=True))
+        self.assertEqual(accepted.status_code,200,accepted.text)
+        setup = await self.portal.post(self.staff_url+'/setup',params={'staff_member_id':str(self.member)},json={'pin':''},headers={'Authorization':'Bearer '+token})
+        self.assertEqual(setup.status_code,200,setup.text)
+        self.assertEqual(setup.json()['submissions'],[staff_view(accepted.json()['history'])])
+        self.assertNotIn('production-audit@example.invalid',setup.text)
+        retry = await self.submit(payload=payload,key=key,token=token)
+        self.assertEqual(retry.status_code,200,retry.text)
+        self.assertTrue(retry.json()['replayed'])
+        self.assertEqual(retry.json()['submission'],submitted.json()['submission'])
+        self.assertEqual(retry.json()['history'],staff_view(accepted.json()['history']))
+
     async def test_review_corrections_production_root_collision_across_stores_and_revision_ids(self):
         body = await self.submission()
         first = await self.submit(body)
@@ -170,7 +199,9 @@ class StaffProductionTests(fixtures.StaffTaskTests):
         p=await self.staff_preview(new,token=staff);self.assertEqual(p.status_code,200,p.text)
         r=await self.submit(payload=dict(pin='not-needed-with-valid-bearer',submission=new,expected_review_hash=p.json()['reviewHash'],reviewed=True),token=staff)
         self.assertEqual(r.status_code,200,r.text);self.assertEqual(r.json()['submission']['credential_kind'],'bearer')
-        self.assertEqual(r.json()['submission']['submitted_by'],'local-staff')
+        self.assertNotIn('submitted_by',r.json()['submission'])
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval('SELECT submitted_by FROM prep_inventory.staff_production_submissions WHERE id=$1',UUID(r.json()['submission']['id'])),'local-staff')
         setup=await self.portal.post(self.staff_url+'/setup',params={'staff_member_id':str(self.member)},json={'pin':''},headers={'Authorization':'Bearer '+staff})
         self.assertEqual(setup.status_code,200,setup.text)
         self.assertEqual(len(setup.json()['submissions']),2)

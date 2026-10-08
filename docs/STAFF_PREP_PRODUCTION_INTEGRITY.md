@@ -14,6 +14,16 @@ enables no operational feature and makes no commit or push.
 
 ## Measurements before production posting
 
+Staff setup, preview and submission/retry responses project out private audit
+identities (`submitted_by`, `recorded_by`, `issued_by`, `actor`, `email`), including
+copies inside nested histories and review snapshots. Manager review and stored
+records retain them. Hashes and fingerprints refer to the private server evidence;
+clients carry these opaque values and do not hash the filtered projection. Old
+pending staff previews can validate the filtered receipt without changing their
+original request key, body or hash. Recipe/lot measurements required for production
+remain visible; this is not individually verified identity or a new privacy model
+for every existing route, user-entered note or claimed roster selection.
+
 An active roster identity submits against its current manager-issued native task
 assignment, explicit location calendar date and daily/bulk track. The task must
 be released, included, positive, open and free of changed production requiring

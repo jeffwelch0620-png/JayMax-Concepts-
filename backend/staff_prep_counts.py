@@ -12,6 +12,7 @@ from native_units import lock_store
 from purchase_api import serial
 from purchase_parser import fingerprint
 from workflow_integrity import conflict_transaction, require_independent
+from staff_response import staff_view
 
 
 class Reviewed(mapping.Strict):
@@ -321,13 +322,13 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
             ids = await conn.fetch('''SELECT s.id FROM prep_inventory.staff_sheets s WHERE store_id=$1
                 AND NOT EXISTS(SELECT 1 FROM prep_inventory.staff_decisions d WHERE d.sheet_id=s.id)
                 ORDER BY performed_at DESC,issued_at DESC''', store)
-            return [await detail(conn, store, r['id']) for r in ids]
+            return staff_view([await detail(conn, store, r['id']) for r in ids])
 
     @router.post('/api/pg/staff/{store}/prep-count-drafts/{ident}/submit')
     async def staff_submit(store: str, ident: UUID, request: Request, body: SubmitIn, idempotency_key: UUID = Header(...)):
         store_check(store); pool = pool_factory()
         async with pool.acquire() as conn:
             await ready(conn); actor, kind = await staff_authorize(request, conn, store, body.pin)
-        return await submit(pool, store, ident, actor, kind, body, idempotency_key)
+        return staff_view(await submit(pool, store, ident, actor, kind, body, idempotency_key))
 
     return router

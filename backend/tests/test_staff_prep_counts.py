@@ -99,6 +99,31 @@ class StaffPrepCountsTests(unittest.IsolatedAsyncioTestCase):
             accepted = await reviewer.post(path+'/decision', json=payload, headers={'Idempotency-Key':str(uuid4())})
             self.assertEqual(accepted.status_code, 200, accepted.text)
 
+    async def test_history_review_staff_count_projection_keeps_private_audit_and_retry(self):
+        from staff_response import staff_view
+        issued, _ = await self.issue_sheet()
+        review = issued.json()['current']
+        token = server._token(dict(id='count-audit@example.invalid',email='count-audit@example.invalid',role='staff',locations=['berts']))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app),base_url='http://test',headers={'Authorization':'Bearer '+token}) as staff:
+            key = str(uuid4())
+            body = self.submission(review)
+            submitted = await self.submit_sheet(review,body=body,key=key,client=staff)
+            self.assertEqual(submitted.status_code,200,submitted.text)
+            self.assertNotIn('count-audit@example.invalid',submitted.text)
+            private = (await self.catalog.get(self.count_url)).json()['sheets'][0]
+            self.assertEqual(private['latest']['submitted_by'],'count-audit@example.invalid')
+            self.assertEqual(submitted.json()['current'],staff_view(private))
+            listing = await staff.post('/api/pg/staff/berts/prep-count-drafts',json={'pin':''})
+            self.assertEqual(listing.status_code,200,listing.text)
+            self.assertEqual(listing.json(),[staff_view(private)])
+            accepted, _ = await self.accept(private)
+            self.assertEqual(accepted.status_code,200,accepted.text)
+            retry = await self.submit_sheet(review,body=body,key=key,client=staff)
+            self.assertEqual(retry.status_code,200,retry.text)
+            self.assertEqual(retry.json()['submission'],submitted.json()['submission'])
+            self.assertTrue(retry.json()['replayed'])
+            self.assertEqual(retry.json()['current'],staff_view(accepted.json()['current']))
+
     async def accept(self,review,decision='accepted',key=None,body=None):
         if body is None:
             p=await self.catalog.post(self.count_url+'/'+review['sheet']['id']+'/decision-preview',json=dict(decision=decision,note='Reviewed physical prep evidence',reviewed=True))
@@ -191,7 +216,9 @@ class StaffPrepCountsTests(unittest.IsolatedAsyncioTestCase):
         try:
             body=self.submission(review)|dict(pin='wrong');self.assertEqual((await self.submit_sheet(review,body=body,client=guest)).status_code,403)
             body=self.submission(review)|dict(pin='4826');sub=await self.submit_sheet(review,body=body,client=guest);self.assertEqual(sub.status_code,200,sub.text)
-            self.assertEqual(sub.json()['submission']['credential_kind'],'shared_pin');self.assertEqual(sub.json()['submission']['submitted_by'],'shared-pin')
+            self.assertEqual(sub.json()['submission']['credential_kind'],'shared_pin');self.assertNotIn('submitted_by',sub.json()['submission'])
+            async with self.pool.acquire() as c:
+                self.assertEqual(await c.fetchval('SELECT submitted_by FROM prep_inventory.staff_submissions WHERE id=$1',UUID(sub.json()['submission']['id'])),'shared-pin')
             self.assertNotIn('4826',str(sub.json()));self.assertNotIn('pin',sub.json()['submission']['submitted_body'])
             self.assertEqual((await guest.post(self.count_url+'/preview',json=self.sheet_body())).status_code,401)
         finally:await guest.aclose()
@@ -202,7 +229,9 @@ class StaffPrepCountsTests(unittest.IsolatedAsyncioTestCase):
                 if role=='staff' and status==200:
                     self.assertEqual((await client.post(self.count_url+'/preview',json=self.sheet_body())).status_code,403)
                     measured=await self.submit_sheet(sub.json()['current'],client=client);self.assertEqual(measured.status_code,200,measured.text)
-                    self.assertEqual(measured.json()['submission']['credential_kind'],'bearer');self.assertEqual(measured.json()['submission']['submitted_by'],'verified-account')
+                    self.assertEqual(measured.json()['submission']['credential_kind'],'bearer');self.assertNotIn('submitted_by',measured.json()['submission'])
+                    async with self.pool.acquire() as c:
+                        self.assertEqual(await c.fetchval('SELECT submitted_by FROM prep_inventory.staff_submissions WHERE id=$1',UUID(measured.json()['submission']['id'])),'verified-account')
         body=self.submission(sub.json()['current']);response=await self.catalog.post('/api/pg/staff/rudds/prep-count-drafts/'+review['sheet']['id']+'/submit',json=body,headers={'Idempotency-Key':str(uuid4())});self.assertEqual(response.status_code,404,response.text)
 
     async def test_sql_guards_immutability_complete_membership_and_legacy_freeze_with_flags_off(self):

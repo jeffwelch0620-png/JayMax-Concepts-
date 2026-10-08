@@ -73,6 +73,12 @@ native view displays linked history and routes its correction to paired reversal
 
 ## Additive schema and installation boundary
 
+Recipe removal checks retained operating references before cascading deletes can
+reach the legacy stock/log hold triggers. Direct, targeted and collection deletion
+return 422 and retain recipe lines, stock, captured raw history and revisions even
+when the container feature flag is off. Older-code rollback must preserve these
+rows and honor schema holds; clearing references is not an approved workaround.
+
 `20261007_container_waste.sql` follows the existing container and observation
 migrations and preserves their immutable data. The new private link table uses
 store-scoped foreign keys, immutable history and deferred transaction seals.

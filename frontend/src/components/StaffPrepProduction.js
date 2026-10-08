@@ -53,7 +53,16 @@ export function validProductionReview(p,body,rid,day,track,manager=false,selecte
       &&r.batch?.review?.staff_submission_id===selected.id&&validBatchReview(r.batch,selected.review_snapshot.submission.batch,selected.review_snapshot.batch)
       &&r.sources?.task?.id===selected.task_id&&r.sources.assignment?.id===selected.assignment_id&&r.sources.assignment.staff_member_id===selected.staff_member_id);
 }
+function staffReceiptView(value){
+  if(Array.isArray(value))return value.map(staffReceiptView);
+  if(value&&typeof value==="object")return Object.fromEntries(Object.entries(value)
+    .filter(([key])=>!["submitted_by","recorded_by","issued_by","actor","email"].includes(key)).map(([key,item])=>[key,staffReceiptView(item)]));
+  return value;
+}
 export function validProductionAck(ack,pending,rid,day,track,manager=false){
+  // A pre-upgrade pending staff preview may contain private audit identities.
+  // Keep its original request/hash while comparing the public response projection.
+  if(!manager){ack=staffReceiptView(ack);pending={...pending,review:staffReceiptView(pending.review)};}
   const r=pending.review.review,store=storeId(rid),record=manager?ack?.decision:ack?.submission;
   if(!uid(record?.id)||record.store_id!==store||record.request_key!==pending.key||!hash(record.request_fingerprint)||record.review_hash!==pending.body.expected_review_hash||!productionSame(record.review_snapshot,r)
     ||!validProductionHistory(ack.history,store))return false;

@@ -30,6 +30,25 @@ class PrepContainerTests(unittest.IsolatedAsyncioTestCase):
             await c.execute("INSERT INTO prep_recipe_stock(store_id,dish_id,on_hand,containers) VALUES('berts',$1,12,'[{\"label\":\"Unverified pan\",\"size\":32,\"count\":2,\"original_extra\":\"retain\"}]')",self.legacy_dish)
             await c.execute((recovery.counts.native.ROOT/'migrations/20261007_prep_containers.sql').read_text())
 
+    async def test_history_review_recipe_delete_with_container_hold_preserves_legacy_source(self):
+        async with self.pool.acquire() as c:
+            await c.execute("UPDATE dishes SET yield_qty=1,yield_uom='qt' WHERE id=$1",self.legacy_dish)
+            await c.execute("INSERT INTO dish_lines(dish_id,source_type,item_code,qty) VALUES($1,'item','test_food',1)",self.legacy_dish)
+            before = await c.fetchval("SELECT revision FROM store_state WHERE store_id='berts'")
+            retained = await c.fetchval("SELECT raw_record FROM prep_inventory.legacy_container_sources WHERE source_table='prep_recipe_stock'")
+        token = server._token(dict(id='synthetic-container-reviewer',email='container@example.invalid',role='owner'))
+        with patch.dict(os.environ,{'PREP_CONTAINERS_ENABLED':'false'}), patch.object(server.db_pg,'_pool',self.pool):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app),base_url='http://test',headers={'Authorization':'Bearer '+token}) as client:
+                direct = await client.delete('/api/pg/dishes/berts/'+str(self.legacy_dish),headers={'If-Match':str(before)})
+                changes = await client.post('/api/pg/dishes/berts/changes',json={'upserts':[],'delete_ids':[str(self.legacy_dish)]},headers={'If-Match':str(before)})
+                replace = await client.put('/api/pg/dishes/berts',json=[],headers={'If-Match':str(before)})
+        self.assertEqual([direct.status_code,changes.status_code,replace.status_code],[422,422,422])
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval("SELECT revision FROM store_state WHERE store_id='berts'"),before)
+            self.assertEqual(await c.fetchval("SELECT raw_record FROM prep_inventory.legacy_container_sources WHERE source_table='prep_recipe_stock'"),retained)
+            self.assertEqual(await c.fetchval('SELECT on_hand FROM prep_recipe_stock WHERE dish_id=$1',self.legacy_dish),12)
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM dish_lines WHERE dish_id=$1',self.legacy_dish),1)
+
     def stamp(self,instant='2026-10-05T12:00:00-04:00'):
         return dict(performed_at=instant,business_date=instant[:10],timezone_name='America/New_York',calendar_date_confirmed=True,note='Invented measured internal movement')
 

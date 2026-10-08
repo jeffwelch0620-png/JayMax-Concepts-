@@ -58,7 +58,9 @@ Earlier checkpoint counts and hash manifests describe their original snapshots.
 3. Known-identity review separation, production root collisions and selected coupled
    request-key conflicts are corrected below. Wider identity/authentication and
    quantity-dependency corrections remain separate work.
-4. Broader cross-module idempotency, history/access boundaries, and migration/runtime-role checks.
+4. Recipe deletion and staff audit-response boundaries are corrected below. Broader
+   cross-module idempotency, other legacy history/access paths, and migration/runtime-role
+   checks remain open. Setup/history paging and batching also remain separate work.
 5. Repeat stack-level acceptance and finish isolated hosted-development validation once
    the separate Supabase development target is available. Never apply test migrations
    or fixture data to the operational project.
@@ -225,3 +227,47 @@ the production build passes with the three existing hook warnings. The first new
 frontend run used the wrong refresh button label; the corrected test passes in both
 complete suites. Prior attempts and final output are retained. These are scoped local
 checks, not full backend coverage, live-browser acceptance or hosted-platform proof.
+
+## History and staff response corrections in PR16
+
+The PR15 recipe-history preflight is carried forward. Installed container legacy stock/
+log hold triggers no longer turn supported recipe removal into a server error. Direct,
+targeted and collection deletion preserve the recipe, child lines, stock and captured
+raw history and return 422, including when the container feature flag is off. Missing
+or foreign recipe identities cannot be used to silently advance another store revision.
+Existing roster assignment-history deletion already returns 409 and suggests deactivation;
+its covered behavior is retained, rather than introducing deletion of historical staff.
+
+Staff count lists and submission/retry receipts, staff production setup/preview/submission
+receipts, and task plans recursively omit private audit identity fields. This includes
+copies in nested review snapshots, decisions, lots and assignment evidence. Stored
+facts, manager responses, request hashes and fingerprints retain the original evidence.
+Counter names, roster selections and free-text notes remain claimed operational data;
+this does not introduce individual authentication or restrict recipe/lot measurements
+required for the current staff production workflow. Privacy of other routes remains
+separate work.
+
+The staff production client compares projected receipts with both old and newly filtered
+pending previews. Original request keys/body/hashes remain pinned, and quantity, assignment,
+location and immutable history checks remain enforced. Manager receipt comparisons keep
+their audit identity checks. Missing progress or assignment state in staff plans now returns
+409 with a review instruction instead of raising StopIteration.
+
+No new migration is required for this batch. No historical row, actor or financial fact
+is rewritten. Installed immutable schema holds still apply after older-code rollback;
+the code-first recovery plan must retain that evidence. These API corrections are not
+a universal SQL deletion policy or proof of hosted deployment readiness. The separate
+newer local continuation remains preserved.
+
+Validation: 16 selected history/access backend cases passed across the first 13-pass
+run and final three-case rerun (including inherited cases), with two parameter subtests.
+The first container deletion fixture used the purchase-only router and received 404;
+the corrected full-app fixture proves the installed hold with the flag off. The final
+rerun also passes staff production permissions and whole SQL production recovery.
+Original roster deletion/deactivation holds, private manager history, count retry races,
+and both count/production author separation remain covered. PR15 separately passes its
+complete 15-check menu suite and 23 subtests. All 438 frontend tests across 53 suites
+pass in default and foundation-native configurations, including old pending-preview
+compatibility and retained measurement/hash checks. The final production build passes
+with the same three hook warnings. Source/probe and selected local runtime evidence
+are distinguished from full backend, browser and hosted Supabase acceptance.

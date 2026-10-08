@@ -12,6 +12,12 @@ enablement, real data import or deployment is included.
 
 ## Measurement and review contract
 
+Staff lists and submission/retry receipts omit private audit identity fields,
+recursively through sheets, history and decisions. Manager responses and stored
+audit records retain original identities. Review hashes/fingerprints remain the
+private server values; no filtered response replaces immutable evidence. The
+counter name and measurement notes remain explicit claimed attribution.
+
 A manager issues a full prepared-inventory sheet for a declared physical instant,
 location calendar date and IANA timezone. The manager selects one current verified
 count profile for every prepared identity, previews its scope/conversions and

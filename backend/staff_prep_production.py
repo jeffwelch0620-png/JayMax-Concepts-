@@ -14,6 +14,7 @@ from native_units import lock_store
 from purchase_api import serial
 from purchase_parser import fingerprint
 from workflow_integrity import conflict_transaction, require_independent
+from staff_response import staff_view
 
 
 class MeasuredBatch(batches.BatchIn):
@@ -239,17 +240,17 @@ def create_router(pool_factory,store_check,manager_authorize,staff_authorize):
         async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):
             await ready(c);_,kind=await staff_authorize(request,c,store,body.pin)
             if not await c.fetchval('SELECT 1 FROM staff_members WHERE id=$1 AND store_id=$2 AND active',staff_member_id,store): raise HTTPException(422,'Select active roster staff at this location')
-            return dict(await state(c,store,day,track,staff_member_id),setup=await batches.setup(c,store),credential_kind=kind,identity_verified=False)
+            return staff_view(dict(await state(c,store,day,track,staff_member_id),setup=await batches.setup(c,store),credential_kind=kind,identity_verified=False))
     @router.post(staff+'/preview')
     async def staff_review(store:str,day:date,request:Request,body:StaffPreview,track:Literal['daily','bulk']='daily'):
         store_check(store)
         async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):
             await ready(c);actor,kind=await staff_authorize(request,c,store,body.pin)
-            return await submission_preview(c,store,day,track,body.submission,actor,kind)
+            return staff_view(await submission_preview(c,store,day,track,body.submission,actor,kind))
     @router.post(staff+'/submissions')
     async def staff_submit(store:str,day:date,request:Request,body:StaffCommit,idempotency_key:UUID=Header(...),track:Literal['daily','bulk']='daily'):
         store_check(store)
         async with pool_factory().acquire() as c:
             await ready(c);actor,kind=await staff_authorize(request,c,store,body.pin)
-        return await submit(pool_factory(),store,day,track,actor,kind,body,idempotency_key)
+        return staff_view(await submit(pool_factory(),store,day,track,actor,kind,body,idempotency_key))
     return router

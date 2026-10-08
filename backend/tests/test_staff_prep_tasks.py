@@ -51,6 +51,23 @@ class StaffTaskTests(fixtures.PrepProgressTests):
     async def staff_plan(self,day='2026-10-08',member=None,track='daily',pin='4826',token=None,store='berts'):
         return await self.portal.post(f'/api/pg/staff/{store}/prep-task-plan',json=dict(pin=pin,day=day,track=track,staff_member_id=str(member) if member else None),headers={'Authorization':'Bearer '+token} if token else {})
 
+    async def test_history_review_missing_task_progress_or_assignment_returns_conflict(self):
+        _, task = await self.start()
+        assigned = await self.assign(self.assignment_body(task))
+        self.assertEqual(assigned.status_code,200,assigned.text)
+        async with self.pool.acquire() as c:
+            state = await tasks.state(c,'berts',tasks.date(2026,10,8),'daily')
+        for missing in ('progress','assignment'):
+            incomplete = copy.deepcopy(state)
+            if missing=='progress':
+                incomplete['execution']['task_progress'] = []
+            else:
+                incomplete['assignments'] = []
+            with patch.object(tasks,'state',return_value=incomplete):
+                held = await self.staff_plan(member=self.member)
+            self.assertEqual(held.status_code,409,held.text)
+        self.assertEqual((await self.staff_plan(member=self.member)).status_code,200)
+
     async def test_staff_tasks_assignment_reassignment_unassignment_preserve_actual_and_production(self):
         _,a,b=await self.pair();accounting=(await self.report(a,b)).json();d,t=await self.start()
         async with self.pool.acquire() as c:before=await c.fetchval('SELECT count(*) FROM prep_inventory.batch_movements')
