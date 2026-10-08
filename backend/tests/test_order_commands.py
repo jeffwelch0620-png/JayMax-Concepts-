@@ -62,6 +62,39 @@ class OrderCommandTests(unittest.IsolatedAsyncioTestCase):
     async def saved(self,response):
         self.assertEqual(response.status_code,200,response.text);return response.json()['order']
 
+    async def test_order_editor_cannot_approve_even_after_another_editor_changes_content(self):
+        po = await self.saved(await self.create())
+        edited = await self.other.put(f"/api/pg/purchases/berts/order-drafts/{po['id']}", json=self.draft(qty='3'),
+            headers={'Idempotency-Key': str(uuid4()), 'If-Match': str(po['orderVersion'])})
+        po = await self.saved(edited)
+        po = await self.saved(await self.edit(po))
+        pending = await self.saved(await self.command(po, 'submit'))
+        before = (await self.catalog.get('/api/orders/berts')).json()
+        for reviewer in (self.catalog, self.other):
+            held = await self.command(pending, 'approve', client=reviewer)
+            self.assertEqual(held.status_code, 403, held.text)
+        self.assertEqual((await self.catalog.get('/api/orders/berts')).json(), before)
+        token = server._token({'id': 'synthetic-third-reviewer', 'role': 'owner', 'email': 'third@example.invalid'})
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url='http://test', headers={'Authorization': 'Bearer '+token}) as third:
+            approved = await self.saved(await self.command(pending, 'approve', client=third))
+        self.assertEqual(approved['approvedBy'], 'synthetic-third-reviewer')
+
+    async def test_invalid_retained_legacy_lines_return_422_without_commands_or_reorders(self):
+        po = await self.saved(await self.create())
+        async with self.pool.acquire() as c:
+            await c.execute('UPDATE purchase_order_lines SET item_code=NULL,control_number=NULL,qty=0 WHERE po_id=(SELECT id FROM purchase_orders WHERE ref=$1)', po['id'])
+        for state, action in (('draft','submit'), ('pending','approve'), ('approved','send'), ('approved','reorder')):
+            async with self.pool.acquire() as c:
+                await c.execute('UPDATE purchase_orders SET status=$2 WHERE ref=$1', po['id'], state)
+            latest = (await self.catalog.get('/api/orders/berts')).json()[0]
+            rejected = await self.command(latest, action, client=self.other)
+            self.assertEqual(rejected.status_code, 422, rejected.text)
+            self.assertIn('legacy lines', rejected.json()['detail'])
+            self.assertEqual((await self.catalog.get('/api/orders/berts')).json()[0], latest)
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM purchasing.order_commands'), 1)
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM purchase_orders'), 1)
+
     async def test_parallel_create_retry_preserves_exact_unknown_zero_and_accounting(self):
         _,a,b=await self.pair();before=(await self.report(a,b)).json();key=str(uuid4())
         responses=await asyncio.gather(self.create(self.draft(price=None),key),self.create(self.draft(price=None),key))
