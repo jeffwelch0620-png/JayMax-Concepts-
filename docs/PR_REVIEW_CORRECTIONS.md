@@ -131,3 +131,18 @@ A final read-only recipe snapshot was added after that run; all four affected-re
 checks passed again against the final backend source. The native-configured production
 build passed with the same three existing hook warnings.
 No new migration, hosted SQL, real invoice import, or live-browser acceptance occurred.
+
+## Carry-forward validation in PR16
+
+The catalog and targeted recipe corrections are inherited in the staff continuation.
+All 434 frontend tests across 53 suites passed with default flags and with the four
+foundation native flags enabled. The production build passed with the same three
+existing hook warnings. Twenty selected backend checks and 21 parameter subtests passed
+against this checkout, including original/scoped menu contracts, catalog/profile query
+budgets and staff legacy reads/completion holds when feature flags are off.
+
+The first frontend attempt passed 433 checks and failed a date-switch fixture that selected
+today's date, so no switch occurred. The fixture now always selects another date and verifies
+the new request before resolving the older response. Both complete suites passed afterward;
+the application response guard was unchanged. These results do not complete the remaining
+staff review-separation, identity collision, waste-dependency or hosted-readiness work.

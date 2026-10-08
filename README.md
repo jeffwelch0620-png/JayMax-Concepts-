@@ -7,6 +7,11 @@ test-configuration fixes,
 their validation, and remaining review work.
 PRs 14–16 remain draft and unmerged; hosted development validation is still pending.
 
+Current PR16 correction checks: **434 frontend tests / 53 suites** pass in default and
+native configurations; **20 selected backend checks** pass. The production build passes
+with three existing hook warnings. Checkpoint evidence below describes the original
+snapshots, before the review corrections.
+
 ## Published staff workflow checkpoint — October 7, 2026
 
 [Draft PR #16 — staff counts, containers, waste and production](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/16)
@@ -15,7 +20,7 @@ unmerged. Read the [detailed checkpoint README](docs/STAFF_WORKFLOW_CHECKPOINT_R
 for the five workflow milestones, additive schema, validation evidence, remaining
 limits and stacked review sequence (#14, then #15, then #16).
 
-Latest evidence: **404 frontend tests / 49 suites**, **36 distinct backend checks**,
+Original staff checkpoint evidence: **404 frontend tests / 49 suites**, **36 distinct backend checks**,
 **23 offline checks**, production build and whole SQL restore. Track 1 Food Cost
 remains independent. All fifteen native feature pairs remain false in examples;
 no operational migration, enablement, real import or deployment occurred.
@@ -200,7 +205,7 @@ All original invoice fields remain preserved by the foundation, including fields
 current mapped output. No real invoices were imported for these checkpoints. Incomplete
 analytics must disclose missing coverage before claiming an unexplained variance.
 
-### Latest verification and preserved snapshot
+### Original workflow checkpoint verification and preserved snapshot
 
 | Check | Recorded result and limit |
 |---|---|
