@@ -1,5 +1,12 @@
 # Hosted Supabase deployment readiness
 
+Current October 8 evidence: the user-designated existing test project passed
+the complete 29-file migration and synthetic API **rollback trial**. See the
+[hosted checkpoint](HOSTED_ROLLBACK_TRIAL_CHECKPOINT.md). Nothing was durably
+installed; managed restore, separate-connection and browser checks remain pending.
+The distinct-project path and local backup guards are intact. The older process
+below is the release checklist, not a statement that deployment is complete.
+
 The user selected the existing hosted Supabase database for this build. This is
 a local preparation checkpoint, not permission to apply SQL, enable features,
 import operational data, deploy, merge or restore the hosted database. PR #16 stays

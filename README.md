@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Hosted rollback trial - October 8, 2026
+
+The existing connected Supabase project, explicitly designated by its owner as
+a build/test database, passed the **29-migration hosted rollback trial** and
+invented purchase/count/prep/container-waste API workflow. Explicit Track 1
+Food Cost remained **$55** through prep and sales-context activity. PFG/US Foods
+capture retained unknown fields and multiline bytes; posting used the received
+date and separated taxes/fees.
+
+After rollback, all **40 existing application/integration tables**, schema,
+permissions and migration identities matched their original fingerprints.
+No native schema or temporary location remains. A fresh application backup is
+preserved privately. **20 selected local checks pass.** Read the
+[hosted checkpoint](docs/HOSTED_ROLLBACK_TRIAL_CHECKPOINT.md) for evidence and
+limits: durable installation, separate-connection workflows, managed restore
+and browser/Data API validation remain pending. No app flags, push, merge or
+publication changed. Older checkpoints below remain historical evidence.
+
 ## Local cutover/correction reconciliation - October 8, 2026
 
 The preserved legacy retirement and correction-review workflows now build on the
