@@ -302,3 +302,15 @@ immediately before final native access hardening. Runtime-role, combined recover
 hosted checks are still pending. No protected continuation source or hosted configuration
 was changed. See [the scoped performance and deployment review](WORKFLOW_READ_PERFORMANCE_REVIEW.md)
 for role ownership limits, paging requirements and validation boundaries.
+
+## Subsequent local deployment reconciliation
+
+A separate local branch based on PR16 correction head `91b028d` brings forward
+the readiness tool, final private-access migration and exact-newline restore fix.
+All 29 native migrations are ordered once, with access hardening last. Fourteen
+selected checks pass, including full chain/restore, client-denial and an ordinary
+owner-role Track 1 transaction/replay test without superuser or RLS-bypass privileges.
+Example PostgreSQL modes align with all native features held. The broader original
+40-file continuation remains unchanged and snapshotted separately. This local
+checkpoint is not pushed and performs no hosted SQL, deployment or operational
+import. See [the current deployment scope and remaining work](DEPLOYMENT_RECONCILIATION_CHECKPOINT.md).

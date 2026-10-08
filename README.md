@@ -1,5 +1,21 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local deployment reconciliation - October 8, 2026
+
+The separate deployment branch reconciles the latest PR16 corrections with the
+preserved readiness tooling, for a complete 29-migration native bundle with final
+access hardening last. **14 selected local checks pass**, including whole SQL
+restore and purchased-inventory transaction/replay checks under an ordinary
+database-owning role without superuser or RLS-bypass privileges.
+
+Read the [deployment reconciliation checkpoint](docs/DEPLOYMENT_RECONCILIATION_CHECKPOINT.md)
+and [readiness process](docs/SUPABASE_DEPLOYMENT_READINESS.md) for the exact scope,
+role model and remaining hosted checks. Example files select PostgreSQL with all
+native features false. Actual environments and compiled frontend flags remain
+unchanged. This local slice is not pushed; PR14-16 remain draft and unmerged.
+The remaining 40-file continuation is preserved separately for reconciliation.
+Earlier checkpoint text below records the state at its publication.
+
 The October 7 correction pass is documented in
 [`docs/PR_REVIEW_CORRECTIONS.md`](docs/PR_REVIEW_CORRECTIONS.md). It records save/retry,
 session-expiry, catalog batching, supplier selection, targeted recipe saves,

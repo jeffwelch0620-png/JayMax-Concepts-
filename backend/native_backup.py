@@ -146,7 +146,9 @@ def validated_sql(directory,manifest):
     if (manifest.get('format')!='jaymax-native-sql-backup-v1' or info.get('filename')!='database.sql'
         or not dump.is_file() or dump.stat().st_size!=info.get('bytes') or digest_file(dump)!=info.get('sha256')):
         raise BackupError('Backup is missing, incomplete or its checksum changed; restore was refused')
-    lines=dump.read_text(encoding='utf-8').splitlines(keepends=True)
+    # Universal newline conversion changes literal CRLF values in invoice text
+    # and stored function bodies. Decode bytes so recovery preserves both.
+    lines=dump.read_bytes().decode('utf-8').splitlines(keepends=True)
     # Only remove pg_dump's outer psql guards. Never filter invoice text inside SQL literals.
     edges=[i for i,line in enumerate(lines) if line.strip() and not line.startswith('--')]
     if not edges:raise BackupError('Empty backup')
