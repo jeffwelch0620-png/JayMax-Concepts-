@@ -40,11 +40,18 @@ these boundaries for its supported workflow.
   quantity bookkeeping remains allowed. Invalid lines, inactive suppliers, retired
   items, bad aliases/units and stale requests leave no partial command/header/lines.
 - Creator and reviewer identities come from the authenticated session, not browser
-  display names. An account cannot approve its own order. Existing orders have an
+  display names. An account cannot approve an order it created or edited, including
+  an earlier edit superseded by another editor. The retained create/edit/reorder
+  command journal supplies these authors; no historical identity is inferred.
+  Existing orders have an
   unverified creator identity and are held at approval until rebuilt as a reviewed
   draft (for example through explicit reorder). No identity is fabricated in a
   migration. Current manager/owner authorization is retained; a broader approval
   permission and login redesign remains outside this milestone.
+- Incomplete legacy line mappings return 422 on submit, approve, send or reorder,
+  without advancing versions or creating commands. Repair or explicitly rebuild
+  the draft; no product, supplier, quantity or unit mapping is invented. Occupied
+  workflow identities/request keys return 409 after the transaction rolls back.
 - Removing a draft/rejected order archives it, retains its lines/history and excludes
   it from active lists. A replay still confirms the archive. Direct physical deletion
   and edits to archived content are held. Reorder copies canonical identities and

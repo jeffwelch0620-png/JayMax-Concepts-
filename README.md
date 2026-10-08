@@ -2,14 +2,16 @@
 
 The October 7 correction pass is documented in
 [`docs/PR_REVIEW_CORRECTIONS.md`](docs/PR_REVIEW_CORRECTIONS.md). It records save/retry,
-session-expiry, catalog batching, supplier selection, targeted recipe saves and
-test-configuration fixes,
+session-expiry, catalog batching, supplier selection, targeted recipe saves,
+order author separation, legacy mapping holds and test-configuration fixes,
 their validation, and remaining review work.
 PRs 14–16 remain draft and unmerged; hosted development validation is still pending.
 
 Current PR15 correction checks: **359 frontend tests / 44 suites** pass in default and
 native configurations; **28 selected backend checks** and **four final recipe rechecks**
-pass. The production build passes with three existing hook warnings. Checkpoint evidence
+pass. A further **11 order backend checks** pass for retained author separation,
+legacy mapping holds, races and recovery. The frontend is unchanged from the prior
+359-test/build checkpoint. The production build passes with three existing hook warnings. Checkpoint evidence
 below describes the original snapshots, before the review corrections.
 
 ## Published workflow checkpoint — October 7, 2026
