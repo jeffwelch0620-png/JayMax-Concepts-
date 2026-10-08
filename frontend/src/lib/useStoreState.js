@@ -3,7 +3,7 @@ import * as api from "./api";
 import { confirmed } from "./saveIntegrity";
 
 export function useStoreState(rid, session, empty, onError) {
-  const scope = useMemo(() => ({ rid, session, revision: null, loaded: false, reads: 0 }), [rid, session]);
+  const scope = useMemo(() => ({ rid, session, revision: null, loaded: false, reads: 0, readFailed: false }), [rid, session]);
   const active = useRef(scope); active.current = scope;
   const pending = useRef(new Map());
   const writes = useRef(new Map());
@@ -25,9 +25,14 @@ export function useStoreState(rid, session, empty, onError) {
       }
       if (scope.loaded && data.revision < scope.revision) return;
       scope.revision = data.revision; scope.loaded = true;
+      scope.readFailed = false;
       setSnapshot({ scope, data: { ...empty, ...data } });
+      return data;
     } catch (error) {
-      if (isCurrent()) errors.current(error?.response?.data?.detail || error.message || "Couldn't load location data.");
+      if (isCurrent() && read === scope.reads && generation === (writes.current.get(rid) || 0) && !pending.current.has(rid)) {
+        if (!scope.readFailed) errors.current(error?.response?.data?.detail || error.message || "Couldn't load location data.");
+        scope.readFailed = true;
+      }
     }
   }, [rid, session, scope, isCurrent, empty]);
   const refreshRef = useRef(refresh); refreshRef.current = refresh;

@@ -7,6 +7,7 @@ import {
 import { RESTAURANTS, OWNER, isOrderEnabled, statusOf, downloadJSON, todayISO, workweekRange } from "./lib/calc";
 import * as api from "./lib/api";
 import { useStoreState } from "./lib/useStoreState";
+import { hasUnsavedDrafts, useDraftUnloadWarning } from "./lib/saveIntegrity";
 import { DashboardTab } from "./components/DashboardTab";
 import { CountsTab } from "./components/CountsTab";
 import { SetupTab } from "./components/SetupTab";
@@ -71,6 +72,7 @@ export default function App() {
   const backupRef = useRef(null);
   const pendingTabRef = useRef(null);
   const drafts = useRef(new Map());
+  useDraftUnloadWarning(drafts);
   useEffect(() => { drafts.current.clear(); }, [session]);
   const store = useStoreState(loc, session, EMPTY_STATE, message => toast.error(message));
   const S = store.state;
@@ -98,6 +100,14 @@ export default function App() {
   const persistReportingPeriods = next => store.save("reportingPeriods", next);
   const persistAreas = next => store.save("areas", next);
   const persistSalesPeriod = (next, revision) => store.save("salesPeriod", next, revision);
+  const loadLatestSales = async () => {
+    const latest = await store.refresh();
+    return latest ? { data: latest.salesPeriod, revision: latest.revision } : null;
+  };
+  function signOut() {
+    if (hasUnsavedDrafts(drafts.current) && !window.confirm("You have unsaved drafts. Sign out and discard them?")) return;
+    api.authLogout(); setSession(null);
+  }
   function applyPrepResult(res) {
     store.apply(p => ({ ...p, items: res.items ?? p.items, prepStock: res.prepStock ?? p.prepStock,
       prepLogs: res.log ? [res.log, ...(p.prepLogs || [])] : p.prepLogs }));
@@ -228,7 +238,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          <button onClick={() => { api.authLogout(); setSession(null); }} className="mt-2 text-xs text-slate-500 hover:text-white">Sign out ({session.user.email})</button>
+          <button onClick={signOut} data-testid="sign-out" className="mt-2 text-xs text-slate-500 hover:text-white">Sign out ({session.user.email})</button>
 
           {!isOwner && (
             <nav className="flex gap-0.5 mt-2 overflow-x-auto" data-testid="main-nav">
@@ -269,7 +279,7 @@ export default function App() {
             {activeTab === "menu" && <MenuTab dishes={S.dishes} onAddNew={() => openCosting(null)} onOpenDish={(id) => openCosting(id)} />}
             {activeTab === "costing" && <CostingTab rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} dishes={S.dishes} persist={persistDishes} showToast={showToast} focusDish={costingFocus} />}
             {activeTab === "recipeCards" && <RecipeCardsTab items={S.items} dishes={S.dishes} />}
-            {activeTab === "sales" && <SalesTrackingTab revision={S.revision} rid={loc} showError={showError} drafts={drafts.current} key={loc} actualMode={api.nativePurchasesEnabled} items={S.items} dishes={S.dishes} purchases={S.purchases} adjustments={S.adjustments} salesPeriod={S.salesPeriod} persist={persistSalesPeriod} reportingPeriods={S.reportingPeriods} persistReportingPeriods={persistReportingPeriods} showToast={showToast} />}
+            {activeTab === "sales" && <SalesTrackingTab revision={S.revision} rid={loc} showError={showError} drafts={drafts.current} key={loc} actualMode={api.nativePurchasesEnabled} items={S.items} dishes={S.dishes} purchases={S.purchases} adjustments={S.adjustments} salesPeriod={S.salesPeriod} persist={persistSalesPeriod} loadLatestSales={loadLatestSales} reportingPeriods={S.reportingPeriods} persistReportingPeriods={persistReportingPeriods} showToast={showToast} />}
             {activeTab === "adjustments" && <AdjustmentsTab rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} adjustments={S.adjustments} persist={persistAdjustments} showToast={showToast} />}
             {activeTab === "history" && (api.nativePurchasesEnabled ? <NativePurchaseHistory key={loc} restaurantId={loc} onOpenInvoices={() => setActiveTab("invoices")} /> : <HistoryTab items={S.items} purchases={S.purchases} focusControlNumber={historyFocusCN} />)}
             {activeTab === "scheduling" && <SchedulingTab key={loc} rid={loc} showToast={showToast} />}
