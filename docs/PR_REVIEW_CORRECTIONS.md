@@ -69,3 +69,35 @@ elevation still prevents treating claimed employee identity as verified review s
 Merge readiness remains pending. The intended merge order is PR14, then PR15, then PR16,
 after their applicable integrity and deployment checks pass. Merging and enabling native
 features are separate decisions.
+
+## Catalog correction batch
+
+Catalog list and owner catalog reads now use one request-local, repeatable-read snapshot.
+Schema checks, supplier rows, location aliases, and shared-location counts are batched.
+Unit-profile validation reads the same source fields as the single-profile contract in
+three queries rather than querying each item/SKU separately. No process-wide cache can
+retain a removed schema, changed pack, or old planning price.
+
+Supplier order is deterministic: available choices, then preferred choices, then stable
+supplier/SKU identities. Current planning selection ignores unavailable rows, including
+an unavailable row still marked preferred. Historical rows, original prices, product
+links, and exact decimal API strings remain present. With no available supplier, there
+is no selected supplier; the later recipe contract preserves unknown costs. Choosing a
+different available supplier affects planning only, never received purchase facts or
+explicit physical-count values.
+
+A6 is corrected for these catalog/profile reads; other setup/history query paths remain
+subject to review. A2's stale-price selection is corrected, but arbitrary SKU reassignment
+remains deliberately held. Reassignment needs a reviewed identity/history contract.
+Retired purchased items retain physical count participation and stock; retirement does
+not prove the stock has disappeared.
+
+Validation: 36 distinct selected backend checks passed across the initial 35-pass run and
+one corrected-fixture recheck. The initial failure assumed `999.0000` rather than the
+equivalent exact decimal returned as `999`; its original output is retained. Five query
+budget/source-contract checks cover one and 300 items/profiles. Disposable PostgreSQL
+regressions also cover shared store settings, retirement, source staleness, received-date
+accounting, receiving, and whole synthetic restore. No hosted database was changed.
+PR14's full frontend suite passes 251 tests across 32 suites with both default flags and
+the four foundation native flags enabled. The native-configured production
+build passes with the same three existing hook warnings.

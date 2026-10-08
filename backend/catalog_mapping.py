@@ -33,26 +33,32 @@ async def lock_catalog(conn):
 
 
 async def supplier_rows(conn,store,code):
+    return await supplier_rows_many(conn,store,[code])
+
+
+async def supplier_rows_many(conn,store,codes):
     await ready(conn)
     rows=await conn.fetch('''SELECT vi.*,v.name AS vendor_name,
         s.price AS store_price,s.price_updated_at AS store_price_updated_at,s.price_source AS store_price_source,
         coalesce(s.preferred,false) AS store_preferred,coalesce(s.available,false) AS store_available
         FROM public.vendor_items vi JOIN public.vendors v ON v.id=vi.vendor_id
         LEFT JOIN purchasing.store_vendor_items s ON s.vendor_item_id=vi.id AND s.store_id=$1
-        WHERE vi.item_code=$2 ORDER BY vi.vendor_id,vi.vendor_sku,vi.id''',store,code)
+        WHERE vi.item_code=ANY($2::text[])
+        ORDER BY store_available DESC,store_preferred DESC,vi.vendor_id,vi.vendor_sku,vi.id''',store,codes)
     result=[{**dict(r),**{key:r['store_'+key] for key in ('price','price_updated_at','price_source','preferred','available')}} for r in rows]
     if await conn.fetchval("SELECT to_regclass('purchasing.supplier_price_events') IS NOT NULL"):
         events=await conn.fetch('''SELECT e.*,e.pack_snapshot IS DISTINCT FROM purchasing.supplier_pack(e.vendor_item_id) AS pack_stale,
             (e.source='invoice' AND NOT EXISTS(SELECT 1 FROM purchasing.current_posting_lines pl
                 WHERE pl.line_id::text=e.basis_snapshot->>'line_id' AND pl.mapping_id::text=e.basis_snapshot->>'mapping_id')) AS invoice_stale
             FROM purchasing.store_vendor_items s JOIN purchasing.supplier_price_events e ON e.id=s.price_event_id
-            WHERE s.store_id=$1 AND s.item_code=$2''',store,code)
+            WHERE s.store_id=$1 AND s.item_code=ANY($2::text[])''',store,codes)
         by_id={e['vendor_item_id']:e for e in events}
         invoice_events=[e for e in events if e['source']=='invoice']
         reviewed_profiles=[]
         if invoice_events:
             from native_units import profiles
             reviewed_profiles=await profiles(conn,store)
+        purchase_profiles={p['vendor_item_id']:p for p in reviewed_profiles if p['profile_kind']=='purchase'}
         for row in result:
             event=by_id.get(row['id'])
             row['price_issues']=[]
@@ -60,7 +66,7 @@ async def supplier_rows(conn,store,code):
                 if event['pack_stale']:row['price_issues'].append('Supplier pack changed; review the planning price')
                 if event['invoice_stale']:row['price_issues'].append('Source invoice was corrected; review the planning price')
                 if event['source']=='invoice':
-                    profile=next((p for p in reviewed_profiles if p['profile_kind']=='purchase' and p['vendor_item_id']==row['id']),None)
+                    profile=purchase_profiles.get(row['id'])
                     if not profile or profile['stale'] or str(profile['id'])!=event['basis_snapshot'].get('profile',{}).get('id'):
                         row['price_issues'].append('Purchase conversion changed; review the planning price')
                 if row['price_issues']:row['price']=None

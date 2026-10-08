@@ -138,3 +138,31 @@ class CatalogIntegrityTests(unittest.IsolatedAsyncioTestCase):
         response=await self.catalog.post('/api/pg/items/berts',json=body,headers={'If-Match':'0'})
         self.assertEqual(response.status_code,200,response.text);self.assertEqual(response.json()['revision'],1)
         response=await self.put([],0);self.assertEqual(response.status_code,409,response.text)
+
+    async def test_unavailable_sku_history_is_retained_but_available_choices_sort_first(self):
+        async with self.pool.acquire() as c:
+            await c.execute("UPDATE vendor_items SET preferred=true,available=false,price=999 WHERE id=$1",self.sku)
+            current=await c.fetchval("""INSERT INTO vendor_items(vendor_id,vendor_sku,item_code,purchase_unit,
+                pack_count,unit_qty,unit_uom,base_per_purchase_unit,price,preferred,available)
+                VALUES('synthetic_other','00002','test_food','case',4,5,'lb',20,80,false,true) RETURNING id""")
+        result=(await self.catalog.get('/api/pg/items/berts')).json()
+        product=next(row for row in result if row['code']=='test_food')
+        self.assertEqual([row['id'] for row in product['vendorSkus']],[str(current),str(self.sku)])
+        self.assertEqual(server.preferred_sku(product)['id'],str(current))
+        self.assertFalse(product['vendorSkus'][1]['available'])
+        self.assertEqual(Decimal(product['vendorSkus'][1]['price']),Decimal('999'))
+
+    async def test_batched_profile_reads_preserve_current_hash_and_detect_source_changes(self):
+        import native_units
+        from purchase_parser import fingerprint
+        self.assertEqual((await self.units())[0].status_code,200)
+        self.assertEqual((await self.units(kind='count'))[0].status_code,200)
+        async with self.pool.acquire() as c:
+            before=await native_units.profiles(c,'berts')
+            self.assertEqual(len(before),2)
+            for row in before:
+                source,_=await native_units.source_snapshot(c,'berts',row['item_code'],row['profile_kind'],row['vendor_item_id'])
+                self.assertEqual(fingerprint(source),row['source_fingerprint']);self.assertFalse(row['stale'])
+            await c.execute("UPDATE items SET unit_qty=6 WHERE code='test_food'")
+            after=await native_units.profiles(c,'berts')
+        self.assertTrue(all(row['stale'] for row in after))

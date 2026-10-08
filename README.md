@@ -2,7 +2,8 @@
 
 The October 7 correction pass is documented in
 [`docs/PR_REVIEW_CORRECTIONS.md`](docs/PR_REVIEW_CORRECTIONS.md). It records save/retry,
-session-expiry and test-configuration fixes, their validation, and remaining review work.
+session-expiry, catalog batching, supplier selection and test-configuration fixes,
+their validation, and remaining review work.
 PRs 14–16 remain draft and unmerged; hosted development validation is still pending.
 
 ## Published workflow checkpoint — October 7, 2026

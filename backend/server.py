@@ -289,7 +289,7 @@ def calc_ppu(yq, yuom, ps, puom):
     return yq / ps
 
 def preferred_sku(item):
-    skus = item.get("vendorSkus") or []
+    skus = [sku for sku in item.get("vendorSkus") or [] if sku.get("available") is not False]
     return next((s for s in skus if s.get("preferred")), skus[0] if skus else None)
 
 def item_derived(item):
@@ -2334,27 +2334,11 @@ async def _pg_owner_view(rid):
     prefix = rid + "_"
     conn = await db_pg.pool().acquire()
     try:
-        item_rows = await conn.fetch(
-            """SELECT i.*, si.count_unit, si.base_per_count_unit, si.storage_area, si.counted_nightly,
-                      si.current_stock, si.par, si.last_counted, si.last_counted_by, si.active AS store_active,
-                      si.order_enabled, si.sales_tracked, si.needs_review
-               FROM items i JOIN store_items si ON si.item_code = i.code
-               WHERE si.store_id = $1""", store_id)
-        sku_rows = await conn.fetch(
-            """SELECT vi.*, v.name AS vendor_name FROM vendor_items vi
-               JOIN vendors v ON v.id = vi.vendor_id
-               WHERE vi.item_code = ANY($1::text[])""",
-            [r["code"] for r in item_rows])
-        skus_by_code = {}
-        for sku in sku_rows:
-            skus_by_code.setdefault(sku["item_code"], []).append(sku)
         items = []
-        for r2 in item_rows:
-            it = await _item_row_to_api(conn, store_id, r2, r2, skus_by_code.get(r2["code"], []))
+        for it in await _pg_catalog_rows(conn, store_id):
             code = it["code"]
             it["controlNumber"] = it.get("controlNumber") or (code[len(prefix):] if code.startswith(prefix) else code)
-            it["purchaseUnit"] = (next((s["purchaseUnit"] for s in it["vendorSkus"] if s["preferred"]), None)
-                                   or (it["vendorSkus"][0]["purchaseUnit"] if it["vendorSkus"] else "case"))
+            it["purchaseUnit"] = (preferred_sku(it) or {}).get("purchaseUnit") or "case"
             items.append(it)
 
         purchases = [] if purchase_api.enabled() else [
@@ -3633,19 +3617,27 @@ class ItemIn(BaseModel):
     needs_review: bool = False
     vendor_skus: List[VendorSkuIn] = []
 
-async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None):
-    await catalog_mapping.reject_legacy_schema(conn)
+async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None, *, catalog_checked=False, shared_meta=None):
+    if not catalog_checked:
+        await catalog_mapping.reject_legacy_schema(conn)
     shared = catalog_mapping.enabled()
-    if shared:
-        skus = await catalog_mapping.supplier_rows(conn, store_id, item_row["code"])
-    elif skus is None:
-        skus = await conn.fetch(
-            """SELECT vi.*, v.name AS vendor_name FROM vendor_items vi
-               JOIN vendors v ON v.id = vi.vendor_id WHERE vi.item_code = $1""", item_row["code"])
+    if skus is None:
+        if shared:
+            skus = await catalog_mapping.supplier_rows(conn, store_id, item_row["code"])
+        else:
+            skus = await conn.fetch(
+                """SELECT vi.*, v.name AS vendor_name FROM vendor_items vi
+                   JOIN vendors v ON v.id = vi.vendor_id WHERE vi.item_code = $1
+                   ORDER BY vi.available DESC,vi.preferred DESC,vi.vendor_id,vi.vendor_sku,vi.id""", item_row["code"])
+    if shared and shared_meta is None:
+        shared_meta = {
+            'control_number': await conn.fetchval('SELECT control_number FROM public.store_items WHERE store_id=$1 AND item_code=$2',store_id,item_row['code']),
+            'shared_store_count': await conn.fetchval('SELECT count(*) FROM public.store_items WHERE item_code=$1',item_row['code']),
+        }
     return {
         "code": item_row["code"], "name": item_row["name"], "category": item_row["category"],
-        "controlNumber": (await conn.fetchval('SELECT control_number FROM store_items WHERE store_id=$1 AND item_code=$2',store_id,item_row['code'])) if shared else None,
-        "sharedStoreCount": (await conn.fetchval('SELECT count(*) FROM store_items WHERE item_code=$1',item_row['code'])) if shared else None,
+        "controlNumber": shared_meta['control_number'] if shared else None,
+        "sharedStoreCount": shared_meta['shared_store_count'] if shared else None,
         "baseUnit": item_row["base_unit"], "itemType": item_row["item_type"],
         "isHighValue": item_row["is_high_value"], "notes": item_row["notes"],
         "costingType": item_row["costing_type"],
@@ -3684,18 +3676,40 @@ async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None):
         } for s in skus],
     }
 
+async def _pg_catalog_rows(conn, store_id):
+    # A request-local snapshot: never cache schema or planning prices across reads.
+    async with conn.transaction(isolation='repeatable_read', readonly=True):
+        await catalog_mapping.reject_legacy_schema(conn)
+        shared = catalog_mapping.enabled()
+        extra_columns = ',si.control_number,links.shared_store_count' if shared else ''
+        extra_join = '''LEFT JOIN (SELECT item_code,count(*) AS shared_store_count
+            FROM public.store_items GROUP BY item_code) links ON links.item_code=i.code''' if shared else ''
+        rows = await conn.fetch(
+            """SELECT i.*, si.count_unit, si.base_per_count_unit, si.storage_area, si.counted_nightly,
+                      si.current_stock, si.par, si.last_counted, si.last_counted_by,
+                      si.active AS store_active, si.order_enabled, si.sales_tracked, si.needs_review""" + extra_columns + """
+               FROM public.items i JOIN public.store_items si ON si.item_code = i.code """ + extra_join + """
+               WHERE si.store_id = $1 ORDER BY i.name""", store_id)
+        codes = [row['code'] for row in rows]
+        if shared:
+            skus = await catalog_mapping.supplier_rows_many(conn, store_id, codes)
+        else:
+            skus = await conn.fetch('''SELECT vi.*,v.name AS vendor_name FROM public.vendor_items vi
+                JOIN public.vendors v ON v.id=vi.vendor_id WHERE vi.item_code=ANY($1::text[])
+                ORDER BY vi.available DESC,vi.preferred DESC,vi.vendor_id,vi.vendor_sku,vi.id''',codes)
+        by_code = {}
+        for sku in skus:
+            by_code.setdefault(sku['item_code'], []).append(sku)
+        return [await _item_row_to_api(conn, store_id, row, row, by_code.get(row['code'], []),
+            catalog_checked=True, shared_meta=row if shared else None) for row in rows]
+
+
 @pg_router.get("/items/{store_id}")
 async def pg_list_items(store_id: str):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
-        rows = await conn.fetch(
-            """SELECT i.*, si.count_unit, si.base_per_count_unit, si.storage_area, si.counted_nightly,
-                      si.current_stock, si.par, si.last_counted, si.last_counted_by,
-                      si.active AS store_active, si.order_enabled, si.sales_tracked, si.needs_review
-               FROM items i JOIN store_items si ON si.item_code = i.code
-               WHERE si.store_id = $1 ORDER BY i.name""", store_id)
-        return [await _item_row_to_api(conn, store_id, r, r) for r in rows]
+        return await _pg_catalog_rows(conn, store_id)
     finally:
         await db_pg.pool().release(conn)
 
@@ -3780,7 +3794,7 @@ async def _pg_save_item(conn, store_id, body):
                     "SELECT * FROM vendor_items WHERE vendor_id=$1 AND vendor_sku=$2 FOR UPDATE",
                     sk.vendor_id, sk.vendor_sku)
         if existing and existing["item_code"] != body.code:
-            raise HTTPException(409, "Vendor SKU is already linked to another item")
+            raise HTTPException(409, "Vendor SKU is already linked to another product and its history. Review the product mapping; removing a supplier option does not release its historical identity.")
         if existing:
             if shared:
                 if sk.price is not None and await conn.fetchval("SELECT to_regclass('purchasing.supplier_price_events') IS NOT NULL"):
