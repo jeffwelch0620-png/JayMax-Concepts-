@@ -99,6 +99,38 @@ class StaffPrepCountsTests(unittest.IsolatedAsyncioTestCase):
             accepted = await reviewer.post(path+'/decision', json=payload, headers={'Idempotency-Key':str(uuid4())})
             self.assertEqual(accepted.status_code, 200, accepted.text)
 
+    async def test_workflow_reads_batch_details_keep_original_errors_hashes_and_pending_scope(self):
+        issued,_ = await self.issue_sheet()
+        review = issued.json()['current']
+        submitted = await self.submit_sheet(review)
+        self.assertEqual(submitted.status_code,200,submitted.text)
+        async def compare():
+            async with self.pool.acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):
+                expected = await counts.detail(c,'berts',UUID(review['sheet']['id']))
+                actual = await counts.details(c,'berts')
+                self.assertEqual(actual,[expected])
+                self.assertEqual(await counts.details(c,'rudds'),[])
+                self.assertEqual(await counts.details(c,'berts',[uuid4()]),[])
+                return expected
+        fresh = await compare()
+        self.assertEqual(fresh['errors'],[])
+        await self.prep_count(stamp='2026-10-07T22:00:00-04:00')
+        await self.product('Another physically counted prep item')
+        conflicted = await compare()
+        self.assertEqual(conflicted['errors'],[
+            'A physical prep count already occupies this boundary; review its correction history',
+            'Prepared-inventory scope changed; issue a new sheet'])
+        await self.profile(self.p,predecessor=self.u['id'])
+        stale = await compare()
+        self.assertTrue(any('count units changed' in error for error in stale['errors']))
+        self.assertNotEqual(stale['reviewHash'],fresh['reviewHash'])
+        rejected,_ = await self.accept(stale,decision='rejected')
+        self.assertEqual(rejected.status_code,200,rejected.text)
+        final = await compare()
+        self.assertEqual(final['errors'],[])
+        async with self.pool.acquire() as c:
+            self.assertEqual(await counts.details(c,'berts',pending_only=True),[])
+
     async def test_history_review_staff_count_projection_keeps_private_audit_and_retry(self):
         from staff_response import staff_view
         issued, _ = await self.issue_sheet()

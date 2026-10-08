@@ -1,5 +1,6 @@
 """Issued Track 2 count sheets, immutable staff quantities and reviewed observations."""
 import os
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -162,10 +163,69 @@ async def detail(conn, store, ident):
                 await mapping.current_product(conn, store, UUID(item['product_version_id']))
                 await mapping.current_profile(conn, store, UUID(item['profile_id']), UUID(item['product_version_id']))
             except HTTPException: errors.append(f"Prepared definition or count units changed for {item['name']}; issue a new sheet")
+    return review_record(sheet,history,decision,errors)
+
+
+def review_record(sheet,history,decision,errors):
     result = serial(dict(sheet=dict(sheet), latest=dict(history[0]) if history else None,
                          history=[dict(r) for r in history], decision=dict(decision) if decision else None, errors=errors))
     result['reviewHash'] = fingerprint(result).hex()
     return result
+
+
+async def count_definitions(conn,store):
+    await mapping.ready(conn)
+    products = await conn.fetch('''SELECT DISTINCT ON(product_id) * FROM prep_inventory.product_versions
+        WHERE store_id=$1 ORDER BY product_id,revision DESC''',store)
+    profiles = await conn.fetch('''SELECT DISTINCT ON(product_version_id,source_unit) * FROM prep_inventory.unit_profiles
+        WHERE store_id=$1 ORDER BY product_version_id,source_unit,revision DESC''',store)
+    return serial(dict(products=[dict(r) for r in products],profiles=[dict(r) for r in profiles]))
+
+
+async def details(conn,store,identities=None,definitions=None,pending_only=False):
+    sheets = await conn.fetch('''SELECT s.* FROM prep_inventory.staff_sheets s WHERE store_id=$1
+        AND ($2::uuid[] IS NULL OR id=ANY($2))
+        AND (NOT $3 OR NOT EXISTS(SELECT 1 FROM prep_inventory.staff_decisions d WHERE d.sheet_id=s.id))
+        ORDER BY performed_at DESC,issued_at DESC''',store,identities,pending_only)
+    if not sheets: return []
+    ids = [r['id'] for r in sheets]
+    histories = {ident:[] for ident in ids}
+    for row in await conn.fetch('''SELECT * FROM prep_inventory.staff_submissions
+        WHERE store_id=$1 AND sheet_id=ANY($2::uuid[]) ORDER BY sheet_id,revision DESC''',store,ids):
+        histories[row['sheet_id']].append(row)
+    decisions = {r['sheet_id']:r for r in await conn.fetch('''SELECT * FROM prep_inventory.staff_decisions
+        WHERE store_id=$1 AND sheet_id=ANY($2::uuid[])''',store,ids)}
+    pending = [r for r in sheets if r['id'] not in decisions]
+    if pending:
+        definitions = definitions if definitions is not None else await count_definitions(conn,store)
+        scope = {str(r['id']) for r in await conn.fetch('SELECT id FROM prep_inventory.products WHERE store_id=$1',store)}
+        versions = {r['id'] for r in definitions['products']}
+        profiles = {(r['id'],r['product_version_id']) for r in definitions['profiles']}
+        policy = await conn.fetchval('SELECT timezone_name FROM prep_inventory.batch_policies WHERE store_id=$1',store)
+        boundaries = [datetime.fromisoformat(r['sheet_snapshot']['stamp']['performed_at']) for r in pending]
+        observed = {r['performed_at'] for r in await conn.fetch('''SELECT performed_at FROM prep_inventory.observations
+            WHERE store_id=$1 AND purpose='count' AND kind='initial' AND performed_at=ANY($2::timestamptz[])''',store,boundaries)}
+        occupied = {}
+        for row in await conn.fetch('''SELECT s.id,s.performed_at FROM prep_inventory.staff_sheets s
+            WHERE store_id=$1 AND performed_at=ANY($2::timestamptz[])
+            AND NOT EXISTS(SELECT 1 FROM prep_inventory.staff_decisions d WHERE d.sheet_id=s.id AND d.decision='rejected')''',store,boundaries):
+            occupied.setdefault(row['performed_at'],set()).add(row['id'])
+    results = []
+    for sheet in sheets:
+        errors = []
+        decision = decisions.get(sheet['id'])
+        if not decision:
+            snapshot = sheet['sheet_snapshot']; stamp = snapshot['stamp']
+            instant = datetime.fromisoformat(stamp['performed_at'])
+            if policy and policy!=stamp['timezone_name']:errors.append('The location timezone changed; issue a new sheet')
+            if instant in observed:errors.append('A physical prep count already occupies this boundary; review its correction history')
+            if occupied.get(instant,set())-{sheet['id']}:errors.append('Another issued sheet occupies this physical boundary')
+            if scope!={i['product_id'] for i in snapshot['items']}:errors.append('Prepared-inventory scope changed; issue a new sheet')
+            for item in snapshot['items']:
+                if item['product_version_id'] not in versions or (item['profile_id'],item['product_version_id']) not in profiles:
+                    errors.append(f"Prepared definition or count units changed for {item['name']}; issue a new sheet")
+        results.append(review_record(sheet,histories[sheet['id']],decision,errors))
+    return results
 
 
 async def prior(conn, table, store, key, digest):
@@ -287,10 +347,9 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
     async def setup(store: str, request: Request):
         _, pool = await manager(request, store)
         async with pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
-            definitions = await mapping.setup(conn, store)
-            ids = await conn.fetch('SELECT id FROM prep_inventory.staff_sheets WHERE store_id=$1 ORDER BY performed_at DESC,issued_at DESC', store)
+            definitions = await count_definitions(conn,store)
             return dict(store_id=store, products=definitions['products'], profiles=definitions['profiles'],
-                        sheets=[await detail(conn, store, r['id']) for r in ids])
+                        sheets=await details(conn,store,definitions=definitions))
 
     @router.post('/api/pg/purchases/{store}/staff-prep-counts/preview')
     async def issue_plan(store: str, request: Request, body: SheetIn):
@@ -319,10 +378,7 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
         store_check(store); pool = pool_factory()
         async with pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
             await ready(conn); await staff_authorize(request, conn, store, body.pin)
-            ids = await conn.fetch('''SELECT s.id FROM prep_inventory.staff_sheets s WHERE store_id=$1
-                AND NOT EXISTS(SELECT 1 FROM prep_inventory.staff_decisions d WHERE d.sheet_id=s.id)
-                ORDER BY performed_at DESC,issued_at DESC''', store)
-            return staff_view([await detail(conn, store, r['id']) for r in ids])
+            return staff_view(await details(conn,store,pending_only=True))
 
     @router.post('/api/pg/staff/{store}/prep-count-drafts/{ident}/submit')
     async def staff_submit(store: str, ident: UUID, request: Request, body: SubmitIn, idempotency_key: UUID = Header(...)):

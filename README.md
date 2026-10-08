@@ -3,19 +3,27 @@
 The October 7 correction pass is documented in
 [`docs/PR_REVIEW_CORRECTIONS.md`](docs/PR_REVIEW_CORRECTIONS.md). It records save/retry,
 session-expiry, catalog batching, supplier selection, targeted recipe saves,
-order/staff review separation, workflow conflicts, limited paired waste corrections
-recipe history retention, staff audit-response boundaries and test-configuration fixes,
+order/staff review separation, workflow conflicts, limited paired waste corrections,
+recipe history retention, staff audit-response boundaries, history read batching
+and test-configuration fixes,
 their validation, and remaining review work.
 PRs 14–16 remain draft and unmerged; hosted development validation is still pending.
 
-Current history/access correction checks: **438 frontend tests / 53 suites** pass in
-default and native configurations. **16 selected backend cases** pass across the
-first attempt and final three-case rerun, including inherited cases and two parameter
-subtests. PR15 separately passes the complete **15 menu checks / 23 parameter subtests**.
-Prior correction results remain documented separately. The production build passes
-with three existing hook warnings. This batch adds no migration; the earlier waste
-migration still must be included in the preserved deployment bundle before hosted
-validation. Checkpoint evidence below describes the original snapshots.
+Current history-read changes batch container balances and staff count history,
+preserving exact values, review hashes, unresolved work and historical evidence.
+**18 distinct selected backend checks** pass across the 15-case regression run
+and four-case boundary/profile recheck, with one repeated case.
+Read [query budgets and migration/runtime-role review](docs/WORKFLOW_READ_PERFORMANCE_REVIEW.md)
+for the implemented scope and remaining full-history/recipe setup work. The preserved
+deployment plan needs the waste correction before final access hardening, for a
+combined 29-migration bundle; combined runtime and hosted recovery validation remain
+pending. This batch adds no SQL migration or frontend change.
+
+Previous history/access evidence remains valid for the unchanged frontend:
+**438 tests / 53 suites** in default and native configurations, with a production
+build passing with three existing hook warnings. Its 16 selected backend cases and
+PR15's complete 15 menu checks / 23 parameter subtests are recorded separately.
+Checkpoint evidence below describes the original snapshots.
 
 ## Published staff workflow checkpoint — October 7, 2026
 

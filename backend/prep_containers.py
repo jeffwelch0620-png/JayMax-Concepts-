@@ -137,19 +137,44 @@ def move_record(row):
     return result
 
 
-async def fill_state(conn, store, ident):
-    row = await conn.fetchrow('SELECT * FROM prep_inventory.container_fills WHERE id=$1 AND store_id=$2', ident, store)
-    if not row: raise HTTPException(404, 'Filled container is not at this location')
-    moves = [move_record(x) for x in await conn.fetch('SELECT * FROM prep_inventory.container_moves WHERE fill_id=$1 ORDER BY revision', ident)]
+def contents_state(row, moves, history):
     storage = batches.exact_sum([row['base_quantity']] + [x['storage_delta'] for x in moves])
     service = batches.exact_sum(x['service_delta'] for x in moves)
     result = dict(fill=dict(row), moves=moves, storage=storage, service=service, allocated=batches.exact_sum([storage, service]), revision=len(moves), voided=any(x['action']=='void_fill' for x in moves))
-    if await conn.fetchval("SELECT to_regclass('prep_inventory.container_waste_links') IS NOT NULL"):
-        history = [dict(link=dict(l),event=dict(await conn.fetchrow('SELECT * FROM prep_inventory.observations WHERE id=$1',l['observation_id'])))
-            for l in await conn.fetch('''SELECT l.* FROM prep_inventory.container_waste_links l JOIN prep_inventory.container_moves m ON m.id=l.move_id
-                WHERE m.fill_id=$1 ORDER BY m.revision''',ident)]
-        if history: result['waste_history'] = history
+    if history: result['waste_history'] = history
     return serial(result)
+
+
+async def fill_states(conn, store, identities=None):
+    rows = await conn.fetch('''SELECT * FROM prep_inventory.container_fills WHERE store_id=$1
+        AND ($2::uuid[] IS NULL OR id=ANY($2)) ORDER BY recorded_at DESC,id''',store,identities)
+    ids = [row['id'] for row in rows]
+    moves, losses = {ident:[] for ident in ids}, {ident:[] for ident in ids}
+    if ids:
+        for move in await conn.fetch('''SELECT m.* FROM prep_inventory.container_moves m
+            JOIN prep_inventory.container_fills f ON f.id=m.fill_id WHERE f.store_id=$1 AND f.id=ANY($2::uuid[])
+            ORDER BY m.fill_id,m.revision''',store,ids):
+            moves[move['fill_id']].append(move_record(move))
+        if await conn.fetchval("SELECT to_regclass('prep_inventory.container_waste_links') IS NOT NULL"):
+            links = await conn.fetch('''SELECT m.fill_id,l.* FROM prep_inventory.container_waste_links l
+                JOIN prep_inventory.container_moves m ON m.id=l.move_id
+                WHERE l.store_id=$1 AND m.fill_id=ANY($2::uuid[]) ORDER BY m.fill_id,m.revision''',store,ids)
+            # Ordinary rows preserve Decimal/timestamp codecs, including custom numeric
+            # domains that asyncpg cannot decode inside PostgreSQL composite records.
+            events = {row['id']:dict(row) for row in await conn.fetch('''SELECT o.* FROM prep_inventory.observations o
+                JOIN prep_inventory.container_waste_links l ON l.observation_id=o.id
+                JOIN prep_inventory.container_moves m ON m.id=l.move_id
+                WHERE l.store_id=$1 AND m.fill_id=ANY($2::uuid[])''',store,ids)}
+            for row in links:
+                link = dict(row); ident = link.pop('fill_id')
+                losses[ident].append(dict(link=link,event=events[link['observation_id']]))
+    return [contents_state(row,moves[row['id']],losses[row['id']]) for row in rows]
+
+
+async def fill_state(conn, store, ident):
+    states = await fill_states(conn,store,[ident])
+    if not states: raise HTTPException(404, 'Filled container is not at this location')
+    return states[0]
 
 
 async def preview(conn, store, body):
@@ -281,18 +306,20 @@ async def setup(conn, store):
     foundation = await mapping.setup(conn, store)
     definitions = [dict(x) for x in await conn.fetch('SELECT d.*,NOT EXISTS(SELECT 1 FROM prep_inventory.container_definitions n WHERE n.predecessor_id=d.id) AS current FROM prep_inventory.container_definitions d WHERE store_id=$1 ORDER BY name,revision,id', store)]
     profiles = [dict(x) for x in await conn.fetch('SELECT d.*,NOT EXISTS(SELECT 1 FROM prep_inventory.container_profiles n WHERE n.predecessor_id=d.id) AS current FROM prep_inventory.container_profiles d WHERE store_id=$1 ORDER BY root_id,revision', store)]
+    current_definitions = {d['id'] for d in definitions if d['current']}
+    current_products = {d['id'] for d in foundation['products']}
+    current_units = {(u['id'],u['product_version_id']) for u in foundation['profiles']}
     for p in profiles:
-        try:
-            await current(conn,'container_profiles',store,p['id'])
-            await current(conn,'container_definitions',store,p['definition_id'])
-            await mapping.current_product(conn,store,p['product_version_id'])
-            await mapping.current_profile(conn,store,p['unit_profile_id'],p['product_version_id'])
-            p['reviewNeeded'] = False
-        except HTTPException: p['reviewNeeded'] = True
-    fills = [await fill_state(conn, store, r['id']) for r in await conn.fetch('SELECT id FROM prep_inventory.container_fills WHERE store_id=$1 ORDER BY recorded_at DESC,id', store)]
+        p['reviewNeeded'] = not (p['current'] and p['definition_id'] in current_definitions
+            and str(p['product_version_id']) in current_products
+            and (str(p['unit_profile_id']),str(p['product_version_id'])) in current_units)
+    fills = await fill_states(conn,store)
     batch = await batches.setup(conn, store)
+    contents_by_lot = {}
+    for state in fills:
+        contents_by_lot.setdefault(state['fill']['source_batch_id'],[]).append(state)
     for lot in batch['lots']:
-        contents = [s for s in fills if s['fill']['source_batch_id']==lot['id']]
+        contents = contents_by_lot.get(lot['id'],[])
         storage = batches.exact_sum(Decimal(s['storage']) for s in contents)
         service = batches.exact_sum(Decimal(s['service']) for s in contents)
         lot.update(containerStorage=storage,containerService=service,totalRemainingRecordedQuantity=batches.exact_sum([Decimal(lot['remainingRecordedQuantity']),storage,service]))

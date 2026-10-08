@@ -144,6 +144,31 @@ class PrepContainerTests(unittest.IsolatedAsyncioTestCase):
         p=await self.command(dict(action='profile',predecessor_id=self.fill_profile['id'],definition_id=d.json()['result']['id'],product_version_id=self.p['id'],unit_profile_id=self.u['id'],usable_quantity='5',evidence='Re-measured product-specific fill',product_fill_measured=True))
         self.assertEqual(p.status_code,200,p.text);self.assertEqual(move.json()['current']['fill']['profile_id'],self.fill_profile['id'])
 
+    async def test_workflow_reads_profile_review_flags_match_individual_checks(self):
+        await self.prepare()
+        async def compare():
+            async with self.pool.acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):
+                state=await containers.setup(c,'berts')
+                for profile in state['profiles']:
+                    expected=False
+                    try:
+                        await containers.current(c,'container_profiles','berts',UUID(profile['id']))
+                        await containers.current(c,'container_definitions','berts',UUID(profile['definition_id']))
+                        await containers.mapping.current_product(c,'berts',UUID(profile['product_version_id']))
+                        await containers.mapping.current_profile(c,'berts',UUID(profile['unit_profile_id']),UUID(profile['product_version_id']))
+                    except server.HTTPException:expected=True
+                    self.assertEqual(profile['reviewNeeded'],expected)
+                return state
+        self.assertFalse((await compare())['profiles'][0]['reviewNeeded'])
+        changed=await self.command(dict(action='definition',predecessor_id=self.definition['id'],name='Revised measured pan',capacity_unit='l',usable_capacity='6',evidence='New physical measurement'))
+        self.assertEqual(changed.status_code,200,changed.text)
+        self.assertTrue((await compare())['profiles'][0]['reviewNeeded'])
+        revised=await self.command(dict(action='profile',predecessor_id=self.fill_profile['id'],definition_id=changed.json()['result']['id'],product_version_id=self.p['id'],unit_profile_id=self.u['id'],usable_quantity='5',evidence='Re-measured fill',product_fill_measured=True))
+        self.assertEqual(revised.status_code,200,revised.text)
+        state=await compare();self.assertEqual([p['reviewNeeded'] for p in state['profiles']],[True,False])
+        await self.profile(self.p,predecessor=self.u['id'])
+        self.assertTrue(all(p['reviewNeeded'] for p in (await compare())['profiles']))
+
     async def test_dependencies_block_batch_correction_and_flags_off_hold_legacy(self):
         await self.prepare();f=await self.fill()
         r=await self.command(self.move(f,'send','1'));self.assertEqual(r.status_code,200,r.text)

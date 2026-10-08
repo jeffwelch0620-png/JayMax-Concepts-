@@ -92,6 +92,41 @@ class ContainerWasteTests(fixtures.PrepContainerTests):
             self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.container_waste_links'),0)
             self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.observations'),1)
 
+    async def test_workflow_reads_batched_fills_preserve_pairs_and_pending_hash(self):
+        from purchase_api import serial
+        await self.prepare()
+        first = await self.fill()
+        second = await self.fill('2')
+        loss = await self.command(self.loss(first,'1.000000000001'))
+        self.assertEqual(loss.status_code,200,loss.text)
+        async def original(conn,store,ident):
+            row = await conn.fetchrow('SELECT * FROM prep_inventory.container_fills WHERE id=$1 AND store_id=$2',ident,store)
+            moves = [containers.move_record(r) for r in await conn.fetch('SELECT * FROM prep_inventory.container_moves WHERE fill_id=$1 ORDER BY revision',ident)]
+            history = []
+            for link in await conn.fetch('''SELECT l.* FROM prep_inventory.container_waste_links l JOIN prep_inventory.container_moves m ON m.id=l.move_id
+                WHERE m.fill_id=$1 ORDER BY m.revision''',ident):
+                event = await conn.fetchrow('SELECT * FROM prep_inventory.observations WHERE id=$1',link['observation_id'])
+                history.append(dict(link=dict(link),event=dict(event)))
+            storage = containers.batches.exact_sum([row['base_quantity']]+[m['storage_delta'] for m in moves])
+            service = containers.batches.exact_sum(m['service_delta'] for m in moves)
+            result = dict(fill=dict(row),moves=moves,storage=storage,service=service,allocated=containers.batches.exact_sum([storage,service]),revision=len(moves),voided=any(m['action']=='void_fill' for m in moves))
+            if history:result['waste_history']=history
+            return serial(result)
+        async with self.pool.acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):
+            expected = [await original(c,'berts',UUID(fill['id'])) for fill in (second,first)]
+            self.assertEqual(await containers.fill_states(c,'berts'),expected)
+            self.assertEqual(await containers.fill_states(c,'rudds'),[])
+            with self.assertRaises(server.HTTPException) as held:await containers.fill_state(c,'rudds',UUID(first['id']))
+            self.assertEqual(held.exception.status_code,404)
+        body = self.move(first,'send','1')
+        with patch.object(containers,'fill_state',side_effect=original):
+            pending = await self.preview_container(body)
+        fresh = await self.preview_container(body)
+        self.assertEqual(fresh.status_code,200,fresh.text)
+        self.assertEqual(fresh.json(),pending.json())
+        committed = await self.command(payload=dict(body=body,expected_review_hash=pending.json()['reviewHash'],reviewed=True))
+        self.assertEqual(committed.status_code,200,committed.text)
+
     async def test_review_corrections_waste_upgrade_preserves_preview_retry_and_restored_function(self):
         await self.prepare()
         fill = await self.fill()

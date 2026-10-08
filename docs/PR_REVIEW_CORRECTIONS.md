@@ -271,3 +271,34 @@ pass in default and foundation-native configurations, including old pending-prev
 compatibility and retained measurement/hash checks. The final production build passes
 with the same three hook warnings. Source/probe and selected local runtime evidence
 are distinguished from full backend, browser and hosted Supabase acceptance.
+
+## History read batching and deployment source review
+
+Staff count setup reads only its current product/unit definitions. Sheet histories,
+decisions, boundary conflicts and definition holds are loaded in batches. Container
+contents load all fills, movements and paired waste observations in batches, keeping
+exact Decimal values, timestamps, original hashes and immutable retry receipts. Current
+profile checks reuse the loaded definition snapshot; lot totals group complete balances.
+
+The retained-history helpers use five queries for nonempty container history with the
+waste schema and seven for pending sheets with definitions supplied. Both query budgets
+hold for one and 300 roots. They do not make whole setup constant-cost: full response
+size and shared recipe/source validation remain open. No cutoff hides pending work or
+older stock; coordinated API/UI paging remains next work.
+
+Validation: 18 distinct selected backend checks passed in a 15-case regression run and
+four-case boundary/profile recheck, with one overlap. Batched results match the previous
+individual reads for loss pairs, old pending hashes, physical-boundary and scope errors,
+superseded units, final rejection history and current profile review flags. Existing
+author, immutability, paired reversal, migration upgrade and whole restore checks pass.
+The initial attempt's composite/domain driver failures and unsuitable timezone fixture
+are retained alongside passing final evidence. Frontend source is unchanged; its previous
+438-test/53-suite results and build remain checkpoint evidence, without fresh reruns.
+
+Source reconciliation verified that all 27 shared native SQL files match the preserved
+continuation after line-ending normalization. That continuation's 28-file readiness plan
+omits the existing waste correction. The combined 29-file plan must put the correction
+immediately before final native access hardening. Runtime-role, combined recovery and
+hosted checks are still pending. No protected continuation source or hosted configuration
+was changed. See [the scoped performance and deployment review](WORKFLOW_READ_PERFORMANCE_REVIEW.md)
+for role ownership limits, paging requirements and validation boundaries.
