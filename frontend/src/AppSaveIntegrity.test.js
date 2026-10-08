@@ -4,7 +4,7 @@ import App from "./App";
 import * as api from "./lib/api";
 import { toast } from "sonner";
 
-jest.mock("./lib/api", () => ({ currentSession: jest.fn(), fetchState: jest.fn(), putCollection: jest.fn(), putSalesPeriod: jest.fn(), SESSION_EXPIRED_EVENT: "test-expired" }));
+jest.mock("./lib/api", () => ({ currentSession: jest.fn(), authLogout: jest.fn(), fetchState: jest.fn(), putCollection: jest.fn(), putSalesPeriod: jest.fn(), SESSION_EXPIRED_EVENT: "test-expired" }));
 jest.mock("sonner", () => ({ Toaster: () => null, toast: { success: jest.fn(), error: jest.fn() } }));
 let mockSetupProps;
 jest.mock("./components/SetupTab", () => ({ SetupTab: props => { mockSetupProps = props; return <p>Item setup</p>; } }));
@@ -54,6 +54,46 @@ test("App polling cannot erase or silently rebase a dirty sales draft", async ()
   await act(async () => jest.advanceTimersByTime(700));
   expect(api.putSalesPeriod).not.toHaveBeenCalled(); expect(find("dish-sales-dish").value).toBe("17"); expect(toast.success).not.toHaveBeenCalled();
   await click("nav-tab-dashboard"); await click("nav-tab-sales"); expect(find("dish-sales-dish").value).toBe("17");
+});
+test("App retries stale sales after an unrelated save without losing fresh fields", async () => {
+  await act(async () => root.render(<App />)); await click("nav-tab-sales");
+  await act(async () => {
+    const field = find("dish-sales-dish"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, "17");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const latest = state("berts", 20); latest.salesPeriod.itemCounts = { F1: { ending: "5" } };
+  api.fetchState.mockResolvedValueOnce(latest); await click("refresh-location-data");
+  await act(async () => jest.advanceTimersByTime(700)); expect(api.putSalesPeriod).not.toHaveBeenCalled();
+  api.fetchState.mockResolvedValueOnce(latest); api.putSalesPeriod.mockResolvedValueOnce({ revision: 21 });
+  await click("retry-sales-save");
+  expect(api.putSalesPeriod).toHaveBeenCalledWith("berts", { ...latest.salesPeriod, dishSales: { dish: "17" } }, 20);
+  expect(find("retry-sales-save")).toBeNull();
+});
+test("App warns before unloading cached drafts even after changing tabs, and clears the warning after save", async () => {
+  await act(async () => root.render(<App />)); await click("nav-tab-sales");
+  await act(async () => {
+    const field = find("dish-sales-dish"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, "17");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await click("nav-tab-dashboard");
+  expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(false);
+  await click("nav-tab-sales"); api.putSalesPeriod.mockResolvedValueOnce({ revision: 11 }); await click("retry-sales-save");
+  expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(true);
+});
+test("canceling sign-out preserves cached drafts, and saved forms sign out without a discard prompt", async () => {
+  const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+  try {
+    await act(async () => root.render(<App />)); await click("nav-tab-sales");
+    await act(async () => {
+      const field = find("dish-sales-dish"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, "17");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click("nav-tab-dashboard"); await click("sign-out");
+    expect(confirm).toHaveBeenCalledTimes(1); expect(api.authLogout).not.toHaveBeenCalled();
+    await click("nav-tab-sales"); expect(find("dish-sales-dish").value).toBe("17");
+    api.putSalesPeriod.mockResolvedValueOnce({ revision: 11 }); await click("retry-sales-save");
+    await click("sign-out"); expect(confirm).toHaveBeenCalledTimes(1); expect(api.authLogout).toHaveBeenCalledTimes(1);
+  } finally { confirm.mockRestore(); }
 });
 
 test("leaving during legacy restore stops further writes and suppresses old-location results", async () => {

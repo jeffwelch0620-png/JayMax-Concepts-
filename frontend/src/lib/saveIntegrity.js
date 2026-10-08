@@ -15,6 +15,19 @@ export async function confirmSave(save, onError) {
   }
 }
 
+// Focus markers share this cache but are navigation metadata, not unsaved forms.
+export const hasUnsavedDrafts = cache => [...cache.keys()].some(key => !key.startsWith("recipe-focus:"));
+
+export function useDraftUnloadWarning(drafts) {
+  useEffect(() => {
+    const warn = event => {
+      if (hasUnsavedDrafts(drafts.current)) { event.preventDefault(); event.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [drafts]);
+}
+
 // Drafts belong to the signed-in App instance, keyed by restaurant and form.
 // They survive tab/location navigation, but do not outlive logout or app reload.
 export function useRetainedDraft(key, initial, drafts, sync = false) {

@@ -1,5 +1,10 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+The October 7 correction pass is documented in
+[`docs/PR_REVIEW_CORRECTIONS.md`](docs/PR_REVIEW_CORRECTIONS.md). It records save/retry,
+session-expiry and test-configuration fixes, their validation, and remaining review work.
+PRs 14–16 remain draft and unmerged; hosted development validation is still pending.
+
 ## Published workflow checkpoint — October 7, 2026
 
 [Draft PR #15 — supplier, order and prep execution workflows](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/15)

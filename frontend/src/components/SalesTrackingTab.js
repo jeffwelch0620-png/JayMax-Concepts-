@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { confirmed, useRetainedDraft } from "../lib/saveIntegrity";
+import { mergeSalesDraft } from "../lib/salesDraft";
 import { Save, Plus } from "lucide-react";
 import { normalizeRecipeSchema, rawPortionsForRecipe, itemDerived, adjustmentSignedPortions, todayISO, fmtDate, num, workweekRange, shiftWorkweek } from "../lib/calc";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 
-export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => {}, actualMode = false, items, dishes, purchases, adjustments, salesPeriod, persist, reportingPeriods, persistReportingPeriods, showToast }) {
+export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => {}, actualMode = false, items, dishes, purchases, adjustments, salesPeriod, persist, loadLatestSales, reportingPeriods, persistReportingPeriods, showToast }) {
   const trackedItems = items.filter((it) => it.salesTracked);
-  const initial = useMemo(() => ({ data: salesPeriod, revision }), [salesPeriod, revision]);
+  const initial = useMemo(() => ({ data: salesPeriod, base: salesPeriod, revision }), [salesPeriod, revision]);
   const [record, editRecord, acknowledge, dirty] = useRetainedDraft(`sales:${rid}`, initial, drafts, true);
   const local = record.data;
   const recordRef = useRef(record); recordRef.current = record;
@@ -22,20 +23,31 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
   }, []);
   const fail = message => { if (mounted.current) { setError(message); showError(message); } };
 
-  async function commit(submitted = recordRef.current) {
+  async function commit(submitted = recordRef.current, reviewLatest = false) {
     clearTimeout(saveTimer.current); saveTimer.current = null;
     if (savingRef.current) return false;
     savingRef.current = true; setSaving(true); setError("");
     try {
-      const result = await persist(submitted.data, submitted.revision);
+      let data = submitted.data, expectedRevision = submitted.revision;
+      if (reviewLatest) {
+        const latest = loadLatestSales ? await loadLatestSales() : { data: salesPeriod, revision };
+        if (!mounted.current) return false;
+        if (!latest?.data || !Number.isSafeInteger(latest.revision)) throw new Error("Latest sales were not confirmed. Your draft is retained.");
+        const merged = mergeSalesDraft(submitted.base, submitted.data, latest.data);
+        if (merged.conflicts.length) throw new Error(`Sales changed in the same fields: ${merged.conflicts.join(", ")}. Your draft is retained; review the latest values before discarding or replacing it.`);
+        data = merged.data; expectedRevision = latest.revision;
+      }
+      const result = await persist(data, expectedRevision);
       if (!confirmed(result)) throw new Error("Sales save was not confirmed. Your draft is retained; review and retry.");
       if (!mounted.current) return false;
-      const accepted = { data: submitted.data, revision: result.revision };
+      const savedData = result.salesPeriod ?? data;
+      const accepted = { data: savedData, base: savedData, revision: result.revision };
       if (acknowledge(submitted, accepted)) recordRef.current = accepted;
       else {
         // Preserve typing done during this request; only advance its base after
         // our own confirmed write. A different user's revision is never adopted.
-        editRecord(current => ({ ...current, revision: result.revision }));
+        editRecord(current => ({ data: mergeSalesDraft(submitted.data, current.data, savedData).data ?? current.data,
+          base: savedData, revision: result.revision }));
         saveTimer.current = setTimeout(() => commit(recordRef.current), 700);
       }
       return result;
@@ -43,7 +55,7 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
     finally { savingRef.current = false; if (mounted.current) setSaving(false); }
   }
   function queuePersist(next) {
-    editRecord({ data: next, revision: dirty ? record.revision : revision });
+    editRecord({ data: next, base: dirty ? record.base : salesPeriod, revision: dirty ? record.revision : revision });
     setError(""); clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => { saveTimer.current = null; commit(recordRef.current); }, 700);
   }
@@ -76,7 +88,7 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
       const saved = await persist(next, result.revision);
       if (!confirmed(saved)) throw new Error("The new working period was not confirmed. Your previous entries are retained.");
       if (mounted.current) {
-        acknowledge(prior, { data: next, revision: saved.revision });
+        acknowledge(prior, { data: next, base: next, revision: saved.revision });
         showToast(message);
       }
     } catch (e) { fail(e.message || "Couldn't change the working period"); }
@@ -147,7 +159,7 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
     <div className="fade-slide-in" data-testid="sales-tab">
       {(error || (dirty && record.revision !== revision)) && <p role="alert">{error || "Saved data changed while you were editing. Your draft is retained; review the latest period before replacing it."}</p>}
       {dirty && <div role="status">Unsaved sales draft for this restaurant.
-        <button className={btnGhost} disabled={saving || periodChanging} onClick={() => commit()} data-testid="retry-sales-save">Save retained draft</button>
+        <button className={btnGhost} disabled={saving || periodChanging} onClick={() => commit(recordRef.current, true)} data-testid="retry-sales-save">Review latest and save draft</button>
         <button className={btnGhost} disabled={saving || periodChanging} onClick={discardDraft} data-testid="discard-sales-draft">Discard draft and load latest</button>
       </div>}
       <PageTitle>{actualMode ? "Sales Tracking — Expected Usage" : "Sales Tracking — Actual Use vs. Sales"}</PageTitle>

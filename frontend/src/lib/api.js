@@ -138,7 +138,7 @@ function tokenExpired(token) {
 const session = () => {
   try {
     const s = JSON.parse(localStorage.getItem(TOKEN_KEY) || "null");
-    if (s?.token && tokenExpired(s.token)) { localStorage.removeItem(TOKEN_KEY); return null; }
+    if (s?.token && tokenExpired(s.token)) { endSession(); return null; }
     return s;
   } catch { return null; }
 };

@@ -763,6 +763,7 @@ function InventoryLog({ drafts, showError, rid, items, dishes, persistDishes, pr
   return (
     <div data-testid="prep-inventory-log">
       {metadataError && <p role="alert">{metadataError}</p>}
+      {Object.keys(metadata).length > 0 && <p role="status">Unsaved prep settings. Use Save prep settings to confirm each recipe. Drafts survive tab changes; save before reloading or signing out.</p>}
       <div className="flex justify-end mb-3">
         <button className={btnGhost} onClick={handleApplySales} disabled={busy} data-testid="apply-sales-usage-button" title="Draw down prep inventory using the quantities entered in Sales Tracking">
           <PackageCheck size={15} /> Deduct Prep Usage from Sales
