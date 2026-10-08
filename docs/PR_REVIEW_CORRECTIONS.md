@@ -146,3 +146,21 @@ today's date, so no switch occurred. The fixture now always selects another date
 the new request before resolving the older response. Both complete suites passed afterward;
 the application response guard was unchanged. These results do not complete the remaining
 staff review-separation, identity collision, waste-dependency or hosted-readiness work.
+
+## Order review separation and mapping corrections in PR15
+
+Approval now checks the authenticated actor against the retained creator and every
+create/edit/reorder journal author. An earlier editor remains ineligible after another
+editor replaces the content. Valid independent approval still follows the current
+version and canonical-line checks. No actor identity is fabricated for legacy orders.
+Incomplete retained line mappings return 422 on submit, approve, send and reorder;
+no partial command, new order or version change remains. Unique workflow identity or
+request-key conflicts return 409 only after the transaction has rolled back.
+
+Eleven selected disposable PostgreSQL order checks passed, including both new cases
+and the existing retry/race, receiving and whole-restore contracts. PR15 frontend code
+is unchanged from the prior 359-test/44-suite default/native and production-build
+checkpoint. This does not prove the externally alleged cross-store key race; that
+specific race was not reproduced and the existing global serialization remains.
+Known session-ID separation is an API guard. Shared-PIN identity and the login redesign
+remain deferred; this does not establish individual identity or SQL-role approval policy.
