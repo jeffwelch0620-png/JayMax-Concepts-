@@ -132,6 +132,24 @@ checks passed again against the final backend source. The native-configured prod
 build passed with the same three existing hook warnings.
 No new migration, hosted SQL, real invoice import, or live-browser acceptance occurred.
 
+## Recipe history retention and direct deletion corrections in PR15
+
+Direct recipe deletion now requires the current `If-Match` revision and a recipe
+belonging to that restaurant. Before direct deletion, targeted removal or collection
+replacement, the transaction locks the parent against concurrent FK references and
+checks retained counts, prep definitions/list lines, logs, recipe stock, overrides
+and par recommendations. Even zero stock or a zero recommendation does not establish
+that its evidence may be erased. Referenced identities return 422 before cascades or
+history-preservation triggers run; revisions and any coupled edits roll back.
+Unused definitions can still be explicitly deleted. No history migration is required.
+
+All 15 menu backend checks and 23 parameter subtests passed on disposable PostgreSQL,
+including unchanged recipe validation, location/revision enforcement, retained stock
+and planning references, and original physical-accounting independence. Frontend
+application code is unchanged from the prior 359-test/44-suite checkpoint. These
+API guards are not a database-wide deletion policy for every legacy SQL writer;
+rollback to older code still requires the documented history-preserving cutover.
+
 ## Order review separation and mapping corrections in PR15
 
 Approval now checks the authenticated actor against the retained creator and every

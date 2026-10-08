@@ -71,6 +71,42 @@ class MenuContractTests(unittest.IsolatedAsyncioTestCase):
         return await self.catalog.post('/api/pg/dishes/' + store + '/changes',
             json={'upserts': list(upserts), 'delete_ids': list(removed)}, headers={'If-Match': str(revision)})
 
+    async def test_history_review_recipe_deletion_requires_revision_and_location(self):
+        saved = await self.create(self.dish())
+        identity = saved.json()['id']
+        path = '/api/pg/dishes/berts/'+identity
+        self.assertEqual((await self.catalog.delete(path)).status_code, 428)
+        self.assertEqual((await self.catalog.delete(path,headers={'If-Match':'0'})).status_code, 409)
+        self.assertEqual((await self.catalog.delete('/api/pg/dishes/rudds/'+identity,headers={'If-Match':'0'})).status_code, 404)
+        self.assertEqual(await self.revision(), 1)
+        self.assertEqual(await self.revision('rudds'), 0)
+        removed = await self.catalog.delete(path,headers={'If-Match':'1'})
+        self.assertEqual(removed.status_code, 200, removed.text)
+        self.assertTrue(removed.json()['deleted'])
+
+    async def test_history_review_cascading_stock_and_planning_references_are_retained(self):
+        for source in ('stock','recommendation'):
+            with self.subTest(source=source):
+                revision = await self.revision()
+                saved = await self.create(self.dish(name='Retained '+source), revision)
+                self.assertEqual(saved.status_code, 200, saved.text)
+                identity = saved.json()['id']
+                async with self.pool.acquire() as conn:
+                    if source=='stock':
+                        await conn.execute("INSERT INTO prep_recipe_stock(store_id,dish_id,on_hand) VALUES('berts',$1,0)",identity)
+                    else:
+                        await conn.execute("INSERT INTO par_recommendations(id,store_id,recipe_id,recommended_par) VALUES($1,'berts',$2,0)",str(uuid4()),identity)
+                revision = await self.revision()
+                before = (await self.catalog.get('/api/pg/dishes/berts')).json()
+                self.assertEqual((await self.catalog.delete('/api/pg/dishes/berts/'+identity,headers={'If-Match':str(revision)})).status_code,422)
+                self.assertEqual((await self.changes(removed=[identity],revision=revision)).status_code,422)
+                self.assertEqual((await self.replace([],revision)).status_code,422)
+                self.assertEqual((await self.catalog.get('/api/pg/dishes/berts')).json(), before)
+                self.assertEqual(await self.revision(), revision)
+                async with self.pool.acquire() as conn:
+                    table, column = ('prep_recipe_stock','dish_id') if source=='stock' else ('par_recommendations','recipe_id')
+                    self.assertEqual(await conn.fetchval(f'SELECT count(*) FROM {table} WHERE {column}=$1',identity),1)
+
     async def test_unrelated_incomplete_definition_is_retained_without_rewriting(self):
         async with self.pool.acquire() as conn:
             old = await conn.fetchrow("INSERT INTO dishes(store_id,name,recipe_type) VALUES('berts','Old incomplete prep','prep') RETURNING *")

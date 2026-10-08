@@ -90,6 +90,26 @@ async def lock(conn, store_id):
     await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", 'menu-definitions:' + store_id)
 
 
+async def retain_operating_history(conn, store_id, identities):
+    """Hold referenced recipes before cascades or immutable-history triggers run."""
+    if not identities:
+        return
+    ids = [UUID(str(identity)) for identity in identities]
+    # Lock the parent against concurrent FK references until the enclosing save ends.
+    owned = await conn.fetch('SELECT id FROM public.dishes WHERE store_id=$1 AND id=ANY($2::uuid[]) FOR UPDATE', store_id, ids)
+    if len(owned) != len(ids):
+        raise HTTPException(404, 'Recipe not found at this restaurant')
+    references = (('count_lines', 'dish_id'), ('prep_items', 'recipe_id'),
+                  ('prep_list_lines', 'recipe_id'), ('prep_logs', 'dish_id'),
+                  ('prep_recipe_stock', 'dish_id'), ('prep_overrides', 'recipe_id'),
+                  ('par_recommendations', 'recipe_id'))
+    for table, column in references:
+        # Identifiers are a fixed source allowlist, never request data.
+        retained = await conn.fetchval(f'SELECT EXISTS(SELECT 1 FROM public.{table} WHERE {column}=ANY($1::uuid[]))', ids)
+        if retained:
+            raise HTTPException(422, 'Recipe has retained operating references; keep its identity and history instead of deleting it')
+
+
 class DishChanges(BaseModel):
     model_config = ConfigDict(extra='forbid')
     upserts: list[DishIn] = Field(default_factory=list, max_length=1000)
