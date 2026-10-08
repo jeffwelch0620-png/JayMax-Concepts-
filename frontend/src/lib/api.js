@@ -286,7 +286,7 @@ export const staffSaveCounts = (rid, body) => actualInventoryEnabled ? retiredWo
 
 export const staffTaskInbox = (rid, pin) => USE_PG ? pgStaffTaskInbox(pgStoreId(rid), pin) : axios.post(`${API}/staff/${rid}/tasks`, { pin }).then((r) => r.data);
 export const staffCompleteStaffTask = (rid, taskId, body) => USE_PG ? pgStaffCompleteStaffTask(pgStoreId(rid), taskId, body) : axios.post(`${API}/staff/${rid}/tasks/${taskId}/complete`, body).then((r) => r.data);
-export const listStaffTasks = (rid) => USE_PG ? pgListStaffTasks(pgStoreId(rid)) : axios.get(`${API}/staff-tasks/${rid}`).then((r) => r.data);
+export const listStaffTasks = (rid, archive = false) => USE_PG ? pgListStaffTasks(pgStoreId(rid), archive) : axios.get(`${API}/staff-tasks/${rid}`).then((r) => r.data);
 export const createStaffTask = (rid, body) => USE_PG ? pgCreateStaffTask(pgStoreId(rid), body) : axios.post(`${API}/staff-tasks/${rid}`, body).then((r) => r.data);
 export const deleteStaffTask = (rid, taskId) => USE_PG ? pgDeleteStaffTask(pgStoreId(rid), taskId) : axios.delete(`${API}/staff-tasks/${rid}/${taskId}`).then((r) => r.data);
 
@@ -384,7 +384,7 @@ export const pgStaffSaveCounts = (storeId, body) => actualInventoryEnabled ? ret
 
 export const pgStaffTaskInbox = (storeId, pin) => axios.post(`${PG_API}/staff/${storeId}/tasks`, { pin }).then((r) => r.data);
 export const pgStaffCompleteStaffTask = (storeId, taskId, body) => axios.post(`${PG_API}/staff/${storeId}/tasks/${taskId}/complete`, body).then((r) => r.data);
-export const pgListStaffTasks = (storeId) => axios.get(`${PG_API}/staff-tasks/${storeId}`).then((r) => r.data);
+export const pgListStaffTasks = (storeId, archive = false) => axios.get(`${PG_API}/staff-tasks/${storeId}`, { params: archive ? { archive: true } : {} }).then((r) => r.data);
 export const pgCreateStaffTask = (storeId, body) => axios.post(`${PG_API}/staff-tasks/${storeId}`, body).then((r) => r.data);
 export const pgDeleteStaffTask = (storeId, taskId) => axios.delete(`${PG_API}/staff-tasks/${storeId}/${taskId}`).then((r) => r.data);
 

@@ -1,5 +1,33 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Employee task cutover and archive permissions - October 8, 2026
+
+**Thirteen selected backend checks and all 460 frontend tests pass** across
+55 frontend suites. The production build passes with two existing hook warnings
+and a Node deprecation warning. The old text-assigned count/prep queue now becomes
+read-only history after native staff cutover, even with feature flags off.
+Manager archive reads preserve entered names without inferring roster identities;
+staff use reviewed count sheets and prep task plans for current work.
+
+The local permission candidate adds SELECT only on `public.staff_tasks` and
+`public.prep_lists`, and removes prep-item INSERT. UPDATE remains for native
+SHARE locks; the retained-metadata trigger rejects DML. Failed task requests no
+longer appear as confirmed empty queues, and late responses cannot replace another
+location's tasks. Track 1 reports and accounting facts remain unchanged.
+
+All 29 migration hashes, 94 function contracts, 123 relation contracts and the
+protected original 40-path continuation are preserved. Read the
+[task cutover checkpoint](docs/RUNTIME_TASK_CUTOVER_CHECKPOINT.md) for exact grants,
+successful evidence, retained test-fixture failures and source helper references.
+Unclassified legacy prep lists still need an archive-access review; their NULL
+track values are preserved rather than guessed.
+
+No Supabase query/grant change, real invoice import, flag-file change, push, merge
+or publication occurred. Remaining route/minimum-grant review, hosted catalog
+reconciliation and ordinary runtime LOGIN/pool validation, browser/Data API,
+managed recovery and matched flags remain open. **Continue holding merges.**
+Older sections below preserve earlier checkpoints.
+
 ## Manager workflows and retained history - October 8, 2026
 
 **Twenty-two selected local checks pass**: eight manager workflow cases, seven

@@ -1,5 +1,10 @@
 # Manager definitions, roster and retained history
 
+Later task retirement and archive permissions are covered by the
+[task cutover checkpoint](RUNTIME_TASK_CUTOVER_CHECKPOINT.md). This document
+preserves the earlier manager evidence and permission matrix as a historical
+checkpoint.
+
 October 8, 2026. This checkpoint extends the local runtime-permission candidate
 from `a85ef65f156e02d5b344867b52c479566386056e`. No hosted query, grant/policy change,
 real invoice import, feature-flag file change, push, merge or publication occurs

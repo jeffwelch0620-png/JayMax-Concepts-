@@ -5414,7 +5414,7 @@ class PgStaffTaskIn(BaseModel):
     note: str = ""
 
 def _pg_staff_task_to_api(row):
-    return {"id": str(row["id"]), "taskType": row["task_type"], "title": row["title"],
+    return {"id": str(row["id"]), "storeId": row["store_id"], "taskType": row["task_type"], "title": row["title"],
             "dueDate": row["due_date"].isoformat(), "recurrence": row["recurrence"],
             "assignedTo": row["assigned_to"] or "", "track": row["track"], "note": row["note"] or "",
             "status": row["status"], "completedBy": row["completed_by"] or "",
@@ -5447,11 +5447,15 @@ async def _pg_notify_new_staff_task(store_id, task):
         await db_pg.pool().execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, endpoint)
 
 @pg_router.get("/staff-tasks/{store_id}")
-async def pg_list_staff_tasks(store_id: str, request: Request):
+async def pg_list_staff_tasks(store_id: str, request: Request, archive: bool = False):
     check_store_id(store_id)
     _require_manager(request)
-    rows = await db_pg.pool().fetch("SELECT * FROM staff_tasks WHERE store_id=$1 ORDER BY due_date DESC", store_id)
-    return [_pg_staff_task_to_api(r) for r in rows]
+    import legacy_staff_tasks as legacy
+    async with db_pg.pool().acquire() as conn:
+        legacy.hold_read(await legacy.retired(conn), archive)
+        rows = await conn.fetch("SELECT * FROM staff_tasks WHERE store_id=$1 ORDER BY due_date DESC,id", store_id)
+    basis = legacy.archive_basis() if archive else {}
+    return [{**_pg_staff_task_to_api(r), **basis} for r in rows]
 
 @pg_router.post("/staff-tasks/{store_id}")
 async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Request):
@@ -5461,11 +5465,14 @@ async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Requ
     if body.recurrence not in ("once", "daily", "weekly"):
         raise HTTPException(400, "recurrence must be once, daily, or weekly")
     user = _require_manager(request)
-    row = await db_pg.pool().fetchrow(
-        """INSERT INTO staff_tasks (store_id, task_type, title, due_date, recurrence, assigned_to, track, note, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
-        store_id, body.taskType, body.title, _pg_date(body.dueDate), body.recurrence, body.assignedTo, body.track, body.note,
-        (user or {}).get("email", ""))
+    from legacy_staff_tasks import hold_write
+    async with db_pg.pool().acquire() as conn:
+        await hold_write(conn)
+        row = await conn.fetchrow(
+            """INSERT INTO staff_tasks (store_id, task_type, title, due_date, recurrence, assigned_to, track, note, created_by)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
+            store_id, body.taskType, body.title, _pg_date(body.dueDate), body.recurrence, body.assignedTo, body.track, body.note,
+            (user or {}).get("email", ""))
     task = _pg_staff_task_to_api(row)
     await _pg_notify_new_staff_task(store_id, task)
     return task
@@ -5474,11 +5481,15 @@ async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Requ
 async def pg_delete_staff_task(store_id: str, task_id: str, request: Request):
     check_store_id(store_id)
     _require_manager(request)
-    await db_pg.pool().execute("DELETE FROM staff_tasks WHERE id=$1 AND store_id=$2", task_id, store_id)
+    from legacy_staff_tasks import hold_write
+    async with db_pg.pool().acquire() as conn:
+        await hold_write(conn)
+        await conn.execute("DELETE FROM staff_tasks WHERE id=$1 AND store_id=$2", task_id, store_id)
     return {"ok": True}
 
 @pg_router.post("/staff/{store_id}/tasks")
 async def pg_staff_task_inbox(store_id: str, body: PgPinBodyIn, request: Request):
+    import legacy_staff_tasks as legacy
     check_store_id(store_id)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
@@ -5486,6 +5497,7 @@ async def pg_staff_task_inbox(store_id: str, body: PgPinBodyIn, request: Request
     try:
         if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
             raise HTTPException(403, "Invalid PIN")
+        legacy.hold_read(await legacy.retired(conn))
         today = _pg_today()
         rows = await conn.fetch(
             "SELECT * FROM staff_tasks WHERE store_id=$1 AND status='pending' AND due_date<=$2 ORDER BY due_date",
@@ -5500,6 +5512,7 @@ class PgStaffTaskCompleteIn(BaseModel):
 
 @pg_router.post("/staff/{store_id}/tasks/{task_id}/complete")
 async def pg_staff_task_complete(store_id: str, task_id: str, body: PgStaffTaskCompleteIn, request: Request):
+    from legacy_staff_tasks import hold_write
     check_store_id(store_id)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
@@ -5510,6 +5523,7 @@ async def pg_staff_task_complete(store_id: str, task_id: str, body: PgStaffTaskC
     try:
         if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
             raise HTTPException(403, "Invalid PIN")
+        await hold_write(conn)
         async with conn.transaction():
             task = await conn.fetchrow("SELECT * FROM staff_tasks WHERE id=$1 AND store_id=$2 FOR UPDATE", task_id, store_id)
             if not task:
