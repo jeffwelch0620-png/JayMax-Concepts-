@@ -1,4 +1,19 @@
-import { pgItemToMongoItem, mongoItemToPgBody, catalogPrice } from "./api";
+let pgItemToMongoItem, mongoItemToPgBody, catalogPrice;
+const flags = ["REACT_APP_USE_PG", "REACT_APP_NATIVE_PURCHASES", "REACT_APP_ACTUAL_INVENTORY", "REACT_APP_CATALOG_MAPPING"];
+const original = Object.fromEntries(flags.map(flag => [flag, process.env[flag]]));
+function load(native = true) {
+  jest.resetModules();
+  process.env.REACT_APP_USE_PG = "true";
+  for (const flag of flags.slice(1)) process.env[flag] = native ? "true" : "false";
+  ({ pgItemToMongoItem, mongoItemToPgBody, catalogPrice } = require("./api"));
+}
+beforeEach(() => load());
+afterAll(() => {
+  for (const flag of flags) {
+    if (original[flag] === undefined) delete process.env[flag];
+    else process.env[flag] = original[flag];
+  }
+});
 
 const item = { code: "papa_food", name: "Purchased food", baseUnit: "lb", countUnit: "case", basePerCountUnit: 20, active: true, countActive: false,
   packCount: 4, unitQty: 5, unitUOM: "lb", portionSize: 4, portionUOM: "oz", vendorSkus: [{ id: "sku", vendor: "special_supplier", vendorName: "Special supplier", vendorSku: "00001", purchaseUnit: "case", packCount: 4, unitQty: 5, unitUOM: "lb", basePerPurchaseUnit: 20 }] };
@@ -16,6 +31,12 @@ test("editing recipe portions cannot rewrite physical case factors", () => {
 test("new catalog case metadata uses physical pack quantity rather than portion count", () => {
   const ui = { controlNumber: "NEW", unitUOM: "lb", packCount: 4, unitQty: 5, portionSize: 4, portionUOM: "oz", vendorSkus: [] };
   const saved = mongoItemToPgBody(ui, "berts"); expect(saved.base_unit).toBe("lb"); expect(saved.base_per_count_unit).toBe(20);
+});
+test.each([[4, 80], [8, 40]])("legacy adapter with native flags off retains portion factor for %s oz", (portionSize, expected) => {
+  load(false);
+  const saved = mongoItemToPgBody({ controlNumber: "LEGACY", unitUOM: "lb", packCount: 4, unitQty: 5, portionSize, portionUOM: "oz", vendorSkus: [] }, "berts");
+  expect(saved.base_unit).toBe("oz");
+  expect(saved.base_per_count_unit).toBe(expected);
 });
 test("unknown pack quantities and incompatible physical units cannot silently become one", () => {
   expect(() => mongoItemToPgBody({ controlNumber: "NEW", unitUOM: "lb", vendorSkus: [] }, "berts")).toThrow("Confirm a physical pack quantity");

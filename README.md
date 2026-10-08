@@ -1,5 +1,10 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+The October 7 correction pass is documented in
+[`docs/PR_REVIEW_CORRECTIONS.md`](docs/PR_REVIEW_CORRECTIONS.md). It records save/retry,
+session-expiry and test-configuration fixes, their validation, and remaining review work.
+PRs 14–16 remain draft and unmerged; hosted development validation is still pending.
+
 ## Inventory foundation review checkpoint — October 6, 2026
 
 This branch is a **draft PR checkpoint** of the cumulative PostgreSQL inventory work. Read

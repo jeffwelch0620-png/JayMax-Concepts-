@@ -104,3 +104,24 @@ test("malformed location collections remain unavailable instead of becoming save
   await render("berts"); expect(container.textContent).toBe("Loading"); expect(errors).toHaveBeenCalled();
   await act(async () => controller.refresh()); expect(controller.state.items).toEqual(["berts"]);
 });
+test("poll failures notify once until a successful refresh resets the failure streak", async () => {
+  await render("berts"); api.fetchState.mockRejectedValue(new Error("Offline"));
+  await act(async () => jest.advanceTimersByTime(45000)); expect(errors).toHaveBeenCalledTimes(1);
+  api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["recovered"] });
+  let latest; await act(async () => { latest = await controller.refresh(); });
+  expect(latest).toEqual({ revision: 11, items: ["recovered"] });
+  await act(async () => controller.refresh()); expect(errors).toHaveBeenCalledTimes(2);
+});
+test("refresh returns no retry baseline if the location changed during the read", async () => {
+  await render("berts"); const pending = deferred(); api.fetchState.mockReturnValueOnce(pending.promise);
+  let read; act(() => { read = controller.refresh(); }); await render("rudds");
+  await act(async () => { pending.resolve({ revision: 11, items: ["old location"] }); expect(await read).toBeUndefined(); });
+  expect(controller.state.revision).toBe(80);
+});
+test("a superseded failed poll cannot announce failure after a newer successful read", async () => {
+  await render("berts"); const old = deferred(); api.fetchState.mockReturnValueOnce(old.promise);
+  let pending; act(() => { pending = controller.refresh(); });
+  api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["fresh"] }); await act(async () => controller.refresh());
+  await act(async () => { old.reject(new Error("old failed poll")); await pending; });
+  expect(errors).not.toHaveBeenCalled(); expect(controller.state.items).toEqual(["fresh"]);
+});

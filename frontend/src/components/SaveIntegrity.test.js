@@ -94,6 +94,39 @@ test("discarding a retained draft explicitly loads latest polled sales", async (
   await click(find("discard-sales-draft")); expect(find("dish-sales-dish").value).toBe("99");
   await act(async () => jest.advanceTimersByTime(700)); expect(save).not.toHaveBeenCalled();
 });
+test("explicit retry reads fresh data and merges independent fields at the returned revision", async () => {
+  const latest = { ...period, dishSales: { dish: "2", other: "99" }, itemCounts: { F01: { ending: "5" } } };
+  const loadLatestSales = jest.fn().mockResolvedValue({ data: latest, revision: 20 });
+  await render(sales({ loadLatestSales })); await input("dish-sales-dish", "17");
+  await click(find("retry-sales-save"));
+  expect(loadLatestSales).toHaveBeenCalledTimes(1);
+  expect(save).toHaveBeenCalledWith({ ...latest, dishSales: { dish: "17", other: "99" } }, 20);
+  expect(find("retry-sales-save")).toBeNull();
+});
+test.each(["field", "period", "unavailable"])("retry refuses %s conflicts and retains the draft", async kind => {
+  const latest = kind === "unavailable" ? null : { revision: 20, data: kind === "field"
+    ? { ...period, dishSales: { dish: "99" } } : { ...period, periodStart: "2026-10-08" } };
+  await render(sales({ loadLatestSales: jest.fn().mockResolvedValue(latest) })); await input("dish-sales-dish", "17");
+  await click(find("retry-sales-save")); expect(save).not.toHaveBeenCalled();
+  expect(find("dish-sales-dish").value).toBe("17"); expect(find("retry-sales-save")).not.toBeNull();
+  expect(errors).toHaveBeenCalled();
+});
+test("typing during retry's fresh read keeps the later edit and the merged remote field", async () => {
+  const reading = deferred(); const loadLatestSales = jest.fn().mockReturnValue(reading.promise);
+  await render(sales({ loadLatestSales })); await input("dish-sales-dish", "17"); await click(find("retry-sales-save"));
+  await input("dish-sales-dish", "18");
+  await act(async () => reading.resolve({ revision: 20, data: { ...period, dishSales: { dish: "2", other: "99" } } }));
+  expect(find("dish-sales-dish").value).toBe("18");
+  await act(async () => jest.advanceTimersByTime(700));
+  expect(save).toHaveBeenLastCalledWith({ ...period, dishSales: { dish: "18", other: "99" } }, 11);
+});
+test("leaving during retry's fresh read sends no write and retains the original location draft", async () => {
+  const reading = deferred();
+  await render(sales({ loadLatestSales: jest.fn().mockReturnValue(reading.promise) }));
+  await input("dish-sales-dish", "17"); await click(find("retry-sales-save")); await render(<p>Other location</p>);
+  await act(async () => reading.resolve({ revision: 20, data: period }));
+  expect(save).not.toHaveBeenCalled(); expect(drafts.get("sales:berts").data.dishSales.dish).toBe("17");
+});
 test.each([null, {}, { revision: 11, ok: false }])("item save %j retains form; failed delete and area save do not claim success", async result => {
   save.mockResolvedValue(result); await render(setup()); await input("item-name-input", "New food"); await click(find("item-submit-button"));
   expect(find("item-name-input").value).toBe("New food"); expect(success).not.toHaveBeenCalled();
@@ -153,9 +186,11 @@ test("partial legacy invoice failure is disclosed and cannot be resubmitted", as
 const prep = () => <PrepTab rid="berts" drafts={drafts} showError={errors} showToast={success} items={[item]} dishes={[{ ...recipe, recipeType: "prep", yieldQty: 4, yieldUOM: "lb", prepPar: 0 }]} persistDishes={save} prepStock={[]} prepLogs={[]} salesPeriod={period} />;
 test("prep setting edits send no per-keystroke write and failure retains draft across navigation", async () => {
   await render(prep()); await click(find("prep-subtab-inventory")); await input("prep-par-dish", "17"); expect(save).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Unsaved prep settings");
   save.mockResolvedValueOnce(null); await click(find("prep-save-meta-dish")); expect(find("prep-par-dish").value).toBe("17"); expect(success).not.toHaveBeenCalled();
   await render(<p>Other tab</p>); await render(prep()); await click(find("prep-subtab-inventory")); expect(find("prep-par-dish").value).toBe("17");
   await click(find("prep-save-meta-dish")); expect(save.mock.calls[1][0][0].prepPar).toBe(17); expect(success).toHaveBeenCalledTimes(1);
+  expect(container.textContent).not.toContain("Unsaved prep settings");
 });
 test("prep acknowledgement cannot erase settings typed while saving", async () => {
   const pending = deferred(); save.mockReturnValueOnce(pending.promise);
