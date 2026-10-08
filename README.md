@@ -1,5 +1,31 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Durable native Supabase installation - October 8, 2026
+
+The owner-designated build database now has the **29 native migrations committed**,
+verified through a fresh connection. Original values in **40 existing tables**
+and all **25 historical migration records** were preserved. New delivery records
+contain hashes matching the SQL actually executed; no historical replay or repair
+was used. The pre-install private application backup restored locally with all
+40 table fingerprints matching.
+
+The committed hosted workflow also passed concurrent purchase/prep retries and
+replay after closing/reopening the pool. Track 1 Food Cost remained **$55** through
+prep, container waste and sales-context changes. Original records were preserved;
+clearly labelled invented test locations remain as audit evidence. A new private
+snapshot backup includes the installed schemas and all **54 migration records**.
+That backup restored locally with all **118 application tables** and all 54
+migration-record fingerprints matching. Full managed platform recovery remains open.
+
+Read the [durable hosted checkpoint](docs/HOSTED_NATIVE_INSTALL_CHECKPOINT.md) for
+the held first attempt, independent rollback reconciliation, committed retry,
+connection diagnostics and remaining validation. This continuation is local and
+unpublished. **PR14–16 remain draft/unmerged**, and GitHub currently reports no
+checks on those branches; retained local evidence is separate from hosted CI.
+Staff/runtime, browser/Data API and full managed recovery remain open. Application
+flags and app publication are unchanged. Earlier sections describe their own
+historical checkpoints, including the rollback-only state before installation.
+
 ## Hosted rollback trial - October 8, 2026
 
 The existing connected Supabase project, explicitly designated by its owner as

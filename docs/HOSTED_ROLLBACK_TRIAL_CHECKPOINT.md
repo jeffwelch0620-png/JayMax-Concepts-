@@ -3,6 +3,10 @@
 October 8, 2026. Local continuation on `codex/deployment-reconciliation-review`;
 not published, merged or deployed by this checkpoint.
 
+Historical rollback-only checkpoint. The later
+[durable installation checkpoint](HOSTED_NATIVE_INSTALL_CHECKPOINT.md) supersedes
+its database-state and pending-installation statements; original proof remains retained.
+
 ## Result
 
 The user explicitly designated the already connected Supabase project as a
@@ -69,7 +73,7 @@ holds, private backup paths, trigger refusals, schema reconciliation and exact
 migration delivery. The earlier 19-case run passed before one additional guard
 case was added. The managed-development tests now expect 29 files and still
 refuse same-project source/target use in their distinct-project workflow. A final
-earlier offline guard recheck passed 12 overlapping cases and skipped its local-database
+offline guard recheck passed 12 overlapping cases and skipped its local-database
 case; these are not 12 additional distinct cases.
 
 Final review strengthened the client permission probe so a failed SET ROLE

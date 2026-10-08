@@ -102,7 +102,7 @@ class TrialPool:
         finally: self.busy = False
 
 
-def private_backup(dsn, pg_dump, directory):
+def private_backup(dsn, pg_dump, directory, *, include_migration_ledger=False, exported_snapshot=None):
     """Full application schemas/data/ACLs only; retained privately outside checkout."""
     directory = Path(directory).resolve(); executable = Path(pg_dump)
     private_root = (Path(os.environ.get('LOCALAPPDATA', '')) / 'JayMaxTests').resolve()
@@ -110,6 +110,8 @@ def private_backup(dsn, pg_dump, directory):
         raise ValueError('Hosted application backup must stay in the private local JayMaxTests directory')
     if not executable.is_file() or not (executable.parent / 'pg_restore.exe').is_file():
         raise ValueError('Trusted pg_dump and pg_restore required')
+    if exported_snapshot is not None and not re.fullmatch(r'[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9]+',exported_snapshot):
+        raise ValueError('Expected an exported PostgreSQL snapshot identity')
     directory.mkdir(parents=True, exist_ok=False)
     uri = urlparse(dsn); env = os.environ.copy()
     for key in ('PGSERVICE','PGSERVICEFILE','PGPASSFILE','PGOPTIONS'): env.pop(key, None)
@@ -119,7 +121,9 @@ def private_backup(dsn, pg_dump, directory):
     command = [str(executable), '--host', uri.hostname, '--port', str(uri.port or 5432),
                '--username', unquote(uri.username), '--dbname', unquote(uri.path.lstrip('/')),
                '--format=custom', '--file', str(filename), '--no-password']
-    command += ['--schema='+schema for schema in reconciliation.SCHEMAS]
+    schemas=list(reconciliation.SCHEMAS)+(['supabase_migrations'] if include_migration_ledger else [])
+    command += ['--schema='+schema for schema in schemas]
+    if exported_snapshot is not None:command+=['--snapshot='+exported_snapshot]
     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
     result = subprocess.run(command, env=env, capture_output=True, timeout=120, creationflags=flags)
     if result.returncode: raise RuntimeError('Private application backup failed; driver output withheld')
@@ -130,8 +134,10 @@ def private_backup(dsn, pg_dump, directory):
     (directory / 'archive-list.txt').write_bytes(listing.stdout)
     manifest = {'format': 'jaymax-private-hosted-application-backup-v1',
                 'bytes': filename.stat().st_size, 'sha256': hashlib.sha256(filename.read_bytes()).hexdigest(),
-                'schemas': list(reconciliation.SCHEMAS), 'containsApplicationRows': True,
+                'schemas': schemas, 'containsApplicationRows': True,
                 'archiveReadable': True, 'restoreVerified': False,
+                'deploymentMigrationLedgerIncluded':include_migration_ledger,
+                'exportedSnapshotUsed':exported_snapshot is not None,
                 'managedAuthStorageVaultCronAndProjectConfigurationIncluded': False}
     (directory / 'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')
     return manifest
@@ -142,6 +148,9 @@ async def row_fingerprints(conn):
     result = {}
     async with conn.transaction(isolation='repeatable_read',readonly=True):
         await conn.execute("SET LOCAL statement_timeout='20s'")
+        # jsonb renders timestamptz using the session timezone. Fixed UTC makes
+        # restored rows comparable across hosts without changing stored values.
+        await conn.execute("SET LOCAL TIME ZONE 'UTC'")
         tables = await conn.fetch("SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=ANY($1::text[]) AND c.relkind IN ('r','p') ORDER BY 1,2",list(reconciliation.SCHEMAS))
         for table in tables:
             name = '.'.join('"'+value.replace('"','""')+'"' for value in table.values())
@@ -179,7 +188,7 @@ async def client_query_denied(conn, role):
         raise AssertionError('Ordinary client role can query private purchase facts')
 
 
-async def synthetic_workflow(conn):
+async def synthetic_workflow(conn, pool=None, emit=None):
     """Invented purchase/count/prep/container chain at a unique temporary location."""
     from decimal import Decimal
     from fastapi import FastAPI, HTTPException
@@ -190,15 +199,19 @@ async def synthetic_workflow(conn):
     # Only the sample generator is reused; no disposable-db setup/teardown runs.
     import csv, io
     from purchase_parser import FIELD_MAP
-    await db_pg._init_connection(conn)
     ident = uuid4().hex; store = 'hosted_trial_'+ident; item = 'trial_food_'+ident
-    await conn.execute('INSERT INTO public.stores(id,name) VALUES($1,$2)', store, 'Synthetic hosted rollback test')
+    durable = pool is not None
+    if not durable:await db_pg._init_connection(conn)
+    emit=emit or (lambda stage,store,item:None)
+    await conn.execute('INSERT INTO public.stores(id,name) VALUES($1,$2)', store, 'Synthetic hosted committed test' if durable else 'Synthetic hosted rollback test')
     await conn.execute("INSERT INTO public.items(code,name,base_unit) VALUES($1,'Synthetic raw food','lb')", item)
     await conn.execute("INSERT INTO public.store_items(store_id,item_code,count_unit,base_per_count_unit,sales_tracked,control_number) VALUES($1,$2,'case',20,false,$2)",store,item)
-    pool = TrialPool(conn); app = FastAPI()
+    emit('invented_location_created',store,item)
+    pool = pool or TrialPool(conn); app = FastAPI()
     def check(location):
         if location != store: raise HTTPException(404, 'Only synthetic trial location allowed')
     def actor(request, location, write):
+        check(location)
         if request.headers.get('authorization') != 'Bearer synthetic-hosted-trial': raise HTTPException(401)
         return 'synthetic-hosted-trial'
     app.include_router(purchases.create_router(lambda:pool,check,actor))
@@ -243,7 +256,11 @@ async def synthetic_workflow(conn):
             item_code=item,base_unit='lb',received_quantity='2',received_unit='case',base_units_per_received_unit='20',verified=True,note='Invented verified mapping') for line in doc['lines']])
         path = p+'/documents/'+doc['id']+'/post'; key = str(uuid4())
         await request('POST',path,mapping|{'received_date':None},expected=422)
-        posted = (await request('POST',path,mapping,key=key)).json()
+        if durable:
+            simultaneous = await asyncio.gather(request('POST',path,mapping,key=key),request('POST',path,mapping,key=key))
+            posted = simultaneous[0].json()
+            if simultaneous[1].json()['batchId'] != posted['batchId']: raise AssertionError('Concurrent purchase retry duplicated a batch')
+        else: posted = (await request('POST',path,mapping,key=key)).json()
         replay = (await request('POST',path,mapping,key=key)).json()
         if replay['batchId'] != posted['batchId']: raise AssertionError('Purchase replay duplicated a batch')
         await request('POST',path,mapping|{'received_date':'2026-10-05'},key=key,expected=409)
@@ -252,6 +269,7 @@ async def synthetic_workflow(conn):
         async def report(): return (await request('GET',a+'/report',params={'opening':opening['header']['id'],'closing':closing['header']['id']})).json()
         baseline = await report()
         if baseline['actualFoodCost'] != '55.00' or baseline['netPurchaseCost'] != '40.00': raise AssertionError('Track 1 explicit valuation failed')
+        emit('purchase_retry_and_actual_cost_passed',store,item)
         setup = (await request('GET',p+'/unit-setup')).json(); source = next(i for i in setup['items'] if i['code']==item)['countSource']
         await request('POST',p+'/unit-profiles',dict(item_code=item,profile_kind='count',vendor_item_id=None,base_unit='lb',
             base_units_per_source_unit='20',expected_source_hash=source['hash'],verified=True,note='Measured physical case conversion'))
@@ -272,8 +290,13 @@ async def synthetic_workflow(conn):
             inputs=[dict(recipe_line_id=str(l['id']),quantity='60',source_unit='lb',factor='1',measurement_basis='measured',evidence='Gross input weighed',included_loss_quantity='12',loss_evidence='Trim inside gross input') for l in lines])
         preview = (await request('POST',p+'/prep-batches/preview',body)).json(); batch_key = str(uuid4())
         payload = dict(batch=body,expected_review_hash=preview['reviewHash'],reviewed=True)
-        batch = (await request('POST',p+'/prep-batches',payload,key=batch_key)).json()['event']
+        if durable:
+            simultaneous = await asyncio.gather(request('POST',p+'/prep-batches',payload,key=batch_key),request('POST',p+'/prep-batches',payload,key=batch_key))
+            batch = simultaneous[0].json()['event']
+            if simultaneous[1].json()['event']['id'] != batch['id']: raise AssertionError('Concurrent prep retry duplicated a batch')
+        else: batch = (await request('POST',p+'/prep-batches',payload,key=batch_key)).json()['event']
         if (await request('POST',p+'/prep-batches',payload,key=batch_key)).json()['event']['id'] != batch['id']: raise AssertionError('Prep replay duplicated batch')
+        emit('prep_batch_retry_passed',store,item)
         async def container(body):
             preview = (await request('POST',p+'/prep-containers/preview',body)).json()
             return (await request('POST',p+'/prep-containers/commands',dict(body=body,expected_review_hash=preview['reviewHash'],reviewed=True))).json()
@@ -290,17 +313,32 @@ async def synthetic_workflow(conn):
         if period['coverage']['finalVarianceAvailable'] or period['cost']['amount'] is not None: raise AssertionError('Incomplete sales coverage became final accounting')
         await conn.execute("UPDATE public.store_state SET sales_period=$2 WHERE store_id=$1",store,{'dishSales':{'invented_sales':999},'synthetic':True})
         if await report() != baseline: raise AssertionError('Prep/waste/sales changed Track 1')
+        emit('prep_waste_and_track1_isolation_passed',store,item)
         tested_roles = []
-        for role in ('anon','authenticated'):
-            if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)',role): continue
-            if await client_query_denied(conn,role): tested_roles.append(role)
-        return {'status':'passed','temporaryStore':store,'rawVendorFormatsVerified':['PFG','US Foods'],
+        async def verify_roles(current):
+            for role in ('anon','authenticated'):
+                if not await current.fetchval('SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)',role): continue
+                if await client_query_denied(current,role): tested_roles.append(role)
+        if durable:
+            async with pool.acquire() as current:await verify_roles(current)
+        else:await verify_roles(conn)
+        result = {'status':'passed','temporaryStore':store,'rawVendorFormatsVerified':['PFG','US Foods'],
                 'rawBytesUnknownColumnsAndMultilinePreserved':True,'receivedDate':'2026-10-04',
                 'actualFoodCost':'55.00','foodPurchaseCost':'40.00','taxAndFeeSourceAmountsRetainedSeparately':True,
                 'prepProduction':'48','prepWaste':'.25','prepObservedDepletion':'.6','prepUnexplainedDepletion':'.35',
                 'exactRetryAndChangedRequestHeld':True,'prepContainerDependencyHeld':True,
                 'track1UnchangedAfterPrepWasteAndSalesContext':True,'salesCoverageRemainsIncomplete':True,
                 'ordinaryClientPurchaseQueryDenied':tested_roles}
+        if durable:
+            result.update(concurrentPurchaseAndPrepRetryVerified=True,
+                retainedInventedTestLocation=True,committedPoolWorkflow=True,
+                inventedItemCode=item,
+                replayFixture={'store':store,'purchasePath':path,'purchaseBody':mapping,'purchaseKey':key,
+                    'purchaseBatchId':posted['batchId'],'prepPath':p+'/prep-batches','prepBody':payload,
+                    'prepKey':batch_key,'prepBatchId':batch['id'],'actualPath':a+'/report',
+                    'reportParams':{'opening':opening['header']['id'],'closing':closing['header']['id']},
+                    'expectedActualReport':baseline})
+        return result
 
 
 async def trial(config, identity, backup_manifest, output, emit=None):

@@ -4,6 +4,8 @@ import unittest
 from unittest.mock import AsyncMock, patch
 from contextlib import asynccontextmanager
 import os
+import tempfile
+from types import SimpleNamespace
 from uuid import uuid4
 from urllib.parse import urlparse
 import asyncpg
@@ -75,6 +77,32 @@ class TrialPoolTests(unittest.IsolatedAsyncioTestCase):
         conn.execute.side_effect = None
         conn.fetchval.side_effect = ['anon',asyncpg.InsufficientPrivilegeError('Invented denied SELECT')]
         self.assertTrue(await hosted.client_query_denied(conn,'anon'))
+
+    async def test_private_backup_uses_exported_snapshot_and_retains_migration_ledger_when_requested(self):
+        private=(Path(os.environ['LOCALAPPDATA'])/'JayMaxTests').resolve();private.mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=private,prefix='synthetic-backup-guard-') as directory:
+            root=Path(directory);binary=root/'pg_dump.exe';binary.write_bytes(b'')
+            (root/'pg_restore.exe').write_bytes(b'')
+            calls=[]
+            def run(command,**kwargs):
+                calls.append((command,kwargs))
+                if '--file' in command:Path(command[command.index('--file')+1]).write_bytes(b'Invented test archive')
+                return SimpleNamespace(returncode=0,stdout=b'Invented archive listing',stderr=b'')
+            with patch.object(hosted.subprocess,'run',side_effect=run):
+                result=hosted.private_backup('postgresql://postgres:synthetic@db.'+'a'*20+'.supabase.co:5432/postgres',binary,root/'backup',
+                    include_migration_ledger=True,exported_snapshot='00000003-0000001B-1')
+            self.assertTrue(result['deploymentMigrationLedgerIncluded']);self.assertTrue(result['exportedSnapshotUsed'])
+            self.assertIn('--schema=supabase_migrations',calls[0][0]);self.assertIn('--snapshot=00000003-0000001B-1',calls[0][0])
+            self.assertFalse(result['restoreVerified'])
+            self.assertIn('default_transaction_read_only=on',calls[0][1]['env']['PGOPTIONS'])
+
+    async def test_invalid_exported_snapshot_refused_before_backup_or_process_launch(self):
+        private=(Path(os.environ['LOCALAPPDATA'])/'JayMaxTests').resolve();private.mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=private,prefix='synthetic-backup-guard-') as directory:
+            root=Path(directory);binary=root/'pg_dump.exe';binary.write_bytes(b'');(root/'pg_restore.exe').write_bytes(b'')
+            with patch.object(hosted.subprocess,'run') as run:
+                with self.assertRaises(ValueError):hosted.private_backup('unused',binary,root/'backup',exported_snapshot='unreviewed')
+                run.assert_not_called();self.assertFalse((root/'backup').exists())
 
 
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'),'Disposable local PostgreSQL required')
