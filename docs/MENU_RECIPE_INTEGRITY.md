@@ -18,9 +18,10 @@ most 100. A prep definition requires an explicit positive yield and supported un
 definitions represent one serving (yield 1 each). Empty recipes, invalid numbers, cross-store
 sources, duplicate recipe IDs/temporary IDs, missing retained sub-recipes, and cycles are held
 with actionable errors. Unknown prices remain allowed in a structurally valid definition;
-they do not make it a fully costed recipe. Retained definitions in the resulting graph also
-need ingredients and valid prep yields. Malformed old definitions must be explicitly repaired
-or removed in a reviewed replacement; a new parent cannot legitimize an incomplete child.
+they do not make it a fully costed recipe. Changed definitions, their transitive dependencies,
+and their retained dependents need ingredients and valid prep yields. An unrelated incomplete
+legacy recipe does not block a targeted edit and is not rewritten. A new parent cannot
+legitimize an incomplete child. Whole-collection replacement still validates the entire graph.
 
 The submitted graph is resolved before any header, line or revision changes. Temporary IDs are
 allocated for all new recipes before writing, allowing unsorted nested prep/menu definitions in
@@ -33,6 +34,14 @@ Create/update, replace, and delete share a per-store menu-definition transaction
 the store revision. Supplied stale `If-Match` values reject writes. This prevents the tested
 granular recipe mutation from being overwritten by a stale collection replacement. It does
 not implement general draft-order replay or version every unrelated metadata writer.
+
+The collection adapter now sends changed definitions and explicit deleted IDs to
+`POST /api/pg/dishes/{store_id}/changes`, which requires `If-Match`. A fresh comparison read
+does not replace the caller's expected revision; concurrent changes still reject the save.
+The server validates the affected dependency graph, writes only changed definitions, and
+returns the saved collection plus temporary-to-canonical IDs in one transaction. The editor
+uses the acknowledged ID for its next edit. Retained-recipe errors name the recipe and ID.
+Catalog and recipe-list reads batch related rows; no process-wide cache is introduced.
 
 ## Quantity and cost boundaries
 
@@ -53,7 +62,9 @@ as the complete cost. Missing selling price leaves contribution and food-cost pe
 
 Menu Costing, production recipe cards, menu profitability, and prep task estimates use these
 completeness checks. Unknown totals do not become `$0.00`, a profitable contribution, or a
-suggested sale price. The editor retains invalid drafts and sends no write or success toast;
+suggested sale price. Unknown profitability sorts after known values, including verified zero.
+Missing prep yield fields stay visibly unknown and use controlled empty form values.
+The editor retains invalid drafts and sends no write or success toast;
 valid but unpriced recipes can still be saved. Recipe nesting is limited to 100 levels and
 whole replacement requests to 1000 definitions to avoid unbounded recursion/work.
 

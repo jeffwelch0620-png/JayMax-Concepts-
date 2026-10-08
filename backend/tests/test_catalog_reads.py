@@ -112,3 +112,26 @@ class ProfileReadTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue((await native_units.profiles(conn,'berts'))[0]['stale'])
         with self.assertRaises(native_units.HTTPException):
             native_units._source_values(source,{'item_code':'other'},'food','purchase',uuid4())
+
+
+class SupplierEventReadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_batch_price_checks_preserve_staleness_with_constant_queries(self):
+        import catalog_mapping
+        budgets = []
+        for size in (1, 300):
+            suppliers = [sku(str(n)) for n in range(size)]
+            profiles = [dict(id=uuid4(), vendor_item_id=row['id'], profile_kind='purchase', stale=n % 3 == 0) for n, row in enumerate(suppliers)]
+            events = [dict(vendor_item_id=row['id'], source='invoice', pack_stale=n % 3 == 1,
+                invoice_stale=n % 3 == 2, basis_snapshot={'profile': {'id': str(profiles[n]['id'])}}) for n, row in enumerate(suppliers)]
+            class Connection:
+                fetchval = AsyncMock(return_value=True)
+            conn = Connection()
+            conn.fetch = AsyncMock(side_effect=[suppliers, events])
+            with patch('native_units.profiles', AsyncMock(return_value=profiles)) as reviewed:
+                result = await catalog_mapping.supplier_rows_many(conn, 'berts', [row['item_code'] for row in suppliers])
+                reviewed.assert_awaited_once_with(conn, 'berts')
+            budgets.append(conn.fetch.await_count + conn.fetchval.await_count)
+            self.assertTrue(all(row['price'] is None and row['price_issues'] for row in result))
+            self.assertIn('ANY($2::text[])', conn.fetch.await_args_list[0].args[0])
+            conn.fetchval.reset_mock()
+        self.assertEqual(budgets, [4, 4])

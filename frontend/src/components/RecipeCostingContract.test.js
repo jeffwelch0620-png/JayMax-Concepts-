@@ -28,6 +28,19 @@ test("invalid loaded recipe keeps its draft and makes no write or success announ
   expect(save).not.toHaveBeenCalled(); expect(success).not.toHaveBeenCalled(); expect(error).toHaveBeenCalled();
   expect(container.querySelector('[data-testid="recipe-name-input"]').value).toBe(recipe.name);
 });
+
+test("a new recipe uses its acknowledged database identity on the next save", async () => {
+  const temporary = { ...recipe, id: "dish-local" };
+  const canonical = "abc00000-0000-4000-8000-000000000001";
+  save.mockImplementation(async rows => ({ revision: 8, clientIds: { "dish-local": canonical }, dishes: rows.map(row => ({ ...row, id: canonical })) }));
+  await act(async () => root.render(costing(temporary)));
+  await act(async () => container.querySelector('[data-testid="save-recipe-button"]').click());
+  await act(async () => root.render(<CostingTab rid="rudds" items={[item]} dishes={[{ ...temporary, id: canonical }]} persist={save} showToast={success} showError={error} />));
+  await act(async () => container.querySelector('[data-testid="save-recipe-button"]').click());
+  expect(save).toHaveBeenCalledTimes(2);
+  expect(save.mock.calls[1][0]).toHaveLength(1);
+  expect(save.mock.calls[1][0][0].id).toBe(canonical);
+});
 test("printed recipe card reports incomplete cost without inventing zero dollars", async () => {
   await act(async () => root.render(<RecipeCardsTab items={[item]} dishes={[recipe]} />));
   expect(container.querySelector('[role="status"]').textContent).toContain("incomplete");

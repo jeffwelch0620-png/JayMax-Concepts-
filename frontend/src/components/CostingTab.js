@@ -69,9 +69,11 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
     const saved = normalizeRecipeSchema({ ...dish, id: dish.id || uid(dish.recipeType === "prep" ? "prep" : "dish"), name: dish.name.trim(), menuCode: code, price: dish.price === "" || dish.price == null ? null : Number(dish.price), yieldQty: dish.recipeType === "prep" ? Number(dish.yieldQty) : 1, prepPar: dish.prepPar === "" || dish.prepPar == null ? null : Number(dish.prepPar) });
     const exists = dishes.some((d) => d.id === saved.id);
     const next = exists ? dishes.map((d) => d.id === saved.id ? saved : d) : [...dishes, saved];
-    if (!(await confirmSave(() => persist(next), fail))) return;
+    let acknowledgement;
+    if (!(await confirmSave(async () => { acknowledgement = await persist(next); return acknowledgement; }, fail))) return;
     showToast(saved.recipeType === "prep" ? "Prep recipe saved" : "Menu item saved");
-    clearDish(dish, saved); setError("");
+    const savedId = acknowledgement.clientIds?.[saved.id] || saved.id;
+    clearDish(dish, acknowledgement.dishes?.find(row => row.id === savedId) || { ...saved, id: savedId }); setError("");
   }
   async function deleteDish(id) {
     const usedBy = dishes.filter((r) => (r.lines || []).some((l) => l.sourceType === "prep" && l.recipeId === id));
@@ -101,20 +103,20 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
           {dish.recipeType === "menu" ? (
             <>
               <Field label="Menu Category"><select className={inpCls} data-testid="recipe-category-select" value={dish.menuCategory} onChange={(e) => onCategoryChange(e.target.value)}>{MENU_CATEGORIES.map((c) => <option key={c.code} value={c.name}>{c.name} ({c.code})</option>)}</select></Field>
-              <Field label="Menu Code"><input className={inpCls} value={dish.menuCode} onChange={(e) => setDish((d) => ({ ...d, menuCode: e.target.value }))} /></Field>
+              <Field label="Menu Code"><input className={inpCls} value={dish.menuCode ?? ""} onChange={(e) => setDish((d) => ({ ...d, menuCode: e.target.value }))} /></Field>
             </>
           ) : (
             <>
-              <Field label="Batch Yield"><input type="number" step="0.01" className={inpCls} data-testid="recipe-yield-input" value={dish.yieldQty} onChange={(e) => setDish((d) => ({ ...d, yieldQty: e.target.value }))} placeholder="128" /></Field>
-              <Field label="Yield Unit"><select className={inpCls} value={dish.yieldUOM} onChange={(e) => setDish((d) => ({ ...d, yieldUOM: e.target.value }))}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
+              <Field label="Batch Yield"><input type="number" step="0.01" className={inpCls} data-testid="recipe-yield-input" value={dish.yieldQty ?? ""} onChange={(e) => setDish((d) => ({ ...d, yieldQty: e.target.value }))} placeholder="128" /></Field>
+              <Field label="Yield Unit"><select className={inpCls} value={dish.yieldUOM ?? ""} onChange={(e) => setDish((d) => ({ ...d, yieldUOM: e.target.value }))}><option value="">Unknown unit</option>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
             </>
           )}
         </div>
-        <Field label="Description / Production Notes"><textarea className={`${inpCls} w-full resize-y`} rows={2} value={dish.description} onChange={(e) => setDish((d) => ({ ...d, description: e.target.value }))} /></Field>
+        <Field label="Description / Production Notes"><textarea className={`${inpCls} w-full resize-y`} rows={2} value={dish.description ?? ""} onChange={(e) => setDish((d) => ({ ...d, description: e.target.value }))} /></Field>
         {dish.recipeType === "menu" ? (
           <div className="grid grid-cols-2 gap-3 mt-3">
-            <Field label="Menu Price ($)"><input type="number" step="0.01" className={inpCls} data-testid="recipe-price-input" value={dish.price} onChange={(e) => setDish((d) => ({ ...d, price: e.target.value }))} /></Field>
-            <Field label="Target Food Cost %"><input type="number" step="0.1" className={inpCls} value={dish.targetPct} onChange={(e) => setDish((d) => ({ ...d, targetPct: e.target.value }))} /></Field>
+            <Field label="Menu Price ($)"><input type="number" step="0.01" className={inpCls} data-testid="recipe-price-input" value={dish.price ?? ""} onChange={(e) => setDish((d) => ({ ...d, price: e.target.value }))} /></Field>
+            <Field label="Target Food Cost %"><input type="number" step="0.1" className={inpCls} value={dish.targetPct ?? ""} onChange={(e) => setDish((d) => ({ ...d, targetPct: e.target.value }))} /></Field>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 mt-3">
@@ -138,7 +140,7 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
           {pickType === "item" ? (
             <Field label="Ingredient (Internal Control #)"><select className={inpCls} data-testid="ingredient-item" value={pickCN} onChange={(e) => setPickCN(e.target.value)}>{items.map((it) => <option key={it.controlNumber} value={it.controlNumber}>{it.controlNumber} — {it.name}</option>)}</select></Field>
           ) : (
-            <Field label="Prep Recipe"><select className={inpCls} data-testid="ingredient-prep" value={pickRecipeId} onChange={(e) => setPickRecipeId(e.target.value)}>{prepRecipes.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.yieldUOM})</option>)}</select></Field>
+            <Field label="Prep Recipe"><select className={inpCls} data-testid="ingredient-prep" value={pickRecipeId} onChange={(e) => setPickRecipeId(e.target.value)}>{prepRecipes.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.yieldUOM || "Unknown unit"})</option>)}</select></Field>
           )}
           <Field label={pickType === "item" ? "Portions Used" : "Yield Units Used"}><input type="number" step="0.01" className={`${inpCls} w-28`} data-testid="ingredient-qty" value={pickQty} onChange={(e) => setPickQty(e.target.value)} /></Field>
           <button className={btnGhost} onClick={addLine} data-testid="ingredient-add"><Plus size={15} /> Add</button>
@@ -160,7 +162,7 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
           <div className="flex gap-7 flex-wrap px-3.5 py-3 bg-[#0F1626] rounded-lg mb-3.5 border border-[#28354A]" data-testid="cost-summary">
             <div><div className="text-[11px] text-slate-500 uppercase">{dish.recipeType === "prep" ? "Planning Batch Cost" : "Estimated Plate Cost"}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(totalCost)}</div></div>
             {dish.recipeType === "prep" ? (
-              <div><div className="text-[11px] text-slate-500 uppercase">Cost per {dish.yieldUOM}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(costPerYieldUnit)}</div></div>
+              <div><div className="text-[11px] text-slate-500 uppercase">Cost per {dish.yieldUOM || "Unknown unit"}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(costPerYieldUnit)}</div></div>
             ) : (
               <>
                 <div><div className="text-[11px] text-slate-500 uppercase">Estimated Food Cost %</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{summary.complete && Number(dish.price) > 0 ? num((totalCost / Number(dish.price)) * 100, 1) + "%" : "Unknown"}</div></div>

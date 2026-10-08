@@ -67,6 +67,81 @@ class MenuContractTests(unittest.IsolatedAsyncioTestCase):
         async with self.pool.acquire() as conn:
             return await conn.fetchval('SELECT COALESCE((SELECT revision FROM store_state WHERE store_id=$1),0)', store)
 
+    async def changes(self, upserts=(), removed=(), revision=0, store='berts'):
+        return await self.catalog.post('/api/pg/dishes/' + store + '/changes',
+            json={'upserts': list(upserts), 'delete_ids': list(removed)}, headers={'If-Match': str(revision)})
+
+    async def test_unrelated_incomplete_definition_is_retained_without_rewriting(self):
+        async with self.pool.acquire() as conn:
+            old = await conn.fetchrow("INSERT INTO dishes(store_id,name,recipe_type) VALUES('berts','Old incomplete prep','prep') RETURNING *")
+        created = await self.create(self.dish())
+        self.assertEqual(created.status_code, 200, created.text)
+        identity = created.json()['id']
+        edited = await self.changes([self.dish(id=identity, name='Edited plate')], revision=1)
+        self.assertEqual(edited.status_code, 200, edited.text)
+        self.assertEqual(len(edited.json()['dishes']), 2)
+        async with self.pool.acquire() as conn:
+            self.assertEqual(dict(await conn.fetchrow('SELECT * FROM dishes WHERE id=$1', old['id'])), dict(old))
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM dish_lines WHERE dish_id=$1', old['id']), 0)
+        strict = await self.replace([self.dish(id=identity), self.dish(id=str(old['id']), recipe_type='prep', yield_qty=1, yield_uom='qt', lines=[])], 2)
+        self.assertEqual(strict.status_code, 422, strict.text)
+        noop = await self.changes(revision=2)
+        self.assertEqual(noop.status_code, 200, noop.text)
+        removed = await self.changes(removed=[str(old['id'])], revision=3)
+        self.assertEqual(removed.status_code, 200, removed.text)
+
+    async def test_changed_prep_validates_retained_dependents_and_rolls_back(self):
+        saved = await self.changes([self.dish(client_id='plate', name='Dependent plate', lines=[{'source_type': 'prep', 'prep_dish_id': 'sauce', 'qty': 1, 'uom': 'qt'}]),
+            self.dish(client_id='sauce', name='Sauce', recipe_type='prep', yield_qty=2, yield_uom='qt')])
+        self.assertEqual(saved.status_code, 200, saved.text)
+        mapping = saved.json()['clientIds']
+        self.assertEqual(set(mapping), {'plate', 'sauce'})
+        before = (await self.catalog.get('/api/pg/dishes/berts')).json()
+        bad = await self.changes([self.dish(id=mapping['sauce'], recipe_type='prep', yield_qty=2, yield_uom='lb')], revision=1)
+        self.assertEqual(bad.status_code, 422, bad.text)
+        self.assertIn('Dependent plate', bad.json()['detail'])
+        self.assertIn(mapping['plate'], bad.json()['detail'])
+        self.assertEqual((await self.catalog.get('/api/pg/dishes/berts')).json(), before)
+        deleted = await self.changes(removed=[mapping['sauce']], revision=1)
+        self.assertEqual(deleted.status_code, 422, deleted.text)
+        self.assertEqual(await self.revision(), 1)
+        bad_source = await self.changes([self.dish(id=mapping['sauce'], recipe_type='prep', yield_qty=2, yield_uom='qt', lines=[{'source_type': 'item', 'item_code': 'not_here', 'qty': 1}])], revision=1)
+        self.assertEqual(bad_source.status_code, 422, bad_source.text)
+        self.assertEqual((await self.catalog.get('/api/pg/dishes/berts')).json(), before)
+
+    async def test_changes_require_current_revision_store_identity_and_retained_history(self):
+        self.assertEqual((await self.catalog.post('/api/pg/dishes/berts/changes', json={})).status_code, 428)
+        saved = await self.changes([self.dish(client_id='new', recipe_type='prep', yield_qty=1, yield_uom='qt')])
+        self.assertEqual(saved.status_code, 200, saved.text)
+        identity = saved.json()['clientIds']['new']
+        self.assertEqual((await self.changes(revision=0)).status_code, 409)
+        self.assertEqual((await self.changes(removed=[str(uuid4())], revision=1)).status_code, 422)
+        self.assertEqual((await self.changes(removed=[identity], store='rudds')).status_code, 422)
+        self.assertEqual((await self.changes(removed=[identity, identity], revision=1)).status_code, 422)
+        async with self.pool.acquire() as conn:
+            await conn.execute("INSERT INTO prep_logs(store_id,kind,dish_id,name,date) VALUES('berts','batch',$1,'Invented history','2026-10-06')", identity)
+        before = (await self.catalog.get('/api/pg/dishes/berts')).json()
+        held = await self.changes(removed=[identity], revision=1)
+        self.assertEqual(held.status_code, 422, held.text)
+        self.assertIn('history', held.json()['detail'])
+        self.assertEqual((await self.catalog.get('/api/pg/dishes/berts')).json(), before)
+        self.assertEqual(await self.revision(), 1)
+
+    async def test_changes_check_incomplete_dependencies_and_cycles_with_recipe_identity(self):
+        async with self.pool.acquire() as conn:
+            old = await conn.fetchval("INSERT INTO dishes(store_id,name,recipe_type) VALUES('berts','Unfinished sauce','prep') RETURNING id")
+        response = await self.changes([self.dish(lines=[{'source_type': 'prep', 'prep_dish_id': str(old), 'qty': 1}])])
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertIn('Unfinished sauce', response.json()['detail'])
+        self.assertIn(str(old), response.json()['detail'])
+        a = self.dish(name='Cycle A', client_id='a', recipe_type='prep', yield_qty=1, yield_uom='qt', lines=[{'source_type': 'prep', 'prep_dish_id': 'b', 'qty': 1}])
+        b = self.dish(name='Cycle B', client_id='b', recipe_type='prep', yield_qty=1, yield_uom='qt', lines=[{'source_type': 'prep', 'prep_dish_id': 'a', 'qty': 1}])
+        cyclic = await self.changes([a, b])
+        self.assertEqual(cyclic.status_code, 422, cyclic.text)
+        self.assertIn('Circular', cyclic.json()['detail'])
+        self.assertEqual(await self.revision(), 0)
+        self.assertEqual(len((await self.catalog.get('/api/pg/dishes/berts')).json()), 1)
+
     async def test_invalid_http_commands_leave_headers_lines_and_revision_unchanged(self):
         for change in ({'lines': []}, {'price': '-Infinity'}, {'lines': [{'source_type': 'item', 'item_code': 'test_food', 'qty': 'NaN'}]}, {'lines': [{'source_type': 'item', 'item_code': 'test_food', 'qty': 1, 'uom': 'lb'}]}, {'lines': [{'source_type': 'prep', 'prep_dish_id': str(uuid4()), 'qty': 1}]}):
             response = await self.create(self.dish(**change))

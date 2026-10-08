@@ -4014,14 +4014,43 @@ async def pg_list_dishes(store_id: str):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
-        rows = await conn.fetch("SELECT * FROM dishes WHERE store_id=$1 ORDER BY name", store_id)
-        out = []
-        for r in rows:
-            lines = await conn.fetch("SELECT * FROM dish_lines WHERE dish_id=$1", r["id"])
-            out.append(_dish_row_to_api(r, lines))
-        return out
+        async with conn.transaction(isolation='repeatable_read', readonly=True):
+            return await _pg_dishes_in_conn(conn, store_id)
     finally:
         await db_pg.pool().release(conn)
+
+
+async def _pg_dishes_in_conn(conn, store_id):
+    rows = await conn.fetch('SELECT * FROM public.dishes WHERE store_id=$1 ORDER BY name,id', store_id)
+    lines = await conn.fetch('SELECT * FROM public.dish_lines WHERE dish_id=ANY($1::uuid[]) ORDER BY dish_id,id',
+                             [row['id'] for row in rows])
+    by_dish = {}
+    for line in lines:
+        by_dish.setdefault(line['dish_id'], []).append(line)
+    return [_dish_row_to_api(row, by_dish.get(row['id'], [])) for row in rows]
+
+
+@pg_router.post('/dishes/{store_id}/changes')
+async def pg_change_dishes(store_id: str, body: menu_contract.DishChanges, request: Request):
+    check_store_id(store_id)
+    if not request.headers.get('if-match'):
+        raise HTTPException(428, 'Load the current recipes before saving changes')
+    async with db_pg.pool().acquire() as conn, conn.transaction():
+        await menu_contract.lock(conn, store_id)
+        revision = await _check_and_bump_revision({'papa': 'papa_leonis'}.get(store_id, store_id), request, conn)
+        prepared, prior = await menu_contract.prepare(conn, store_id, body.upserts, remove=body.delete_ids)
+        headers = [await _pg_save_dish(conn, store_id, dish, {}, creating=dish.id not in prior, write_lines=False)
+                   for dish in prepared]
+        for dish, row in zip(prepared, headers):
+            await _pg_save_dish_lines(conn, dish, row, {})
+        if body.delete_ids:
+            await conn.execute('DELETE FROM public.dish_lines WHERE dish_id=ANY($1::uuid[])', body.delete_ids)
+            try:
+                await conn.execute('DELETE FROM public.dishes WHERE store_id=$1 AND id=ANY($2::uuid[])', store_id, body.delete_ids)
+            except asyncpg.exceptions.ForeignKeyViolationError:
+                raise HTTPException(422, 'Recipe is referenced by retained operating history; changes were not saved')
+        return {'ok': True, 'revision': revision, 'dishes': await _pg_dishes_in_conn(conn, store_id),
+                'clientIds': {original.client_id: saved.id for original, saved in zip(body.upserts, prepared) if original.client_id}}
 
 @pg_router.post("/dishes/{store_id}")
 async def pg_create_dish(store_id: str, body: DishIn, request: Request):
