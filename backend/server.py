@@ -4041,6 +4041,7 @@ async def pg_change_dishes(store_id: str, body: menu_contract.DishChanges, reque
         await menu_contract.lock(conn, store_id)
         revision = await _check_and_bump_revision({'papa': 'papa_leonis'}.get(store_id, store_id), request, conn)
         prepared, prior = await menu_contract.prepare(conn, store_id, body.upserts, remove=body.delete_ids)
+        await menu_contract.retain_operating_history(conn, store_id, body.delete_ids)
         headers = [await _pg_save_dish(conn, store_id, dish, {}, creating=dish.id not in prior, write_lines=False)
                    for dish in prepared]
         for dish, row in zip(prepared, headers):
@@ -4115,6 +4116,7 @@ async def pg_replace_dishes(store_id: str, body: List[DishIn], request: Request)
         async with conn.transaction():
             await menu_contract.lock(conn, store_id)
             prepared, prior = await menu_contract.prepare(conn, store_id, body, replace=True)
+            await menu_contract.retain_operating_history(conn, store_id, set(prior) - {dish.id for dish in prepared})
             revision = await _check_and_bump_revision(revision_rid, request, conn)
             headers = [await _pg_save_dish(conn, store_id, dish, {}, creating=dish.id not in prior, write_lines=False) for dish in prepared]
             saved = [await _pg_save_dish_lines(conn, dish, row, {}) for dish, row in zip(prepared, headers)]
@@ -4133,6 +4135,8 @@ async def pg_replace_dishes(store_id: str, body: List[DishIn], request: Request)
 @pg_router.delete("/dishes/{store_id}/{dish_id}")
 async def pg_delete_dish(store_id: str, dish_id: str, request: Request):
     check_store_id(store_id)
+    if not request.headers.get('if-match'):
+        raise HTTPException(428, 'Load the current recipes before deleting a recipe')
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
@@ -4142,11 +4146,11 @@ async def pg_delete_dish(store_id: str, dish_id: str, request: Request):
             except ValueError:
                 raise HTTPException(422, "Invalid recipe ID")
             revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
+            await menu_contract.retain_operating_history(conn, store_id, [dish_id])
             try:
                 deleted = await conn.execute("DELETE FROM dishes WHERE id=$1 AND store_id=$2", dish_id, store_id)
             except asyncpg.exceptions.ForeignKeyViolationError:
-                raise HTTPException(400, "This recipe is referenced elsewhere (another recipe's ingredients, prep history, "
-                                          "or a count) -- remove those references first")
+                raise HTTPException(422, 'Recipe has retained references; keep its identity and history instead of deleting it')
             return {"ok": True, "deleted": deleted != "DELETE 0", "revision": revision}
     finally:
         await db_pg.pool().release(conn)
