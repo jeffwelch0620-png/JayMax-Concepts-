@@ -127,5 +127,7 @@ and with the four foundation native flags enabled. No controlled-input warnings 
 The selected local PostgreSQL run passed 28 checks plus 21 parameter subtests: affected
 graphs, canonical IDs, stale/missing revisions, incompatible yield rollback, retained history,
 supplier-source staleness, query budgets, original recipe contracts, and synthetic restore.
-A final read-only recipe snapshot was added after that run and is checked separately.
+A final read-only recipe snapshot was added after that run; all four affected-recipe
+checks passed again against the final backend source. The native-configured production
+build passed with the same three existing hook warnings.
 No new migration, hosted SQL, real invoice import, or live-browser acceptance occurred.
