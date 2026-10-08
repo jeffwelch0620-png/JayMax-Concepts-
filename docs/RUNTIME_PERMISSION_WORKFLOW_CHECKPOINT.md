@@ -1,5 +1,10 @@
 # Runtime permission workflow checkpoint
 
+Subsequent local work narrows the legacy-source grants and adds a frozen catalog
+reference and read-only verifier. See the [verifier checkpoint](RUNTIME_PERMISSION_VERIFIER_CHECKPOINT.md)
+for 14 selected passing local checks and the exact-SQL fixture correction. The
+remaining-work statements below describe this earlier candidate.
+
 October 8, 2026. Candidate grants and validation are local to unique disposable
 PostgreSQL databases. No hosted database query, grant/policy change, feature-flag
 file edit, push, merge or application publication occurred in this step.

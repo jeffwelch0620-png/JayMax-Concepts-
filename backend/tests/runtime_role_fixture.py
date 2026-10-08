@@ -3,36 +3,17 @@
 No hosted apply path. Frozen SQL/object manifest fails closed on source drift.
 Public RLS uses a dedicated trusted backend role; user scope stays in app gates.
 """
-import hashlib,json,os,re
+import os,re
 from pathlib import Path
-from urllib.parse import urlparse
+from unittest.mock import patch
 from uuid import uuid4
 import asyncpg,db_pg,deployment_readiness as readiness
 
-MANIFEST=readiness.ROOT/'docs/RUNTIME_PERMISSION_CANDIDATE.json'
-PRIVATE_UPDATES={'purchasing.import_files','purchasing.document_identities','purchasing.document_versions',
-    'purchasing.po_receipts','actual_inventory.scopes','actual_inventory.count_snapshots',
-    'purchasing.store_vendor_items','purchasing.store_supplier_contacts'}
-PUBLIC={
-    'stores':('SELECT',),'items':('SELECT','INSERT','UPDATE'),
-    'store_items':('SELECT','INSERT','UPDATE'),'vendor_items':('SELECT','INSERT','UPDATE'),
-    'vendors':('SELECT','INSERT','UPDATE'),'dishes':('SELECT','INSERT','UPDATE'),
-    'dish_lines':('SELECT','INSERT','UPDATE','DELETE'),'prep_items':('SELECT','INSERT','UPDATE'),
-    'staff_members':('SELECT','INSERT','UPDATE'),'store_state':('SELECT','INSERT','UPDATE'),
-    'activity_log':('SELECT','INSERT'),'purchase_orders':('SELECT','INSERT','UPDATE'),
-    'purchase_order_lines':('SELECT','INSERT','UPDATE','DELETE'),
-    'invoices':('SELECT',),'invoice_lines':('SELECT',),'prep_logs':('SELECT',),
-    'count_sessions':('SELECT',),'count_lines':('SELECT',),'reporting_periods':('SELECT',),'store_vendor_contacts':('SELECT',),
-    'staff_pins':('SELECT',)}
-
-def manifest():
-    value=json.loads(MANIFEST.read_text())
-    if value['publication']!='candidate; local test only':raise ValueError('Unreviewed profile')
-    for name,digest in value['migrationSha256'].items():
-        if hashlib.sha256((readiness.ROOT/'migrations'/name).read_bytes()).hexdigest()!=digest:
-            raise ValueError('Reviewed runtime SQL drift')
-    if set(value['migrationSha256'])!=set(readiness.MIGRATIONS):raise ValueError('Reviewed runtime migration list drift')
-    return value
+import runtime_permissions as candidate
+MANIFEST=candidate.MANIFEST
+PRIVATE_UPDATES=candidate.PRIVATE_UPDATES
+PUBLIC=candidate.PUBLIC
+manifest=candidate.manifest
 
 async def apply(conn,role):
     address=await conn.fetchval('SELECT inet_server_addr()::text')
@@ -43,12 +24,16 @@ async def apply(conn,role):
     flags=await conn.fetchrow('SELECT rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication FROM pg_roles WHERE rolname=$1',role)
     if not flags or any(flags.values()):raise ValueError('Unprivileged role required')
     profile=manifest();present=[]
+    allowed=candidate.table_privileges(profile)
+    expected=candidate.contract(profile)
+    async with conn.transaction(readonly=True):
+        await conn.execute('SET LOCAL search_path=pg_catalog')
+        live=await candidate.catalog_contracts(conn)
+    if live['functions']!=expected['functions']:raise ValueError('Reviewed function signature/body drift')
     for schema in readiness.PRIVATE:await conn.execute('GRANT USAGE ON SCHEMA '+schema+' TO '+role)
     for name in profile['tables']+profile['views']:
         if not await conn.fetchval('SELECT to_regclass($1) IS NOT NULL',name):continue
-        privileges=['SELECT']
-        if name in profile['tables'] and name!='purchasing.base_units':privileges.append('INSERT')
-        if name in PRIVATE_UPDATES:privileges.append('UPDATE')
+        privileges=allowed[name]
         await conn.execute('GRANT '+','.join(privileges)+' ON '+name+' TO '+role);present.append(name)
     functions=await conn.fetch("SELECT n.nspname||'.'||p.proname AS name,p.oid::regprocedure::text AS signature,p.prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=ANY($1::text[]) AND p.prorettype<>'trigger'::regtype",list(readiness.PRIVATE))
     for row in functions:
@@ -71,7 +56,28 @@ async def role_setup(conn,role):
 
 class RuntimeRoleMixin:
     async def asyncSetUp(self):
-        await super().asyncSetUp()
+        # The installer preserves exact SQL bytes. Older workflow fixtures use
+        # read_text(), which normalizes CRLF even within a function body/literal.
+        # Keep that reference identical ONLY for reviewed fixture SQL paths.
+        reviewed={readiness.ROOT/'supabase/schema.sql'} | {readiness.ROOT/'migrations'/name for name in readiness.MIGRATIONS}
+        original_read=Path.read_text
+        def exact_sql(path,*args,**kwargs):
+            if path in reviewed:
+                encoding=kwargs.get('encoding') or (args[0] if args else None) or 'utf-8'
+                return path.read_bytes().decode(encoding,errors=kwargs.get('errors') or 'strict')
+            return original_read(path,*args,**kwargs)
+        with patch.object(Path,'read_text',exact_sql):
+            await super().asyncSetUp()
+        try:
+            await self.prepare_runtime()
+        except BaseException:
+            # unittest skips asyncTearDown when asyncSetUp fails. This fixture's
+            # parent setup completed, so close its own clients/pools and drop its
+            # exact invented DB before the registered DROP ROLE cleanup.
+            await super().asyncTearDown()
+            raise
+
+    async def prepare_runtime(self):
         self.runtime_role='native_runtime_test_'+uuid4().hex
         await self.admin.execute('CREATE ROLE '+self.runtime_role+' NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT')
         async def cleanup():
@@ -88,9 +94,9 @@ class RuntimeRoleMixin:
                 if present:installed=all(present)
                 else:
                     installed=all([bool(await conn.fetchval("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$1 AND p.proname=$2)",*name.split('.'))) for name in entry['functions']])
-                if not installed:await conn.execute((readiness.ROOT/'migrations'/entry['file']).read_text())
+                if not installed:await conn.execute((readiness.ROOT/'migrations'/entry['file']).read_bytes().decode('utf-8'))
             # Revoke inherited PUBLIC/native RPC access before testing the profile.
-            await conn.execute((readiness.ROOT/'migrations/20261007_native_private_access.sql').read_text())
+            await conn.execute((readiness.ROOT/'migrations/20261007_native_private_access.sql').read_bytes().decode('utf-8'))
             self.permission_result=await apply(conn,self.runtime_role)
             if not self.permission_result['completeNativeObjectSet']:raise AssertionError('Complete reviewed native fixture required')
         old_pool=self.pool

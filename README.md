@@ -1,5 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Read-only runtime permissions and drift checks - October 8, 2026
+
+**Fourteen selected local checks pass**: six permission-verifier cases, seven
+inventory workflows and one fixture-safety check. Preserved legacy planning,
+count, container, day-list and supplier-contact captures now receive SELECT only;
+reviewed mappings still create separate resolution records. Track 1 accounting
+remains independent of prep and sales.
+
+The read-only verifier compares effective privileges, column ACLs, role
+memberships, grant options, ownership and backend RLS policies with the candidate.
+Its independently installed reference pins **94 exact function contracts** and
+**123 relation fingerprints**, including constraints, triggers, columns and RLS.
+Strict checks caught SQL line-ending normalization in older fixtures; the runtime
+tests now preserve the reviewed SQL bytes. Read the
+[verifier checkpoint](docs/RUNTIME_PERMISSION_VERIFIER_CHECKPOINT.md) for the
+matrix changes, evidence, retained diagnostics and limits.
+
+This remains a local candidate. Other manager routes, unused grants and the
+hosted catalog/runtime LOGIN need review before a hosted permissions trial.
+Browser/Data API, managed recovery and matched deployment flags remain separate
+gates. No Supabase permissions changed; no push, merge or publication occurred.
+**Continue holding merges.** Older sections below are historical checkpoints.
+
 ## Nonowner runtime workflow candidate - October 8, 2026
 
 **Seven selected local workflow cases passed** using a role with no ownership,
