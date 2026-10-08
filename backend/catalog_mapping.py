@@ -33,13 +33,18 @@ async def lock_catalog(conn):
 
 
 async def supplier_rows(conn,store,code):
+    return await supplier_rows_many(conn,store,[code])
+
+
+async def supplier_rows_many(conn,store,codes):
     await ready(conn)
     rows=await conn.fetch('''SELECT vi.*,v.name AS vendor_name,
         s.price AS store_price,s.price_updated_at AS store_price_updated_at,s.price_source AS store_price_source,
         coalesce(s.preferred,false) AS store_preferred,coalesce(s.available,false) AS store_available
         FROM public.vendor_items vi JOIN public.vendors v ON v.id=vi.vendor_id
         LEFT JOIN purchasing.store_vendor_items s ON s.vendor_item_id=vi.id AND s.store_id=$1
-        WHERE vi.item_code=$2 ORDER BY vi.vendor_id,vi.vendor_sku,vi.id''',store,code)
+        WHERE vi.item_code=ANY($2::text[])
+        ORDER BY store_available DESC,store_preferred DESC,vi.vendor_id,vi.vendor_sku,vi.id''',store,codes)
     return [{**dict(r),**{key:r['store_'+key] for key in ('price','price_updated_at','price_source','preferred','available')}} for r in rows]
 
 

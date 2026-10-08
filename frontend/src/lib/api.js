@@ -1,5 +1,5 @@
 import axios from "axios";
-import { calcPortionsPerUnit } from "./calc";
+import { calcPortionsPerUnit, preferredSku } from "./calc";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Supabase migration target -- see docs/SUPABASE_MIGRATION_PLAN.md. Store ids here
@@ -385,7 +385,7 @@ function pgSkuToMongoSku(s) {
 export function pgItemToMongoItem(pgItem, rid) {
   const prefix = `${rid}_`;
   const controlNumber = pgItem.controlNumber || (pgItem.code.startsWith(prefix) ? pgItem.code.slice(prefix.length) : pgItem.code);
-  const preferred = pgItem.vendorSkus.find((s) => s.preferred) || pgItem.vendorSkus[0];
+  const preferred = preferredSku(pgItem);
   return {
     controlNumber, name: pgItem.name, storageArea: pgItem.storageArea || "",
     itemCode: pgItem.code, baseUnit: pgItem.baseUnit, countUnit: pgItem.countUnit, basePerCountUnit: pgItem.basePerCountUnit,
@@ -422,7 +422,7 @@ function physicalPackFactor(packTotal, unit, base) {
 }
 export function mongoItemToPgBody(item, rid) {
   const skus = item.vendorSkus || [];
-  const preferred = skus.find((s) => s.preferred) || skus[0];
+  const preferred = preferredSku(item);
   const { packTotal, unitUOM } = packTotalFor(preferred, item);
   const nativeBase = physicalUnit(item.baseUnit || item.unitUOM || unitUOM);
   const basePerCountUnit = nativePurchasesEnabled ? item.basePerCountUnit ?? physicalPackFactor(packTotal, unitUOM, nativeBase)
