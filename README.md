@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Nonowner runtime workflow candidate - October 8, 2026
+
+**Seven selected local workflow cases passed** using a role with no ownership,
+superuser, RLS bypass, database/role creation, private journal deletion or DDL
+authority. The checks cover physical invoice/count corrections and period replay,
+staff count/production review, order receiving/independence, supplier price/contact
+history, paired waste corrections and saved prep analytics/reopening.
+
+The candidate names individual objects across **78 native tables and seven views**.
+Tests identified specific row-lock UPDATE rights and read-only access to existing
+reporting periods; immutable invoice/count rewrites remain rejected. Read the
+[runtime workflow checkpoint](docs/RUNTIME_PERMISSION_WORKFLOW_CHECKPOINT.md)
+for the grant matrix, held diagnostics and evidence limits. This remains a local
+candidate: unused rights, other routes and a read-only grants verifier still need
+review before a hosted role trial. No Supabase permissions changed. No push,
+merge or publication occurred; **continue holding merges**. Older sections below
+are historical checkpoints.
+
 ## Hosted staff assignment and production - October 8, 2026
 
 The retained synthetic hosted workflow now covers reviewed task assignment,

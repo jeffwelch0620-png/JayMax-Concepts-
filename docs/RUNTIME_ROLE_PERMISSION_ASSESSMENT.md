@@ -1,5 +1,13 @@
 # Backend runtime permission assessment
 
+The later [workflow checkpoint](RUNTIME_PERMISSION_WORKFLOW_CHECKPOINT.md)
+records **seven passing selected local cases** under a per-object nonowner
+candidate across purchasing, physical counts/corrections, staff review, orders,
+supplier settings, waste and prep analytics. It identifies necessary private
+row-lock UPDATE rights and read-only access to legacy reporting periods.
+The assessment below preserves the earlier staff-production-only prototype;
+its schema-wide grants are not the current candidate. Hosted-role approval remains open.
+
 October 8, 2026. Local prototype only; no hosted role, grant, policy or ownership
 was changed. This is a workflow permission assessment, not deployable grant SQL.
 
