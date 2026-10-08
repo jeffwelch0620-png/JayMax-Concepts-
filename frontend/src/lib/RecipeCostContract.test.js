@@ -14,9 +14,10 @@ test.each([null, undefined, "", " ", "NaN", "Infinity", -1, true])("missing or i
   expect(result).toMatchObject({ complete: false, valid: true, totalCost: null, costPerYieldUnit: null });
   expect(result.issues.length).toBeGreaterThan(0);
 });
-test("explicit free price remains a valid zero; unavailable preferred supplier is held", () => {
+test("explicit free price remains valid; current costing selects only available suppliers", () => {
   expect(itemPlanningCost({ ...food, vendorSkus: [{ price: "0", preferred: true }] }).cost).toBe(0);
-  expect(itemPlanningCost({ ...food, vendorSkus: [{ price: 80, preferred: true, available: false }, { price: 60, available: true }] }).cost).toBeNull();
+  expect(itemPlanningCost({ ...food, vendorSkus: [{ price: 80, preferred: true, available: false }, { price: 60, available: true }] }).cost).toBe(0.75);
+  expect(itemPlanningCost({ ...food, vendorSkus: [{ price: 80, preferred: true, available: false }] }).cost).toBeNull();
 });
 test.each([{ portionSize: 0 }, { portionSize: -1 }, { portionSize: "Infinity" }, { portionUOM: "fl oz" }, { unitUOM: "unknown" }, { packCount: 0 }, { unitQty: null }])("invalid or incompatible physical metadata %p is uncosted", changes => {
   expect(summarize(plate, [{ ...food, ...changes }]).totalCost).toBeNull();
@@ -53,6 +54,13 @@ test("an unpriced ingredient cannot yield an apparently profitable menu estimate
 test("missing selling price retains unknown contribution even when ingredients are priced", () => {
   const report = buildPeriodReport({}, [food], [], [{ ...plate, price: null }], []);
   expect(report.menuProfitability[0]).toMatchObject({ cost: 2, contribution: null, price: null, foodCostPct: null });
+});
+
+test("unknown profitability sorts after a verified zero food cost", () => {
+  const report = buildPeriodReport({}, [{ ...food, vendorSkus: [{ price: 0 }] }], [], [{ ...plate, id: "unknown", price: null }, { ...plate, id: "free" }], []);
+  expect(report.menuProfitability.map(row => row.recipe.id)).toEqual(["free", "unknown"]);
+  expect(report.menuProfitability[0].foodCostPct).toBe(0);
+  expect(report.menuProfitability[1].foodCostPct).toBeNull();
 });
 test("excessively nested prep is held rather than causing a costing recursion failure", () => {
   const recipes = Array.from({ length: 101 }, (_, i) => ({ id: `prep-${i}`, recipeType: "prep", yieldQty: 1, yieldUOM: "qt", lines: i === 100 ? plate.lines : [{ sourceType: "prep", recipeId: `prep-${i + 1}`, qty: 1 }] }));

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { calcPortionsPerUnit } from "./calc";
+import { calcPortionsPerUnit, preferredSku } from "./calc";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Supabase migration target -- see docs/SUPABASE_MIGRATION_PLAN.md. Store ids here
@@ -431,7 +431,7 @@ function pgSkuToMongoSku(s) {
 export function pgItemToMongoItem(pgItem, rid) {
   const prefix = `${rid}_`;
   const controlNumber = pgItem.controlNumber || (pgItem.code.startsWith(prefix) ? pgItem.code.slice(prefix.length) : pgItem.code);
-  const preferred = pgItem.vendorSkus.find((s) => s.preferred) || pgItem.vendorSkus[0];
+  const preferred = preferredSku(pgItem);
   return {
     controlNumber, name: pgItem.name, storageArea: pgItem.storageArea || "",
     itemCode: pgItem.code, baseUnit: pgItem.baseUnit, countUnit: pgItem.countUnit, basePerCountUnit: pgItem.basePerCountUnit,
@@ -468,7 +468,7 @@ function physicalPackFactor(packTotal, unit, base) {
 }
 export function mongoItemToPgBody(item, rid) {
   const skus = item.vendorSkus || [];
-  const preferred = skus.find((s) => s.preferred) || skus[0];
+  const preferred = preferredSku(item);
   const { packTotal, unitUOM } = packTotalFor(preferred, item);
   const nativeBase = physicalUnit(item.baseUnit || item.unitUOM || unitUOM);
   const basePerCountUnit = nativePurchasesEnabled ? item.basePerCountUnit ?? physicalPackFactor(packTotal, unitUOM, nativeBase)
@@ -589,12 +589,12 @@ function pgLineToMongoLine(l, rid, items) {
   };
 }
 
-function mongoLineToPgBody(l, rid, items) {
+function mongoLineToPgBody(l, rid, items, comparison = false) {
   const item = l.sourceType === "item" ? items.find(it => l.itemCode ? it.itemCode === l.itemCode : it.controlNumber === l.controlNumber) : null;
-  if (l.sourceType === "item" && !item) throw new Error("Ingredient is not linked to this restaurant. Reload and review the recipe mapping.");
+  if (l.sourceType === "item" && !item && !comparison) throw new Error("Ingredient is not linked to this restaurant. Reload and review the recipe mapping.");
   return {
     source_type: l.sourceType,
-    item_code: item?.itemCode || null,
+    item_code: item?.itemCode || (comparison ? l.itemCode ?? null : null),
     prep_dish_id: l.sourceType === "prep" ? l.recipeId : null,
     qty: numOrNull(l.qty ?? l.qtyPortions), uom: l.uom ?? null,
   };
@@ -611,7 +611,7 @@ function pgDishToMongoDish(d, rid, items) {
   };
 }
 
-function mongoDishToPgBody(dish, rid, items) {
+function mongoDishToPgBody(dish, rid, items, comparison = false) {
   return {
     id: isUuid(dish.id) ? dish.id : null,
     name: dish.name, menu_code: dish.menuCode || null, recipe_type: dish.recipeType || "menu",
@@ -620,7 +620,7 @@ function mongoDishToPgBody(dish, rid, items) {
     procedure: dish.procedure || null, equipment: dish.equipment || null, shelf_life: dish.shelfLife || null,
     menu_category: dish.menuCategory || null, description: dish.description || null, photo_url: dish.photoUrl || null,
     portion_note: dish.portionNote || null, frequency: dish.frequency || null,
-    lines: (dish.lines || []).map((l) => mongoLineToPgBody(l, rid, items)),
+    lines: (dish.lines || []).map((l) => mongoLineToPgBody(l, rid, items, comparison)),
   };
 }
 
@@ -631,10 +631,15 @@ async function pgFetchDishes(rid) {
 
 async function pgPutDishes(rid, arr, revision) {
   const items = (await pgListItems(pgStoreId(rid))).map(it => pgItemToMongoItem(it, rid));
-  const saved = await pgReplaceDishes(pgStoreId(rid), arr.map((dish) => ({
-    ...mongoDishToPgBody(dish, rid, items), client_id: isUuid(dish.id) ? null : dish.id,
-  })), revision);
-  return { revision: saved.revision, dishes: saved.dishes.map((dish) => pgDishToMongoDish(dish, rid, items)) };
+  const current = await pgListDishes(pgStoreId(rid));
+  const prior = new Map(current.map(dish => [dish.id, JSON.stringify(mongoDishToPgBody(pgDishToMongoDish(dish, rid, items), rid, items, true))]));
+  const changed = arr.filter(dish => prior.get(dish.id) !== JSON.stringify(mongoDishToPgBody(dish, rid, items, true)));
+  const retained = new Set(arr.map(dish => dish.id));
+  const saved = (await axios.post(`${PG_API}/dishes/${pgStoreId(rid)}/changes`, {
+    upserts: changed.map(dish => ({ ...mongoDishToPgBody(dish, rid, items), client_id: isUuid(dish.id) ? null : dish.id })),
+    delete_ids: current.filter(dish => !retained.has(dish.id)).map(dish => dish.id),
+  }, { headers: revisionHeaders(revision) })).data;
+  return { revision: saved.revision, clientIds: saved.clientIds || {}, dishes: saved.dishes.map(dish => pgDishToMongoDish(dish, rid, items)) };
 }
 
 export async function streamChat(rid, message, { onDelta, onError, onDone }) {

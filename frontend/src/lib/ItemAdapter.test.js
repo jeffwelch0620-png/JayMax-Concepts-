@@ -70,3 +70,11 @@ test("a location alias never replaces the canonical shared product code", () => 
   expect(ui.controlNumber).toBe("R01");expect(ui.itemCode).toBe("papa_food");expect(ui.sharedStoreCount).toBe(2);
   expect(mongoItemToPgBody(ui,"rudds").code).toBe("papa_food");
 });
+test.each([true,false])("supplier selection uses an available row and retains unavailable history (native %s)", native => {
+  load(native);
+  const retired = { ...item.vendorSkus[0], id: "retired", preferred: true, available: false, purchaseUnit: "old-case" };
+  const current = { ...item.vendorSkus[0], id: "current", vendorSku: "NEW", preferred: false, available: true, purchaseUnit: "case" };
+  const ui = pgItemToMongoItem({ ...item, vendorSkus: [retired,current] }, "berts");
+  expect(ui.purchaseUnit).toBe("case"); expect(ui.vendorSkus).toHaveLength(2);
+  expect(mongoItemToPgBody(ui,"berts").vendor_skus[0].available).toBe(false);
+});

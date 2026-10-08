@@ -135,7 +135,7 @@ export function calcPortionsPerUnit(yieldQty, yieldUOM, portionSize, portionUOM)
 }
 
 export function preferredSku(item) {
-  const skus = item.vendorSkus || [];
+  const skus = (item.vendorSkus || []).filter(s => s.available !== false);
   return skus.find((s) => s.preferred) || skus[0] || null;
 }
 export function isCountActive(item) { return item.countActive !== undefined ? !!item.countActive : item.active !== false; }
@@ -520,7 +520,7 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
     const c = recipeCostSummary(r, items, normalizedRecipes);
     const price = recipeNumber(r.price);
     return { recipe: r, cost: c.totalCost, costComplete: c.complete, costIssues: c.issues, price, foodCostPct: c.complete && price > 0 ? (c.totalCost / price) * 100 : null, contribution: c.complete && price != null ? price - c.totalCost : null };
-  }).sort((a, b) => (b.foodCostPct || 0) - (a.foodCostPct || 0));
+  }).sort((a, b) => a.foodCostPct == null ? (b.foodCostPct == null ? 0 : 1) : b.foodCostPct == null ? -1 : b.foodCostPct - a.foodCostPct);
 
   const liveInventoryValue = items.reduce((sum, it) => sum + (Number(it.currentStock) || 0) * (Number(itemDerived(it).price) || 0), 0);
   const orderExposure = items.filter((it) => isOrderEnabled(it) && (Number(it.currentStock) || 0) < (Number(it.par) || 0)).reduce((sum, it) => {

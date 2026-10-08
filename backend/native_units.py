@@ -43,12 +43,19 @@ async def source_snapshot(conn,store,code,kind,vendor_item_id=None):
         si.count_unit,si.base_per_count_unit FROM public.items i JOIN public.store_items si ON si.item_code=i.code
         WHERE si.store_id=$1 AND i.code=$2''',store,code)
     if item is None or item['item_type']!='raw':raise HTTPException(422,'Choose a purchased raw item at this location')
+    sku=None
+    if kind=='purchase' and vendor_item_id is not None:
+        sku=await conn.fetchrow('''SELECT id,vendor_id,vendor_sku,item_code,purchase_unit,base_per_purchase_unit,
+            pack_count,unit_qty,unit_uom,pack_verified FROM public.vendor_items WHERE id=$1 AND item_code=$2''',vendor_item_id,code)
+    return _source_values(item,sku,code,kind,vendor_item_id)
+
+
+def _source_values(item,sku,code,kind,vendor_item_id):
+    if item is None or item['item_type']!='raw':raise HTTPException(422,'Choose a purchased raw item at this location')
     source={'item':dict(item)}
     if kind=='purchase':
         if vendor_item_id is None:raise HTTPException(422,'Select the supplier product for a purchase-unit profile')
-        sku=await conn.fetchrow('''SELECT id,vendor_id,vendor_sku,item_code,purchase_unit,base_per_purchase_unit,
-            pack_count,unit_qty,unit_uom,pack_verified FROM public.vendor_items WHERE id=$1 AND item_code=$2''',vendor_item_id,code)
-        if sku is None:raise HTTPException(422,'Supplier product does not belong to this item')
+        if sku is None or sku['item_code']!=code:raise HTTPException(422,'Supplier product does not belong to this item')
         source['supplierProduct']=dict(sku);unit=sku['purchase_unit']
     else:
         if vendor_item_id is not None:raise HTTPException(422,'Count profiles use the location count unit')
@@ -60,11 +67,22 @@ async def source_snapshot(conn,store,code,kind,vendor_item_id=None):
 async def profiles(conn,store):
     rows=await conn.fetch('''SELECT DISTINCT ON (item_code,profile_kind,context_key) * FROM purchasing.unit_profiles
         WHERE store_id=$1 ORDER BY item_code,profile_kind,context_key,revision DESC''',store)
+    if not rows:return []
+    # Read the exact source fields used by source_snapshot in two batch queries.
+    # Prices, availability and historical profile data do not enter this hash.
+    items=await conn.fetch('''SELECT i.code,i.base_unit,i.item_type,i.pack_count,i.unit_qty,i.unit_uom,
+        si.count_unit,si.base_per_count_unit FROM public.items i JOIN public.store_items si ON si.item_code=i.code
+        WHERE si.store_id=$1 AND i.code=ANY($2::text[])''',store,list({r['item_code'] for r in rows}))
+    skus=await conn.fetch('''SELECT id,vendor_id,vendor_sku,item_code,purchase_unit,base_per_purchase_unit,
+        pack_count,unit_qty,unit_uom,pack_verified FROM public.vendor_items WHERE id=ANY($1::uuid[])''',
+        list({r['vendor_item_id'] for r in rows if r['vendor_item_id'] is not None}))
+    by_code={r['code']:r for r in items};by_sku={r['id']:r for r in skus}
     result=[]
     for r in rows:
         value=dict(r)
         try:
-            source,_=await source_snapshot(conn,store,r['item_code'],r['profile_kind'],r['vendor_item_id'])
+            source,_=_source_values(by_code.get(r['item_code']),by_sku.get(r['vendor_item_id']),
+                r['item_code'],r['profile_kind'],r['vendor_item_id'])
             value['stale']=fingerprint(source)!=r['source_fingerprint']
         except HTTPException:value['stale']=True
         result.append(value)
