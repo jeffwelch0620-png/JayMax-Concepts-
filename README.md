@@ -2,15 +2,20 @@
 
 The October 7 correction pass is documented in
 [`docs/PR_REVIEW_CORRECTIONS.md`](docs/PR_REVIEW_CORRECTIONS.md). It records save/retry,
-session-expiry, catalog batching, supplier selection, targeted recipe saves and
-test-configuration fixes,
+session-expiry, catalog batching, supplier selection, targeted recipe saves,
+order/staff review separation, workflow conflicts, limited paired waste corrections
+and test-configuration fixes,
 their validation, and remaining review work.
 PRs 14–16 remain draft and unmerged; hosted development validation is still pending.
 
-Current PR16 correction checks: **434 frontend tests / 53 suites** pass in default and
-native configurations; **20 selected backend checks** pass. The production build passes
-with three existing hook warnings. Checkpoint evidence below describes the original
-snapshots, before the review corrections.
+Current PR16 correction checks: **437 frontend tests / 53 suites** pass in default and
+native configurations. **14 distinct selected staff/waste backend checks** pass across
+the first attempt and final rerun; the final rerun passes all **10** selected cases.
+The inherited PR15 order correction has **11** passing order checks. Earlier catalog/
+recipe checks remain separately documented. The production build passes with three
+existing hook warnings. The new waste migration must be included in the preserved
+ordered deployment bundle before hosted validation. Checkpoint evidence below describes
+the original snapshots, before the review corrections.
 
 ## Published staff workflow checkpoint — October 7, 2026
 

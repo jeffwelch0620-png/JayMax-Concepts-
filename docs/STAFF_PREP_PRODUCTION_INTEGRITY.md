@@ -46,7 +46,15 @@ can be revised or withdrawn. Rejected submissions can be revised and reviewed
 again. Withdrawal retains the original assignment and history and creates no
 production. Withdrawn or accepted roots cannot be edited by staff.
 
+New roots cannot reuse an occupied root or revision ID, including another store's
+identity. Preview and commit return 409 without partial submission history. Real
+cross-module request-key collisions likewise roll back batch/link/finish/decision
+effects before returning 409; the caller must refresh and review a new request.
+
 Managers inspect submitted usable output, gross inputs, source lots and evidence.
+Acceptance rejects any recorded revision author and an actor whose canonical ID
+matches the claimed roster ID. Shared-PIN identity remains unverified; these known-ID
+guards do not replace the planned login work or prove individual review independence.
 Acceptance rechecks the current assignment, active roster, recipe mapping,
 allocation availability and task progress. One transaction records exactly one
 measured batch, links its production root to the native task and saves its

@@ -1,5 +1,6 @@
 """Measured container contents and internal service transfers; no accounting writes."""
 import os
+from workflow_integrity import conflict_transaction
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -222,16 +223,24 @@ async def preview(conn, store, body):
             if state['moves'] or body.performed_at != datetime.fromisoformat(fill['performed_at']): raise HTTPException(409, 'Void fill requires no movements and its original physical instant')
             ds = Decimal(fill['base_quantity']).copy_negate()
         else:
-            target = state['moves'][-1] if state['moves'] else None
+            extended = action == 'undo_waste' and await conn.fetchval("SELECT to_regprocedure('prep_inventory.can_reverse_container_waste(uuid,uuid)') IS NOT NULL")
+            if extended:
+                target = next((move for move in state['moves'] if move['id'] == str(body.target_move_id)), None)
+                if not target or not await conn.fetchval('SELECT prep_inventory.can_reverse_container_waste($1,$2)', body.fill_id, body.target_move_id):
+                    raise HTTPException(409, 'Choose an unreversed container loss with no later quantity-changing dependencies')
+            else:
+                target = state['moves'][-1] if state['moves'] else None
             allowed = ('waste',) if action=='undo_waste' else ('send','return','unpack')
             if not target or target['id'] != str(body.target_move_id) or target['action'] not in allowed:
-                raise HTTPException(409, 'Undo only the latest original send, return or unpack movement')
+                raise HTTPException(409, 'Undo requires an eligible original movement; older waste corrections require the correction migration')
             if body.performed_at != datetime.fromisoformat(target['performed_at']): raise HTTPException(422, 'Undo retains the original movement instant')
             ds, dv = Decimal(target['storage_delta']).copy_negate(), Decimal(target['service_delta']).copy_negate()
         if action not in ('undo','undo_waste','void_fill') and body.performed_at < max(datetime.fromisoformat(x['performed_at']) for x in [fill]+state['moves']):
             raise HTTPException(422, 'Movement must follow recorded container activity')
         after_storage, after_service = batches.exact_sum([storage,ds]), batches.exact_sum([service,dv])
         if min(after_storage, after_service) < 0: raise HTTPException(409, 'Movement exceeds recorded contents in its source location')
+        if action == 'undo_waste' and batches.exact_sum([after_storage, after_service]) > Decimal(fill['base_quantity']):
+            raise HTTPException(409, 'Waste reversal would exceed the original measured fill')
         lot = await conn.fetchrow('SELECT * FROM prep_inventory.batch_events WHERE id=$1', UUID(fill['source_batch_id']))
         if not await source_valid(conn, dict(lot)) or lot['kind']=='void' or await conn.fetchval('SELECT 1 FROM prep_inventory.batch_events WHERE predecessor_id=$1', lot['id']):
             raise HTTPException(409, 'Source lot changed; review dependencies before moving contents')
@@ -287,7 +296,9 @@ async def setup(conn, store):
         storage = batches.exact_sum(Decimal(s['storage']) for s in contents)
         service = batches.exact_sum(Decimal(s['service']) for s in contents)
         lot.update(containerStorage=storage,containerService=service,totalRemainingRecordedQuantity=batches.exact_sum([Decimal(lot['remainingRecordedQuantity']),storage,service]))
-    return serial(dict(store_id=store, definitions=definitions, profiles=profiles, fills=fills, products=foundation['products'], units=foundation['profiles'], lots=batch['lots'], policy=batch['policy'], directWasteSupported=bool(await conn.fetchval("SELECT to_regclass('prep_inventory.container_waste_links') IS NOT NULL")),quantityBasis='Uncontained lot output plus recorded container contents; service transfers are not consumption'))
+    return serial(dict(store_id=store, definitions=definitions, profiles=profiles, fills=fills, products=foundation['products'], units=foundation['profiles'], lots=batch['lots'], policy=batch['policy'], directWasteSupported=bool(await conn.fetchval("SELECT to_regclass('prep_inventory.container_waste_links') IS NOT NULL")),
+        directWasteCorrectionSupported=bool(await conn.fetchval("SELECT to_regprocedure('prep_inventory.can_reverse_container_waste(uuid,uuid)') IS NOT NULL")),
+        quantityBasis='Uncontained lot output plus recorded container contents; service transfers are not consumption'))
 
 
 def install_routes(router, context):
@@ -314,7 +325,7 @@ def install_routes(router, context):
         actor, pool = await ctx(request,store_id,True)
         digest = fingerprint(body.model_dump(mode='json'))
         async with pool.acquire() as conn:
-            async with conn.transaction():
+            async with conflict_transaction(conn):
                 await ready(conn)
                 await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', str(key))
                 await lock_store(conn,store_id)

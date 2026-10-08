@@ -44,13 +44,18 @@ replacement for counting what is physically present.
 
 ## Corrections and retries
 
-An erroneous latest waste movement can be reversed only together with its
+An erroneous waste movement can be reversed only together with its
 original linked observation at the original physical instant. Both journals
 retain the original entry and append its correction. The reversal restores the
 recorded quantity in the original compartment and voids the matching loss.
 An undo cannot itself be undone. A corrected measured loss uses a fresh review.
-Later activity holds earlier corrections for review; a historical dependency
-correction workflow remains future work.
+With `20261008_container_waste_corrections.sql` installed, later storage/service
+transfers and reversals of those transfers permit an earlier waste correction.
+The original target remains unreversed and the restored total cannot exceed the
+original measured fill. Later waste, unpacking, quantity corrections, voids and
+changed source lots still hold earlier corrections for dependency review.
+Without this migration, the earlier latest-only waste rule remains. A broader
+historical quantity-dependency correction workflow remains future work.
 
 Standalone waste correction routes and controls reject container-linked events.
 Private SQL guards reject orphan movements, unpaired observations, incorrect
@@ -76,6 +81,14 @@ and empty loss history is omitted, preserving existing reviewed commands and
 pending previews. An additive upgrade test verifies retry of prior ordinary
 commands after migration. Application database connections must be drained and
 recycled after DDL to avoid stale asyncpg row/statement caches.
+
+Apply `20261008_container_waste_corrections.sql` after the direct-waste migration.
+It adds a private invoker eligibility function and replaces the movement guard,
+retaining original facts, receipt hashes and pending latest-waste preview shape.
+PUBLIC, anon and authenticated receive no function grant. Upgrade and whole SQL
+restore checks cover the function, original retry, pending preview and retained pair.
+The separately preserved local deployment bundle still needs this new migration
+added and its ordered migration/recovery rehearsal repeated before hosted use.
 
 No new feature pair is added. The existing container/observation dependencies
 apply; all fourteen native feature pairs remain false in example files. The UI

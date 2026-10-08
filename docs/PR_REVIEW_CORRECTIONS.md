@@ -55,9 +55,10 @@ Earlier checkpoint counts and hash manifests describe their original snapshots.
 2. PR15 adds recipe validation scoped to changed recipes, dependents and their inputs,
    named errors, canonical save acknowledgement and unknown-cost sorting/display.
    Partial-cost display and wider legacy history deletion paths remain under review.
-3. Review separation covering authors and subsequent editors, safe conflict responses,
-   staff production identity collisions, and container-waste correction dependencies.
-4. Cross-module idempotency, history/access boundaries, and migration/runtime-role checks.
+3. Known-identity review separation, production root collisions and selected coupled
+   request-key conflicts are corrected below. Wider identity/authentication and
+   quantity-dependency corrections remain separate work.
+4. Broader cross-module idempotency, history/access boundaries, and migration/runtime-role checks.
 5. Repeat stack-level acceptance and finish isolated hosted-development validation once
    the separate Supabase development target is available. Never apply test migrations
    or fixture data to the operational project.
@@ -164,3 +165,45 @@ checkpoint. This does not prove the externally alleged cross-store key race; tha
 specific race was not reproduced and the existing global serialization remains.
 Known session-ID separation is an API guard. Shared-PIN identity and the login redesign
 remain deferred; this does not establish individual identity or SQL-role approval policy.
+
+## Staff review, workflow conflicts and waste correction in PR16
+
+Count acceptance checks every retained sheet revision author. Production acceptance
+checks every retained root revision author plus a matching canonical claimed roster ID.
+Rejection and exact retained retries remain available. These are known-ID API checks;
+shared PINs and typed names do not prove independent employees. No login redesign or
+new SQL-role permission policy is claimed.
+
+Production previews and commits reject roots occupied by another store or by an existing
+revision ID with 409. Selected order, count, production and container transactions
+translate unique identity/request-key conflicts to 409 after rollback. Real production
+batch/acceptance and container/waste journal key collisions exercise rollback of the
+coupled effects. This is not a universal global namespace for all module request keys.
+
+The additive `20261008_container_waste_corrections.sql` migration permits paired reversal
+of an erroneous older loss after storage/service transfers or reversals of those transfers.
+Later waste, unpacking, quantity corrections and source changes still hold the correction.
+The target, original timestamp, compartment and exact quantity remain pinned; no restored
+total can exceed the original fill. Both journals retain the loss and append its reversal.
+The client offers older targets only when the new database capability is installed.
+Track 1 purchased counts, received purchase facts, explicit count values and Food Cost
+remain independent of these analytical corrections.
+
+Migration installation follows `20261007_container_waste.sql`; connection pools must be
+recycled after DDL. The private invoker function is not granted to PUBLIC/anon/authenticated.
+The preserved newer local 28-migration deployment bundle needs the new migration included
+and ordered migration/recovery validation repeated before hosted use. No hosted SQL or
+operational data has been changed.
+
+Validation: 14 distinct selected local PostgreSQL staff/waste checks passed across the
+first attempt (9 pass) and final rerun (10 pass, overlapping earlier cases). The first
+five failures were test fixtures missing token email fields or calling a nonexistent
+helper; those fixtures were corrected and all final selected cases passed. The final
+root test exercises both preview and direct POST collisions, and restore verifies the
+new function's private ACL. Existing retry races, actual-report independence, paired
+latest reversal and late-reversal holds remain covered by these selected checks.
+All 437 frontend tests across 53 suites pass with default and foundation native flags;
+the production build passes with the three existing hook warnings. The first new
+frontend run used the wrong refresh button label; the corrected test passes in both
+complete suites. Prior attempts and final output are retained. These are scoped local
+checks, not full backend coverage, live-browser acceptance or hosted-platform proof.

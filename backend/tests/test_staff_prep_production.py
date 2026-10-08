@@ -48,6 +48,65 @@ class StaffProductionTests(fixtures.StaffTaskTests):
             p=await self.decision_preview(body,token);self.assertEqual(p.status_code,200,p.text);payload=body|dict(expected_review_hash=p.json()['reviewHash'],reviewed=True)
         return await self.portal.post(self.production_url+'/decisions',json=payload,headers={'Authorization':'Bearer '+(token or self.owner),'Idempotency-Key':key or str(uuid4())})
 
+    async def test_review_corrections_production_author_and_claimed_roster_cannot_accept(self):
+        body = await self.submission()
+        first = await self.submit(body, token=self.owner)
+        self.assertEqual(first.status_code, 200, first.text)
+        first_event = first.json()['submission']
+        revised = await self.submit(body | dict(expected_revision=1, note='Staff corrected measured evidence'))
+        self.assertEqual(revised.status_code, 200, revised.text)
+        decision = self.decision(revised.json()['submission'])
+        self.assertEqual((await self.decision_preview(decision)).status_code, 403)
+        roster = server._token(dict(id=str(self.member), email='roster@example.invalid', role='owner'))
+        self.assertEqual((await self.decision_preview(decision, roster)).status_code, 403)
+        reviewer = server._token(dict(id='independent-production-reviewer', email='reviewer@example.invalid', role='owner'))
+        preview = await self.decision_preview(decision, reviewer)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        payload = decision | dict(expected_review_hash=preview.json()['reviewHash'], reviewed=True)
+        self.assertEqual((await self.decide(payload=payload)).status_code, 403)
+        self.assertEqual((await self.decide(payload=payload, token=roster)).status_code, 403)
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.batch_events'), 0)
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.staff_production_decisions'), 0)
+        accepted = await self.decide(payload=payload, token=reviewer)
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertEqual(accepted.json()['history']['events'][0]['id'], first_event['id'])
+
+    async def test_review_corrections_production_root_collision_across_stores_and_revision_ids(self):
+        body = await self.submission()
+        first = await self.submit(body)
+        self.assertEqual(first.status_code, 200, first.text)
+        revised = await self.submit(body | dict(expected_revision=1, note='New staff evidence'))
+        self.assertEqual(revised.status_code, 200, revised.text)
+        collision = body | dict(root_id=revised.json()['submission']['id'])
+        self.assertEqual((await self.staff_preview(collision)).status_code, 409)
+        payload = dict(pin='4826', submission=collision, expected_review_hash='a'*64, reviewed=True)
+        self.assertEqual((await self.submit(payload=payload)).status_code, 409)
+        foreign = self.staff_url.replace('/berts/', '/rudds/')
+        self.assertEqual((await self.staff_preview(body, token=self.owner, url=foreign)).status_code, 409)
+        command = await self.portal.post(foreign+'/submissions',json=payload | {'submission':body},
+            headers={'Authorization':'Bearer '+self.owner,'Idempotency-Key':str(uuid4())})
+        self.assertEqual(command.status_code,409,command.text)
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.staff_production_submissions'), 2)
+
+    async def test_review_corrections_production_cross_module_key_rolls_back_all_effects(self):
+        body = await self.submission()
+        measured = await self.production()
+        submitted = await self.submit(body)
+        self.assertEqual(submitted.status_code, 200, submitted.text)
+        decision = self.decision(submitted.json()['submission'], complete=True)
+        before = await self.execution_state()
+        conflict = await self.decide(decision, key=measured['request_key'])
+        self.assertEqual(conflict.status_code, 409, conflict.text)
+        self.assertIn('retained history', conflict.json()['detail'])
+        self.assertEqual(await self.execution_state(), before)
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.batch_events'), 1)
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.staff_production_decisions'), 0)
+        accepted = await self.decide(decision)
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+
     async def test_staff_production_submission_posts_nothing_accepts_partial_once_and_actual_is_independent(self):
         _,a,b=await self.pair();actual=(await self.report(a,b)).json();body=await self.submission('2.000000000001');r=await self.submit(body);self.assertEqual(r.status_code,200,r.text)
         s=r.json()['submission'];self.assertFalse(s['review_snapshot']['identity_verified']);self.assertEqual(s['credential_kind'],'shared_pin')

@@ -1,6 +1,6 @@
 import React,{act} from "react";
 import {createRoot} from "react-dom/client";
-import {PrepContainers,validContainerState,validContainerAck,validContainerWasteReview} from "./PrepContainers";
+import {PrepContainers,validContainerState,validContainerAck,validContainerWasteReview,reversibleWasteMoves} from "./PrepContainers";
 import * as api from "../lib/api";
 jest.mock("../lib/api",()=>({prepContainers:jest.fn(),previewPrepContainer:jest.fn(),savePrepContainer:jest.fn()}));
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
@@ -42,3 +42,36 @@ test("loss commands are unavailable until the backend confirms installed waste s
 test("stale loss requires explicit revise before a fresh measurement review",async()=>{api.savePrepContainer.mockRejectedValueOnce({response:{status:409,data:{detail:"Container changed"}}});await render();await review();await click(container.querySelector('[aria-label="Confirm container review"]'));await click(button("Save reviewed container command"));await click(button("Revise rejected container command"));expect(container.querySelector('[aria-label="Movement quantity in original measured unit"]').value).toBe("1.5");expect(button("Save reviewed container command")).toBeFalsy();});
 test("paired reversal validates original loss, exact restoration and linked journal void",()=>{const a=ack(preview(),id(30)),old=a.current.waste_history[0];const move={...a.result,id:id(40),command_id:id(41),revision:2,action:"undo_waste",quantity:null,target_move_id:a.result.id,storage_delta:"3",service_delta:"0",note:"Erroneous measurement"};const p={...a.waste_event.review_snapshot,kind:"void",revision:2,root_id:a.waste_event.root_id,predecessor_id:a.waste_event.id,body:null,reason:move.note,movements:[{...old.event.review_snapshot.movements[0],side:"reverse",quantity:"3",reverses_movement_id:id(42)}]};const event={...a.waste_event,id:id(43),kind:"void",revision:2,predecessor_id:a.waste_event.id,reason:move.note,review_snapshot:p};const link={command_id:move.command_id,move_id:move.id,observation_id:event.id,store_id:"berts",undo_of_command_id:old.link.command_id};const state={...a.current,moves:[a.result,move],storage:"10",allocated:"10",revision:2,waste_history:[old,{link,event}]};expect(validContainerState(state,"berts")).toBe(true);expect(validContainerState({...state,waste_history:[old,{link:{...link,undo_of_command_id:id(44)},event}]},"berts")).toBe(false);});
 test("late loss callback cannot clear a different location or revive logged-out draft",async()=>{const drafts=new Map();let resolve;api.savePrepContainer.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));await render({drafts});await review();await click(container.querySelector('[aria-label="Confirm container review"]'));await click(button("Save reviewed container command"));const first=api.savePrepContainer.mock.calls[0];drafts.clear();await render({rid:"rudds",drafts});await act(async()=>resolve(ack(preview(first[1].body),first[2])));expect(drafts.size).toBe(0);expect(container.querySelector('[role="status"]')).toBeNull();});
+
+test("earlier loss remains selectable after transfers and transfer undo but quantity changes hold it",()=>{
+  const loss=ack(preview(),id(30)).result;
+  const send={id:id(51),action:"send"};
+  const undo={id:id(52),action:"undo",target_move_id:send.id};
+  expect(reversibleWasteMoves({moves:[loss,send,undo]})).toEqual([loss]);
+  for(const action of ["unpack","waste","undo_waste","void_fill"])
+    expect(reversibleWasteMoves({moves:[loss,send,undo,{id:id(53),action}]})).not.toContain(loss);
+});
+
+test("older waste target is offered only after correction schema is confirmed",async()=>{
+  const a=ack(preview(),id(30));
+  const sent={...a.result,id:id(51),revision:2,action:"send",quantity:"0.5",storage_delta:"-1",service_delta:"1",compartment:undefined};
+  const state={...a.current,moves:[a.result,sent],storage:"6",service:"1",revision:2};
+  api.prepContainers.mockResolvedValue({...setup,fills:[state],directWasteCorrectionSupported:true});
+  await render();await input("Container action","undo_waste");await input("Filled container",fill.id);
+  expect(container.querySelector('[aria-label="Original movement to undo"]').textContent).toContain("waste");
+  api.prepContainers.mockResolvedValue({...setup,fills:[state],directWasteCorrectionSupported:false});
+  await click(button("Refresh containers"));
+  expect(container.querySelector('[aria-label="Original movement to undo"]').textContent).not.toContain("waste");
+});
+
+test("paired older loss reversal validates through a later transfer without rewriting it",()=>{
+  const a=ack(preview(),id(30)),old=a.current.waste_history[0];
+  const sent={...a.result,id:id(50),command_id:id(51),revision:2,action:"send",quantity:"0.5",storage_delta:"-1",service_delta:"1",compartment:undefined};
+  const move={...a.result,id:id(40),command_id:id(41),revision:3,action:"undo_waste",quantity:null,target_move_id:a.result.id,storage_delta:"3",service_delta:"0",note:"Erroneous measurement"};
+  const p={...a.waste_event.review_snapshot,kind:"void",revision:2,root_id:a.waste_event.root_id,predecessor_id:a.waste_event.id,body:null,reason:move.note,movements:[{...old.event.review_snapshot.movements[0],side:"reverse",quantity:"3",reverses_movement_id:id(42)}]};
+  const event={...a.waste_event,id:id(43),kind:"void",revision:2,predecessor_id:a.waste_event.id,reason:move.note,review_snapshot:p};
+  const link={command_id:move.command_id,move_id:move.id,observation_id:event.id,store_id:"berts",undo_of_command_id:old.link.command_id};
+  const state={...a.current,moves:[a.result,sent,move],storage:"9",service:"1",allocated:"10",revision:3,waste_history:[old,{link,event}]};
+  expect(validContainerState(state,"berts")).toBe(true);
+  expect(validContainerState({...state,moves:[a.result,{...sent,action:"unpack",service_delta:"0"},move],service:"0",allocated:"9"},"berts")).toBe(false);
+});

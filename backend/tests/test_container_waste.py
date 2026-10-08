@@ -25,6 +25,109 @@ class ContainerWasteTests(fixtures.PrepContainerTests):
         await super().asyncSetUp()
         if self._testMethodName != 'test_direct_waste_additive_upgrade_preserves_old_commands_and_pending_preview':
             async with self.pool.acquire() as c:await c.execute((fixtures.recovery.counts.native.ROOT/'migrations/20261007_container_waste.sql').read_text())
+        if self._testMethodName.startswith('test_review_corrections_') and 'upgrade' not in self._testMethodName:
+            await self.correction_migration()
+
+    async def correction_migration(self):
+        async with self.pool.acquire() as c:
+            await c.execute((fixtures.recovery.counts.native.ROOT/'migrations/20261008_container_waste_corrections.sql').read_text())
+
+    async def test_review_corrections_waste_after_transfer_and_transfer_undo_restores_pair(self):
+        _, a, b = await self.pair()
+        actual = (await self.report(a,b)).json()
+        await self.prepare()
+        fill = await self.fill()
+        first = await self.command(self.loss(fill,'2'))
+        self.assertEqual(first.status_code,200,first.text)
+        sent = await self.command(self.move(fill,'send','1',performed_at='2026-10-05T14:00:00-04:00'))
+        self.assertEqual(sent.status_code,200,sent.text)
+        reverse = await self.command(self.move(fill,'undo',target_move_id=sent.json()['result']['id'],performed_at='2026-10-05T14:00:00-04:00'))
+        self.assertEqual(reverse.status_code,200,reverse.text)
+        correction = self.move(fill,'undo_waste',target_move_id=first.json()['result']['id'])
+        restored = await self.command(correction)
+        self.assertEqual(restored.status_code,200,restored.text)
+        self.assertEqual((restored.json()['current']['storage'],restored.json()['current']['service']),('10','0'))
+        self.assertEqual(restored.json()['waste_event']['predecessor_id'],first.json()['waste_event']['id'])
+        self.assertEqual((await self.preview_container(correction)).status_code,409)
+        self.assertEqual((await self.report(a,b)).json(),actual)
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval('SELECT sum(quantity) FROM prep_inventory.waste_movements'),0)
+            self.assertEqual(await c.fetchval('SELECT prep_inventory.lot_used($1)',UUID(self.lot['id'])),10)
+
+    async def test_review_corrections_waste_quantity_dependencies_and_stale_reviews_are_held(self):
+        await self.prepare()
+        fill = await self.fill()
+        first = await self.command(self.loss(fill,'2'))
+        correction = self.move(fill,'undo_waste',target_move_id=first.json()['result']['id'])
+        p = await self.preview_container(correction)
+        self.assertEqual(p.status_code,200,p.text)
+        await self.command(self.move(fill,'send','1',performed_at='2026-10-05T14:00:00-04:00'))
+        before = await self.container_state()
+        stale = await self.command(payload=dict(body=correction,expected_review_hash=p.json()['reviewHash'],reviewed=True))
+        self.assertEqual(stale.status_code,409,stale.text)
+        self.assertEqual(await self.container_state(),before)
+        await self.command(self.move(fill,'unpack','1',performed_at='2026-10-05T15:00:00-04:00'))
+        held = await self.preview_container(correction)
+        self.assertEqual(held.status_code,409,held.text)
+        self.assertIn('dependencies',held.json()['detail'])
+        async with self.pool.acquire() as c:
+            self.assertFalse(await c.fetchval('SELECT prep_inventory.can_reverse_container_waste($1,$2)',UUID(fill['id']),UUID(first.json()['result']['id'])))
+
+    async def test_review_corrections_waste_cross_module_key_rolls_back_contents_and_journal(self):
+        await self.prepare()
+        fill = await self.fill()
+        raw = self.stamp() | dict(source_kind='raw',raw_item_code='test_food',quantity='1',source_unit='lb',factor='1',
+            measurement_basis='measured',already_included_in_batch=False,category='other')
+        p = await self.client.post('/api/pg/purchases/berts/prep-observations/waste/preview',json=raw)
+        self.assertEqual(p.status_code,200,p.text)
+        key = str(uuid4())
+        recorded = await self.save('prep-observations/waste',dict(body=raw,expected_review_hash=p.json()['reviewHash'],reviewed=True),key)
+        self.assertEqual(recorded.status_code,200,recorded.text)
+        before = await self.container_state()
+        lost = await self.command(self.loss(fill),key=key)
+        self.assertEqual(lost.status_code,409,lost.text)
+        self.assertEqual(await self.container_state(),before)
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.container_moves'),0)
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.container_waste_links'),0)
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.observations'),1)
+
+    async def test_review_corrections_waste_upgrade_preserves_preview_retry_and_restored_function(self):
+        await self.prepare()
+        fill = await self.fill()
+        loss = self.loss(fill)
+        preview = await self.preview_container(loss)
+        payload = dict(body=loss,expected_review_hash=preview.json()['reviewHash'],reviewed=True)
+        key = str(uuid4())
+        first = await self.command(payload=payload,key=key)
+        self.assertEqual(first.status_code,200,first.text)
+        undo = self.move(fill,'undo_waste',target_move_id=first.json()['result']['id'])
+        pending = await self.preview_container(undo)
+        self.assertEqual(pending.status_code,200,pending.text)
+        await self.correction_migration()
+        await self.pool.expire_connections()
+        self.assertEqual((await self.preview_container(undo)).json(),pending.json())
+        result = await self.command(payload=dict(body=undo,expected_review_hash=pending.json()['reviewHash'],reviewed=True))
+        self.assertEqual(result.status_code,200,result.text)
+        before = await self.container_state()
+        await backup.create_backup(self.source,fixtures.recovery.PG_DUMP,self.directory)
+        dsn = await self.target()
+        self.assertEqual((await backup.verify_restore(dsn,self.directory))['status'],'verified')
+        client,pool = await self.restored_client(dsn)
+        original = self.client
+        self.client = client
+        try:
+            self.assertEqual(await self.container_state(),before)
+            replay = await self.command(payload=payload,key=key)
+            self.assertEqual(replay.status_code,200,replay.text)
+            self.assertEqual(replay.json()['waste_event'],first.json()['waste_event'])
+            async with pool.acquire() as c:
+                self.assertTrue(await c.fetchval("SELECT to_regprocedure('prep_inventory.can_reverse_container_waste(uuid,uuid)') IS NOT NULL"))
+                self.assertFalse(await c.fetchval("SELECT EXISTS(SELECT 1 FROM pg_proc p,aclexplode(p.proacl) a WHERE p.oid='prep_inventory.can_reverse_container_waste(uuid,uuid)'::regprocedure AND a.grantee<>p.proowner)"))
+        finally:
+            self.client = original
+            await client.aclose()
+            await pool.close()
 
     def loss(self,fill,quantity='2',compartment='storage',**changes):
         return self.stamp('2026-10-05T13:00:00-04:00')|dict(action='waste',fill_id=fill['id'],quantity=quantity,compartment=compartment,

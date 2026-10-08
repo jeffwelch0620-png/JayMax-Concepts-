@@ -13,6 +13,7 @@ from staff_prep_counts import Reviewed, Credentials
 from native_units import lock_store
 from purchase_api import serial
 from purchase_parser import fingerprint
+from workflow_integrity import conflict_transaction, require_independent
 
 
 class MeasuredBatch(batches.BatchIn):
@@ -105,6 +106,8 @@ async def current_assignment(conn,store,day,track,body):
 async def submission_preview(conn,store,day,track,body,actor,kind):
     await ready(conn)
     h=await history(conn,body.root_id,store); old=h['events'][-1] if h['events'] else None
+    if old is None and await conn.fetchval('SELECT EXISTS(SELECT 1 FROM prep_inventory.staff_production_submissions WHERE id=$1 OR root_id=$1)', body.root_id):
+        raise HTTPException(409, 'Production identity is already reserved; refresh and review the retained submission')
     if body.expected_revision!=(old['revision'] if old else 0): raise HTTPException(409,'Submission revision changed; refresh the retained draft')
     if old:
         if old['review_snapshot']['day']!=str(day) or old['review_snapshot']['track']!=track: raise HTTPException(422,'A revision keeps its original calendar date and track')
@@ -135,7 +138,7 @@ async def coordinated(conn,store,key):
 
 async def submit(pool,store,day,track,actor,kind,body,key):
     digest=fingerprint(serial(dict(store=store,day=day,track=track,actor=actor,kind=kind,body=body.model_dump(mode='json',exclude={'pin'}))))
-    async with pool.acquire() as conn,conn.transaction():
+    async with pool.acquire() as conn, conflict_transaction(conn):
         await ready(conn);await coordinated(conn,store,key)
         old=await conn.fetchrow('SELECT * FROM prep_inventory.staff_production_submissions WHERE request_key=$1',key)
         if old:
@@ -153,7 +156,7 @@ async def submit(pool,store,day,track,actor,kind,body,key):
         return dict(submission=row,history=await history(conn,UUID(row['root_id']),store),replayed=replayed,productionEffect='none')
 
 
-async def decision_preview(conn,store,day,track,body):
+async def decision_preview(conn,store,day,track,body,actor=None):
     await ready(conn)
     row=await conn.fetchrow('SELECT * FROM prep_inventory.staff_production_submissions WHERE id=$1 AND store_id=$2',body.submission_id,store)
     if not row or row['review_snapshot']['day']!=str(day) or row['review_snapshot']['track']!=track: raise HTTPException(422,'Select submission at this date, track and location')
@@ -161,6 +164,9 @@ async def decision_preview(conn,store,day,track,body):
         raise HTTPException(409,'Select a current undecided production submission')
     s=serial(dict(row)); batch=None; sources=None
     if body.decision=='accepted':
+        if actor is not None:
+            authors = await conn.fetch('SELECT submitted_by FROM prep_inventory.staff_production_submissions WHERE root_id=$1 AND store_id=$2', row['root_id'], store)
+            require_independent(actor, [author['submitted_by'] for author in authors], row['staff_member_id'])
         b=Submission(**s['review_snapshot']['submission']);e,t,a,progress=await current_assignment(conn,store,day,track,b)
         batch=await batches.preview(conn,store,b.batch)
         batch['review']['staff_submission_id']=s['id']
@@ -183,13 +189,13 @@ async def decision_result(conn,row,store,day,track,replayed):
 
 async def decide(pool,store,day,track,actor,body,key):
     digest=fingerprint(serial(dict(store=store,day=day,track=track,actor=actor,body=body.model_dump(mode='json'))))
-    async with pool.acquire() as conn,conn.transaction():
+    async with pool.acquire() as conn, conflict_transaction(conn):
         await ready(conn);await coordinated(conn,store,key)
         old=await conn.fetchrow('SELECT * FROM prep_inventory.staff_production_decisions WHERE request_key=$1',key)
         if old:
             if old['request_fingerprint']!=digest: raise HTTPException(409,'Request key belongs to another decision or actor')
             return await decision_result(conn,old,store,day,track,True)
-        command=Decision(**body.model_dump(exclude={'expected_review_hash','reviewed'}));p=await decision_preview(conn,store,day,track,command)
+        command=Decision(**body.model_dump(exclude={'expected_review_hash','reviewed'}));p=await decision_preview(conn,store,day,track,command,actor)
         if p['reviewHash']!=body.expected_review_hash: raise HTTPException(409,'Submission, assignment or production changed since review')
         batch=link=finish=None
         if body.decision=='accepted':
@@ -221,8 +227,8 @@ def create_router(pool_factory,store_check,manager_authorize,staff_authorize):
         async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):return await state(c,store,day,track)
     @router.post(base+'/preview')
     async def review(store:str,day:date,request:Request,body:Decision,track:Literal['daily','bulk']='daily'):
-        store_check(store);manager_authorize(request,store,True)
-        async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):return await decision_preview(c,store,day,track,body)
+        store_check(store);actor=manager_authorize(request,store,True)
+        async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):return await decision_preview(c,store,day,track,body,actor)
     @router.post(base+'/decisions')
     async def decision(store:str,day:date,request:Request,body:DecisionCommit,idempotency_key:UUID=Header(...),track:Literal['daily','bulk']='daily'):
         store_check(store);actor=manager_authorize(request,store,True)

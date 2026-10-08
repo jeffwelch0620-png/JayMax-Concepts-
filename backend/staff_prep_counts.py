@@ -11,6 +11,7 @@ import prep_observations as observations
 from native_units import lock_store
 from purchase_api import serial
 from purchase_parser import fingerprint
+from workflow_integrity import conflict_transaction, require_independent
 
 
 class Reviewed(mapping.Strict):
@@ -188,7 +189,7 @@ def current(review, expected, allow_stale=False):
 
 async def issue(pool, store, actor, body, key):
     digest = fingerprint(dict(body=body.model_dump(mode='json'), actor=actor))
-    async with pool.acquire() as conn, conn.transaction():
+    async with pool.acquire() as conn, conflict_transaction(conn):
         await coordinate(conn, store, key)
         old = await prior(conn, 'staff_sheets', store, key, digest)
         if old: return dict(sheet=serial(dict(old)), current=await detail(conn, store, old['id']), replayed=True)
@@ -205,7 +206,7 @@ async def submit(pool, store, ident, actor, kind, body, key):
     # Neither the PIN nor a PIN-derived digest is retained. Name is claimed attribution.
     public_body = body.model_dump(mode='json', exclude={'pin'})
     digest = fingerprint(dict(sheet_id=str(ident), body=public_body, actor=actor, credential_kind=kind))
-    async with pool.acquire() as conn, conn.transaction():
+    async with pool.acquire() as conn, conflict_transaction(conn):
         await coordinate(conn, store, key)
         old = await prior(conn, 'staff_submissions', store, key, digest)
         if old: return dict(submission=serial(dict(old)), current=await detail(conn, store, ident), replayed=True)
@@ -220,12 +221,14 @@ async def submit(pool, store, ident, actor, kind, body, key):
         return dict(submission=serial(dict(row)), current=await detail(conn, store, ident), replayed=False)
 
 
-async def decision_preview(conn, store, ident, body):
+async def decision_preview(conn, store, ident, body, actor=None):
     await ready(conn)
     review = await detail(conn, store, ident)
     if review['decision']: raise HTTPException(409, 'This sheet already has a final decision')
     plan = None
     if body.decision == 'accepted':
+        if actor is not None:
+            require_independent(actor, [row['submitted_by'] for row in review['history']])
         if review['errors']: raise HTTPException(409, '; '.join(review['errors']))
         if not review['latest']: raise HTTPException(422, 'Staff must submit measured quantities first')
         rows = {l['product_id']: l for l in review['latest']['quantities']}
@@ -243,13 +246,13 @@ async def decision_preview(conn, store, ident, body):
 
 async def decide(pool, store, ident, actor, body, key):
     digest = fingerprint(dict(sheet_id=str(ident), body=body.model_dump(mode='json'), actor=actor))
-    async with pool.acquire() as conn, conn.transaction():
+    async with pool.acquire() as conn, conflict_transaction(conn):
         await coordinate(conn, store, key)
         old = await prior(conn, 'staff_decisions', store, key, digest)
         if old: return await outcome(conn, store, ident, serial(dict(old)), True)
         # Native definition writes share the store lock; public catalog writers are held as in observation recording.
         await conn.execute('LOCK TABLE public.items,public.store_items,public.dishes,public.dish_lines,public.prep_items IN SHARE MODE')
-        plan = await decision_preview(conn, store, ident, body)
+        plan = await decision_preview(conn, store, ident, body, actor)
         current(plan['current'], body.expected_review_hash, allow_stale=body.decision == 'rejected')
         observation_id = None
         if plan['observation']:
@@ -301,9 +304,9 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
 
     @router.post('/api/pg/purchases/{store}/staff-prep-counts/{ident}/decision-preview')
     async def review_decision(store: str, ident: UUID, request: Request, body: Decision):
-        _, pool = await manager(request, store, True)
+        actor, pool = await manager(request, store, True)
         async with pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
-            return await decision_preview(conn, store, ident, body)
+            return await decision_preview(conn, store, ident, body, actor)
 
     @router.post('/api/pg/purchases/{store}/staff-prep-counts/{ident}/decision')
     async def record_decision(store: str, ident: UUID, request: Request, body: DecisionIn, idempotency_key: UUID = Header(...)):

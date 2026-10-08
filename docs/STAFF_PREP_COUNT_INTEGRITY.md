@@ -36,7 +36,11 @@ payload or actor cannot reuse that request key. No submission changes a stock
 balance or automatically becomes a planning count.
 
 A manager previews acceptance or rejection with a reason and explicitly confirms
-the decision. Acceptance requires the latest complete submission, unchanged
+the decision. Acceptance rejects an authenticated actor recorded on any submission
+revision of the sheet. This compares known session identities; shared-PIN attribution
+and typed counter names do not prove individual identity. Rejection remains available.
+Unique coupled request-key conflicts return 409 after all effects roll back.
+Acceptance requires the latest complete submission, unchanged
 prepared scope/profiles, the issued physical boundary and a freshly reviewed
 native observation hash. It atomically creates one full `prep_inventory`
 physical-count observation and one immutable decision referencing that submission.

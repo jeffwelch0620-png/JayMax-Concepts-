@@ -70,7 +70,34 @@ class StaffPrepCountsTests(unittest.IsolatedAsyncioTestCase):
                     lines=[dict(product_id=i['product_id'],quantity=quantity,evidence='Invented scale measurement') for i in review['sheet']['sheet_snapshot']['items']])|changes
 
     async def submit_sheet(self,review,quantity='2.123456789012',key=None,body=None,client=None):
-        return await (client or self.catalog).post('/api/pg/staff/berts/prep-count-drafts/'+review['sheet']['id']+'/submit',json=body or self.submission(review,quantity),headers={'Idempotency-Key':key or str(uuid4())})
+        headers = {'Idempotency-Key':key or str(uuid4())}
+        if client is None:
+            headers['Authorization'] = 'Bearer '+server._token(dict(id='synthetic-count-counter', email='counter@example.invalid', role='staff', locations=['berts']))
+        return await (client or self.catalog).post('/api/pg/staff/berts/prep-count-drafts/'+review['sheet']['id']+'/submit',json=body or self.submission(review,quantity),headers=headers)
+
+    async def test_review_corrections_count_author_cannot_accept_after_staff_revision(self):
+        issued, _ = await self.issue_sheet()
+        first = await self.submit_sheet(issued.json()['current'], client=self.catalog)
+        self.assertEqual(first.status_code, 200, first.text)
+        revised = await self.submit_sheet(first.json()['current'], quantity='3')
+        self.assertEqual(revised.status_code, 200, revised.text)
+        path = self.count_url+'/'+issued.json()['sheet']['id']
+        command = dict(decision='accepted', note='Independent review', reviewed=True)
+        held = await self.catalog.post(path+'/decision-preview', json=command)
+        self.assertEqual(held.status_code, 403, held.text)
+        token = server._token(dict(id='independent-count-reviewer', email='reviewer@example.invalid', role='owner'))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url='http://test', headers={'Authorization':'Bearer '+token}) as reviewer:
+            p = await reviewer.post(path+'/decision-preview', json=command)
+            self.assertEqual(p.status_code, 200, p.text)
+            plan = p.json()
+            payload = command | dict(expected_review_hash=plan['current']['reviewHash'], expected_observation_hash=plan['observation']['reviewHash'])
+            held = await self.catalog.post(path+'/decision', json=payload, headers={'Idempotency-Key':str(uuid4())})
+            self.assertEqual(held.status_code, 403, held.text)
+            async with self.pool.acquire() as c:
+                self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.staff_decisions'), 0)
+                self.assertEqual(await c.fetchval('SELECT count(*) FROM prep_inventory.observations'), 0)
+            accepted = await reviewer.post(path+'/decision', json=payload, headers={'Idempotency-Key':str(uuid4())})
+            self.assertEqual(accepted.status_code, 200, accepted.text)
 
     async def accept(self,review,decision='accepted',key=None,body=None):
         if body is None:
