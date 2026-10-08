@@ -4,7 +4,8 @@ from decimal import Decimal, localcontext, ROUND_HALF_UP
 from typing import Literal
 from uuid import UUID, uuid4
 from fastapi import Header, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from workflow_integrity import conflict_transaction, require_independent
 import catalog_mapping
 from native_units import lock_store
 from purchase_api import serial
@@ -110,9 +111,17 @@ async def write_lines(conn,po_id,lines):
             line['controlNumber'],line['name'],line['vendor_item_id'],line['vendorSku'],line['qty'],line['purchaseUnit'],line['unitCost'],line['extended'])
 
 
+def retained_draft(po, current, note=''):
+    try:
+        return Draft(vendor=po['vendor_name'], vendorId=po['vendor_id'], note=note,
+            lines=[{k: line[k] for k in ('itemCode','controlNumber','name','vendorSku','qty','purchaseUnit','unitCost')} for line in current['lines']])
+    except (ValidationError, KeyError):
+        raise HTTPException(422, 'Order contains incomplete legacy lines; repair or rebuild a draft with explicit product, supplier, quantity and purchase-unit mappings') from None
+
+
 async def execute(pool,store,actor,action,body,key,ref=None,expected=None):
     digest=fingerprint(serial({'store':store,'actor':actor,'action':action,'ref':ref,'expected':expected,'body':body.model_dump(mode='python')}))
-    async with pool.acquire() as conn,conn.transaction():
+    async with pool.acquire() as conn, conflict_transaction(conn):
         await ready(conn);await catalog_mapping.lock_catalog(conn);await lock_store(conn,store)
         prior=await conn.fetchrow('SELECT * FROM purchasing.order_commands WHERE request_key=$1',key)
         if prior:
@@ -126,8 +135,7 @@ async def execute(pool,store,actor,action,body,key,ref=None,expected=None):
         if action=='reorder':
             import server
             previous=await result(conn,po['id'])
-            body=Draft(vendor=po['vendor_name'],vendorId=po['vendor_id'],note=note or 'Reviewed reorder from '+ref,
-                lines=[{k:l[k] for k in ('itemCode','controlNumber','name','vendorSku','qty','purchaseUnit','unitCost')} for l in previous['lines']])
+            body=retained_draft(po, previous, note or 'Reviewed reorder from '+ref)
         if action in ('create','edit','reorder'):
             if action=='edit' and po['status']!='draft':raise HTTPException(409,'Only a current draft can be edited')
             vendor,lines,total=await content(conn,store,body)
@@ -152,10 +160,11 @@ async def execute(pool,store,actor,action,body,key,ref=None,expected=None):
                 if action in ('submit','approve','send'):
                     current=await result(conn,po_id)
                     if not current['lines']:raise HTTPException(422,'An order needs at least one reviewed line')
-                    await content(conn,store,Draft(vendor=po['vendor_name'],vendorId=po['vendor_id'],lines=[{k:l[k] for k in ('itemCode','controlNumber','name','vendorSku','qty','purchaseUnit','unitCost')} for l in current['lines']]))
+                    await content(conn,store,retained_draft(po,current))
                 if action=='approve':
                     if not po['creator_actor']:raise HTTPException(409,'Legacy creator identity is unverified; reopen/rebuild a reviewed draft before approval')
-                    if po['creator_actor']==actor:raise HTTPException(403,'A different authenticated reviewer must approve this order')
+                    editors = await conn.fetch("SELECT actor FROM purchasing.order_commands WHERE po_id=$1 AND action IN ('create','edit','reorder')", po_id)
+                    require_independent(actor, [po['creator_actor']] + [row['actor'] for row in editors])
                 if action=='reject' and not note:raise HTTPException(422,'Record the reason for rejecting this order')
                 await conn.execute('''UPDATE public.purchase_orders SET status=$2,
                     submitted_at=CASE WHEN $3='submit' THEN now() ELSE submitted_at END,
