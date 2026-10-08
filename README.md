@@ -1,5 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Hosted staff assignment and production - October 8, 2026
+
+The retained synthetic hosted workflow now covers reviewed task assignment,
+pending staff production, independent partial acceptance and a separate explicit
+task finish. Original-key replay through a new pool retains one accepted batch
+and the current completed task. Exact output **2.000000000001** survives;
+all eight fixture Track 1 fact sets and the **$55 Food Cost** report remain intact.
+All original **40-table projections** and **54 migration records** still match.
+
+The hosted run reached its time budget after acceptance. Independent read-only
+reconciliation proved the committed partial state and preserved all **41 physical
+accounting/purchasing table fingerprints**. Completion resumed that same task;
+the held attempt remains separately recorded. Read the
+[production checkpoint](docs/HOSTED_STAFF_PRODUCTION_CHECKPOINT.md) for the evidence.
+
+**Three selected local regression cases pass**, including a nonowner role with no
+RLS bypass, ownership, DDL or journal-delete authority. The local prototype exposed
+a roster row-lock policy requirement; Supabase grants were not changed. The
+[runtime permission assessment](docs/RUNTIME_ROLE_PERMISSION_ASSESSMENT.md) explains
+its scope and remaining design work. Hosted runtime-role, browser/Data API and
+full managed recovery checks remain open. This continuation is local/unpublished;
+keep holding merges. Earlier sections below are historical checkpoints.
+
 ## Hosted staff count and independent review - October 8, 2026
 
 The staff prep-count workflow passed against the designated hosted build database

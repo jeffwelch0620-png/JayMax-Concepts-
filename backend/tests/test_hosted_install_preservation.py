@@ -116,3 +116,16 @@ class PreservationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(await preservation.fingerprints(self.conn,columns,exclude_synthetic=exclusion),before)
         with self.assertRaises(ValueError):
             await preservation.fingerprints(self.conn,columns,exclude_synthetic={('public','activity_log'):('path',['Changed'])})
+
+    async def test_exact_synthetic_roster_uuid_does_not_hide_original_staff_changes(self):
+        original=uuid4();invented=uuid4()
+        await self.conn.execute('CREATE TABLE public.staff_members(id uuid,name text)')
+        await self.conn.execute("INSERT INTO public.staff_members VALUES($1,'Original')",original)
+        columns=await preservation.original_columns(self.conn);before=await preservation.fingerprints(self.conn,columns)
+        await self.conn.execute("INSERT INTO public.staff_members VALUES($1,'Invented')",invented)
+        exclude={('public','staff_members'):('id',[str(invented)])}
+        self.assertEqual(await preservation.fingerprints(self.conn,columns,exclude_synthetic=exclude),before)
+        await self.conn.execute("UPDATE public.staff_members SET name='Changed' WHERE id=$1",original)
+        self.assertNotEqual(await preservation.fingerprints(self.conn,columns,exclude_synthetic=exclude),before)
+        with self.assertRaises(ValueError):
+            await preservation.fingerprints(self.conn,columns,exclude_synthetic={('public','staff_members'):('id',['not-a-uuid'])})

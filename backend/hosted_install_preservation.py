@@ -4,6 +4,7 @@ Metadata and digests only; no rows, SQL defaults or connection values returned.
 New fields are excluded explicitly, while removed/retyped original fields hold.
 """
 import asyncpg
+from uuid import UUID
 import schema_reconciliation as reconciliation
 
 
@@ -28,7 +29,7 @@ async def original_columns(conn):
 async def fingerprints(conn, baseline, *, exclude_synthetic=None):
     """Compare the same original projection before/after an additive change."""
     result = {};exclude_synthetic=exclude_synthetic or {}
-    permitted={('public','stores'):'id',('public','items'):'code',('public','store_items'):'store_id',('public','store_state'):'store_id',('public','activity_log'):'user_id'}
+    permitted={('public','stores'):'id',('public','items'):'code',('public','store_items'):'store_id',('public','store_state'):'store_id',('public','activity_log'):'user_id',('public','staff_members'):'id'}
     for key,(field,value) in exclude_synthetic.items():
         values=[value] if isinstance(value,str) else value
         if permitted.get(key)!=field or not isinstance(values,list) or not values or any(not isinstance(v,str) or not v for v in values) or len(set(values))!=len(values) or key not in baseline:
@@ -48,9 +49,13 @@ async def fingerprints(conn, baseline, *, exclude_synthetic=None):
             suffix='';args=[]
             if key in exclude_synthetic:
                 field,value=exclude_synthetic[key]
-                if actual.get(field)!='text':raise ValueError('Synthetic identity must use an original text column')
+                identity_type=actual.get(field)
+                if identity_type not in ('text','uuid'):raise ValueError('Synthetic identity must use an original text/UUID column')
                 values=[value] if isinstance(value,str) else value
-                suffix=' WHERE NOT coalesce('+quoted(field)+'=ANY($1::text[]),false)';args=[values]
+                if identity_type=='uuid':
+                    if key!=('public','staff_members') or any(str(UUID(v))!=v for v in values):raise ValueError('Synthetic roster identity must be a canonical UUID')
+                    values=[UUID(v) for v in values]
+                suffix=' WHERE NOT coalesce('+quoted(field)+'=ANY($1::'+identity_type+'[]),false)';args=[values]
             row = await conn.fetchrow("SELECT count(*) AS rows,encode(sha256(convert_to(coalesce(string_agg(h,'' ORDER BY h),''),'UTF8')),'hex') AS sha256 FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS h FROM (SELECT "+projection+' FROM '+table+suffix+") t) x",*args)
             result['.'.join(key)] = dict(row)
     return result

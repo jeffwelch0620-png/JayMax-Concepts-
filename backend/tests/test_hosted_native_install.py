@@ -127,6 +127,80 @@ class NativeInstallTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(result['historicalLedgerRowsPreserved'])
         finally:await other.close()
 
+    async def test_staff_assignment_pending_production_independent_acceptance_finish_and_restart(self):
+        import hosted_committed_workflow as workflow
+        import hosted_staff_production as production
+        await self.run_install()
+        fixture=await workflow.run(self.dsn)
+        result=await production.run(self.dsn,fixture['temporaryStore'],fixture['actualReportParams'])
+        self.assertTrue(result['track1ReportAndAllFactsUnchanged'])
+        self.assertTrue(result['pendingSubmissionCreatesNoBatch'])
+        self.assertTrue(result['freshPoolReplayAndPrivateStaffProjectionVerified'])
+        self.assertEqual(result['actualFoodCost'],'55.00')
+        exclusion={('public','stores'):('id',fixture['temporaryStore']),
+            ('public','items'):('code',fixture['inventedItemCode']),
+            ('public','store_items'):('store_id',fixture['temporaryStore']),
+            ('public','store_state'):('store_id',fixture['temporaryStore']),
+            ('public','activity_log'):('user_id',result['activityActorIds']),
+            ('public','staff_members'):('id',result['staffMemberIds'])}
+        after=await preservation.fingerprints(self.conn,self.columns,exclude_synthetic=exclusion)
+        self.assertEqual([name for name in self.rows if after[name]!=self.rows[name]],[])
+
+    async def test_nonowner_runtime_role_can_review_staff_production_with_scoped_rls_and_no_ddl(self):
+        import hosted_committed_workflow as workflow
+        import hosted_staff_production as production
+        await self.run_install();fixture=await workflow.run(self.dsn)
+        store=fixture['temporaryStore'];item=fixture['inventedItemCode']
+        role='native_runtime_test_'+uuid4().hex
+        await self.conn.execute('CREATE ROLE '+role+' NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT')
+        async def remove_role():
+            control=await asyncpg.connect(os.environ['NATIVE_PURCHASE_TEST_DSN'])
+            try:await control.execute('DROP ROLE '+role)
+            finally:await control.close()
+        self.addAsyncCleanup(remove_role) # Runs after teardown drops this unique database.
+        for schema in ('purchasing','actual_inventory','prep_inventory'):
+            await self.conn.execute('GRANT USAGE ON SCHEMA '+schema+' TO '+role)
+            await self.conn.execute('GRANT SELECT,INSERT ON ALL TABLES IN SCHEMA '+schema+' TO '+role)
+            await self.conn.execute('GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA '+schema+' TO '+role)
+            await self.conn.execute('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA '+schema+' TO '+role)
+        await self.conn.execute('GRANT USAGE ON SCHEMA public TO '+role)
+        policies={'stores':"id='"+store+"'",'items':"code='"+item+"'",'store_items':"store_id='"+store+"'",
+            'dishes':"store_id='"+store+"'",'dish_lines':"dish_id IN (SELECT id FROM public.dishes WHERE store_id='"+store+"')",
+            'prep_items':"store_id='"+store+"'",'vendor_items':"item_code='"+item+"'",'vendors':"id IN ('pfg','us_foods')",
+            'staff_members':"store_id='"+store+"'",'store_state':"store_id='"+store+"'",'activity_log':"user_email LIKE '%@example.invalid'"}
+        for table,expression in policies.items():
+            await self.conn.execute('GRANT SELECT ON public.'+table+' TO '+role)
+            await self.conn.execute('CREATE POLICY runtime_fixture_read ON public.'+table+' FOR SELECT TO '+role+' USING ('+expression+')')
+        # SHARE table locks require write ACLs. Roster row locks also need a
+        # scoped UPDATE policy; catalog rows remain protected from rewriting.
+        for table in ('items','store_items','dishes','dish_lines','prep_items','staff_members'):
+            await self.conn.execute('GRANT UPDATE ON public.'+table+' TO '+role)
+        for table in ('store_state','staff_members','activity_log'):
+            await self.conn.execute('GRANT INSERT ON public.'+table+' TO '+role)
+            await self.conn.execute('CREATE POLICY runtime_fixture_insert ON public.'+table+' FOR INSERT TO '+role+' WITH CHECK ('+policies[table]+')')
+        await self.conn.execute('GRANT UPDATE ON public.store_state TO '+role)
+        await self.conn.execute('CREATE POLICY runtime_fixture_update ON public.store_state FOR UPDATE TO '+role+" USING (store_id='"+store+"') WITH CHECK (store_id='"+store+"')")
+        await self.conn.execute('CREATE POLICY runtime_fixture_lock ON public.staff_members FOR UPDATE TO '+role+' USING ('+policies['staff_members']+') WITH CHECK ('+policies['staff_members']+')')
+        observed=[]
+        async def select_role(conn):
+            await conn.execute('SET ROLE '+role)
+            flags=dict(await conn.fetchrow('SELECT current_user AS name,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname=current_user'))
+            self.assertEqual(flags['name'],role)
+            self.assertFalse(any(flags[k] for k in flags if k!='name'))
+            observed.append(flags['name'])
+        result=await production.run(self.dsn,store,fixture['actualReportParams'],pool_setup=select_role)
+        self.assertTrue(result['freshPoolReplayAndPrivateStaffProjectionVerified']);self.assertTrue(observed)
+        self.assertTrue(result['track1ReportAndAllFactsUnchanged'])
+        self.assertGreaterEqual(result['activityRowsBeforeRestart'],20)
+        async with self.conn.transaction():
+            await self.conn.execute('SET LOCAL ROLE '+role)
+            self.assertIsNone(await self.conn.fetchval("SELECT id FROM public.stores WHERE id='preserve_test'"))
+            self.assertEqual(await self.conn.execute("UPDATE public.items SET name='Forbidden rewrite' WHERE code=$1",item),'UPDATE 0')
+            for command in ('ALTER TABLE prep_inventory.staff_production_submissions ADD COLUMN forbidden text',
+                            'DELETE FROM prep_inventory.staff_production_submissions'):
+                with self.assertRaises(asyncpg.InsufficientPrivilegeError):
+                    async with self.conn.transaction():await self.conn.execute(command)
+
     async def test_stale_rows_or_historical_sql_hold_before_native_ddl(self):
         await self.conn.execute("UPDATE public.items SET name='Changed existing record'")
         with self.assertRaises(installer.InstallFailure):await self.run_install()
