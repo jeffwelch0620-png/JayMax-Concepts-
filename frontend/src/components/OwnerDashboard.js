@@ -25,12 +25,15 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
   function load() {
     const id = ++request.current;
     const apply = setter => result => { if (request.current === id) setter(result); };
-    setErr(""); setData(null);
+    setErr(""); setData(null); setPrep(null);
     api.ownerSummary().then(result => {
       if (!Array.isArray(result?.stores) || !result.totals || (api.nativePurchasesEnabled && result.inventoryBasis !== "native_received_purchases_and_explicit_counts")) throw new Error("Native ownership figures were not confirmed.");
       apply(setData)(result);
     }).catch(() => { if (request.current === id) setErr("Couldn't confirm the ownership rollup. Refresh to retry."); });
-    api.ownerPrepSummary().then(apply(setPrep)).catch(() => {});
+    api.ownerPrepSummary().then(result => {
+      if (!Array.isArray(result?.stores)) throw new Error("Prep summary was not confirmed.");
+      apply(setPrep)(result);
+    }).catch(() => apply(setPrep)({ available: false, stores: [], message: "Prep summary could not be confirmed. Refresh to retry." }));
     api.ownerOrders().then(apply(setPending)).catch(() => {});
     if (!api.nativePurchasesEnabled) {
       api.ownerDiscrepancies().then(apply(setDisc)).catch(() => {});
@@ -165,7 +168,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
               <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">Below Par</div><div className="num font-bold text-slate-200">{native ? "Review on-hand" : `${s.orderAlerts} items`}</div></div>
             </div>
             {native && <p className="text-xs mb-3" data-testid={`native-count-status-${s.id}`}>Count: {s.nativeInventory?.count?.count_date || "Not available"} · {s.nativeInventory?.countStatus?.replaceAll("_", " ")} · {s.nativeInventory?.count?.timing?.replaceAll("_", " ") || ""}. Received food window: {s.nativeInventory?.receivedFrom} to before {s.nativeInventory?.receivedBefore}. Counts are historical measurements; actual Food Cost is on the location's Actual Inventory dashboard.</p>}
-            {prep && (() => { const p = prep.stores.find((x) => x.id === s.id); return p ? (
+            {prep?.available === false ? <p className="text-xs text-slate-400 mb-3" data-testid={`prep-unavailable-${s.id}`}>{prep.message || "Prep summary is unavailable. Use reviewed prep counts, production and period reports."}</p> : prep && (() => { const p = prep.stores.find((x) => x.id === s.id); return p ? (
               <div className="flex gap-1.5 flex-wrap mb-3" data-testid={`prep-summary-${s.id}`}>
                 <Pill color={p.countStatus === "submitted" ? "#10B981" : "#64748B"} bg={p.countStatus === "submitted" ? "rgba(16,185,129,0.12)" : "#1E293B"}>Tonight's count: {p.countStatus}</Pill>
                 <Pill color="#06B6D4" bg="rgba(6,182,212,0.12)">Tasks {p.tasksDone}/{p.tasksTotal}</Pill>

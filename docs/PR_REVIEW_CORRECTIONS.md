@@ -314,3 +314,15 @@ Example PostgreSQL modes align with all native features held. The broader origin
 40-file continuation remains unchanged and snapshotted separately. This local
 checkpoint is not pushed and performs no hosted SQL, deployment or operational
 import. See [the current deployment scope and remaining work](DEPLOYMENT_RECONCILIATION_CHECKPOINT.md).
+
+## Subsequent local cutover and correction reconciliation
+
+The preserved retirement boundaries and dependency-review UI now combine with the
+latest history batching, paired waste correction, private staff-response and author
+separation guards. Missing coverage or malformed movements hold the client review.
+The combined-day fixture uses an independent counter and retains the newer guard.
+Nineteen distinct selected backend cases and both 454-test/54-suite frontend modes
+pass. The combined SQL restore retains reports, task progress, dependency evidence
+and exact staff retry, with Track 1 unchanged. Initial fixture and pre-final frontend
+attempts remain in immutable evidence. Schema/managed-development integration,
+hosted acceptance and other original findings remain open. See [the current scope](CUTOVER_RECONCILIATION_CHECKPOINT.md).

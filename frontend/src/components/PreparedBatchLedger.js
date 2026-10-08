@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { Field, cardCls, inpCls, btnAcc, btnGhost } from "./common";
+import { PrepCorrectionReview } from "./PrepCorrectionReview";
 
 const blank = () => ({ recipe_version_id: "", planned_batches: "", output_quantity: "", performed_at: "", business_date: "", timezone_name: "",
   calendar_date_confirmed: false, single_output_confirmed: false, inputs: [], note: "" });
@@ -10,6 +11,9 @@ export function PreparedBatchLedger({ restaurantId }) {
   const [data, setData] = useState(null), [form, setForm] = useState(blank), [mode, setMode] = useState("initial"), [eventId, setEventId] = useState(""), [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState(""), [review, setReview] = useState(null), [confirmed, setConfirmed] = useState(false), [history, setHistory] = useState(null);
   const pending = useRef(null), alive = useRef(true);
+  const [dependencies, setDependencies] = useState(null);
+  const receiveDependencies = useCallback(result => { setDependencies(result); setReview(null); setConfirmed(false); }, []);
+  const dependenciesReady = dependencies?.restaurantId === restaurantId && dependencies?.selectedEventId === eventId && dependencies?.gate?.status === "eligible_for_preview";
   useEffect(() => {
     let active = true; alive.current = true;
     api.nativePrepBatchSetup(restaurantId).then(d => active && setData(d)).catch(e => active && setError(detail(e)));
@@ -28,6 +32,7 @@ export function PreparedBatchLedger({ restaurantId }) {
       included_loss_quantity: "", evidence: "", loss_evidence: "" })) })));
   }
   function selectEvent(id) {
+    setDependencies(null);
     const e = data.events.find(x => x.id === id);
     change(() => { setEventId(id); setReason(""); setForm(e?.review_snapshot.batch ? { ...e.review_snapshot.batch, inputs: e.review_snapshot.batch.inputs.map(x => ({ ...x, included_loss_quantity: x.included_loss_quantity ?? "", loss_evidence: x.loss_evidence ?? "" })) } : blank()); });
   }
@@ -41,6 +46,7 @@ export function PreparedBatchLedger({ restaurantId }) {
     finally { if (alive.current) setBusy(false); }
   }
   async function preview() {
+    if (mode !== "initial" && !dependenciesReady) return;
     setBusy(true); setReview(null); setConfirmed(false); setError("");
     try {
       const payload = body();
@@ -50,6 +56,7 @@ export function PreparedBatchLedger({ restaurantId }) {
     finally { if (alive.current) setBusy(false); }
   }
   async function save() {
+    if (!pending.current && review?.mode !== "initial" && !dependenciesReady) return;
     if (!pending.current && (!review || !confirmed)) return;
     setBusy(true); setError("");
     try {
@@ -92,6 +99,7 @@ export function PreparedBatchLedger({ restaurantId }) {
           <Field label="Current batch"><select aria-label="Current batch" className={inpCls} value={eventId} onChange={e => selectEvent(e.target.value)}><option value="">Select current batch</option>{data.events.filter(e => e.kind !== "void").map(e => <option key={e.id} value={e.id}>{e.business_date} · {e.id} · revision {e.revision}</option>)}</select></Field>
           <Field label="Correction reason"><input aria-label="Correction reason" className={inpCls} value={reason} onChange={e => change(() => setReason(e.target.value))} /></Field>
           <p>Corrections keep the original date and prepared item. Resolve batches that used this output first. Voiding an erroneous record is not waste reporting.</p>
+          {eventId && <PrepCorrectionReview key={`${restaurantId}:${eventId}`} restaurantId={restaurantId} eventId={eventId} onResult={receiveDependencies} />}
         </>}
         {mode !== "void" && <>
           <Field label="Approved recipe"><select aria-label="Approved recipe" className={inpCls} value={form.recipe_version_id} onChange={e => selectRecipe(e.target.value)}><option value="">Select reviewed recipe</option>{data.recipes.map(r => <option key={r.id} value={r.id} disabled={r.reviewNeeded}>{r.review_snapshot.product.name} · recipe {r.revision}{r.reviewNeeded ? " · review needed" : ""}</option>)}</select></Field>
@@ -111,7 +119,7 @@ export function PreparedBatchLedger({ restaurantId }) {
           <label className="block"><input type="checkbox" checked={form.calendar_date_confirmed} onChange={e => update("calendar_date_confirmed", e.target.checked)} /> I confirm calendar-day reporting and this location timezone</label>
           <label className="block"><input type="checkbox" checked={form.single_output_confirmed} onChange={e => update("single_output_confirmed", e.target.checked)} /> This batch has one usable output; no recoverable byproducts need separate mapping</label>
         </>}
-        <button className={btnAcc} disabled={mode !== "initial" && !eventId} onClick={preview}>Review batch quantities</button>
+        <button className={btnAcc} disabled={mode !== "initial" && (!eventId || !dependenciesReady)} onClick={preview}>Review batch quantities</button>
       </fieldset>
       {review && <div className={`${cardCls} space-y-3`} aria-label="Batch quantity review">
         <p>{review.review.kind} · {review.review.business_date} · {review.review.timezone_name}</p>

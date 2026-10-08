@@ -115,6 +115,7 @@ export const saveNativePrepObservation = (rid, purpose, body, key) => axios.post
 export const previewNativePrepObservationChange = (rid, purpose, id, body) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/${encodeURIComponent(id)}/change-preview`, body).then(r => r.data);
 export const saveNativePrepObservationChange = (rid, purpose, id, body, key) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/${encodeURIComponent(id)}/changes`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const nativePrepBatchHistory = (rid, root) => axios.get(`${purchaseUrl(rid)}/prep-batches/${encodeURIComponent(root)}/history`).then(r => r.data);
+export const nativePrepCorrectionReview = (rid, id) => axios.get(`${purchaseUrl(rid)}/prep-batches/${encodeURIComponent(id)}/correction-review`).then(r => r.data);
 export const previewNativePrepBatch = (rid, body) => axios.post(`${purchaseUrl(rid)}/prep-batches/preview`, body).then(r => r.data);
 export const saveNativePrepBatch = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-batches`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const previewNativePrepBatchChange = (rid, id, body) => axios.post(`${purchaseUrl(rid)}/prep-batches/${encodeURIComponent(id)}/change-preview`, body).then(r => r.data);
@@ -395,8 +396,9 @@ export const pgPushUnsubscribe = (storeId, body) => axios.post(`${PG_API}/staff/
 // See docs/SUPABASE_MIGRATION_PLAN.md. fetchState/putCollection below reshape the granular
 // pg Items/Invoices endpoints into the exact `items`/`purchases` array shapes every existing
 // component already reads, so nothing downstream of App.js needs to change. Only active when
-// USE_PG is on; dishes/adjustments/prepStock/etc. still come from Mongo either way (not
-// migrated yet). Known limitations, not attempted here: an invoice line's vendor can only be
+// USE_PG is on; the state, dishes and legacy prep adapters also read PostgreSQL.
+// Retired prep balances are explicitly unavailable; native journals are read separately.
+// Known limitations of the old invoice adapter: an invoice line's vendor can only be
 // one of the 5 canonical VENDOR_NAME_TO_ID vendors -- a free-text vendor name from CSV
 // auto-import falls back to "other"; and purchases/invoices are only ever appended, never
 // edited or deleted, matching what the current UI (InvoicesTab) actually does.

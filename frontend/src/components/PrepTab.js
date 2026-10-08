@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { ChefHat, Play, PackageCheck, Layers, X, Plus, Trash2, Check, Sparkles, ClipboardList, Send, Package } from "lucide-react";
 import { normalizeRecipeSchema, recipeCostSummary, fmtDate, fmtMoney, num, todayISO, FREQS, VESSELS } from "../lib/calc";
@@ -58,7 +58,7 @@ function RecurringScheduleFields({ recurDays, toggleDay, fixedQty, setFixedQty, 
   );
 }
 
-export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, persistDishes, prepStock, prepLogs, applyPrepResult, salesPeriod, showToast }) {
+export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, persistDishes, prepStock, prepLogs, prepReadStatus, prepCapabilities, applyPrepResult, salesPeriod, showToast }) {
   const [track, setTrack] = useState("daily");
   const [sub, setSub] = useState("list");
   const [prepItems, setPrepItems] = useState([]);
@@ -69,7 +69,7 @@ export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, pers
     <div className="fade-slide-in" data-testid="prep-tab">
       <PageTitle>Prep Production</PageTitle>
       <div className="text-xs text-slate-500 -mt-3 mb-4">
-        {api.nativePurchasesEnabled ? "Prep counts and production explain inventory usage. Track 1 physical counts and received purchases remain the accounting baseline." : "Nightly cycle: the closing manager records the evening prep count, the system builds tomorrow's prep list (par − counted = prep quantity), staff mark tasks prepped, and raw inventory is deducted automatically."}
+        {api.nativePurchasesEnabled || prepCapabilities?.reportingAvailable === false ? "Prep counts and production explain inventory usage. Track 1 physical counts and received purchases remain the accounting baseline." : "Nightly cycle: the closing manager records the evening prep count, the system builds tomorrow's prep list (par − counted = prep quantity), staff mark tasks prepped, and raw inventory is deducted automatically."}
       </div>
       <div className="flex gap-2 mb-4 flex-wrap" data-testid="prep-track-selector">
         {TRACKS.map((t) => (
@@ -93,10 +93,10 @@ export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, pers
           );
         })}
       </div>
-      {sub === "list" && (api.prepDayTasksEnabled ? <PrepDayDrafts rid={rid} track={track} drafts={drafts} showToast={showToast}/> : <PrepListView rid={rid} track={track} items={items} dishes={dishes} prepItems={prepItems} reloadPrepItems={reloadPrepItems} applyPrepResult={applyPrepResult} showToast={showToast} />)}
-      {sub === "count" && (api.staffPrepCountsEnabled ? <StaffPrepCountReview key={rid} rid={rid} drafts={drafts}/> : <EveningCount rid={rid} track={track} showToast={showToast} />)}
-      {sub === "inventory" && (api.prepContainersEnabled ? <PrepContainers key={rid} rid={rid} drafts={drafts} /> : <InventoryLog drafts={drafts} showError={showError} rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />)}
-      {sub === "planning" && <Planning showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} persistDishes={persistDishes} showToast={showToast} />}
+      {sub === "list" && (api.prepDayTasksEnabled ? <PrepDayDrafts rid={rid} track={track} drafts={drafts} showToast={showToast}/> : prepCapabilities?.listsAvailable === false ? <p data-testid="prep-list-unavailable">Historical prep lists are retained for review. Use reviewed dated prep tasks for current work.</p> : <PrepListView rid={rid} track={track} items={items} dishes={dishes} prepItems={prepItems} reloadPrepItems={reloadPrepItems} applyPrepResult={applyPrepResult} showToast={showToast} />)}
+      {sub === "count" && (api.staffPrepCountsEnabled ? <StaffPrepCountReview key={rid} rid={rid} drafts={drafts}/> : prepCapabilities?.countsAvailable === false ? <p data-testid="prep-count-unavailable">Historical count sessions are retained for review. Ask your manager to issue a reviewed prep count sheet.</p> : <EveningCount rid={rid} track={track} showToast={showToast} />)}
+      {sub === "inventory" && (api.prepContainersEnabled ? <PrepContainers key={rid} rid={rid} drafts={drafts} /> : prepReadStatus?.available === false ? <p data-testid="prep-inventory-unavailable">{prepReadStatus.message || "Prep balances are unavailable here. Use reviewed prep counts, production and period reports."}</p> : <InventoryLog drafts={drafts} showError={showError} rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />)}
+      {sub === "planning" && <Planning showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} prepCapabilities={prepCapabilities} persistDishes={persistDishes} showToast={showToast} />}
     </div>
   );
 }
@@ -290,16 +290,20 @@ function EveningCount({ rid, track, showToast }) {
   const [countedBy, setCountedBy] = useState(() => localStorage.getItem("prepCountedBy") || "");
   const [savingId, setSavingId] = useState("");
   const [showRev, setShowRev] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const request = useRef(0);
 
-  const load = () => api.getCountSession(rid, date, track).then((s) => {
+  const load = () => { const id = ++request.current; setSession(null); setLoadError(""); return api.getCountSession(rid, date, track).then((s) => {
+    if (request.current !== id) return;
     setSession(s);
     const d = {}, n = {};
     (s.entries || []).forEach((e) => { const k = e.recipeId || e.prepItemId; d[k] = e.onHand === null || e.onHand === undefined ? "" : e.onHand; n[k] = e.note || ""; });
     setDrafts(d);
     setNoteDrafts(n);
-  }).catch(() => showToast("Couldn't load the count session"));
-  useEffect(() => { load(); }, [rid, date, track]); // eslint-disable-line react-hooks/exhaustive-deps
+  }).catch(e => { if (request.current === id) setLoadError(e?.response?.data?.detail || "Couldn't confirm the count session. Retry to load it."); }); };
+  useEffect(() => { load(); return () => { request.current++; }; }, [rid, date, track]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (loadError) return <div role="alert" data-testid="count-load-error">{loadError}<button onClick={load} className={btnGhost}>Retry count session</button></div>;
   if (!session) return <div className="text-slate-500 text-sm" data-testid="count-loading">Loading count session…</div>;
   const recipes = session.recipes || [];
   const prepItems = session.prepItems || [];
@@ -425,18 +429,21 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editingRecurring, setEditingRecurring] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  const request = useRef(0);
 
   const load = () => {
-    setLoaded(false);
+    const id = ++request.current; setLoaded(false); setList(null); setLoadError("");
     api.getPrepList(rid, date, track).then((r) => {
+      if (request.current !== id) return;
       setList(r.list);
       setLoaded(true);
       const d = {};
       (r.list?.tasks || []).forEach((t) => { d[t.id] = t.batchesPlanned; });
       setPlannedDrafts(d);
-    }).catch(() => { setLoaded(true); showToast("Couldn't load the prep list"); });
+    }).catch(e => { if (request.current === id) setLoadError(e?.response?.data?.detail || "Couldn't confirm the prep list. Retry to load it."); });
   };
-  useEffect(() => { load(); }, [rid, date, track]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); return () => { request.current++; }; }, [rid, date, track]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function generate() {
     try {
@@ -525,6 +532,7 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
     } catch (e) { showToast(e?.response?.data?.detail || "Couldn't add it to the list"); }
   }
 
+  if (loadError) return <div role="alert" data-testid="prep-list-load-error">{loadError}<button onClick={load} className={btnGhost}>Retry prep list</button></div>;
   const tasks = (list?.tasks || []).filter((t) => !t.removed);
   const doneCount = tasks.filter((t) => t.batchesPlanned > 0 && t.batchesDone >= t.batchesPlanned).length;
   const oneOffs = prepItems.filter((p) => p.schedule === "oneoff");
@@ -914,7 +922,9 @@ function InventoryLog({ drafts, showError, rid, items, dishes, persistDishes, pr
 }
 
 /* ---------------- Planning: projections, overrides, PIN, AI par advisor ---------------- */
-function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast }) {
+function Planning({ showError, rid, dishes, prepItems, prepCapabilities, persistDishes, showToast }) {
+  const overridesHeld = prepCapabilities?.listsAvailable === false || api.prepDayTasksEnabled;
+  const advisorHeld = prepCapabilities?.reportingAvailable === false || api.prepPlanningEnabled || api.prepBatchesEnabled;
   const prepRecipes = dishes.filter((d) => d.recipeType === "prep").map(normalizeRecipeSchema);
   const [proj, setProj] = useState({ date: tomorrowISO(), amount: "", note: "" });
   const [projList, setProjList] = useState([]);
@@ -928,10 +938,10 @@ function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast 
 
   useEffect(() => {
     api.getProjections(rid).then(setProjList).catch(() => {});
-    api.listOverrides(rid).then(setOvrList).catch(() => {});
+    if (!overridesHeld) api.listOverrides(rid).then(setOvrList).catch(() => {});
     api.getStaffPin(rid).then((p) => { setPinInfo(p); setPin(p.staffPin); }).catch(() => {});
-    api.getParRecs(rid).then(setRecs).catch(() => {});
-  }, [rid]);
+    if (!advisorHeld) api.getParRecs(rid).then(setRecs).catch(() => {});
+  }, [rid, overridesHeld, advisorHeld]);
 
   const targetName = (o) => prepRecipes.find((r) => r.id === o.recipeId)?.name || prepItems.find((p) => p.id === o.prepItemId)?.name || o.customName || "item";
 
@@ -946,6 +956,7 @@ function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast 
   }
 
   async function saveOverride() {
+    if (overridesHeld) return;
     const recipeId = ovr.target.startsWith("r:") ? ovr.target.slice(2) : null;
     const prepItemId = ovr.target.startsWith("p:") ? ovr.target.slice(2) : null;
     if (ovr.type !== "add" && !recipeId && !prepItemId) { showToast("Pick a prep item for this override"); return; }
@@ -959,9 +970,9 @@ function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast 
   }
 
   async function removeOverride(id) {
-    await api.deleteOverride(rid, id).catch(() => {});
-    setOvrList((l) => l.filter((o) => o.id !== id));
-    showToast("Override removed");
+    if (overridesHeld) return;
+    try { await api.deleteOverride(rid, id); setOvrList((l) => l.filter((o) => o.id !== id)); showToast("Override removed"); }
+    catch (e) { showError(e?.response?.data?.detail || "Couldn't confirm removal. The override remains visible for review."); }
   }
 
   async function savePin() {
@@ -973,6 +984,7 @@ function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast 
   }
 
   async function runAdvisor() {
+    if (advisorHeld) return;
     setAdvisorBusy(true);
     try {
       const r = await api.runParAdvisor(rid);
@@ -984,6 +996,7 @@ function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast 
   }
 
   async function applyRec(rec) {
+    if (advisorHeld) return;
     try {
       const saved = await persistDishes(dishes.map((d) => d.id === rec.recipeId ? { ...d, prepPar: rec.recommendedPar } : d));
       if (!saved) return;
@@ -1017,7 +1030,7 @@ function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast 
           <div className="text-[11px] text-slate-500 mt-2">Toast report import comes later — once you share a sample export or API access.</div>
         </div>
 
-        <div className={`${cardCls} p-5`} data-testid="overrides-card">
+        {overridesHeld ? <p data-testid="prep-overrides-unavailable">Historical day adjustments are retained for review. Use reviewed dated prep tasks for current adjustments.</p> : <div className={`${cardCls} p-5`} data-testid="overrides-card">
           <SectionLabel>One-Day Adjustments (don't change the standing list)</SectionLabel>
           <div className="flex gap-2 flex-wrap items-end mb-2">
             <Field label="For Date"><input type="date" className={inpCls} data-testid="override-date" value={ovr.date} onChange={(e) => setOvr((o) => ({ ...o, date: e.target.value }))} /></Field>
@@ -1054,6 +1067,7 @@ function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast 
           ))}
         </div>
 
+        }
         <div className={`${cardCls} p-5`} data-testid="staff-pin-card">
           <SectionLabel>Staff Prep Sheet PIN</SectionLabel>
           <div className="text-xs text-slate-400 mb-3">
@@ -1065,7 +1079,7 @@ function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast 
           </div>
         </div>
 
-        <div className={`${cardCls} p-5`} data-testid="par-advisor-card">
+        {advisorHeld ? <p data-testid="prep-advisor-unavailable">Historical par advice is unavailable for current planning. Use reviewed prep observations and planning settings.</p> : <div className={`${cardCls} p-5`} data-testid="par-advisor-card">
           <SectionLabel>AI Par Advisor</SectionLabel>
           <div className="text-xs text-slate-400 mb-3">
             Sous analyzes evening counts, amounts prepped, usage via sales, and projections, then recommends par changes. Recommendations are advisory — nothing changes until you tap Apply. It needs a few weeks of real counts before firm recommendations; until then it reports trends.
@@ -1087,7 +1101,7 @@ function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast 
               </div>
             </div>
           ))}
-        </div>
+        </div>}
       </div>
     </div>
   );

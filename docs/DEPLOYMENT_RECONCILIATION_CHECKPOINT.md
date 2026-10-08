@@ -1,5 +1,10 @@
 # Deployment reconciliation checkpoint - October 8, 2026
 
+Subsequent local work reconciles the legacy retirement and correction-review
+workflows and verifies their combined day/restore. See [the cutover checkpoint](CUTOVER_RECONCILIATION_CHECKPOINT.md).
+The integration-pending statements below describe this earlier deployment slice.
+Schema/managed-development tooling and hosted validation still remain pending.
+
 The deployment slice now builds on draft PR16 correction commit
 `91b028d8d44ac94a0253c1b8c2173a937f628c7f`. It includes the preserved readiness
 tool, final private-access migration and exact-newline restore fix. The original

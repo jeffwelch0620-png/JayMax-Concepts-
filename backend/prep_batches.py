@@ -282,6 +282,15 @@ def install_routes(router, context):
                 if not rows: raise HTTPException(404, 'Batch history is not at this location')
                 return serial({'events': [dict(r) for r in rows]})
 
+    @router.get('/{store_id}/prep-batches/{event_id}/correction-review')
+    async def correction_review(store_id: str, event_id: UUID, request: Request):
+        # Same manager/location authorization as correction previews; no write.
+        _, pool = await ctx(request, store_id, True)
+        from prep_correction_review import review as dependency_review
+        async with pool.acquire() as conn:
+            async with conn.transaction(isolation='repeatable_read', readonly=True):
+                return await dependency_review(conn, store_id, event_id)
+
     async def review(request, store, batch=None, old=None, change=None):
         _, pool = await ctx(request, store, True)
         async with pool.acquire() as conn:

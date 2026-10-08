@@ -1,5 +1,19 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local cutover/correction reconciliation - October 8, 2026
+
+The preserved legacy retirement and correction-review workflows now build on the
+latest integrity and deployment fixes. **19 distinct selected backend cases** pass,
+including the combined restaurant day and whole SQL restore. Both frontend modes
+pass **454 tests / 54 suites**. Track 1 stays unchanged while prep activity explains
+usage; old ledgers remain retired after installed cutover even with flags off.
+The production build passes with the same three existing hook warnings.
+
+Read [the current cutover checkpoint](docs/CUTOVER_RECONCILIATION_CHECKPOINT.md) for
+coverage, the corrected independent-counter fixture and remaining integration work.
+This is local work, not pushed or deployed. The original continuation is preserved;
+PR14-16 remain draft and unmerged. Earlier checkpoint text below is retained history.
+
 ## Local deployment reconciliation - October 8, 2026
 
 The separate deployment branch reconciles the latest PR16 corrections with the

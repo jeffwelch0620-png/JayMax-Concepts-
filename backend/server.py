@@ -2025,6 +2025,8 @@ async def _pg_prep_report_sources(rid, frm, to):
     start, end = _pg_date(frm), _pg_date(to)
     conn = await db_pg.pool().acquire()
     try:
+        from legacy_prep_views import hold_report
+        await hold_report(conn)
         session_rows = await conn.fetch(
             """SELECT * FROM count_sessions WHERE store_id=$1 AND count_date BETWEEN $2 AND $3
                ORDER BY count_date LIMIT 500""", store_id, start, end)
@@ -2098,6 +2100,12 @@ async def owner_prep_summary():
         stores = []
         conn = await db_pg.pool().acquire()
         try:
+            from legacy_prep_views import reporting_retired, unavailable
+            if await reporting_retired(conn):
+                return {**unavailable(), 'stores': [
+                    {**{k: r[k] for k in ('id', 'short', 'accent')},
+                     'countStatus': 'unavailable', 'tasksTotal': None,
+                     'tasksDone': None, 'prepCost7d': None} for r in RESTAURANTS]}
             for r in RESTAURANTS:
                 store_id = RESTAURANT_TO_PG_STORE[r["id"]]
                 session = await conn.fetchrow(
@@ -2200,7 +2208,6 @@ PAR_ADVISOR_SCHEMA = {
 @api_router.post("/ai/par-advisor/{rid}")
 async def run_par_advisor(rid: str):
     check_rid(rid)
-    client = _ai()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).date().isoformat()
     if USE_PG:
         sessions, logs, recipes, _ = await _pg_prep_report_sources(rid, cutoff, _today())
@@ -2208,6 +2215,7 @@ async def run_par_advisor(rid: str):
         recipes = await _prep_recipes(rid)
         sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(200)
         logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(500)
+    client = _ai()
     if not recipes:
         raise HTTPException(400, "No prep recipes yet")
     projections = await _projections_for(rid)
@@ -2296,6 +2304,8 @@ async def apply_par_rec(rid: str, rec_id: str):
         conn = await db_pg.pool().acquire()
         try:
             async with conn.transaction():
+                from legacy_prep_views import hold_report
+                await hold_report(conn)
                 rec = await conn.fetchrow(
                     "SELECT recipe_id, recommended_par FROM par_recommendations WHERE store_id=$1 AND id=$2 FOR UPDATE",
                     store_id, rec_id)
@@ -2413,8 +2423,8 @@ async def store_summary(r):
                           "price": price, "pct": round(pct, 1) if pct is not None else None,
                           "target": f(d.get("targetPct"), 30)})
     pcts = [x["pct"] for x in dish_rows if x["pct"] is not None]
-    stock_by_recipe = {s["recipeId"]: s for s in prep_stock}
-    prep_low = sum(1 for d in dishes if d.get("recipeType") == "prep" and f(d.get("prepPar")) > 0
+    stock_by_recipe = {s["recipeId"]: s for s in (prep_stock or [])}
+    prep_low = None if prep_stock is None else sum(1 for d in dishes if d.get("recipeType") == "prep" and f(d.get("prepPar")) > 0
                    and f((stock_by_recipe.get(d["id"]) or {}).get("onHand")) < f(d.get("prepPar")))
     return {**r, "inventoryValue": native_summary['inventoryValue'] if native_summary else round(inv_value, 2), "orderAlerts": alerts, "spend30": spend30,
             "nativeInventory": native_summary,
@@ -2475,7 +2485,9 @@ def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock, nat
     if menu_lines:
         lines.append("MENU COSTING: " + " | ".join(menu_lines[:40]))
     preps = [d for d in dishes if d.get("recipeType") == "prep"]
-    if preps:
+    if prep_stock is None:
+        lines.append('TRACK 2: legacy prep on-hand is unavailable after cutover. Do not infer zero stock, prep shortfalls or consumption from retained legacy records. Use reviewed prep counts, production and period reports.')
+    elif preps:
         stock_map = {s["recipeId"]: s for s in prep_stock}
         lines.append("PREP INVENTORY: " + "; ".join(
             f"{p.get('name','')} on-hand {f((stock_map.get(p['id']) or {}).get('onHand')):g} {p.get('yieldUOM','')} (par {f(p.get('prepPar')):g}, {p.get('frequency','daily')}, yield {f(p.get('yieldQty')):g} {p.get('yieldUOM','')}/batch, shelf life {p.get('shelfLife','n/a')})"
@@ -4240,6 +4252,9 @@ def _pg_log_to_api(row):
             "createdAt": row["created_at"].isoformat() if row["created_at"] else None}
 
 async def _pg_prep_stock_list(conn, store_id):
+    from legacy_prep_views import stock_retired
+    if await stock_retired(conn):
+        return None
     rows = await conn.fetch(
         """SELECT prs.dish_id, prs.prep_item_id, prs.on_hand, prs.containers,
                   COALESCE(d.name, pi.name) AS name, COALESCE(d.yield_uom, pi.container) AS yield_uom
@@ -4257,10 +4272,15 @@ async def pg_prep_state(store_id: str):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
+        from legacy_prep_views import stock_retired, unavailable, capabilities
+        prep_capabilities = await capabilities(conn)
+        if await stock_retired(conn):
+            return {'prepStock': None, 'prepLogs': None, 'prepReadStatus': unavailable(), 'prepCapabilities': prep_capabilities}
         logs = await conn.fetch(
             "SELECT * FROM prep_logs WHERE store_id=$1 ORDER BY created_at DESC LIMIT 20000", store_id)
         return {"prepStock": await _pg_prep_stock_list(conn, store_id),
-               "prepLogs": [_pg_log_to_api(row) for row in logs]}
+               "prepLogs": [_pg_log_to_api(row) for row in logs],
+               'prepReadStatus': {'available': True, 'basis': 'legacy_prep'}, 'prepCapabilities': prep_capabilities}
     finally:
         await db_pg.pool().release(conn)
 
@@ -4500,6 +4520,7 @@ async def _pg_get_or_create_session(conn, store_id, date, track):
 @pg_router.get("/prepcount/{store_id}/session")
 async def pg_get_count_session(store_id: str, date: str = Query(""), track: str = Query("daily")):
     check_store_id(store_id)
+    if track not in TRACK_TO_COUNT_TYPE: raise HTTPException(422, 'Select daily or bulk prep')
     conn = await db_pg.pool().acquire()
     try:
         return await _pg_get_or_create_session(conn, store_id, date or _pg_today(), track)
@@ -4562,12 +4583,15 @@ async def pg_submit_count(store_id: str, sid: str, body: dict):
         await db_pg.pool().release(conn)
 
 @pg_router.get("/prepcount/{store_id}/history")
-async def pg_count_history(store_id: str):
+async def pg_count_history(store_id: str, archive: bool = False):
     check_store_id(store_id)
-    rows = await db_pg.pool().fetch("SELECT * FROM count_sessions WHERE store_id=$1 ORDER BY count_date DESC LIMIT 60", store_id)
+    from legacy_prep_views import counts_retired, hold_read, archive_basis
+    hold_read(await counts_retired(db_pg.pool()), archive, 'counts')
+    rows = await db_pg.pool().fetch("SELECT * FROM count_sessions WHERE store_id=$1 AND count_type=ANY($2::text[]) ORDER BY count_date DESC LIMIT 60", store_id, list(TRACK_TO_COUNT_TYPE.values()))
     return [{"id": str(r["id"]), "date": r["count_date"].isoformat(), "track": COUNT_TYPE_TO_TRACK.get(r["count_type"], "daily"),
              "status": r["status"], "countedBy": r["counted_by_name"] or "",
-             "submittedAt": r["submitted_at"].isoformat() if r["submitted_at"] else None} for r in rows]
+             "submittedAt": r["submitted_at"].isoformat() if r["submitted_at"] else None,
+             **(archive_basis() if archive else {})} for r in rows]
 
 # ---------------- Prep lists (Postgres) ----------------
 async def _pg_prep_list_to_api(conn, plist):
@@ -4596,14 +4620,17 @@ async def _pg_prep_list_to_api(conn, plist):
     }
 
 @pg_router.get("/preplists/{store_id}")
-async def pg_get_prep_list(store_id: str, date: str = Query(""), track: str = Query("daily")):
+async def pg_get_prep_list(store_id: str, date: str = Query(""), track: str = Query("daily"), archive: bool = False):
     check_store_id(store_id)
+    if track not in TRACK_TO_COUNT_TYPE: raise HTTPException(422, 'Select daily or bulk prep')
     count_type = TRACK_TO_COUNT_TYPE.get(track, "nightly_prep")
     conn = await db_pg.pool().acquire()
     try:
+        from legacy_prep_views import lists_retired, hold_read, archive_basis
+        hold_read(await lists_retired(conn), archive, 'lists')
         plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE store_id=$1 AND prep_date=$2 AND count_type=$3",
                                      store_id, _pg_date(date or _pg_today()), count_type)
-        return {"list": await _pg_prep_list_to_api(conn, plist) if plist else None}
+        return {"list": await _pg_prep_list_to_api(conn, plist) if plist else None, **(archive_basis() if archive else {})}
     finally:
         await db_pg.pool().release(conn)
 
@@ -5016,15 +5043,17 @@ def _pg_override_to_api(row):
             "note": row["note"] or "", "createdBy": row["created_by"] or ""}
 
 @pg_router.get("/prep-overrides/{store_id}")
-async def pg_list_overrides(store_id: str, date: str = Query("")):
+async def pg_list_overrides(store_id: str, date: str = Query(""), archive: bool = False):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
+        from legacy_prep_views import lists_retired, hold_read, archive_basis
+        hold_read(await lists_retired(conn), archive, 'day overrides')
         if date:
             rows = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 AND date=$2 ORDER BY date DESC", store_id, _pg_date(date))
         else:
             rows = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 ORDER BY date DESC LIMIT 500", store_id)
-        return [_pg_override_to_api(r) for r in rows]
+        return [{**_pg_override_to_api(r), **(archive_basis() if archive else {})} for r in rows]
     finally:
         await db_pg.pool().release(conn)
 

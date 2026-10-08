@@ -1,9 +1,9 @@
-"""Postgres (Supabase) connection pool -- the migration target running alongside the
-existing Motor/MongoDB connection in server.py while the migration is in progress
-(see docs/SUPABASE_MIGRATION_PLAN.md). Connects with DATABASE_URL, which should be
-the Postgres *service role* connection (bypasses RLS) -- authorization stays decided
-in FastAPI, matching the existing collaboration_security middleware, since none of
-the new tables have RLS policies written yet.
+"""PostgreSQL connection pool selected by DATABASE_URL.
+
+Hosted deployment uses the backend's privileged PostgreSQL owner connection;
+this is a database login, not a Supabase API service-role key. FastAPI enforces
+application authorization. USE_PG=true in server.py retires the Mongo client.
+The deployment preflight checks both mode flags and native database permissions.
 """
 import os
 import json
@@ -27,10 +27,8 @@ async def _init_connection(conn):
     await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog", format="text")
 
 async def init_pool():
-    # Fails open, deliberately: during the migration the app must keep serving the
-    # existing Mongo-backed /api/... routes even if Postgres isn't reachable yet (e.g.
-    # DATABASE_URL still has the [YOUR-PASSWORD] placeholder). Only /api/pg/... routes
-    # are affected -- they'll 503 via pool() below until this succeeds.
+    # Keep process health available while reconnecting; database routes return 503.
+    # In PostgreSQL mode this never starts Mongo or changes the authoritative source.
     global _pool, _retry_task
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url or "[YOUR-PASSWORD]" in database_url:
