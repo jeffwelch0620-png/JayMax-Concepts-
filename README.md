@@ -1,5 +1,30 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Hosted staff count and independent review - October 8, 2026
+
+The staff prep-count workflow passed against the designated hosted build database
+through the actual FastAPI routes and middleware, using synthetic signed identities.
+Concurrent submission/approval retries and replay through a completely new pool
+retained one measured revision and one accepted observation. Blank quantities,
+stale requests, changed same-key bodies, unauthorized locations and self-approval
+were held. Exact quantities survived; Track 1 Food Cost remained **$55**.
+
+The checks caught and fixed a staff-response gap: reviewer and definition-author
+audit identities now remain private in nested staff receipts. Stored manager audit
+facts and review hashes remain unchanged. **Seven selected local regression cases
+passed**, covering counts, task history, production history and response projection.
+All original **40-table projections** and **54 migration records** still match;
+20 synthetic activity-log rows and the invented count history remain as evidence.
+
+Read the [staff review checkpoint](docs/HOSTED_STAFF_REVIEW_CHECKPOINT.md) for
+evidence and the next work. This verifies locally executed app routes connected
+to hosted PostgreSQL; deployed browser, login and ordinary backend-role readiness
+remain open. Browser control failed before the Supabase dashboard could be read.
+The current connection is the privileged `postgres` owner role; no grants changed.
+This continuation remains local/unpublished. **PR14–16 remain draft/unmerged**;
+continue holding merges until the remaining checks and continuation PR review.
+Earlier sections below are historical checkpoints.
+
 ## Durable native Supabase installation - October 8, 2026
 
 The owner-designated build database now has the **29 native migrations committed**,

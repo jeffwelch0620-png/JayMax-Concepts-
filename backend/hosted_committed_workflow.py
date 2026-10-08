@@ -78,5 +78,5 @@ async def run(dsn, ssl=None, emit=None):
             except BaseException:pool.terminate();raise
         # Fixture contains invented payloads only, but compact public evidence
         # needs only stable synthetic IDs and conclusions.
-        proof.pop('replayFixture')
+        proof['actualReportParams']=proof.pop('replayFixture')['reportParams']
         return proof

@@ -150,10 +150,14 @@ class StaffPrepCountsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(listing.json(),[staff_view(private)])
             accepted, _ = await self.accept(private)
             self.assertEqual(accepted.status_code,200,accepted.text)
+            reviewer=accepted.json()['decision']['reviewed_by']
+            self.assertTrue(reviewer)
             retry = await self.submit_sheet(review,body=body,key=key,client=staff)
             self.assertEqual(retry.status_code,200,retry.text)
             self.assertEqual(retry.json()['submission'],submitted.json()['submission'])
             self.assertTrue(retry.json()['replayed'])
+            self.assertNotIn('reviewed_by',str(retry.json()))
+            self.assertNotIn(reviewer,retry.text)
             self.assertEqual(retry.json()['current'],staff_view(accepted.json()['current']))
 
     async def accept(self,review,decision='accepted',key=None,body=None):

@@ -104,3 +104,15 @@ class PreservationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(await preservation.fingerprints(self.conn,columns,exclude_synthetic=exclusion),before)
         for bad in ({('public','food'):('note','keep raw')},{('public','stores'):('id','')},{('public','stores'):('name','Invented test')}):
             with self.assertRaises(ValueError):await preservation.fingerprints(self.conn,columns,exclude_synthetic=bad)
+
+    async def test_synthetic_activity_exclusion_preserves_existing_and_unattributed_audit_rows(self):
+        await self.conn.execute("CREATE TABLE public.activity_log(user_id text,path text); INSERT INTO public.activity_log VALUES('original','Keep'),(NULL,'Unattributed')")
+        columns=await preservation.original_columns(self.conn)
+        before=await preservation.fingerprints(self.conn,columns)
+        await self.conn.execute("INSERT INTO public.activity_log VALUES('synthetic-counter','Invented')")
+        exclusion={('public','activity_log'):('user_id',['synthetic-counter'])}
+        self.assertEqual(await preservation.fingerprints(self.conn,columns,exclude_synthetic=exclusion),before)
+        await self.conn.execute("UPDATE public.activity_log SET path='Changed' WHERE user_id IS NULL")
+        self.assertNotEqual(await preservation.fingerprints(self.conn,columns,exclude_synthetic=exclusion),before)
+        with self.assertRaises(ValueError):
+            await preservation.fingerprints(self.conn,columns,exclude_synthetic={('public','activity_log'):('path',['Changed'])})

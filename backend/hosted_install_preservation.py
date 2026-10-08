@@ -28,11 +28,11 @@ async def original_columns(conn):
 async def fingerprints(conn, baseline, *, exclude_synthetic=None):
     """Compare the same original projection before/after an additive change."""
     result = {};exclude_synthetic=exclude_synthetic or {}
-    permitted={('public','stores'):'id',('public','items'):'code',('public','store_items'):'store_id',('public','store_state'):'store_id'}
+    permitted={('public','stores'):'id',('public','items'):'code',('public','store_items'):'store_id',('public','store_state'):'store_id',('public','activity_log'):'user_id'}
     for key,(field,value) in exclude_synthetic.items():
         values=[value] if isinstance(value,str) else value
         if permitted.get(key)!=field or not isinstance(values,list) or not values or any(not isinstance(v,str) or not v for v in values) or len(set(values))!=len(values) or key not in baseline:
-            raise ValueError('Only exact invented store/item identities may be excluded')
+            raise ValueError('Only exact invented store/item/audit identities may be excluded')
     async with conn.transaction(isolation='repeatable_read',readonly=True):
         await conn.execute("SET LOCAL statement_timeout='20s'; SET LOCAL TIME ZONE 'UTC'")
         current = await original_columns(conn)

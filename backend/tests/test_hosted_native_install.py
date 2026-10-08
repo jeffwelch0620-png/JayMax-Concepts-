@@ -47,6 +47,7 @@ class NativeInstallTests(unittest.IsolatedAsyncioTestCase):
             CREATE TABLE supabase_migrations.schema_migrations(version text PRIMARY KEY,name text,statements text[],created_by text,idempotency_key text,rollback text[]);
             INSERT INTO supabase_migrations.schema_migrations(version,name,statements) VALUES('20260929135736','invented_local_history',ARRAY['SELECT 1;']);
             INSERT INTO public.stores(id,name) VALUES('preserve_test','Invented local preservation test');
+            INSERT INTO public.vendors(id,name) VALUES('pfg','PFG'),('us_foods','US Foods');
             INSERT INTO public.items(code,name,base_unit) VALUES('preserve_food','Invented food','lb');
             INSERT INTO public.store_items(store_id,item_code,count_unit,base_per_count_unit) VALUES('preserve_test','preserve_food','case',20);''')
         self.catalog=(await reconciliation.capture(self.conn))['catalog']
@@ -92,6 +93,24 @@ class NativeInstallTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await self.conn.fetchval("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='purchasing')"))
         self.assertEqual(await preservation.ledger_fingerprints(self.conn),self.ledger)
         self.assertEqual(await preservation.fingerprints(self.conn,self.columns),self.rows)
+
+    async def test_actual_staff_routes_preserve_track1_and_require_independent_exact_count_review(self):
+        import hosted_committed_workflow as workflow
+        import hosted_staff_review as staff
+        await self.run_install()
+        fixture=await workflow.run(self.dsn)
+        result=await staff.run(self.dsn,fixture['temporaryStore'],fixture['actualReportParams'])
+        self.assertTrue(result['track1Unchanged'])
+        self.assertTrue(result['independentAuthorReviewHeld'])
+        self.assertEqual(result['actualFoodCost'],'55.00')
+        self.assertEqual((result['submissions'],result['decisions']),(2,1))
+        exclusion={('public','stores'):('id',fixture['temporaryStore']),
+            ('public','items'):('code',fixture['inventedItemCode']),
+            ('public','store_items'):('store_id',fixture['temporaryStore']),
+            ('public','store_state'):('store_id',fixture['temporaryStore']),
+            ('public','activity_log'):('user_id',result['activityActorIds'])}
+        after=await preservation.fingerprints(self.conn,self.columns,exclude_synthetic=exclusion)
+        self.assertEqual([name for name in self.rows if after[name]!=self.rows[name]],[])
 
     async def test_lost_commit_acknowledgement_is_unknown_until_independently_reconciled(self):
         with self.assertRaises(installer.InstallFailure) as error:

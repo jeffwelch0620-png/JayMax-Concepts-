@@ -3,6 +3,11 @@
 October 8, 2026. Local continuation on `codex/deployment-reconciliation-review`.
 PR14–16 remain draft and unmerged; this continuation has not been pushed.
 
+Subsequent evidence: the [hosted staff count/review checkpoint](HOSTED_STAFF_REVIEW_CHECKPOINT.md)
+now records application-route validation, fresh-pool replay and the corrected
+nested staff audit projection. Remaining statements below describe this earlier
+installation checkpoint; the newer report identifies the still-open gates.
+
 ## Confirmed installation
 
 The owner designated the existing connected Supabase project for build testing.
