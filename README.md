@@ -1,5 +1,29 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Manager workflows and retained history - October 8, 2026
+
+**Twenty-two selected local checks pass**: eight manager workflow cases, seven
+profile/fixture/verifier cases and seven inventory regressions.
+Roster creation now honors `active=false`, and
+malformed roster IDs are held by UUID validation. Candidate permissions add four
+history-table reads and DELETE on unused recipe/roster definitions; native journal
+deletion remains denied.
+
+Manager tests cover all seven retained recipe-reference types, stale/concurrent
+edits, late-failure rollback, store-specific supplier prices and item retirement,
+roster history, and assignment/deletion races. Tested reports and accounting facts
+remain unchanged: Track 1 is independent of prep and sales. The 94 function and
+123 relation contracts, all 29 migration hashes and protected original 40-path
+continuation remain intact. Read the
+[manager checkpoint](docs/RUNTIME_MANAGER_WORKFLOW_CHECKPOINT.md) for the exact
+permission delta, evidence, retained failures and limits.
+
+This is a local candidate; unused privileges and remaining routes still need
+review. Hosted catalog reconciliation and actual runtime LOGIN/pool behavior,
+browser/Data API exposure, managed recovery and matched deployment flags remain
+open. No Supabase permissions changed; no push, merge or publication occurred.
+**Continue holding merges.** Older sections below are historical checkpoints.
+
 ## Read-only runtime permissions and drift checks - October 8, 2026
 
 **Fourteen selected local checks pass**: six permission-verifier cases, seven

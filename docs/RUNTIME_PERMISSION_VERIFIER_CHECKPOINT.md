@@ -1,5 +1,9 @@
 # Runtime permission narrowing and read-only verifier
 
+Historical checkpoint. The subsequent [manager workflow checkpoint](RUNTIME_MANAGER_WORKFLOW_CHECKPOINT.md)
+reviews four additional history reads and two definition DELETE permissions.
+Its deliberate matrix-pin update leaves the function/relation reference unchanged.
+
 October 8, 2026. Local candidate only. No hosted query, role/grant/policy change,
 real invoice import, feature-flag file change, push, merge or publication in this
 step. The earlier [workflow checkpoint](RUNTIME_PERMISSION_WORKFLOW_CHECKPOINT.md)

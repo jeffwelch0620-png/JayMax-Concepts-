@@ -566,7 +566,7 @@
       "trigger": true
     }
   },
-  "permissionMatrixSha256": "a31366bdd6fd2094db36e1101ec86b231865d0c3ca33862e4e765758efc468a3",
+  "permissionMatrixSha256": "f2e134445020d7464ef90f4a156e1c26a941d92803bdb299b8b985726b10eae8",
   "postgresMajor": 17,
   "provenance": "Independent invented loopback database; reviewed public reference plus all 29 native migrations; no target catalog accepted as baseline",
   "publicSchemaSha256": "ba53f9c7a731eb471b34a2f36b1b75b30fa45f614e292af86b69eebef1ed6cb2",

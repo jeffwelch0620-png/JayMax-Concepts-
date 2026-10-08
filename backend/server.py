@@ -5150,12 +5150,12 @@ async def pg_create_staff_member(store_id: str, body: PgStaffMemberIn, request: 
     _require_manager(request)
     name = _pg_validate_staff_member(body)
     row = await db_pg.pool().fetchrow(
-        "INSERT INTO staff_members (store_id, name, role, active) VALUES ($1,$2,$3,TRUE) RETURNING *",
-        store_id, name, body.role)
+        "INSERT INTO staff_members (store_id, name, role, active) VALUES ($1,$2,$3,$4) RETURNING *",
+        store_id, name, body.role, body.active)
     return _pg_staff_member_to_api(row)
 
 @pg_router.put("/staff/{store_id}/members/{staff_id}")
-async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemberIn, request: Request):
+async def pg_update_staff_member(store_id: str, staff_id: uuid.UUID, body: PgStaffMemberIn, request: Request):
     check_store_id(store_id)
     _require_manager(request)
     name = _pg_validate_staff_member(body)
@@ -5167,12 +5167,12 @@ async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemb
     return _pg_staff_member_to_api(row)
 
 @pg_router.delete("/staff/{store_id}/members/{staff_id}")
-async def pg_delete_staff_member(store_id: str, staff_id: str, request: Request):
+async def pg_delete_staff_member(store_id: str, staff_id: uuid.UUID, request: Request):
     check_store_id(store_id)
     _require_manager(request)
     async with db_pg.pool().acquire() as conn:
         if await conn.fetchval("SELECT to_regclass('prep_inventory.task_assignments') IS NOT NULL"):
-            if await conn.fetchval('SELECT 1 FROM prep_inventory.task_assignments WHERE staff_member_id=$1 AND store_id=$2', uuid.UUID(staff_id),store_id):
+            if await conn.fetchval('SELECT 1 FROM prep_inventory.task_assignments WHERE staff_member_id=$1 AND store_id=$2', staff_id,store_id):
                 raise HTTPException(409, 'This roster identity has assignment history. Set it inactive to retain that history.')
     try:
         await db_pg.pool().execute("DELETE FROM staff_members WHERE id=$1 AND store_id=$2", staff_id, store_id)

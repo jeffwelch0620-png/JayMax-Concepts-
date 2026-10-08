@@ -24,14 +24,16 @@ PRIVATE_UPDATES = {
 PUBLIC = {
     'stores': ('SELECT',), 'items': ('SELECT', 'INSERT', 'UPDATE'),
     'store_items': ('SELECT', 'INSERT', 'UPDATE'), 'vendor_items': ('SELECT', 'INSERT', 'UPDATE'),
-    'vendors': ('SELECT', 'INSERT', 'UPDATE'), 'dishes': ('SELECT', 'INSERT', 'UPDATE'),
+    'vendors': ('SELECT', 'INSERT', 'UPDATE'), 'dishes': ('SELECT', 'INSERT', 'UPDATE', 'DELETE'),
     'dish_lines': ('SELECT', 'INSERT', 'UPDATE', 'DELETE'), 'prep_items': ('SELECT', 'INSERT', 'UPDATE'),
-    'staff_members': ('SELECT', 'INSERT', 'UPDATE'), 'store_state': ('SELECT', 'INSERT', 'UPDATE'),
+    'staff_members': ('SELECT', 'INSERT', 'UPDATE', 'DELETE'), 'store_state': ('SELECT', 'INSERT', 'UPDATE'),
     'activity_log': ('SELECT', 'INSERT'), 'purchase_orders': ('SELECT', 'INSERT', 'UPDATE'),
     'purchase_order_lines': ('SELECT', 'INSERT', 'UPDATE', 'DELETE'),
     'invoices': ('SELECT',), 'invoice_lines': ('SELECT',), 'prep_logs': ('SELECT',),
     'count_sessions': ('SELECT',), 'count_lines': ('SELECT',), 'reporting_periods': ('SELECT',),
     'store_vendor_contacts': ('SELECT',), 'staff_pins': ('SELECT',),
+    'prep_list_lines': ('SELECT',), 'prep_recipe_stock': ('SELECT',),
+    'prep_overrides': ('SELECT',), 'par_recommendations': ('SELECT',),
 }
 SCHEMAS = ('public', 'integrations', *readiness.PRIVATE)
 TABLE_PRIVILEGES = ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN')
