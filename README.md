@@ -7,6 +7,11 @@ test-configuration fixes,
 their validation, and remaining review work.
 PRs 14–16 remain draft and unmerged; hosted development validation is still pending.
 
+Current PR15 correction checks: **359 frontend tests / 44 suites** pass in default and
+native configurations; **28 selected backend checks** and **four final recipe rechecks**
+pass. The production build passes with three existing hook warnings. Checkpoint evidence
+below describes the original snapshots, before the review corrections.
+
 ## Published workflow checkpoint — October 7, 2026
 
 [Draft PR #15 — supplier, order and prep execution workflows](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/15)
@@ -59,7 +64,7 @@ All original invoice fields remain preserved by the foundation, including fields
 current mapped output. No real invoices were imported for these checkpoints. Incomplete
 analytics must disclose missing coverage before claiming an unexplained variance.
 
-### Latest verification and preserved snapshot
+### Original workflow checkpoint verification and preserved snapshot
 
 | Check | Recorded result and limit |
 |---|---|
