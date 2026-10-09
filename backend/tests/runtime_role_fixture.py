@@ -104,7 +104,10 @@ class RuntimeRoleMixin:
         server_bound=server.db_pg._pool is old_pool
         await old_pool.close()
         dsn=os.environ['NATIVE_PURCHASE_TEST_DSN'].rsplit('/',1)[0]+'/'+self.db
-        async def setup(conn):await role_setup(conn,self.runtime_role)
-        self.pool=await asyncpg.create_pool(dsn,min_size=1,max_size=5,init=db_pg._init_connection,setup=setup)
+        self.pool=await self.runtime_pool(dsn)
         # Actual server fixtures hold a direct pool reference in addition to routers.
         if server_bound:server.db_pg._pool=self.pool
+
+    async def runtime_pool(self,dsn):
+        async def setup(conn):await role_setup(conn,self.runtime_role)
+        return await asyncpg.create_pool(dsn,min_size=1,max_size=5,init=db_pg._init_connection,setup=setup)

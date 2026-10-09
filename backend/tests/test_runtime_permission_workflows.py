@@ -34,8 +34,7 @@ class RuntimePhysicalTests(permissions.RuntimeRoleMixin,deployment.DeploymentRea
                 self.assertEqual(await conn.fetchval('SELECT count(*) FROM actual_inventory.period_closures'),5)
                 self.assertEqual(await conn.fetchval('SELECT count(*) FROM actual_inventory.active_period_closures'),2)
             await self.pool.close()
-            async def setup(conn):await permissions.role_setup(conn,self.runtime_role)
-            self.pool=await asyncpg.create_pool(self.source,min_size=1,max_size=3,init=db_pg._init_connection,setup=setup)
+            self.pool=await self.runtime_pool(self.source)
             c=fixture['correction']['correction']
             body={**c['reviewed_plan']['review'],'expected_plan_hash':c['reviewed_plan']['planHash'],
                 'expected_initial_batch_id':c['initial_batch_id'],'expected_correction_id':None}

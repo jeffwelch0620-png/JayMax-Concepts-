@@ -1,5 +1,24 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Restricted LOGIN workflows and permanent connection plan - October 8, 2026
+
+**26 selected backend workflows pass through ordinary restricted database LOGIN**,
+with seven passing subtests; four static safeguards and five tampering subtests
+also pass. Each workflow checks five clients in a newly created pool. Wrong
+passwords and attempts to assume the database owner are rejected. The disposable
+local server's original authentication file is restored and the server stops.
+Older retained test databases/roles remain intact; this run leaves no extra ones.
+
+The saved owner connection cannot yet be replaced directly: account and push
+queries currently share the inventory pool, but their tables are deliberately
+excluded from its permission profile. The prepared recommendation is a separate,
+narrow backend connection to those tables in the same PostgreSQL database.
+See the [connection/workflow checkpoint](docs/RUNTIME_CONNECTION_WORKFLOW_CHECKPOINT.md)
+for the exact coverage, access map, tradeoffs and remaining checks. The inventory
+matrix, both catalog references and all 29 migration hashes remain unchanged.
+No permanent credential, hosted data/configuration change, push or merge occurs
+in this checkpoint. **Continue holding merges.**
+
 ## Hosted catalog and ordinary database login - October 8, 2026
 
 The hosted catalog now matches an independent reconstruction from the retained

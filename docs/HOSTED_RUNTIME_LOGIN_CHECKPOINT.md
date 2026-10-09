@@ -138,3 +138,8 @@ temporary trial role is not a deployment credential.
 
 Supabase documents [custom role usernames and session pooling](https://supabase.com/docs/guides/database/connecting-to-postgres)
 and [custom LOGIN support without separate pooler registration](https://supabase.com/docs/guides/troubleshooting/fatal-password-authentication-failed).
+
+The [following connection/workflow checkpoint](RUNTIME_CONNECTION_WORKFLOW_CHECKPOINT.md)
+adds 26 passing local password-authenticated workflow checks and prepares the
+separate account/notification connection boundary. It preserves this hosted
+catalog reference and does not deploy permanent credentials.
