@@ -15,7 +15,7 @@ PRIVATE_UPDATES=candidate.PRIVATE_UPDATES
 PUBLIC=candidate.PUBLIC
 manifest=candidate.manifest
 
-async def apply(conn,role):
+async def apply(conn,role,reference='local'):
     address=await conn.fetchval('SELECT inet_server_addr()::text')
     database=await conn.fetchval('SELECT current_database()')
     if address!='127.0.0.1/32' and address!='127.0.0.1':raise ValueError('Runtime fixture requires loopback')
@@ -25,7 +25,7 @@ async def apply(conn,role):
     if not flags or any(flags.values()):raise ValueError('Unprivileged role required')
     profile=manifest();present=[]
     allowed=candidate.table_privileges(profile)
-    expected=candidate.contract(profile)
+    expected=candidate.contract(profile,reference)
     async with conn.transaction(readonly=True):
         await conn.execute('SET LOCAL search_path=pg_catalog')
         live=await candidate.catalog_contracts(conn)

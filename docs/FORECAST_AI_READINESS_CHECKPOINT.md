@@ -1,5 +1,9 @@
 # Manual forecasts and retained AI conversation history
 
+The subsequent [hosted runtime checkpoint](HOSTED_RUNTIME_LOGIN_CHECKPOINT.md)
+records independent hosted-catalog reconciliation and ordinary database LOGIN
+work. The results below remain the preceding local planning/history checkpoint.
+
 October 8, 2026. Extends local commit
 `36d4fe8dc7c35ddb5967ab1676b6c861cb70953c`. Local review and invented tests only;
 no Supabase query, hosted grants, real invoice import, provider request, flag-file

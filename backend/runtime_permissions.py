@@ -11,6 +11,21 @@ import deployment_readiness as readiness
 
 MANIFEST = readiness.ROOT / 'docs/RUNTIME_PERMISSION_CANDIDATE.json'
 CONTRACT = readiness.ROOT / 'docs/RUNTIME_CATALOG_CONTRACT.json'
+HOSTED_CONTRACT = readiness.ROOT / 'docs/HOSTED_RUNTIME_CATALOG_CONTRACT.json'
+HOSTED_SCHEMA_EXPORT = 'b41b50cdec7eeef316c2df94249855aeff89a78c4255df8b79cfcbd70bfffbf3'
+HOSTED_CATALOG_SHA256 = 'dd7729de33e17a26b6b5f9c75b5f5484618e847a185e36c5c25232fe94313302'
+HOSTED_DELTA = {
+    'functions': {
+        'added': ['public.jmax_toast_enable_daily_sync(text)', 'public.jmax_toast_read_day(text, date)'],
+        'missing': [],
+        'changed': ['public.jmax_toast_finish_sync(uuid, text, integer, text)', 'public.jmax_toast_start_sync(text, date, date)',
+                    'public.jmax_toast_store_payloads(uuid, jsonb)', 'public.jmax_touch_updated_at()'],
+    },
+    'relations': {
+        'added': ['integrations.toast_location_map', 'integrations.toast_report_payloads', 'integrations.toast_sync_runs', 'public.item_price_history'],
+        'missing': [], 'changed': [],
+    },
+}
 READ_ONLY_TABLES = {
     'purchasing.base_units', 'purchasing.legacy_supplier_contacts',
     'prep_inventory.legacy_planning_sources', 'prep_inventory.legacy_count_sources',
@@ -121,7 +136,7 @@ async def catalog_contracts(conn):
     return {'functions': functions, 'relations': relations}
 
 
-def contract(profile):
+def contract(profile, reference='local'):
     value = json.loads(CONTRACT.read_text())
     if value.get('format') != 'jaymax-runtime-catalog-contract-v1' or value.get('sourceProfileSha256') != digest(profile):
         raise ValueError('Unreviewed catalog contract')
@@ -129,10 +144,27 @@ def contract(profile):
         raise ValueError('Reviewed permission matrix drift')
     if value.get('publicSchemaSha256') != hashlib.sha256((readiness.ROOT / 'supabase/schema.sql').read_bytes()).hexdigest():
         raise ValueError('Reviewed public reference drift')
-    return value
+    if reference == 'local':
+        return value
+    if reference != 'hosted_build':
+        raise ValueError('Select an explicitly reviewed catalog reference')
+    hosted = json.loads(HOSTED_CONTRACT.read_bytes())
+    if (hosted.get('format') != value['format'] or hosted.get('basis') != 'archived_hosted_schema'
+            or hosted.get('schemaExportSha256') != HOSTED_SCHEMA_EXPORT
+            or digest({key: hosted.get(key) for key in ('functions', 'relations')}) != HOSTED_CATALOG_SHA256
+            or hosted.get('localFrozenContractSha256') != digest(value)
+            or any(hosted.get(key) != value.get(key) for key in ('sourceProfileSha256', 'permissionMatrixSha256', 'publicSchemaSha256', 'postgresMajor'))):
+        raise ValueError('Unreviewed hosted catalog reference')
+    for group in ('functions', 'relations'):
+        old, new = value[group], hosted[group]
+        delta = {'added': sorted(new.keys()-old.keys()), 'missing': sorted(old.keys()-new.keys()),
+                 'changed': sorted(key for key in old.keys() & new.keys() if old[key] != new[key])}
+        if delta != HOSTED_DELTA[group] or hosted.get('differencesFromLocalReference', {}).get(group) != delta:
+            raise ValueError('Unreviewed hosted catalog delta')
+    return hosted
 
 
-async def inspect(conn, role):
+async def inspect(conn, role, reference='local'):
     """Assess a named role without SET ROLE, DDL, grants, business reads or writes.
 
     A catalog-reader connection may assess a different runtime role. Its identity
@@ -142,7 +174,7 @@ async def inspect(conn, role):
     if conn.is_in_transaction():
         raise ValueError('Dedicated connection outside a transaction required')
     profile = manifest()
-    expected = contract(profile)
+    expected = contract(profile, reference)
     allowed = table_privileges(profile)
     issues = []
     def issue(kind, name, privilege=None):
@@ -282,4 +314,4 @@ async def inspect(conn, role):
             'readOnly': readonly, 'catalogReader': reader, 'assessedRole': role,
             'issues': sorted(issues, key=lambda value: json.dumps(value, sort_keys=True)),
             'operationalReleaseApproved': False, 'hostedRoleLoginVerified': False,
-            'candidatePublication': profile['publication'], 'contractSha256': digest(expected)}
+            'candidatePublication': profile['publication'], 'catalogReference': reference, 'contractSha256': digest(expected)}

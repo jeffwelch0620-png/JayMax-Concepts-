@@ -1,5 +1,25 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Hosted catalog and ordinary database login - October 8, 2026
+
+The hosted catalog now matches an independent reconstruction from the retained
+pre-native schema-only export and exact 29-file migration chain. Its extra Toast
+groundwork and legacy price-history table are preserved. The original local
+94-function/123-relation reference remains unchanged; a separately pinned hosted
+variant contains 96 functions and 127 relations and requires explicit selection.
+
+Three static checks and both local catalog-reader/nonowner assessments pass.
+The hosted LOGIN/pool trial also passes: ten independently authenticated clients
+across two fresh pools, with a complete restricted-role permission assessment.
+The temporary roles and their grants are removed; an independent read-only check
+confirms cleanup and the unchanged hosted catalog. Trial and cleanup
+evidence are recorded in the
+[hosted runtime checkpoint](docs/HOSTED_RUNTIME_LOGIN_CHECKPOINT.md). This work
+does not deploy a permanent runtime account or change the app's connection,
+feature flags, invoice data or integration activity. **Continue holding merges**
+for the remaining workflow, browser/Data API, managed recovery, configuration
+and sequential PR checks. Older sections preserve earlier checkpoint results.
+
 ## Forecast and AI history review - October 8, 2026
 
 **Seven selected backend checks and all 494 frontend tests pass** across 61
