@@ -147,3 +147,9 @@ expected prep appends and synthetic state revision changes from preserved
 accounting facts, earlier prep history and other locations' state values.
 Safe receipts, all reconciled holds and the six-test XML are included in the
 chained local review package. Private configuration remains excluded.
+
+The subsequent [credential recovery checkpoint](BUILD_CREDENTIAL_RECOVERY_CHECKPOINT.md)
+passed replacement authentication, old-password rejection and pool reconnects,
+but held on the combined hosted LOGIN-disable response. Both original credentials
+and the complete baseline are restored. Eight guards pass. Read-only pooler-log
+and direct-connection diagnosis is next; active settings and merge holds remain.

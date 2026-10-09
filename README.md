@@ -1,5 +1,21 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Credential rotation checks and recovered hold - October 9, 2026
+
+Replacement credential authentication, rejection of both old credentials and
+reconnection of both pools passed. The combined hosted LOGIN-disable check held
+on internal pooler errors, including its bounded retry. Both original passwords
+and LOGIN ability were restored; fresh original-file connections and the full
+application/native, Track 1, ledger, catalog/access and role baseline passed.
+Replacement files remain inactive, and eight local guards pass.
+
+The [credential recovery checkpoint](docs/BUILD_CREDENTIAL_RECOVERY_CHECKPOINT.md)
+records all recovered holds and the isolated inventory authorization-denial test.
+Next: read-only pooler-log/direct-connection diagnosis before another rotation.
+Account-role disable and later checks remain unrun. **Continue holding merges**;
+active application settings, schema/migrations and application routing are unchanged.
+
+
 ## Enabled hosted workflows with retained LOGINs - October 9, 2026
 
 Selected account, manual-forecast and prep workflows now pass through the retained
