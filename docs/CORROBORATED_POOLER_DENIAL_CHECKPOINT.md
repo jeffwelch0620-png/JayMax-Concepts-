@@ -1,5 +1,11 @@
 # Independently corroborated pooler denial
 
+Follow-up: the [combined rehearsal](COMBINED_ROTATION_REHEARSAL_CHECKPOINT.md)
+verifies both per-role comparisons under temporary credentials, but the complete
+rotation/recovery exercise holds. Original pooled access and the full data baseline
+are separately verified after recovery. This passing isolated contract remains
+valid within its bounded scope; it does not clear the combined or release gates.
+
 October 9, 2026. Local review branch only. Contract:
 `jaymax-corroborated-pooler-denial-v1`. Hosted receipt:
 `corroborated-pooler-denial-20261009T2145358003693Z.json`.

@@ -1,5 +1,13 @@
 # Retained build credential rotation and recovery — October 9, 2026
 
+Later evidence: the [combined rehearsal checkpoint](COMBINED_ROTATION_REHEARSAL_CHECKPOINT.md)
+passes old-password rejection, actual pool reconnection and both corroborated
+NOLOGIN comparisons, then holds before verified completion. Separate read-only
+checks verify the original session-pooler credentials, temporary-password rejection
+and full application/Track 1/ledger/role baseline. Direct connections later timed
+out. The combined gate and these historical held receipts remain held; temporary
+configuration is inactive and original application credentials remain current.
+
 Follow-up: the [read-only pooler diagnosis](POOLER_DIAGNOSIS_CHECKPOINT.md)
 verifies direct access for both original LOGINs and records the exact dashboard
 EAUTHQUERY event with its missing role attribution. The combined hold below

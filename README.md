@@ -1,5 +1,25 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Combined rehearsal held; original pooled access and data verified - October 9, 2026
+
+Temporary credentials authenticated, old passwords were rejected, both actual
+application pools reconnected, and both controlled NOLOGIN comparisons passed.
+The complete rehearsal then held on password-authentication/recovery verification.
+Separate read-only checks verify both original application credentials, rejection
+of temporary passwords and preservation of all 120 table/sequence fingerprints,
+13 catalog groups, Track 1, the complete ledger and original role attributes.
+Direct connections later timed out; the application session-pooler path is verified.
+
+Original private configuration remains current. Temporary credentials are inactive.
+Fifty-eight guards and 101 subtests pass. The
+[combined rehearsal checkpoint](docs/COMBINED_ROTATION_REHEARSAL_CHECKPOINT.md)
+preserves the held attempt, separate recovery evidence, exact hosted source and
+locally tested recovery refinements. No further password rotations were run.
+
+Next: review parallel new-role rotation and direct-path reliability before another
+credential mutation, then finish the deployment/PR checklist. **Keep merges and
+active cutover held.** Local only; nothing pushed, merged or deployed.
+
 ## Corroborated pooler denial verified for both roles - October 9, 2026
 
 The controlled accounts and inventory comparisons pass under the new versioned
