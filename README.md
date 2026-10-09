@@ -1,5 +1,17 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Isolated LOGIN revocation hold - October 9, 2026
+
+The owner confirmed inventory NOLOGIN and direct PostgreSQL rejected a fresh
+client, but the session pooler accepted a fresh client as that role after 15
+seconds. The role was restored immediately and both original accounts reconnected
+on both paths. The test stopped before disabling the account role. Passwords,
+business data, application settings and the strict combined probe are unchanged.
+Four local classification guards pass. See the
+[isolated comparison checkpoint](docs/ISOLATED_LOGIN_COMPARISON_CHECKPOINT.md).
+**Continue holding merges and active cutover.** Review the intended direct/pooler
+connection and exact-role retirement behavior before another combined rotation.
+
 ## Read-only pooler diagnosis - October 9, 2026
 
 Both original retained LOGINs authenticate directly to PostgreSQL over IPv6.

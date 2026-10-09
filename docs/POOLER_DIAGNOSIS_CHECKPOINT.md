@@ -1,5 +1,10 @@
 # Read-only connection diagnosis — October 9, 2026
 
+Follow-up: the [isolated comparison](ISOLATED_LOGIN_COMPARISON_CHECKPOINT.md)
+observed a fresh pooler client accepted while direct PostgreSQL rejected the
+confirmed NOLOGIN inventory role. The test restored access and held; the earlier
+EAUTHQUERY hypothesis must not substitute for this observed revocation limit.
+
 Direct PostgreSQL access over IPv6 works from this build computer for both
 retained inventory and account LOGINs. The original private connection file
 remains current. No credentials, roles, business rows or active application
