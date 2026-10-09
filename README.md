@@ -1,5 +1,27 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Unclassified prep-list history - October 8, 2026
+
+**Four selected backend checks and all 469 frontend tests pass** across 57
+frontend suites. The production build passes with existing warnings. A separate
+read-only Prep History view preserves every stored
+header/line field and exact decimal strings. Missing track values remain
+Unclassified; other recorded count types remain distinct. No current recipe/price
+joins or historical-to-current assignments are introduced. Tested Track 1 reports
+and all eight accounting fact fingerprints remain unchanged.
+
+No permissions or schema constraints change: all 29 migration hashes, 94 function
+contracts, 123 relation contracts and the protected original 40-path continuation
+remain intact. See the [prep-list history checkpoint](docs/PREP_LIST_ARCHIVE_CHECKPOINT.md)
+for filtering, pagination, retained failed attempts, validation and limitations.
+This closes the unclassified archive-access item recorded below.
+
+No Supabase change, real invoice import, flag-file change, push, merge or
+publication occurred. Remaining route/minimum-grant review, approved hosted catalog
+reconciliation and runtime LOGIN/pool testing, browser/Data API, managed recovery
+and matched flags remain open. **Continue holding merges.** Older sections retain
+their checkpoint-specific evidence.
+
 ## Employee task cutover and archive permissions - October 8, 2026
 
 **Thirteen selected backend checks and all 460 frontend tests pass** across
@@ -19,8 +41,9 @@ All 29 migration hashes, 94 function contracts, 123 relation contracts and the
 protected original 40-path continuation are preserved. Read the
 [task cutover checkpoint](docs/RUNTIME_TASK_CUTOVER_CHECKPOINT.md) for exact grants,
 successful evidence, retained test-fixture failures and source helper references.
-Unclassified legacy prep lists still need an archive-access review; their NULL
-track values are preserved rather than guessed.
+At that checkpoint unclassified legacy prep lists still needed archive-access
+review. The subsequent prep-list history checkpoint above closes that item while
+preserving NULL track values.
 
 No Supabase query/grant change, real invoice import, flag-file change, push, merge
 or publication occurred. Remaining route/minimum-grant review, hosted catalog

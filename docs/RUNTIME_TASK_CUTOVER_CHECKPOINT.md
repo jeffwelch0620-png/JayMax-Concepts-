@@ -1,5 +1,9 @@
 # Retained employee tasks and archive permissions
 
+Follow-up: [stored prep-list history](PREP_LIST_ARCHIVE_CHECKPOINT.md) closes this
+checkpoint's unclassified-list access item. The evidence and remaining holds below
+describe the earlier task-cutover checkpoint.
+
 October 8, 2026. Extends local commit
 `24869fe703fad6051a076682d1cd043019ba81c3`. This step does not query or change
 Supabase, import real invoices, edit deployment flags, push, merge or publish.

@@ -348,6 +348,7 @@ export const pgCountHistory = (storeId) => axios.get(`${PG_API}/prepcount/${stor
 
 // ---- Prep: lists ----
 export const pgGetPrepList = (storeId, date, track = "daily") => axios.get(`${PG_API}/preplists/${storeId}`, { params: { date, track } }).then((r) => r.data);
+export const prepListArchive = (rid, params = {}) => USE_PG ? axios.get(`${PG_API}/prep-list-archive/${pgStoreId(rid)}`, { params }).then(r => r.data) : retiredWorkflow("Historical PostgreSQL lists require PostgreSQL mode.");
 export const pgGeneratePrepList = (storeId, date, track = "daily") => axios.post(`${PG_API}/preplists/${storeId}/generate`, { date, track }).then((r) => r.data);
 export const pgUpdatePrepList = (storeId, id, tasks) => axios.put(`${PG_API}/preplists/${storeId}/${id}`, { tasks }).then((r) => r.data);
 export const pgReleasePrepList = (storeId, id, releasedBy) => axios.post(`${PG_API}/preplists/${storeId}/${id}/release`, { releasedBy }).then((r) => r.data);

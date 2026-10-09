@@ -5599,6 +5599,8 @@ async def pg_push_unsubscribe(store_id: str, body: PgPushUnsubscribeIn, request:
 
 app.include_router(api_router)
 app.include_router(pg_router)
+import prep_list_archive
+app.include_router(prep_list_archive.create_router(db_pg.pool, check_store_id, _require_manager, lambda: USE_PG))
 
 # Purchase authorization is explicit even when development disables blanket auth.
 import purchase_api
