@@ -132,3 +132,12 @@ temporary removed trial roles are not deployment credentials. Browser/Data API
 acceptance, matched frontend/server flags, managed Auth/Storage/Vault recovery
 and sequential PR stack revalidation remain open. Continue holding merges.
 This is a local review checkpoint; nothing is pushed, merged or published.
+
+## Subsequent retained connection setup
+
+The [private build connection checkpoint](PRIVATE_BUILD_CONNECTIONS_CHECKPOINT.md)
+now provisions and validates retained inventory/account LOGINs and stages their
+secrets in the selected access-restricted local configuration. It preserves the
+previous temporary-trial evidence and frozen references. The active application
+is not switched; enabled workflows, rotation/recovery and remaining release gates
+still need validation. Keep holding merges.

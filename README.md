@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Retained build connections in private local configuration - October 9, 2026
+
+Two retained build LOGINs and their reviewed grants/policies are now provisioned.
+Their connection file is staged outside Git in an access-restricted local folder.
+Eight simultaneous authenticated clients pass the inventory/account assessments
+and deny prohibited cross-boundary reads; four local provisioning guards pass.
+Independent verification confirms pre-existing permissions/policies and the
+catalog, migration ledger and observed counts are preserved. No business rows
+are written, and active application settings/feature flags are unchanged.
+
+The [private build connection checkpoint](docs/PRIVATE_BUILD_CONNECTIONS_CHECKPOINT.md)
+records safe evidence, the retained initial ACL-check hold and the next controlled
+workflow/rotation/recovery steps. Credentials and owner configuration are excluded
+from shared review artifacts. The inventory matrix, application routing/pools,
+catalog references and all 29 migration hashes remain unchanged. **Continue
+holding merges** until enabled-workflow, recovery and remaining deployment checks
+are completed.
+
 ## Hosted two-pool verification - October 9, 2026
 
 The hosted build trial passes with **16 authenticated clients** across two fresh
