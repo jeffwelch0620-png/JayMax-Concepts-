@@ -1,5 +1,11 @@
 # Controlled NOLOGIN and owned pooler-client drain
 
+Follow-up: the separate [corroborated denial checkpoint](CORROBORATED_POOLER_DENIAL_CHECKPOINT.md)
+passes for accounts and inventory under a new, versioned contract with independent
+owner/direct/owned-connection/peer/recovery witnesses. Full recovery preservation
+passes. This native-only receipt retains its original held status; the combined
+rotation/recovery gate remains held.
+
 October 9, 2026. Local review branch only. Initial receipt:
 `owned-pooler-drain-20261009T2119254300057Z.json`.
 The final trial receipt is `owned-pooler-drain-20261009T2129233178790Z.json`.

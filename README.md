@@ -1,5 +1,24 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Corroborated pooler denial verified for both roles - October 9, 2026
+
+The controlled accounts and inventory comparisons pass under the new versioned
+denial contract. Each exact role was confirmed NOLOGIN, rejected fresh direct
+access, and rejected both fresh pooler requests after closing only its verified
+owned test connection. The exact provider lookup response qualifies only with
+independent witnesses; arbitrary internal errors remain held. The native-only
+strict-pass flags and historical held receipts retain their original meaning.
+
+Both unchanged original credentials and LOGINs are restored. All 120 table/sequence
+fingerprints, 13 catalog groups, Track 1, the complete ledger and original role
+attributes are preserved. Thirty-four guards and 73 subtests pass. The
+[corroborated denial checkpoint](docs/CORROBORATED_POOLER_DENIAL_CHECKPOINT.md)
+records the measured results, acceptance contract and limits.
+
+Next: integrate this narrow qualification into the combined credential rotation,
+pool-reconnect and recovery probe, then verify that workflow separately.
+**Continue holding merges and active cutover.** Local only; no push or deployment.
+
 ## Controlled pooler drain and recovered hold - October 9, 2026
 
 The owner confirmed inventory NOLOGIN, direct PostgreSQL returned the known 28000
