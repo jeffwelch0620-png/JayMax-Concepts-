@@ -8,6 +8,7 @@ import asyncpg
 from fastapi import HTTPException
 import db_pg
 import auxiliary_permissions
+from db_tls import connection_tls
 
 logger = logging.getLogger(__name__)
 _pool = None
@@ -36,10 +37,9 @@ def same_target(primary, auxiliary):
 async def _try_connect(url):
     candidate = None
     try:
-        local = urlsplit(url).hostname in ('127.0.0.1', '::1', 'localhost')
         candidate = await asyncio.wait_for(asyncpg.create_pool(
-            url, min_size=1, max_size=3, statement_cache_size=0, init=db_pg._init_connection,
-            ssl=None if local else 'require', timeout=db_pg.CONNECT_TIMEOUT,
+            url, min_size=1, max_size=2, statement_cache_size=0, init=db_pg._init_connection,
+            ssl=connection_tls(url), timeout=db_pg.CONNECT_TIMEOUT,
             command_timeout=30), db_pg.CONNECT_TIMEOUT + 5)
         async with candidate.acquire() as conn:
             report = await auxiliary_permissions.inspect(conn)

@@ -1,5 +1,21 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Verified TLS and hosted-to-local recovery plan - October 9, 2026
+
+Both reviewed application pools now require certificate and hostname verification
+for remote PostgreSQL, use conservative two-connection caps, and safely hold failed
+connections. Fifteen local tests and both hosted read-only pool checks pass. The
+session pooler on 5432 remains the connection plan; no paid IPv4 add-on, credential
+change, private configuration activation or deployment occurred.
+
+The [TLS checkpoint](docs/TLS_AND_LOCAL_BACKUP_CHECKPOINT.md) records the evidence
+and corrects the earlier pooler/backend SSL measurement. The
+[local recovery workflow](docs/HOSTED_TO_LOCAL_BACKUP_WORKFLOW.md) covers all three
+inventory tracks, original source fields, integration data and migration history.
+This is a prepared workflow: the current hosted encrypted export/restore trial is
+still pending. **Merges and active cutover remain held** on the separate credential
+retirement/recovery and release gates. This checkpoint is local only.
+
 ## Isolated LOGIN revocation hold - October 9, 2026
 
 The owner confirmed inventory NOLOGIN and direct PostgreSQL rejected a fresh

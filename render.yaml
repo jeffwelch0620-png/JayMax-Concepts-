@@ -18,7 +18,7 @@ services:
       # Supabase only: the backend never connects to MongoDB in this mode.
       - key: USE_PG
         value: "true"
-      - key: DATABASE_URL        # Supabase > Connect > Shared pooler (Transaction mode)
+      - key: DATABASE_URL        # Supabase > Connect > Shared pooler (Session mode, 5432)
         sync: false
       - key: AUTH_REQUIRED
         value: "true"
