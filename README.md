@@ -1,5 +1,15 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Read-only pooler diagnosis - October 9, 2026
+
+Both original retained LOGINs authenticate directly to PostgreSQL over IPv6.
+The hosted pooler log identifies an EAUTHQUERY lookup failure during the held
+disable interval, but its detail does not identify the role. The
+[diagnostic checkpoint](docs/POOLER_DIAGNOSIS_CHECKPOINT.md) distinguishes observed
+evidence from the likely lookup mechanism and specifies an isolated comparison
+before another password rotation. No application connection path, credential,
+role or business data changed. **Continue holding merges and active cutover.**
+
 ## Credential rotation checks and recovered hold - October 9, 2026
 
 Replacement credential authentication, rejection of both old credentials and

@@ -1,5 +1,11 @@
 # Retained build credential rotation and recovery — October 9, 2026
 
+Follow-up: the [read-only pooler diagnosis](POOLER_DIAGNOSIS_CHECKPOINT.md)
+verifies direct access for both original LOGINs and records the exact dashboard
+EAUTHQUERY event with its missing role attribution. The combined hold below
+remains unresolved; historical direct-access uncertainty is superseded only by
+that later diagnostic evidence.
+
 **Rotation authentication/reconnect checks passed; combined LOGIN-disable recovery
 remains held.** Both recovered retries proved replacement authentication, old
 credential rejection and pool reconnection. The final disable check returned
