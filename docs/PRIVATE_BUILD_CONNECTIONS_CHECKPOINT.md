@@ -110,3 +110,9 @@ real invoices, push/merge a PR or publish the application. All 29 migration hash
 both frozen catalog references, the inventory permission matrix and application
 pool/routing source remain unchanged. Shared review artifacts include source and
 safe evidence only, never this credential file or the existing owner configuration.
+
+The subsequent [retained LOGIN workflow checkpoint](RETAINED_LOGIN_WORKFLOW_CHECKPOINT.md)
+passes selected enabled account, forecast and prep/replay workflows plus independent
+accounting/history preservation. Six guards pass; reconciled holds remain visible.
+Active configuration and merge holds remain unchanged. Credential rotation,
+reconnect and recovery are next.

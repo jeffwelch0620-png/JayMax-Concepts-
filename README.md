@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Enabled hosted workflows with retained LOGINs - October 9, 2026
+
+Selected account, manual-forecast and prep workflows now pass through the retained
+inventory/account connections. Prep submission/acceptance retries create exactly
+one measured batch; explicit completion and replay through a fresh connection
+pass. Account cleanup, exact forecast cents, stale-save rejection and forecast
+rollback pass. Six local probe guards also pass.
+
+Independent verification preserves all global Track 1 rows, the complete ledger,
+prior prep history and other locations' state rows. Only exact labelled new prep
+records and the test location's revision/update time are allowed; its stable
+fields are preserved. The [retained LOGIN workflow checkpoint](docs/RETAINED_LOGIN_WORKFLOW_CHECKPOINT.md)
+records passing evidence and all reconciled probe holds. Active configuration,
+application routing, schema/migrations and the permission matrix remain unchanged.
+**Continue holding merges.** Next: credential rotation/reconnect and recovery,
+then remaining browser, deployment and sequential PR checks.
+
+
 ## Retained build connections in private local configuration - October 9, 2026
 
 Two retained build LOGINs and their reviewed grants/policies are now provisioned.
