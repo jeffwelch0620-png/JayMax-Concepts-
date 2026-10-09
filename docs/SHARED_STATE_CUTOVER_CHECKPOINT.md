@@ -1,5 +1,9 @@
 # Retained adjustments and reporting periods at native cutover
 
+The subsequent local [forecast and AI-history checkpoint](FORECAST_AI_READINESS_CHECKPOINT.md)
+extends the candidate's planning/history access and records its own validation.
+The results and matrix pin below remain the evidence for this earlier checkpoint.
+
 October 8, 2026. Extends local commit
 `3966e864ab01b496de3a0bab14f607eea1ebab73`. This checkpoint is local; it does not
 query/change Supabase, import real invoices, edit flag files, push, merge or publish.

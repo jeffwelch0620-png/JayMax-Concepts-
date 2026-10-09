@@ -5,7 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 from typing import Optional, List, Annotated, Any
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from pathlib import Path
 import os, json, math, re, uuid, logging, ipaddress, io, base64, hashlib, hmac, secrets, time, asyncio
@@ -24,6 +24,8 @@ import order_commands
 import supplier_contacts
 import prep_planning
 import prep_day_tasks
+import manual_forecasts
+import ai_storage
 from menu_contract import DishIn, DishLineIn
 try:
     from pywebpush import webpush, WebPushException
@@ -1493,15 +1495,10 @@ async def delete_override(rid: str, oid: str):
     return {"ok": True}
 
 # ---------------- Projected sales ----------------
-class ProjectionIn(BaseModel):
-    date: str
-    amount: float = 0
-    note: str = ""
-    enteredBy: str = ""
+ProjectionIn = manual_forecasts.ForecastIn
 
 def _pg_projection_doc(rid, r):
-    return {"date": r["date"].isoformat(), "amount": f(r["amount"]), "note": r["note"], "enteredBy": r["entered_by"],
-            "restaurantId": rid, "updatedAt": _ts_out(r["updated_at"])}
+    return manual_forecasts.document(rid,r)
 
 async def _projections_for(rid, limit=200):
     """Newest first. Postgres: store_sales_projections, one row per store and date."""
@@ -1517,23 +1514,22 @@ async def get_projections(rid: str):
     check_rid(rid)
     return await _projections_for(rid, 60)
 
+@api_router.get("/projections/{rid}/review")
+async def review_projection(rid: str, date: date):
+    check_rid(rid)
+    if not USE_PG:raise HTTPException(503,'Reviewed forecasts require PostgreSQL mode')
+    return await manual_forecasts.review(db_pg.pool(),rid,RESTAURANT_TO_PG_STORE.get(rid,rid),date)
+
 @api_router.put("/projections/{rid}")
-async def put_projection(rid: str, body: ProjectionIn):
+async def put_projection(rid: str, body: ProjectionIn, request: Request):
     check_rid(rid)
     if USE_PG:
-        try:
-            day = _pg_date(body.date)
-        except ValueError:
-            day = None
-        if not day:
-            raise HTTPException(400, "date must be YYYY-MM-DD")
-        await db_pg.pool().execute(
-            """INSERT INTO store_sales_projections (store_id, date, amount, note, entered_by) VALUES ($1, $2, $3, $4, $5)
-               ON CONFLICT (store_id, date) DO UPDATE SET amount=$3, note=$4, entered_by=$5, updated_at=now()""",
-            RESTAURANT_TO_PG_STORE.get(rid, rid), day, body.amount, body.note, body.enteredBy)
-        return {"ok": True}
-    await db.projected_sales.update_one({"restaurantId": rid, "date": body.date},
-        {"$set": {**body.model_dump(), "restaurantId": rid, "updatedAt": _now_iso()}}, upsert=True)
+        user=_require_manager(request)
+        actor=user.get('sub')
+        if not isinstance(actor,str) or not actor:raise HTTPException(403,'Signed manager identity required')
+        return await manual_forecasts.save(db_pg.pool(),rid,RESTAURANT_TO_PG_STORE.get(rid,rid),body,request.headers.get('if-match'),actor)
+    await db.projected_sales.update_one({"restaurantId": rid, "date": str(body.date)},
+        {"$set": {**body.model_dump(mode='json'), "restaurantId": rid, "updatedAt": _now_iso()}}, upsert=True)
     return {"ok": True}
 
 # ---------------- Staff PIN & prep sheet ----------------
@@ -2521,7 +2517,7 @@ async def _chat_history(rid, limit, oldest_first=False):
     oldest_first, the first `limit` messages ever (matching the history screen's query)."""
     if USE_PG:
         rows = await db_pg.pool().fetch(
-            f"SELECT role, content, ts FROM ai_chat_messages WHERE store_id=$1 ORDER BY ts {'ASC' if oldest_first else 'DESC'} LIMIT {int(limit)}",
+            f"SELECT role, content, ts FROM ai_chat_messages WHERE store_id=$1 ORDER BY ts {'ASC' if oldest_first else 'DESC'},id {'ASC' if oldest_first else 'DESC'} LIMIT {int(limit)}",
             RESTAURANT_TO_PG_STORE.get(rid, rid))
         msgs = [{"restaurantId": rid, "role": r["role"], "content": r["content"], "ts": _ts_out(r["ts"])} for r in rows]
     else:
@@ -2542,6 +2538,8 @@ async def ai_chat(body: ChatIn, request: Request):
     user = _decode_token(token)
     if user and user.get("role") != "owner" and body.restaurantId not in user.get("locations", []):
         raise HTTPException(403, "Location access denied")
+    if USE_PG:
+        await ai_storage.require(db_pg.pool(),RESTAURANT_TO_PG_STORE.get(body.restaurantId,body.restaurantId),'chatAvailable')
     client = _ai()
     rid = body.restaurantId
     await ensure_seed(rid)
@@ -2599,12 +2597,20 @@ async def ai_chat(body: ChatIn, request: Request):
 @api_router.get("/ai/history/{rid}")
 async def ai_history(rid: str):
     check_rid(rid)
+    if USE_PG:await ai_storage.require(db_pg.pool(),RESTAURANT_TO_PG_STORE.get(rid,rid),'historyAvailable')
     return await _chat_history(rid, 100, oldest_first=True)
+
+@api_router.get("/ai/capabilities/{rid}")
+async def ai_capabilities(rid: str):
+    check_rid(rid)
+    if USE_PG:return await ai_storage.capabilities(db_pg.pool(),RESTAURANT_TO_PG_STORE.get(rid,rid))
+    return {'storeId':RESTAURANT_TO_PG_STORE.get(rid,rid),'basis':'ai_conversation_storage','historyAvailable':True,'chatAvailable':True,'clearAvailable':True,'accounting':False}
 
 @api_router.delete("/ai/history/{rid}")
 async def ai_clear(rid: str):
     check_rid(rid)
     if USE_PG:
+        await ai_storage.require(db_pg.pool(),RESTAURANT_TO_PG_STORE.get(rid,rid),'clearAvailable')
         await db_pg.pool().execute("DELETE FROM ai_chat_messages WHERE store_id=$1", RESTAURANT_TO_PG_STORE.get(rid, rid))
     else:
         await db.chat_messages.delete_many({"restaurantId": rid})

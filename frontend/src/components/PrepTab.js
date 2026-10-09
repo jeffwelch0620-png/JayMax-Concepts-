@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { ChefHat, Play, PackageCheck, Layers, X, Plus, Trash2, Check, Sparkles, ClipboardList, Send, Package } from "lucide-react";
 import { normalizeRecipeSchema, recipeCostSummary, fmtDate, fmtMoney, num, todayISO, FREQS, VESSELS } from "../lib/calc";
+import { ManualForecast } from "./ManualForecast";
 import * as api from "../lib/api";
 import { PrepDayDrafts } from "./PrepDayDrafts";
 import { HistoricalPrepLists } from "./HistoricalPrepLists";
@@ -98,7 +99,7 @@ export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, pers
       {sub === "list" && (api.prepDayTasksEnabled ? <PrepDayDrafts rid={rid} track={track} drafts={drafts} showToast={showToast}/> : prepCapabilities?.listsAvailable === false ? <p data-testid="prep-list-unavailable">Historical prep lists are retained for review. Use reviewed dated prep tasks for current work.</p> : <PrepListView rid={rid} track={track} items={items} dishes={dishes} prepItems={prepItems} reloadPrepItems={reloadPrepItems} applyPrepResult={applyPrepResult} showToast={showToast} />)}
       {sub === "count" && (api.staffPrepCountsEnabled ? <StaffPrepCountReview key={rid} rid={rid} drafts={drafts}/> : prepCapabilities?.countsAvailable === false ? <p data-testid="prep-count-unavailable">Historical count sessions are retained for review. Ask your manager to issue a reviewed prep count sheet.</p> : <EveningCount rid={rid} track={track} showToast={showToast} />)}
       {sub === "inventory" && (api.prepContainersEnabled ? <PrepContainers key={rid} rid={rid} drafts={drafts} /> : prepReadStatus?.available === false ? <p data-testid="prep-inventory-unavailable">{prepReadStatus.message || "Prep balances are unavailable here. Use reviewed prep counts, production and period reports."}</p> : <InventoryLog drafts={drafts} showError={showError} rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />)}
-      {sub === "planning" && <Planning showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} prepCapabilities={prepCapabilities} persistDishes={persistDishes} showToast={showToast} />}
+      {sub === "planning" && <Planning drafts={drafts} showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} prepCapabilities={prepCapabilities} persistDishes={persistDishes} showToast={showToast} />}
       {sub === "history" && api.isPostgres && <HistoricalPrepLists key={rid} rid={rid} />}
     </div>
   );
@@ -925,12 +926,10 @@ function InventoryLog({ drafts, showError, rid, items, dishes, persistDishes, pr
 }
 
 /* ---------------- Planning: projections, overrides, PIN, AI par advisor ---------------- */
-function Planning({ showError, rid, dishes, prepItems, prepCapabilities, persistDishes, showToast }) {
+function Planning({ drafts, showError, rid, dishes, prepItems, prepCapabilities, persistDishes, showToast }) {
   const overridesHeld = prepCapabilities?.listsAvailable === false || api.prepDayTasksEnabled;
   const advisorHeld = prepCapabilities?.reportingAvailable === false || api.prepPlanningEnabled || api.prepBatchesEnabled;
   const prepRecipes = dishes.filter((d) => d.recipeType === "prep").map(normalizeRecipeSchema);
-  const [proj, setProj] = useState({ date: tomorrowISO(), amount: "", note: "" });
-  const [projList, setProjList] = useState([]);
   const [ovr, setOvr] = useState({ date: tomorrowISO(), type: "add", target: "", customName: "", par: "", batches: 1, note: "" });
   const [ovrList, setOvrList] = useState([]);
   const [pin, setPin] = useState("");
@@ -940,23 +939,12 @@ function Planning({ showError, rid, dishes, prepItems, prepCapabilities, persist
   const [advisorBusy, setAdvisorBusy] = useState(false);
 
   useEffect(() => {
-    api.getProjections(rid).then(setProjList).catch(() => {});
     if (!overridesHeld) api.listOverrides(rid).then(setOvrList).catch(() => {});
     api.getStaffPin(rid).then((p) => { setPinInfo(p); setPin(p.staffPin); }).catch(() => {});
     if (!advisorHeld) api.getParRecs(rid).then(setRecs).catch(() => {});
   }, [rid, overridesHeld, advisorHeld]);
 
   const targetName = (o) => prepRecipes.find((r) => r.id === o.recipeId)?.name || prepItems.find((p) => p.id === o.prepItemId)?.name || o.customName || "item";
-
-  async function saveProjection() {
-    if (!(Number(proj.amount) > 0)) { showToast("Enter a projected sales amount"); return; }
-    try {
-      await api.putProjection(rid, { date: proj.date, amount: Number(proj.amount), note: proj.note });
-      showToast("Projected sales saved");
-      setProj((p) => ({ ...p, amount: "", note: "" }));
-      api.getProjections(rid).then(setProjList).catch(() => {});
-    } catch (e) { showToast("Couldn't save the projection"); }
-  }
 
   async function saveOverride() {
     if (overridesHeld) return;
@@ -1016,22 +1004,7 @@ function Planning({ showError, rid, dishes, prepItems, prepCapabilities, persist
   return (
     <div data-testid="planning-view">
       <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))" }}>
-        <div className={`${cardCls} p-5`} data-testid="projections-card">
-          <SectionLabel>Projected Sales (Manual Daily Entry)</SectionLabel>
-          <div className="flex gap-2 flex-wrap items-end mb-3">
-            <Field label="Date"><input type="date" className={inpCls} data-testid="projection-date" value={proj.date} onChange={(e) => setProj((p) => ({ ...p, date: e.target.value }))} /></Field>
-            <Field label="Amount ($)"><input type="number" step="100" className={`${inpCls} w-28`} data-testid="projection-amount" value={proj.amount} onChange={(e) => setProj((p) => ({ ...p, amount: e.target.value }))} placeholder="4500" /></Field>
-            <Field label="Note"><input className={inpCls} data-testid="projection-note" value={proj.note} onChange={(e) => setProj((p) => ({ ...p, note: e.target.value }))} placeholder="e.g. Friday rush" /></Field>
-            <button className={btnAcc} onClick={saveProjection} data-testid="projection-save-button"><Plus size={14} /> Save</button>
-          </div>
-          {projList.slice(0, 6).map((p) => (
-            <div key={p.date} className="flex justify-between text-xs py-1.5 border-b border-[#22304A] last:border-0">
-              <span className="text-slate-300">{fmtDate(p.date)}{p.note ? ` — ${p.note}` : ""}</span>
-              <span className="num font-bold">{fmtMoney(p.amount)}</span>
-            </div>
-          ))}
-          <div className="text-[11px] text-slate-500 mt-2">Toast report import comes later — once you share a sample export or API access.</div>
-        </div>
+        <ManualForecast key={rid} rid={rid} drafts={drafts} showToast={showToast}/>
 
         {overridesHeld ? <p data-testid="prep-overrides-unavailable">Historical day adjustments are retained for review. Use reviewed dated prep tasks for current adjustments.</p> : <div className={`${cardCls} p-5`} data-testid="overrides-card">
           <SectionLabel>One-Day Adjustments (don't change the standing list)</SectionLabel>

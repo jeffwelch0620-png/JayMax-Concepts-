@@ -32,6 +32,8 @@ PUBLIC = {
     'purchase_order_lines': ('SELECT', 'INSERT', 'UPDATE', 'DELETE'),
     'invoices': ('SELECT',), 'invoice_lines': ('SELECT',), 'prep_logs': ('SELECT',),
     'adjustments': ('SELECT',),
+    'store_sales_projections': ('SELECT','INSERT','UPDATE'),
+    'ai_chat_messages': ('SELECT',),
     'count_sessions': ('SELECT',), 'count_lines': ('SELECT',), 'reporting_periods': ('SELECT',),
     'store_vendor_contacts': ('SELECT',), 'staff_pins': ('SELECT',),
     'prep_list_lines': ('SELECT',), 'prep_recipe_stock': ('SELECT',),

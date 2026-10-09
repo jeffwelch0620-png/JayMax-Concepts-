@@ -1,5 +1,34 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Forecast and AI history review - October 8, 2026
+
+**Seven selected backend checks and all 494 frontend tests pass** across 61
+frontend suites. Production compilation passes with existing warnings. Passing
+case selection, retained failures and the interrupted broad test attempt are
+recorded in the checkpoint notes.
+
+Manual forecast saves now require a reviewed store/date version, preserve exact
+amounts and reject stale replacements. Forecast dollars remain planning data;
+they do not post purchases, physical usage or Food Cost. The editor retains drafts
+on failed/unconfirmed saves and after navigation.
+
+The proposed runtime role can read retained AI history but cannot insert or clear
+it. The drawer shows that boundary, reports failed reads honestly, keeps history
+after failed clears, and ignores late responses from another location. Storage
+availability is checked before unavailable chat requests reach a provider.
+
+The local matrix adds forecast SELECT/INSERT/UPDATE and AI-history SELECT only.
+All 29 migration hashes, 94 function contracts, 123 relation contracts and the
+protected original continuation remain intact. See the
+[forecast/AI checkpoint](docs/FORECAST_AI_READINESS_CHECKPOINT.md) for the exact
+concurrency, storage, compatibility and validation boundaries.
+
+This checkpoint remains local. **Continue holding merges** until the approved
+hosted catalog, ordinary LOGIN/pool, browser/Data API, managed recovery, matched
+feature configuration and sequential PR stack checks are complete. No hosted
+grant, invoice import, AI provider request, push or merge occurs in this step.
+Older sections retain prior checkpoint evidence.
+
 ## Shared-state cutover and retained periods - October 8, 2026
 
 **Five selected backend checks and all 481 frontend tests pass** across 60

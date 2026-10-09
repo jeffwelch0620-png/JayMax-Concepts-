@@ -241,6 +241,7 @@ export const sendOrder = (rid, oid, by) => axios.post(`${API}/orders/${rid}/${oi
 export const receiveOrder = (rid, oid, by, lines, invoiceNumber) => axios.post(`${API}/orders/${rid}/${oid}/receive`, { by, lines, invoiceNumber }).then((r) => r.data);
 export const deleteOrder = (rid, oid) => axios.delete(`${API}/orders/${rid}/${oid}`).then((r) => r.data);
 export const aiHistory = (rid) => axios.get(`${API}/ai/history/${rid}`).then((r) => r.data);
+export const aiCapabilities = (rid) => axios.get(`${API}/ai/capabilities/${rid}`).then((r) => r.data);
 export const aiClear = (rid) => axios.delete(`${API}/ai/history/${rid}`).then((r) => r.data);
 
 export const getCountSession = (rid, date, track = "daily") => USE_PG ? pgGetCountSession(pgStoreId(rid), date, track) : axios.get(`${API}/prepcount/${rid}/session`, { params: { date, track } }).then((r) => r.data);
@@ -259,7 +260,8 @@ export const addOverride = (rid, body) => USE_PG ? pgAddOverride(pgStoreId(rid),
 export const deleteOverride = (rid, oid) => USE_PG ? pgDeleteOverride(pgStoreId(rid), oid) : axios.delete(`${API}/prep-overrides/${rid}/${oid}`).then((r) => r.data);
 
 export const getProjections = (rid) => axios.get(`${API}/projections/${rid}`).then((r) => r.data);
-export const putProjection = (rid, body) => axios.put(`${API}/projections/${rid}`, body).then((r) => r.data);
+export const getProjectionReview = (rid, date) => axios.get(`${API}/projections/${rid}/review`, { params: { date } }).then(r => r.data);
+export const putProjection = (rid, body, version) => axios.put(`${API}/projections/${rid}`, body, { headers: version ? { "If-Match": version } : {} }).then((r) => r.data);
 export const prepReport = (rid, from, to) => axios.get(`${API}/reports/${rid}/prep`, { params: { from, to } }).then((r) => r.data);
 
 export const getStaffPin = (rid) => USE_PG ? pgGetStaffPin(pgStoreId(rid)) : axios.get(`${API}/staff/${rid}/pin`).then((r) => r.data);
@@ -645,11 +647,12 @@ async function pgPutDishes(rid, arr, revision) {
   return { revision: saved.revision, clientIds: saved.clientIds || {}, dishes: saved.dishes.map(dish => pgDishToMongoDish(dish, rid, items)) };
 }
 
-export async function streamChat(rid, message, { onDelta, onError, onDone }) {
+export async function streamChat(rid, message, { onDelta, onError, onDone, signal }) {
   let res;
   try {
     res = await fetch(`${API}/ai/chat`, {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json", ...(session()?.token ? { Authorization: ["Bearer", session().token].join(" ") } : {}) },
       body: JSON.stringify({ restaurantId: rid, message }),
     });
