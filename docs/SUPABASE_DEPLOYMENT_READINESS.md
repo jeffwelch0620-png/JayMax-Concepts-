@@ -1,6 +1,22 @@
 # Hosted Supabase deployment readiness
 
-Current October 8 evidence: the user-designated existing test project passed
+Latest October 9 review: keep the original restricted inventory/account logins
+on the verified shared session pooler at port 5432, with the encrypted local
+application recovery copy. Both current permission profiles and all six bounded
+pooler samples pass; all six direct samples time out. The
+[parallel-account checkpoint](PARALLEL_ROTATION_REVIEW_CHECKPOINT.md) records
+the read-only evidence and transition-policy prerequisite. No paid IPv4 add-on,
+replacement login or configuration switch was enabled. The combined credential
+rotation/recovery and release gates remain held; this is not publication approval.
+
+The [native installation checkpoint](HOSTED_NATIVE_INSTALL_CHECKPOINT.md) records
+the later committed 29-file delivery and preservation evidence on the designated
+build database. The [encrypted backup checkpoint](HOSTED_BACKUP_VERIFICATION_CHECKPOINT.md)
+records the verified six-schema application backup/restore; managed recovery
+remains separate. The older rollback-trial paragraph below describes its own
+point in time, before that durable installation.
+
+Earlier October 8 evidence: the user-designated existing test project passed
 the complete 29-file migration and synthetic API **rollback trial**. See the
 [hosted checkpoint](HOSTED_ROLLBACK_TRIAL_CHECKPOINT.md). Nothing was durably
 installed; managed restore, separate-connection and browser checks remain pending.

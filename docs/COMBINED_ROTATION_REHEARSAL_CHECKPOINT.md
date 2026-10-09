@@ -1,5 +1,12 @@
 # Combined credential rotation and recovery rehearsal
 
+Follow-up: the [parallel-account review](PARALLEL_ROTATION_REVIEW_CHECKPOINT.md)
+verifies current original permission profiles and six successful original pooler
+connections, alongside six direct timeouts. The 66 existing role-addressed policies
+match the reviewed profile, and role/policy/membership metadata is preserved.
+It records the singleton-policy verifier prerequisite and a staged replacement
+plan; no credentials or policies changed. This combined rehearsal remains held.
+
 October 9, 2026. Local review branch only. Hosted receipt:
 `combined-rotation-rehearsal-20261009T2218325582424Z.json`.
 Format: `jaymax-combined-rotation-rehearsal-v1`.

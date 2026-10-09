@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Parallel-account rotation review and current pooler checks - October 9, 2026
+
+Read-only review passes for both current permission profiles and all six original
+session-pooler connection samples. Six direct connection samples time out; DNS
+resolves the direct endpoint to IPv6 and the pooler to IPv4. All 58 inventory and
+8 account policies match the reviewed contract, and role/policy/membership
+metadata is unchanged. No credentials, roles, grants, policies or settings changed.
+
+The [parallel rotation review](docs/PARALLEL_ROTATION_REVIEW_CHECKPOINT.md) recommends
+keeping the current port-5432 pooler and private credentials while preparing
+replacement accounts beside them. It identifies the strict singleton-policy
+verifier prerequisite and the staged grant/policy/client/retirement process.
+The review planner emits no SQL. Five guards and 20 subtests pass.
+
+Next: implement the default-strict transition permission inspector before
+preparing a journaled parallel-account installer. **Combined rotation/recovery,
+merge and active-cutover gates remain held.** Local only; no push or deployment.
+
 ## Combined rehearsal held; original pooled access and data verified - October 9, 2026
 
 Temporary credentials authenticated, old passwords were rejected, both actual
