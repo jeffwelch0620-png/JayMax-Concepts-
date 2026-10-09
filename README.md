@@ -1,5 +1,21 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Verified owned-connection signal rehearsal - October 9, 2026
+
+The owner successfully closed one newly created read-only test connection for
+each retained build account. Both backends disappeared and unchanged original
+credentials reconnected. No existing application connection was targeted.
+Ten guard tests and 15 subtests pass. A separate read-only reconciliation verifies
+original application records, Track 1, the complete ledger, catalog/access and
+role attributes against the preserved recovered baseline.
+
+The [signal checkpoint](docs/OWNED_SESSION_SIGNAL_CHECKPOINT.md) retains the
+interrupted journal as held and records its passing reconciliation separately.
+Next: compare a disabled login after draining only its explicitly owned pooler
+test connection. Actual pooled-login retirement and the combined recovery
+checkpoint remain unverified. **Continue holding merges and active cutover.**
+This checkpoint is local only; nothing was pushed, merged or deployed.
+
 ## Verified encrypted application backup and local restore - October 9, 2026
 
 The manual hosted export and isolated local restore pass: all 8,335 records, 120

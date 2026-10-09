@@ -88,6 +88,13 @@ disable result remains untested.
 
 ## Recommended next review
 
+Follow-up: the [owned-session signal rehearsal](OWNED_SESSION_SIGNAL_CHECKPOINT.md)
+now proves that the owner can terminate only newly created, labeled, read-only
+direct test clients for both retained roles. Fresh unchanged credentials reconnect;
+independent read-only reconciliation verifies the preserved recovered baseline.
+No existing application session or LOGIN was changed. This supports the next
+bounded pooler-client drain comparison; it does not resolve this NOLOGIN hold.
+
 Separate credential replacement from immediate access revocation. The earlier
 rotation runs already demonstrated replacement authentication, old-password
 denial and reconnects; this isolated result is a separate revocation limitation.
