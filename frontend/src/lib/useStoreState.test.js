@@ -19,6 +19,26 @@ beforeEach(() => {
   api.fetchState.mockImplementation(rid => Promise.resolve({ revision: rid === "berts" ? 10 : 80, items: [rid] }));
   api.putCollection.mockResolvedValue({ ok: true, revision: 11 });
 });
+
+test("retired prep with explicit unavailability loads without manufacturing empty balances", async () => {
+  api.fetchState.mockResolvedValue({ revision: 10, items: [], dishes: [], prepStock: null, prepLogs: null,
+    prepReadStatus: { available: false, basis: "legacy_prep_retired" },
+    legacyStateCapabilities: { inventoryRetired: true, adjustmentsAvailable: false, reportingPeriodsAvailable: false } });
+  await render("berts");
+  expect(controller.state).not.toBeNull(); expect(controller.state.prepStock).toBeNull(); expect(controller.state.prepLogs).toBeNull();
+  expect(controller.state.legacyStateCapabilities.inventoryRetired).toBe(true); expect(errors).not.toHaveBeenCalled();
+});
+
+test.each([
+  {}, { prepReadStatus: { available: true, basis: "legacy_prep_retired" } },
+  { prepReadStatus: { available: false, basis: "other" } },
+  { prepReadStatus: { available: false, basis: "legacy_prep_retired" }, prepLogs: [] },
+  { prepReadStatus: { available: false, basis: "legacy_prep_retired" }, prepStock: [], prepLogs: [] },
+])("retired prep nulls require the complete confirmed unavailable contract %j", async change => {
+  api.fetchState.mockResolvedValue({ revision: 10, items: [], prepStock: null, prepLogs: null, ...change });
+  await render("berts"); expect(controller.state).toBeNull(); expect(errors).toHaveBeenCalled();
+  await act(async () => controller.save("items", ["forbidden"])); expect(api.putCollection).not.toHaveBeenCalled();
+});
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.useRealTimers(); });
 
 test("acknowledged writes update saved totals and pass the restaurant revision", async () => {

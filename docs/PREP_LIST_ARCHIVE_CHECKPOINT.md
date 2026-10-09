@@ -1,5 +1,9 @@
 # Stored prep-list history without inferred tracks
 
+Follow-up: [shared-state cutover](SHARED_STATE_CUTOVER_CHECKPOINT.md) addresses main
+state loading and legacy adjustment/period writers. The unchanged permissions
+described below apply to this earlier archive checkpoint.
+
 October 8, 2026. Extends local commit
 `66e60679566a253798fc858eb94a87dc18f1bbb9`. No Supabase query or permission change,
 real invoice import, deployment flag-file change, push, merge or publication.

@@ -20,7 +20,10 @@ export function useStoreState(rid, session, empty, onError) {
       const data = await api.fetchState(rid);
       if (!isCurrent() || read !== scope.reads || generation !== (writes.current.get(rid) || 0) || pending.current.has(rid)) return;
       if (!data || !Number.isSafeInteger(data.revision) || data.revision < 0) throw new Error("Location data was not confirmed.");
+      const prepUnavailable = data.prepReadStatus?.available === false && data.prepReadStatus.basis === "legacy_prep_retired";
+      if (prepUnavailable && (data.prepStock !== null || data.prepLogs !== null)) throw new Error("Retired prep balances were not confirmed unavailable.");
       for (const name of ["items", "dishes", "purchases", "areas", "adjustments", "reportingPeriods", "prepStock", "prepLogs"]) {
+        if (prepUnavailable && ["prepStock", "prepLogs"].includes(name)) continue;
         if (data[name] !== undefined && !Array.isArray(data[name])) throw new Error("Location collections were not confirmed.");
       }
       if (scope.loaded && data.revision < scope.revision) return;

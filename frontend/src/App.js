@@ -7,6 +7,7 @@ import {
 import { RESTAURANTS, OWNER, isOrderEnabled, statusOf, downloadJSON, todayISO, workweekRange } from "./lib/calc";
 import * as api from "./lib/api";
 import { useStoreState } from "./lib/useStoreState";
+import { nativeStateMode, retainedAdjustments } from "./lib/stateCutover";
 import { hasUnsavedDrafts, useDraftUnloadWarning } from "./lib/saveIntegrity";
 import { DashboardTab } from "./components/DashboardTab";
 import { CountsTab } from "./components/CountsTab";
@@ -76,6 +77,7 @@ export default function App() {
   useEffect(() => { drafts.current.clear(); }, [session]);
   const store = useStoreState(loc, session, EMPTY_STATE, message => toast.error(message));
   const S = store.state;
+  const nativeSharedState = nativeStateMode(S, api.nativePurchasesEnabled);
   const isOwner = !!session && loc === "owner" && session.user.role === "owner";
   const current = isOwner ? OWNER : RESTAURANTS.find((r) => r.id === loc) || RESTAURANTS[0];
   const accessibleRestaurants = RESTAURANTS.filter((r) => session?.user?.role === "owner" || session?.user?.locations?.includes(r.id));
@@ -116,10 +118,10 @@ export default function App() {
   function openCosting(dishId) { setCostingFocus({ id: dishId, nonce: Date.now() + Math.random() }); setActiveTab("costing"); }
   function openOrder(rid, orderId) { pendingTabRef.current = "purchaseOrders"; setFocusOrder({ id: orderId, nonce: Date.now() + Math.random() }); if (rid === loc) { setActiveTab("purchaseOrders"); } else { setLoc(rid); } }
 
-  const alertCount = useMemo(() => !S || api.actualInventoryEnabled ? 0 : S.items.filter((it) => isOrderEnabled(it) && statusOf(it).key !== "ok").length, [S]);
+  const alertCount = useMemo(() => !S || nativeSharedState ? 0 : S.items.filter((it) => isOrderEnabled(it) && statusOf(it).key !== "ok").length, [S, nativeSharedState]);
 
   function backupAll() {
-    if (api.nativePurchasesEnabled) { toast.error("App files cannot provide a complete inventory backup. Complete recovery is awaiting setup."); return; }
+    if (nativeSharedState) { toast.error("App files cannot provide a complete inventory backup. Complete recovery is awaiting setup."); return; }
     if (!S) return;
     downloadJSON(`${current.short.replace(/\W+/g, "")}_backup_${todayISO()}.json`, {
       exportedAt: new Date().toISOString(), restaurant: loc,
@@ -129,7 +131,7 @@ export default function App() {
   }
 
   function restoreBackup(e) {
-    if (api.nativePurchasesEnabled) { toast.error("App files omit inventory history and cannot restore this inventory mode."); return; }
+    if (nativeSharedState) { toast.error("App files omit inventory history and cannot restore this inventory mode."); return; }
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -202,8 +204,8 @@ export default function App() {
               {!isOwner && (
                 <>
                   <button onClick={store.refresh} data-testid="refresh-location-data" className="text-xs text-slate-300">Refresh saved data</button>
-                  <BackupControls nativeMode={api.nativePurchasesEnabled} onBackup={backupAll} onRestore={() => backupRef.current?.click()} />
-                  {!api.nativePurchasesEnabled && <input ref={backupRef} type="file" accept=".json,application/json" onChange={restoreBackup} className="hidden" />}
+                  <BackupControls nativeMode={nativeSharedState} onBackup={backupAll} onRestore={() => backupRef.current?.click()} />
+                  {!nativeSharedState && <input ref={backupRef} type="file" accept=".json,application/json" onChange={restoreBackup} className="hidden" />}
                 </>
               )}
               <button
@@ -269,9 +271,9 @@ export default function App() {
           <div className="text-slate-500 text-sm p-10 text-center" data-testid="loading-state">Loading {current.name}…</div>
         ) : (
           <>
-            {activeTab === "dashboard" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:report`} restaurantId={loc} view="report" /> : api.nativePurchasesEnabled ? <p>Accounting reports are awaiting Actual Inventory setup and explicit physical count values. Purchases are reviewed in Invoice Master.</p> : <DashboardTab rid={loc} items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />)}
+            {activeTab === "dashboard" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:report`} restaurantId={loc} view="report" /> : nativeSharedState ? <p>Accounting reports are awaiting Actual Inventory setup and explicit physical count values. Purchases are reviewed in Invoice Master.</p> : <DashboardTab rid={loc} items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />)}
             {activeTab === "prep" && <PrepTab showError={showError} drafts={drafts.current} key={loc} rid={loc} items={S.items} dishes={S.dishes} persistDishes={persistDishes} prepStock={S.prepStock} prepLogs={S.prepLogs} prepReadStatus={S.prepReadStatus} prepCapabilities={S.prepCapabilities} applyPrepResult={applyPrepResult} salesPeriod={S.salesPeriod} showToast={showToast} />}
-            {activeTab === "counts" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:counts`} restaurantId={loc} /> : <CountsTab key={loc} rid={loc} items={S.items} onCountsApplied={(next) => store.apply(p => ({ ...p, items: next }))} showToast={showToast} />)}
+            {activeTab === "counts" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:counts`} restaurantId={loc} /> : nativeSharedState ? <p>Physical counts are awaiting Actual Inventory setup. Legacy count entry is unavailable.</p> : <CountsTab key={loc} rid={loc} items={S.items} onCountsApplied={(next) => store.apply(p => ({ ...p, items: next }))} showToast={showToast} />)}
             {activeTab === "setup" && <SetupTab onCatalogLinked={store.refresh} showError={showError} drafts={drafts.current} key={loc} items={S.items} persistItems={persistItems} areas={S.areas} persistAreas={persistAreas} showToast={showToast} rid={loc} />}
             {activeTab === "invoices" && <InvoicesTab showError={showError} drafts={drafts.current} key={loc} rid={loc} items={S.items} persistItems={persistItems} purchases={S.purchases} persistPurchases={persistPurchases} showToast={showToast} restaurantName={current.name} />}
             {activeTab === "order" && <OrderTab key={loc} items={S.items} showToast={showToast} restaurantName={current.name} rid={loc} onCreatedPO={() => setActiveTab("purchaseOrders")} />}
@@ -279,9 +281,9 @@ export default function App() {
             {activeTab === "menu" && <MenuTab dishes={S.dishes} onAddNew={() => openCosting(null)} onOpenDish={(id) => openCosting(id)} />}
             {activeTab === "costing" && <CostingTab rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} dishes={S.dishes} persist={persistDishes} showToast={showToast} focusDish={costingFocus} />}
             {activeTab === "recipeCards" && <RecipeCardsTab items={S.items} dishes={S.dishes} />}
-            {activeTab === "sales" && <SalesTrackingTab revision={S.revision} rid={loc} showError={showError} drafts={drafts.current} key={loc} actualMode={api.nativePurchasesEnabled} items={S.items} dishes={S.dishes} purchases={S.purchases} adjustments={S.adjustments} salesPeriod={S.salesPeriod} persist={persistSalesPeriod} loadLatestSales={loadLatestSales} reportingPeriods={S.reportingPeriods} persistReportingPeriods={persistReportingPeriods} showToast={showToast} />}
-            {activeTab === "adjustments" && <AdjustmentsTab rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} adjustments={S.adjustments} persist={persistAdjustments} showToast={showToast} />}
-            {activeTab === "history" && (api.nativePurchasesEnabled ? <NativePurchaseHistory key={loc} restaurantId={loc} onOpenInvoices={() => setActiveTab("invoices")} /> : <HistoryTab items={S.items} purchases={S.purchases} focusControlNumber={historyFocusCN} />)}
+            {activeTab === "sales" && <SalesTrackingTab revision={S.revision} rid={loc} showError={showError} drafts={drafts.current} key={loc} actualMode={nativeSharedState} items={S.items} dishes={S.dishes} purchases={S.purchases} adjustments={S.adjustments} salesPeriod={S.salesPeriod} persist={persistSalesPeriod} loadLatestSales={loadLatestSales} reportingPeriods={S.reportingPeriods} persistReportingPeriods={persistReportingPeriods} showToast={showToast} />}
+            {activeTab === "adjustments" && <AdjustmentsTab readOnly={retainedAdjustments(S)} rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} adjustments={S.adjustments} persist={persistAdjustments} showToast={showToast} />}
+            {activeTab === "history" && (api.nativePurchasesEnabled ? <NativePurchaseHistory key={loc} restaurantId={loc} onOpenInvoices={() => setActiveTab("invoices")} /> : nativeSharedState ? <p>Received purchase history is awaiting setup. Review purchases in Invoice Master.</p> : <HistoryTab items={S.items} purchases={S.purchases} focusControlNumber={historyFocusCN} />)}
             {activeTab === "scheduling" && <SchedulingTab key={loc} rid={loc} showToast={showToast} />}
             {activeTab === "team" && <StaffTab key={loc} rid={loc} showToast={showToast} />}
           </>

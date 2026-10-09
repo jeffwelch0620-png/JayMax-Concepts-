@@ -741,6 +741,7 @@ async def _pg_replace_adjustments(rid, rows, conn=None):
     conn = conn or await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await legacy_shared_state.hold_write(conn, 'adjustments')
             await conn.execute("DELETE FROM adjustments WHERE store_id=$1", store_id)
             # item_code links to the catalog when the item still exists; control_number is the source of truth.
             await conn.executemany(
@@ -756,7 +757,7 @@ async def _pg_list_adjustments(rid):
     rows = await db_pg.pool().fetch("SELECT * FROM adjustments WHERE store_id=$1 ORDER BY date, created_at",
                                     RESTAURANT_TO_PG_STORE.get(rid, rid))
     return [{"id": r["ref"], "date": r["date"].isoformat(), "controlNumber": r["control_number"], "reason": r["reason"],
-             "qtyBasis": r["qty_basis"], "qty": f(r["qty"]), "note": r["note"] or "",
+             "qtyBasis": r["qty_basis"], "qty": purchase_api.serial(r["qty"]), "note": r["note"] or "",
              "createdAt": _ts_out(r["created_at"])} for r in rows]
 
 def _pg_period_rows(rid, payload):
@@ -781,6 +782,7 @@ async def _pg_replace_reporting_periods(rid, rows, conn=None):
     conn = conn or await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await legacy_shared_state.hold_write(conn, 'reportingPeriods')
             await conn.execute("DELETE FROM reporting_periods WHERE store_id=$1", store_id)
             await conn.executemany(
                 """INSERT INTO reporting_periods (store_id, ref, name, period_start, period_end, status, dish_sales,
@@ -816,6 +818,13 @@ async def get_state(rid: str):
         state["adjustments"] = await _pg_list_adjustments(rid)
         state["reportingPeriods"] = await _pg_list_reporting_periods(rid)
         state.update(await _pg_get_store_state(rid))
+        async with db_pg.pool().acquire() as conn:
+            status = await legacy_shared_state.capabilities(conn)
+        state['legacyStateCapabilities'] = status
+        state['legacyStateBasis'] = {
+            'adjustments': legacy_shared_state.basis(status['adjustmentsAvailable'], 'legacy_adjustments'),
+            'reportingPeriods': legacy_shared_state.basis(status['reportingPeriodsAvailable'], 'legacy_reporting_periods'),
+        }
         return state
     await ensure_seed(rid)
     state = {}
@@ -875,10 +884,11 @@ async def put_collection(rid: str, collection: str, payload: List[Any], request:
         if collection not in _PG_REPLACERS:
             # items/purchases/dishes have their own /api/pg/* writers; nothing may land in Mongo.
             raise HTTPException(400, f"{collection} is saved through /api/pg in Postgres mode")
-        rows = _PG_REPLACERS[collection][0](rid, payload)  # validate before bumping the revision
         conn = await db_pg.pool().acquire()
         try:
             async with conn.transaction():
+                await legacy_shared_state.hold_write(conn, collection)
+                rows = _PG_REPLACERS[collection][0](rid, payload)  # validate before bumping the revision
                 revision = await _check_and_bump_revision(rid, request, conn)
                 await _PG_REPLACERS[collection][1](rid, rows, conn)
         finally:
@@ -5600,6 +5610,7 @@ async def pg_push_unsubscribe(store_id: str, body: PgPushUnsubscribeIn, request:
 app.include_router(api_router)
 app.include_router(pg_router)
 import prep_list_archive
+import legacy_shared_state
 app.include_router(prep_list_archive.create_router(db_pg.pool, check_store_id, _require_manager, lambda: USE_PG))
 
 # Purchase authorization is explicit even when development disables blanket auth.

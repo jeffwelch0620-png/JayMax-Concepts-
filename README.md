@@ -1,5 +1,32 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Shared-state cutover and retained periods - October 8, 2026
+
+**Five selected backend checks and all 481 frontend tests pass** across 60
+frontend suites. The production build passes with existing warnings.
+The proposed role can now load retained adjustments through
+SELECT-only access. Legacy adjustment and reporting-period replacement is held
+after native cutover, including owner connections with flags off, preserving
+historical periods referenced by purchase guards. No historical data is remapped.
+
+Server capabilities keep legacy adjustment editing, period closing, old accounting
+views and incomplete app backup/restore unavailable after installed inventory cutover.
+Explicitly retired prep balances load as unknown; malformed or unlabeled responses
+remain held. Analytical sales
+drafts and area settings remain editable with revision checks. Tested physical
+reports and all eight accounting fact fingerprints remain unchanged.
+
+Only the local permission matrix changes: add adjustment SELECT, without DML.
+All 29 migration hashes, 94 function contracts, 123 relation contracts and the
+protected original 40-path continuation remain intact. Read the
+[shared-state checkpoint](docs/SHARED_STATE_CUTOVER_CHECKPOINT.md) for exact
+boundaries, selected passing evidence, retained failures and remaining route gaps.
+
+No Supabase query/grant change, real invoice import, flag-file change, push, merge
+or publication occurred. Forecast/AI-history and minimum-grant review, hosted
+catalog/LOGIN/pool testing, browser/Data API, managed recovery and matched flags
+remain open. **Continue holding merges.** Older sections preserve earlier evidence.
+
 ## Unclassified prep-list history - October 8, 2026
 
 **Four selected backend checks and all 469 frontend tests pass** across 57
