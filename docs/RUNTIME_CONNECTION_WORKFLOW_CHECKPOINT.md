@@ -127,3 +127,12 @@ permission evidence alone does not prove HTTP exposure.
 See [the preceding hosted catalog/LOGIN checkpoint](HOSTED_RUNTIME_LOGIN_CHECKPOINT.md)
 for the registered reference, temporary hosted access and independently verified
 cleanup. Earlier checkpoints retain their own validation boundaries.
+
+## Subsequent implementation - October 9, 2026
+
+The separate account/notification connection is now implemented and validated
+locally with two ordinary restricted LOGIN pools. See the
+[auxiliary connection checkpoint](AUXILIARY_CONNECTION_CHECKPOINT.md) for its
+exact permissions, compatibility/failure behavior, unchanged accounting results
+and retained test attempts. This updates the local implementation status; the
+hosted rollout, permanent credentials and merge hold remain open.

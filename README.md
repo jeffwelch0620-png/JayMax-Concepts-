@@ -1,5 +1,25 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Separate account/notification connection - October 9, 2026
+
+The backend now supports an optional separately restricted connection for
+accounts and push subscriptions in the same PostgreSQL database. Inventory
+and staff PIN queries retain the primary pool. Seven connection unit tests,
+two existing account compatibility tests and both local tests with independent
+restricted LOGIN pools pass. Account/push changes leave native accounting
+records and the physical-count Food Cost report unchanged; five excess-access
+variants are rejected. External push delivery is mocked.
+
+Configure both connection URLs before replacing the owner connection with the
+restricted inventory role. When explicitly configured, an invalid or unavailable
+auxiliary connection is held without falling back to inventory access. See the
+[auxiliary connection checkpoint](docs/AUXILIARY_CONNECTION_CHECKPOINT.md) for
+permissions, retained failures, test evidence and rollout limits. All 29 migration
+hashes and both catalog/permission references remain unchanged. This checkpoint
+is committed locally; saved credentials and hosted configuration are unchanged.
+**Continue holding merges** pending hosted two-role validation, permanent
+credentials/recovery and the remaining deployment checks.
+
 ## Restricted LOGIN workflows and permanent connection plan - October 8, 2026
 
 **26 selected backend workflows pass through ordinary restricted database LOGIN**,

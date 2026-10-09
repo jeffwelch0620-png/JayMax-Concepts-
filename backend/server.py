@@ -18,6 +18,7 @@ from pymongo.errors import DuplicateKeyError
 import asyncpg
 import anthropic
 import db_pg
+import db_auxiliary
 import catalog_mapping
 import menu_contract
 import order_commands
@@ -599,7 +600,7 @@ def _pg_user_row(row):
 
 async def _pg_insert_user(user):
     try:
-        await db_pg.pool().execute(
+        await db_auxiliary.pool().execute(
             "INSERT INTO app_users (id, email, password_hash, role, locations) VALUES ($1,$2,$3,$4,$5)",
             user["id"], user["email"], user["passwordHash"], user["role"], user["locations"])
     except asyncpg.UniqueViolationError:
@@ -609,7 +610,7 @@ async def _pg_insert_user(user):
 async def auth_bootstrap(body: BootstrapIn):
     if not BOOTSTRAP_TOKEN or not hmac.compare_digest(body.bootstrapToken, BOOTSTRAP_TOKEN):
         raise HTTPException(403, "Invalid bootstrap token")
-    existing = (await db_pg.pool().fetchval("SELECT count(*) FROM app_users")) if USE_PG else await db.users.count_documents({})
+    existing = (await db_auxiliary.pool().fetchval("SELECT count(*) FROM app_users")) if USE_PG else await db.users.count_documents({})
     if existing:
         raise HTTPException(409, "Bootstrap has already been completed")
     if body.role != "owner" or not body.email.strip() or len(body.password) < 12:
@@ -627,7 +628,7 @@ async def auth_bootstrap(body: BootstrapIn):
 async def auth_login(body: LoginIn):
     email = body.email.strip().lower()
     if USE_PG:
-        row = await db_pg.pool().fetchrow("SELECT * FROM app_users WHERE email=$1", email)
+        row = await db_auxiliary.pool().fetchrow("SELECT * FROM app_users WHERE email=$1", email)
         user = _pg_user_row(row) if row else None
     else:
         user = await db.users.find_one({"email": email})
@@ -657,7 +658,7 @@ class PasswordIn(BaseModel):
 async def auth_list_users(request: Request):
     _require_owner(request)
     if USE_PG:
-        rows = await db_pg.pool().fetch("SELECT id, email, role, locations, created_at FROM app_users ORDER BY email")
+        rows = await db_auxiliary.pool().fetch("SELECT id, email, role, locations, created_at FROM app_users ORDER BY email")
         return [{"id": r["id"], "email": r["email"], "role": r["role"], "locations": list(r["locations"] or []),
                  "createdAt": r["created_at"].isoformat() if r["created_at"] else None} for r in rows]
     docs = await db.users.find({}, {"_id": 0, "passwordHash": 0}).sort("email", 1).to_list(1000)
@@ -670,7 +671,7 @@ async def auth_reset_password(user_id: str, body: PasswordIn, request: Request):
         raise HTTPException(400, "Password must be at least 12 characters")
     pw_hash = _password_hash(body.password)
     if USE_PG:
-        found = await db_pg.pool().fetchval("UPDATE app_users SET password_hash=$2 WHERE id=$1 RETURNING id", user_id, pw_hash)
+        found = await db_auxiliary.pool().fetchval("UPDATE app_users SET password_hash=$2 WHERE id=$1 RETURNING id", user_id, pw_hash)
     else:
         found = (await db.users.update_one({"id": user_id}, {"$set": {"passwordHash": pw_hash}})).matched_count
     if not found:
@@ -683,7 +684,7 @@ async def auth_delete_user(user_id: str, request: Request):
     if user_id == actor.get("sub"):
         raise HTTPException(400, "You can't remove your own account")
     if USE_PG:
-        found = await db_pg.pool().fetchval("DELETE FROM app_users WHERE id=$1 RETURNING id", user_id)
+        found = await db_auxiliary.pool().fetchval("DELETE FROM app_users WHERE id=$1 RETURNING id", user_id)
     else:
         found = (await db.users.delete_one({"id": user_id})).deleted_count
     if not found:
@@ -5440,7 +5441,7 @@ def _pg_staff_task_to_api(row):
 async def _pg_notify_new_staff_task(store_id, task):
     if not PUSH_ENABLED:
         return
-    subs = await db_pg.pool().fetch("SELECT endpoint, keys FROM push_subscriptions WHERE store_id=$1", store_id)
+    subs = await db_auxiliary.pool().fetch("SELECT endpoint, keys FROM push_subscriptions WHERE store_id=$1", store_id)
     if not subs:
         return
     label = "Count" if task.get("taskType") == "count" else "Prep"
@@ -5460,7 +5461,7 @@ async def _pg_notify_new_staff_task(store_id, task):
         except Exception:
             logger.exception("web push delivery error")
     for endpoint in stale:
-        await db_pg.pool().execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, endpoint)
+        await db_auxiliary.pool().execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, endpoint)
 
 @pg_router.get("/staff-tasks/{store_id}")
 async def pg_list_staff_tasks(store_id: str, request: Request, archive: bool = False):
@@ -5581,19 +5582,18 @@ async def pg_push_subscribe(store_id: str, body: PgPushSubscriptionIn, request: 
     check_store_id(store_id)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    conn = await db_pg.pool().acquire()
-    try:
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
-            raise HTTPException(403, "Invalid PIN")
-        if not body.endpoint or not body.keys.get("p256dh") or not body.keys.get("auth"):
-            raise HTTPException(400, "Invalid push subscription")
+    if not user:
+        async with db_pg.pool().acquire() as conn:
+            if body.pin != await _pg_get_staff_pin(conn, store_id):
+                raise HTTPException(403, "Invalid PIN")
+    if not body.endpoint or not body.keys.get("p256dh") or not body.keys.get("auth"):
+        raise HTTPException(400, "Invalid push subscription")
+    async with db_auxiliary.pool().acquire() as conn:
         await conn.execute(
             """INSERT INTO push_subscriptions (store_id, endpoint, keys) VALUES ($1,$2,$3)
                ON CONFLICT (endpoint) DO UPDATE SET store_id=$1, keys=$3""",
             store_id, body.endpoint, body.keys)
         return {"ok": True}
-    finally:
-        await db_pg.pool().release(conn)
 
 class PgPushUnsubscribeIn(BaseModel):
     pin: str = ""
@@ -5604,14 +5604,13 @@ async def pg_push_unsubscribe(store_id: str, body: PgPushUnsubscribeIn, request:
     check_store_id(store_id)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    conn = await db_pg.pool().acquire()
-    try:
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
-            raise HTTPException(403, "Invalid PIN")
+    if not user:
+        async with db_pg.pool().acquire() as conn:
+            if body.pin != await _pg_get_staff_pin(conn, store_id):
+                raise HTTPException(403, "Invalid PIN")
+    async with db_auxiliary.pool().acquire() as conn:
         await conn.execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, body.endpoint)
         return {"ok": True}
-    finally:
-        await db_pg.pool().release(conn)
 
 app.include_router(api_router)
 app.include_router(pg_router)
@@ -5681,9 +5680,12 @@ async def startup_pg_pool():
     if not USE_PG:
         await db.state_versions.create_index("restaurantId", unique=True)
     await db_pg.init_pool()
+    if USE_PG:
+        await db_auxiliary.init_pool()
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
     if client is not None:
         client.close()
+    await db_auxiliary.close_pool()
     await db_pg.close_pool()
