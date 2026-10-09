@@ -3,21 +3,28 @@
 No installer: grants and role-addressed policies require separate review.
 Application authorization still controls users, locations and staff PINs.
 """
+import transition_permissions as transition_checks
+
 TABLES = ('app_users', 'push_subscriptions')
 PRIVATE = ('purchasing', 'actual_inventory', 'prep_inventory', 'integrations')
 VERBS = ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
 
 
-async def inspect(conn):
+async def inspect(conn, *, transition=None):
+    if conn.is_in_transaction():
+        raise ValueError('Dedicated connection outside a transaction required')
     issues = []
     async with conn.transaction(isolation='repeatable_read', readonly=True):
         await conn.execute("SET LOCAL search_path=pg_catalog")
+        await conn.execute("SET LOCAL statement_timeout='20s'")
         identity = await conn.fetchrow('''SELECT current_user AS current_role,session_user AS login_role,
-            rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication
+            oid,rolinherit,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication
             FROM pg_roles WHERE rolname=current_user''')
         if identity['current_role'] != identity['login_role'] or any(identity[k] for k in
-                ('rolsuper', 'rolbypassrls', 'rolcreatedb', 'rolcreaterole', 'rolreplication')):
+                ('rolsuper', 'rolbypassrls', 'rolcreatedb', 'rolcreaterole', 'rolreplication', 'rolinherit')):
             issues.append('Privileged or selected role')
+        cohort = (await transition_checks.live_cohort(conn, transition, 'accounts', identity['current_role'])
+                  if transition is not None else (identity['oid'],))
         if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_auth_members
             WHERE member=(SELECT oid FROM pg_roles WHERE rolname=current_user))'''):
             issues.append('Role membership')
@@ -52,15 +59,27 @@ async def inspect(conn):
             selected = [r for r in grants if r['nspname'] == 'public' and r['relname'] == table]
             if not selected or not all(r['relkind'] in ('r', 'p') and r['relrowsecurity'] for r in selected):
                 issues.append('Required RLS table missing: ' + table)
-            policies = await conn.fetch('''SELECT polcmd::text AS polcmd,polpermissive,
-                pg_get_expr(polqual,polrelid) AS using,pg_get_expr(polwithcheck,polrelid) AS check
-                FROM pg_policy WHERE polrelid=to_regclass($1)
-                AND (SELECT oid FROM pg_roles WHERE rolname=current_user)=ANY(polroles)''', 'public.' + table)
-            for command in ('r', 'a', 'w', 'd'):
-                if not any(p['polpermissive'] and p['polcmd'] in (command, '*') and
-                           (command == 'a' or p['using'] == 'true') and
-                           (command not in ('a', 'w') or (p['check'] or p['using']) == 'true') for p in policies):
-                    issues.append('Role policy missing: ' + table + ':' + command)
+        policies = await conn.fetch('''SELECT n.nspname||'.'||c.relname AS table_name,
+            p.polname,p.polcmd::text AS polcmd,p.polpermissive,p.polroles,
+            pg_get_expr(p.polqual,p.polrelid) AS using_expr,
+            pg_get_expr(p.polwithcheck,p.polrelid) AS check_expr
+            FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname=ANY($1::text[]) AND (0=ANY(p.polroles)
+                OR p.polroles && $2::oid[] OR EXISTS(SELECT 1 FROM unnest(p.polroles) r
+                    WHERE r<>0 AND pg_has_role((SELECT oid FROM pg_roles WHERE rolname=current_user),r,'USAGE')))''',
+            ['public', *PRIVATE], list(cohort))
+        found = set()
+        for row in policies:
+            key = (row['table_name'], row['polname'])
+            if not transition_checks.policy_valid(row, {name: VERBS for name in TABLES}, 'auxiliary_candidate_', cohort) or key in found:
+                issues.append('Unreviewed applicable policy: ' + '.'.join(key))
+            else:
+                found.add(key)
+        for table in TABLES:
+            for verb in VERBS:
+                if ('public.' + table, 'auxiliary_candidate_' + verb.lower()) not in found:
+                    issues.append('Role policy missing: ' + table + ':' + verb)
         if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
             WHERE c.relkind='S' AND n.nspname=ANY($1::text[])
             AND (c.relowner=(SELECT oid FROM pg_roles WHERE rolname=current_user)
@@ -71,5 +90,8 @@ async def inspect(conn):
             (p.proowner=(SELECT oid FROM pg_roles WHERE rolname=current_user)
              OR ((n.nspname<>'public' OR p.prosecdef) AND has_function_privilege(current_user,p.oid,'EXECUTE'))))''', ['public', *PRIVATE]):
             issues.append('Native/definer function access or ownership')
+        readonly = await conn.fetchval('SHOW transaction_read_only') == 'on'
     return {'status': 'held' if issues else 'passed', 'issues': sorted(set(issues)),
-            'readOnly': True, 'operationalReleaseApproved': False}
+            'policyMode': 'reviewed_overlap' if transition is not None else 'single_role',
+            'transitionRecordSha256': transition.record_sha256 if transition is not None else None,
+            'readOnly': readonly, 'operationalReleaseApproved': False}

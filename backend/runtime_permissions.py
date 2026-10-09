@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import deployment_readiness as readiness
+import transition_permissions as transition_checks
 
 MANIFEST = readiness.ROOT / 'docs/RUNTIME_PERMISSION_CANDIDATE.json'
 CONTRACT = readiness.ROOT / 'docs/RUNTIME_CATALOG_CONTRACT.json'
@@ -164,12 +165,14 @@ def contract(profile, reference='local'):
     return hosted
 
 
-async def inspect(conn, role, reference='local'):
+async def inspect(conn, role, reference='local', *, transition=None):
     """Assess a named role without SET ROLE, DDL, grants, business reads or writes.
 
     A catalog-reader connection may assess a different runtime role. Its identity
     is reported separately; success does not prove actual LOGIN/pool behavior.
     An existing transaction is refused to guarantee our own read-only snapshot.
+    Only an independently verified diagnostic record permits the exact overlap
+    cohort. No application setting enables it; grants/catalog checks remain intact.
     """
     if conn.is_in_transaction():
         raise ValueError('Dedicated connection outside a transaction required')
@@ -187,6 +190,8 @@ async def inspect(conn, role, reference='local'):
         await conn.execute('SET LOCAL search_path=pg_catalog')
         await conn.execute("SET LOCAL statement_timeout='20s'")
         reader = await conn.fetchval('SELECT current_user')
+        cohort = (await transition_checks.live_cohort(conn, transition, 'inventory', role)
+                  if transition is not None else None)
         version = int(await conn.fetchval('SHOW server_version_num')) // 10000
         if version != expected['postgresMajor']:
             issue('unreviewed_postgres_major', str(version))
@@ -195,6 +200,8 @@ async def inspect(conn, role, reference='local'):
         if not flags:
             issue('missing_runtime_role', role)
         else:
+            if cohort is None:
+                cohort = (flags['oid'],)
             for key, value in dict(flags).items():
                 if key != 'oid' and value:
                     issue('privileged_runtime_role', role, key)
@@ -283,18 +290,12 @@ async def inspect(conn, role, reference='local'):
                 FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid
                 JOIN pg_namespace n ON n.oid=c.relnamespace
                 WHERE n.nspname=ANY($2::text[]) AND
-                (0=ANY(p.polroles) OR $1=ANY(p.polroles) OR EXISTS(
-                    SELECT 1 FROM unnest(p.polroles) r WHERE r<>0 AND pg_has_role($1,r,'USAGE')))''', flags['oid'], list(SCHEMAS))
+                (0=ANY(p.polroles) OR p.polroles && $3::oid[] OR EXISTS(
+                    SELECT 1 FROM unnest(p.polroles) r WHERE r<>0 AND pg_has_role($1::oid,r,'USAGE')))''', flags['oid'], list(SCHEMAS), list(cohort))
             found = set()
-            commands = {'SELECT': 'r', 'INSERT': 'a', 'UPDATE': 'w', 'DELETE': 'd'}
             for row in policies:
                 key = (row['table_name'], row['polname'])
-                verb = row['polname'].removeprefix('runtime_candidate_').upper()
-                valid = row['table_name'].startswith('public.') and verb in PUBLIC.get(row['table_name'][7:], ())
-                valid = valid and row['polname'] == 'runtime_candidate_' + verb.lower()
-                valid = valid and list(row['polroles']) == [flags['oid']] and row['polpermissive'] and row['polcmd'] == commands.get(verb)
-                valid = valid and row['using_expr'] == (None if verb == 'INSERT' else 'true')
-                valid = valid and row['check_expr'] == ('true' if verb in ('INSERT', 'UPDATE') else None)
+                valid = transition_checks.policy_valid(row, PUBLIC, 'runtime_candidate_', cohort) and key not in found
                 if not valid:
                     issue('unreviewed_applicable_policy', row['table_name'] + '.' + row['polname'])
                 else:
@@ -314,4 +315,6 @@ async def inspect(conn, role, reference='local'):
             'readOnly': readonly, 'catalogReader': reader, 'assessedRole': role,
             'issues': sorted(issues, key=lambda value: json.dumps(value, sort_keys=True)),
             'operationalReleaseApproved': False, 'hostedRoleLoginVerified': False,
+            'policyMode': 'reviewed_overlap' if transition is not None else 'single_role',
+            'transitionRecordSha256': transition.record_sha256 if transition is not None else None,
             'candidatePublication': profile['publication'], 'catalogReference': reference, 'contractSha256': digest(expected)}

@@ -1,5 +1,13 @@
 # Hosted Supabase deployment readiness
 
+Latest local prerequisite: the [transition permission checker](TRANSITION_PERMISSION_CHECKPOINT.md)
+accepts only independently pinned same-profile overlap during explicit diagnostics.
+Normal startup remains singleton-only. Before any hosted TO-list change, prepare
+the journaled installer, explicit startup integration and registered-client plan.
+Current application credentials remain selected; merge/recovery gates stay held.
+Both original hosted profiles pass the stricter default checks with unchanged
+role/policy/membership metadata. Twenty-nine local tests and 91 subtests pass.
+
 Latest October 9 review: keep the original restricted inventory/account logins
 on the verified shared session pooler at port 5432, with the encrypted local
 application recovery copy. Both current permission profiles and all six bounded

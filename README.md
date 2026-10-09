@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Default-strict transition permission checker - October 9, 2026
+
+The local diagnostic checker permits only independently recorded, same-profile
+original/replacement role pairs. All effective privilege and inventory catalog
+checks remain in place. Account policies now receive exact per-verb/cohort checks,
+including rejection of extra PUBLIC/restrictive policies. Actual application
+startup retains singleton policies and has no overlap environment toggle.
+
+Validation passes: 29 tests and 91 subtests, including real disposable PostgreSQL
+policy/privilege regressions. Both unchanged hosted credentials pass their
+read-only default permission profiles; role/policy/membership metadata is preserved.
+
+The [transition permission checkpoint](docs/TRANSITION_PERMISSION_CHECKPOINT.md)
+documents record provenance, exact administrative membership pins, the tests and
+remaining installer/startup/client-registry work. No hosted role, credential,
+grant, policy or application configuration changes occur here. **Combined recovery,
+merge and active-cutover gates remain held.** Local only; no push or deployment.
+
 ## Parallel-account rotation review and current pooler checks - October 9, 2026
 
 Read-only review passes for both current permission profiles and all six original
@@ -14,8 +32,9 @@ replacement accounts beside them. It identifies the strict singleton-policy
 verifier prerequisite and the staged grant/policy/client/retirement process.
 The review planner emits no SQL. Five guards and 20 subtests pass.
 
-Next: implement the default-strict transition permission inspector before
-preparing a journaled parallel-account installer. **Combined rotation/recovery,
+Follow-up: the [transition checker](docs/TRANSITION_PERMISSION_CHECKPOINT.md) now
+implements the diagnostic prerequisite; journaled installation and explicit
+startup/client integration remain to be prepared. **Combined rotation/recovery,
 merge and active-cutover gates remain held.** Local only; no push or deployment.
 
 ## Combined rehearsal held; original pooled access and data verified - October 9, 2026

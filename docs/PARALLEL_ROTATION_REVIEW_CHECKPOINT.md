@@ -1,5 +1,11 @@
 # Parallel account rotation and connection-path review
 
+Follow-up: the local [transition permission checker](TRANSITION_PERMISSION_CHECKPOINT.md)
+implements the diagnostic cohort prerequisite and pins newly observed inbound
+creator-administration metadata. Application startup remains singleton-only;
+installation, switching and recovery gates remain held. Results below describe
+the earlier read-only source and evidence.
+
 October 9, 2026. Local only; no credential, role, grant, policy, business-row,
 application configuration or endpoint changes. Hosted read-only receipt:
 `parallel-rotation-review-20261009T2242136669784Z.json`.
