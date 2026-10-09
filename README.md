@@ -1,5 +1,21 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Hosted two-pool verification - October 9, 2026
+
+The hosted build trial passes with **16 authenticated clients** across two fresh
+rounds of simultaneous inventory and account/notification pools. Both permission
+assessments pass and prohibited cross-boundary reads are denied. Independent
+verification confirms temporary roles/grants/policies are removed and the
+catalog, effective object permissions, policies, migration ledger and observed
+row counts match the starting snapshot. Three target-guard tests also pass.
+
+The [hosted two-pool checkpoint](docs/HOSTED_TWO_POOL_CHECKPOINT.md) records the
+passing evidence and an earlier interrupted attempt with verified recovery.
+No business writes, permanent credentials or saved application configuration
+changes occur. The next credential step will use private local configuration
+for continued build/testing. **Continue holding merges** for permanent connection
+and workflow validation, recovery, browser/Data API and sequential PR checks.
+
 ## Separate account/notification connection - October 9, 2026
 
 The backend now supports an optional separately restricted connection for

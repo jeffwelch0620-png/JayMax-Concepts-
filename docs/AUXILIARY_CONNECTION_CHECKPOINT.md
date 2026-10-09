@@ -111,3 +111,12 @@ validation remain open. Continue holding merges. No real invoice import,
 permanent credential change, hosted write, push, merge or publication occurs
 in this checkpoint. Previous full frontend/build results remain historical;
 frontend source did not change here.
+
+## Subsequent hosted validation - October 9, 2026
+
+The [hosted two-pool checkpoint](HOSTED_TWO_POOL_CHECKPOINT.md) now verifies
+simultaneous ordinary inventory and auxiliary LOGINs against the connected build
+database, with independent cleanup and unchanged catalog/ACL/policy/ledger/count
+snapshots. It preserves this local implementation and all frozen references.
+Permanent credential setup remains next; the selected destination is private
+local configuration for continued build/testing. Keep holding merges.
