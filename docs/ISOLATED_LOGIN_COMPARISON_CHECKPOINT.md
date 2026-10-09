@@ -88,6 +88,15 @@ disable result remains untested.
 
 ## Recommended next review
 
+Later evidence: the [owned pooler drain checkpoint](OWNED_POOLER_DRAIN_CHECKPOINT.md)
+confirms inventory NOLOGIN/native direct denial and closes only a newly owned
+pooler client. Both subsequent fresh pooler attempts returned the exact lookup
+error and none was accepted. The native-denial-only guard held and restoration/
+full source comparisons passed. This narrows the observed behavior under owned
+draining; it does not relabel the earlier accepted-client result or prove the
+accounts-role case. Review the corroborated lookup contract before changing the
+combined error classifier.
+
 Follow-up: the [owned-session signal rehearsal](OWNED_SESSION_SIGNAL_CHECKPOINT.md)
 now proves that the owner can terminate only newly created, labeled, read-only
 direct test clients for both retained roles. Fresh unchanged credentials reconnect;

@@ -47,6 +47,14 @@ application labels. Existing application connections are never signal candidates
 
 ## Next bounded comparison
 
+Follow-up: the [controlled owned-pooler drain](OWNED_POOLER_DRAIN_CHECKPOINT.md)
+now verifies the inventory client's owned backend/client closure with confirmed
+NOLOGIN and native direct denial. Both bounded fresh pooler attempts rejected
+with the exact lookup category, but the native-only guard held. LOGIN/original
+credentials and the full source baseline recovered. The accounts disable remains
+untested. Review the explicitly corroborated provider contract next; do not label
+this as a passed combined rotation/recovery check.
+
 Keep the [isolated LOGIN hold](ISOLATED_LOGIN_COMPARISON_CHECKPOINT.md) and combined
 credential/recovery checkpoint held. The earlier fresh pooler client accepted a
 confirmed NOLOGIN role; today's direct-client signal rehearsal does not resolve it.

@@ -1,5 +1,21 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Controlled pooler drain and recovered hold - October 9, 2026
+
+The owner confirmed inventory NOLOGIN, direct PostgreSQL returned the known 28000
+denial, and only the verified owned pooler test connection was closed. Both fresh
+pooler attempts then rejected access with the specific EAUTHQUERY lookup error.
+The strict native-denial guard held; the accounts-role disable was not run.
+LOGIN and unchanged original credentials are recovered on both paths, and all
+120 table/sequence fingerprints, 13 catalog groups, Track 1, the complete ledger
+and role attributes are preserved. Twenty-three guards and 18 subtests pass.
+
+The [controlled drain checkpoint](docs/OWNED_POOLER_DRAIN_CHECKPOINT.md) records
+the initial setup/data-comparison holds and the final recovered evidence.
+Next: review the independently corroborated provider-denial contract and prove
+the accounts-role case before changing combined rotation/recovery handling.
+**Continue holding merges and active cutover.** Local only; no push or deployment.
+
 ## Verified owned-connection signal rehearsal - October 9, 2026
 
 The owner successfully closed one newly created read-only test connection for
