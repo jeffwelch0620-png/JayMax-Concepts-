@@ -79,13 +79,14 @@ were terminated and no combined credential-rotation checkpoint was rerun.
 See [Hosted-to-local backup workflow](HOSTED_TO_LOCAL_BACKUP_WORKFLOW.md).
 Read-only catalog discovery confirmed PostgreSQL 17.6, all six initial application
 and migration-history schemas, and zero `storage.objects` rows at this observation.
-The available local `pg_dump` is PostgreSQL 17.11. These are preparation facts;
-they do not prove that a current hosted data backup or its restore has passed.
+The available local `pg_dump` is PostgreSQL 17.11. These were preparation facts
+at this checkpoint. The subsequent [application backup verification](HOSTED_BACKUP_VERIFICATION_CHECKPOINT.md)
+records the completed hosted export/local restore; managed recovery remains pending.
 
-Next: implement and run the snapshot-consistent encrypted application export and
-disposable local restore described there, compare complete data/catalog fingerprints
-and reports, then address bounded exact-role retirement and the remaining release
-gates. Keep original credentials/flags and unrelated continuation work unchanged.
+The application export/restore step is now complete within its declared scope.
+Next: address bounded exact-role retirement and the remaining release gates.
+Keep original credentials/flags and unrelated continuation work unchanged. There
+were no closed source periods, so runtime Food Cost report comparison is not claimed.
 
 Sources:
 

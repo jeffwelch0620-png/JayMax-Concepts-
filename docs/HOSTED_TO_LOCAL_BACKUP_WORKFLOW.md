@@ -1,8 +1,8 @@
 # Hosted Supabase to local recovery copy
 
-Prepared October 9, 2026. This is the implementation and acceptance plan, not a
-completed hosted backup, automated job, restore utility or verified recovery claim.
-Nothing is scheduled by this checkpoint.
+Updated October 9, 2026. The manual application export and disposable local restore
+are implemented and verified. See [the verification checkpoint](HOSTED_BACKUP_VERIFICATION_CHECKPOINT.md)
+for exact scope, evidence and remaining gates. Nothing is scheduled.
 
 ## Scope and authority
 
@@ -14,8 +14,8 @@ verification/recovery; it must not feed back into hosted inventory through sync.
 The older `native_backup.py` remains deliberately limited to disposable loopback
 databases and `public`, `purchasing`, `actual_inventory`. Do not loosen that tool's
 remote-source/restore guards or call its three-schema proof a complete current
-application backup. Add a separate hosted-export entry point and reuse only the
-verified comparison primitives where their scope is explicit.
+application backup. The separate `backend/hosted_backup.py` and manual
+`backend/hosted_backup_cli.py` implement the six-schema export and isolated restore.
 
 Initial application export scope, confirmed present in the current hosted catalog:
 
@@ -46,6 +46,10 @@ Supabase database backups do not contain the stored object files themselves.
 ([Database backup scope](https://supabase.com/docs/guides/platform/backups))
 
 ## Export implementation sequence
+
+These export steps are implemented. Current build tooling uses bounded in-memory
+authenticated encryption: custom archives larger than 64 MiB are held. Streaming
+encryption and production-scale validation remain future work.
 
 1. Require an expected project reference and reviewed owner/backup connection from
    private configuration. Validate endpoint, database and project before connecting;
@@ -113,7 +117,13 @@ work, not an implied request to create an automation now.
 
 ## Remaining release conditions
 
-Implement and prove this workflow before promising local disaster recovery.
+The application-scope trial passes. Its 30 migration-file hashes are recorded
+metadata; this does not execute migrations again or validate a future checkout.
+The trial confirms restored grants, but does not exercise restricted-role writes,
+idempotency workflows or application logins on the restored database. No source
+period closures exist, so runtime Food Cost report comparison remains unproven.
+Global role memberships/passwords and managed-service recovery are separate.
+
 Separately resolve exact-role retirement through the pooler, complete the combined
 credential/recovery checkpoint, finish browser/Data API and deployment checks, and
 review the pending PR chain before proposing sequential merges. TLS success does

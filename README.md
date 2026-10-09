@@ -1,5 +1,20 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Verified encrypted application backup and local restore - October 9, 2026
+
+The manual hosted export and isolated local restore pass: all 8,335 records, 120
+table/sequence fingerprints and 13 catalog groups match across six application
+and migration schemas. Thirty migration-file hashes are captured. Hosted data
+and the baseline are preserved, restored access boundaries pass, and the disposable
+database/role stubs were cleaned up. Ten local backup guards pass.
+
+See the [backup verification checkpoint](docs/HOSTED_BACKUP_VERIFICATION_CHECKPOINT.md)
+and [manual recovery workflow](docs/HOSTED_TO_LOCAL_BACKUP_WORKFLOW.md). Data and
+the separate encryption key remain private. This verifies application-scope
+recovery; managed services, credential retirement and remaining release checks
+are still pending. Backups are not scheduled. **Merges and active cutover remain
+held.** This checkpoint is local only; nothing was pushed, merged or deployed.
+
 ## Verified TLS and hosted-to-local recovery plan - October 9, 2026
 
 Both reviewed application pools now require certificate and hostname verification
@@ -12,8 +27,8 @@ The [TLS checkpoint](docs/TLS_AND_LOCAL_BACKUP_CHECKPOINT.md) records the eviden
 and corrects the earlier pooler/backend SSL measurement. The
 [local recovery workflow](docs/HOSTED_TO_LOCAL_BACKUP_WORKFLOW.md) covers all three
 inventory tracks, original source fields, integration data and migration history.
-This is a prepared workflow: the current hosted encrypted export/restore trial is
-still pending. **Merges and active cutover remain held** on the separate credential
+The application export/restore subsequently passed, as recorded above.
+**Merges and active cutover remain held** on the separate credential
 retirement/recovery and release gates. This checkpoint is local only.
 
 ## Isolated LOGIN revocation hold - October 9, 2026
