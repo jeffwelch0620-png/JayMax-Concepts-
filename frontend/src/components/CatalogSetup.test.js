@@ -60,7 +60,7 @@ test("retained editor keeps its original version across navigation and later typ
   expect(find("item-name-input").value).toBe("Retained fictional edit");
 });
 
-test("new item starts at its first edit version and can be explicitly discarded after refresh", async () => {
+test("new item appends to the latest catalog and uses its latest available control number", async () => {
   await act(async () => root.render(<SetupTab {...revisionProps(10)} />));
   await act(async () => root.render(<SetupTab {...revisionProps(11)} />));
   await changeInput(find("item-name-input"),"Fictional new item");
@@ -68,13 +68,16 @@ test("new item starts at its first edit version and can be explicitly discarded 
   expect(persist).toHaveBeenCalledWith(expect.any(Array),11);
   persist.mockClear(); success.mockClear();
   await changeInput(find("item-name-input"),"Second fictional draft");
-  await act(async () => root.render(<SetupTab {...revisionProps(12)} />));
-  await click("item-submit-button"); expect(persist).not.toHaveBeenCalled();
+  const added = { ...item, controlNumber: "F-002", itemCode: "second_food", name: "Another fictional item" };
+  await act(async () => root.render(<SetupTab {...revisionProps(12,[item,added])} />));
+  await click("item-submit-button");
+  expect(persist).toHaveBeenCalledWith([item,added,expect.objectContaining({controlNumber:"F-003",name:"Second fictional draft"})],12);
+  await changeInput(find("item-name-input"),"Discardable fictional draft");
   await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent.includes("Cancel")).click());
   expect(find("item-name-input").value).toBe("");
 });
 
-test("server conflict preserves the original editor revision for retry", async () => {
+test("409 then a same-item refresh refuses retry without a second persist", async () => {
   const drafts = new Map();
   await act(async () => root.render(<SetupTab key="conflict" {...revisionProps(10,[item],drafts)} />));
   await click("edit-item-F01");
@@ -82,6 +85,80 @@ test("server conflict preserves the original editor revision for retry", async (
   await click("item-submit-button");
   expect(success).not.toHaveBeenCalled(); expect(drafts.get("item:berts").draftRevision).toBe(10);
   expect(find("item-name-input").value).toBe(item.name);
+  await act(async () => root.render(<SetupTab {...revisionProps(11,[{...item,par:1}],drafts)} />));
+  await click("item-submit-button");
+  expect(persist).toHaveBeenCalledTimes(1); expect(success).not.toHaveBeenCalled();
+  expect(drafts.get("item:berts").draftRevision).toBe(10);
+});
+
+test("409 then an unrelated refresh allows a guarded retry while preserving new records", async () => {
+  await act(async () => root.render(<SetupTab {...revisionProps(10)} />));
+  await click("edit-item-F01"); await changeInput(parInput(),"2");
+  persist.mockRejectedValueOnce({response:{status:409,data:{detail:"Catalog changed elsewhere"}}});
+  await click("item-submit-button");
+  const other = {...item,controlNumber:"F02",itemCode:"other_food",par:9};
+  await act(async () => root.render(<SetupTab {...revisionProps(11,[item,other])} />));
+  await click("item-submit-button");
+  expect(persist).toHaveBeenLastCalledWith([expect.objectContaining({par:2}),other],11);
+  expect(persist).toHaveBeenCalledTimes(2); expect(success).toHaveBeenCalledTimes(1);
+});
+
+test("explicit item recovery preserves independent local and remote edits and exact supplier data", async () => {
+  const base = {...item,vendorSkus:[{...item.vendorSkus[0],basePerPurchaseUnit:null}]};
+  const latest = {...base,notes:"Remote metadata",vendorSkus:[{...base.vendorSkus[0],price:"98765432109876543210.000000000009"}]};
+  const load = jest.fn().mockResolvedValue({revision:11,items:[latest]});
+  await act(async () => root.render(<SetupTab {...revisionProps(10,[base])} onCatalogLinked={load} />));
+  await click("edit-item-F01"); await changeInput(parInput(),"2");
+  await act(async () => root.render(<SetupTab {...revisionProps(11,[latest])} onCatalogLinked={load} />));
+  await click("item-submit-button"); expect(persist).not.toHaveBeenCalled();
+  await click("review-item-draft"); expect(persist).not.toHaveBeenCalled();
+  await click("item-submit-button");
+  const saved = persist.mock.calls[0][0][0];
+  expect(saved.par).toBe(2); expect(saved.notes).toBe("Remote metadata");
+  expect(saved.vendorSkus[0].price).toBe(latest.vendorSkus[0].price);
+  expect(saved.vendorSkus[0].basePerPurchaseUnit).toBeNull();
+  expect(saved).not.toHaveProperty("draftBase"); expect(saved).not.toHaveProperty("draftRevision");
+  expect(persist.mock.calls[0][1]).toBe(11);
+});
+
+test("overlapping item changes are named and retained until explicitly resolved", async () => {
+  await act(async () => root.render(<SetupTab {...revisionProps(10)} />));
+  await click("edit-item-F01"); await changeInput(parInput(),"2");
+  await act(async () => root.render(<SetupTab {...revisionProps(11,[{...item,par:1}])} />));
+  await click("review-item-draft");
+  expect(container.querySelector('[role="alert"]').textContent).toContain("Conflicting item changes: par");
+  expect(parInput().value).toBe("2"); await click("item-submit-button"); expect(persist).not.toHaveBeenCalled();
+  await changeInput(parInput(),"1"); await click("review-item-draft"); await click("item-submit-button");
+  expect(persist).toHaveBeenCalledWith([expect.objectContaining({par:1})],11);
+});
+
+test("recovery refuses coupled pack and supplier changes even across different fields", async () => {
+  await act(async () => root.render(<SetupTab {...revisionProps(10)} />)); await click("edit-item-F01");
+  const pack = [...container.querySelectorAll("label")].find(label => label.textContent.startsWith("Pack Count")).querySelector("input");
+  await changeInput(pack,"6");
+  const latest = {...item,vendorSkus:[{...item.vendorSkus[0],basePerPurchaseUnit:24}]};
+  await act(async () => root.render(<SetupTab {...revisionProps(11,[latest])} />));
+  await click("review-item-draft");
+  expect(container.querySelector('[role="alert"]').textContent).toContain("pack, portion and supplier details");
+  expect(pack.value).toBe("6"); expect(persist).not.toHaveBeenCalled();
+});
+
+test.each([{latest:[]},{latest:[{...item,itemCode:"replacement_food"}]}])("removed or replaced items cannot be resurrected by recovery", async ({latest}) => {
+  await act(async () => root.render(<SetupTab {...revisionProps(10)} />)); await click("edit-item-F01");
+  await changeInput(find("item-name-input"),"Retained fictional name");
+  await act(async () => root.render(<SetupTab {...revisionProps(11,latest)} />));
+  await click("review-item-draft"); await click("item-submit-button");
+  expect(persist).not.toHaveBeenCalled(); expect(find("item-name-input").value).toBe("Retained fictional name");
+});
+
+test("late item recovery reads cannot replace typing that happened while reading", async () => {
+  let complete;
+  const load = jest.fn().mockReturnValue(new Promise(resolve => {complete=resolve;}));
+  await act(async () => root.render(<SetupTab {...revisionProps(10)} onCatalogLinked={load} />)); await click("edit-item-F01");
+  act(() => find("review-item-draft").click());
+  await changeInput(find("item-name-input"),"Newer typing");
+  await act(async () => complete({revision:11,items:[{...item,par:1}]}));
+  expect(find("item-name-input").value).toBe("Newer typing"); expect(parInput().value).toBe("0");
 });
 test("an ordinary item edit preserves activation, actor, canonical units and exact supplier fields", async () => {
   await click("edit-item-F01"); await click("item-submit-button");

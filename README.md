@@ -8,10 +8,14 @@ close/reopen/reclose history, separate prep/waste explanation and the staff
 quantity/manager acceptance workflow, including refusal of a stale review.
 Independent employee authorization and posting retries remain outstanding.
 The [live acceptance follow-up](docs/LIVE_ACCEPTANCE_CATALOG_EDITOR_FOLLOWUP.md)
-records the results and a reproduced two-tab catalog overwrite. Its narrow
-revision-retention fix is prepared for draft PR review; hosted validation of that
-fix is pending a separately approved deployment. All **527 frontend tests across 63
-suites** and the strict production build pass locally for this follow-up.
+records the results and a reproduced two-tab catalog overwrite. The amended
+[draft PR19](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/19) protects
+both item and recipe editors, permits unrelated-refresh saves and new items,
+and adds explicit recovery that preserves independent edits while holding
+conflicts. The [review response](docs/PR19_REVIEW_AMENDMENT.md) explains the
+boundaries. All **553 frontend tests across 65 suites** pass locally with the
+native profile, and the strict production build passes. Hosted item
+and recipe validation awaits a separately approved merge and test deployment.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
 locally corrected blockers: duplicate count panels while typing, and unrelated

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
+import { equalEditorValue, snapshotEditorValue, mergeEditorFields } from "../lib/editorDraft";
 import { supplierConversionMismatch, supplierReviewSaved } from "../lib/supplierConversion";
 import { Plus, Trash2, Star, X } from "lucide-react";
 import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, nextControlNumber, itemDerived, isCountActive, isOrderEnabled, uid, fmtMoney, num } from "../lib/calc";
@@ -19,25 +20,57 @@ import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnA
 
 function emptyForm(areas) {
   return {
-    draftRevision: null, name: "", storageArea: (areas[0] || DEFAULT_STORAGE_AREAS[0]).name, active: true, countActive: true, orderEnabled: true, salesTracked: false, itemType: "portion",
+    draftRevision: null, draftBase: null, name: "", storageArea: (areas[0] || DEFAULT_STORAGE_AREAS[0]).name, active: true, countActive: true, orderEnabled: true, salesTracked: false, itemType: "portion",
     purchaseUnit: "case", packCount: "", unitQty: "", unitUOM: "lb",
     portionSize: "", portionUOM: "oz", par: "", currentStock: "",
     vendorSkus: [{ id: uid("vs"), vendor: VENDORS[0], vendorSku: "", packDescription: "", purchaseUnit: "case", packCount: "", unitQty: "", unitUOM: "lb", price: "", priceUpdatedAt: "", priceSource: "manual", available: true, preferred: true }],
   };
 }
 
+function itemForm(it, revision) {
+  return {
+    draftRevision: revision, draftBase: snapshotEditorValue(it),
+    name: it.name, storageArea: it.storageArea, active: it.active !== false,
+    countActive: isCountActive(it), orderEnabled: isOrderEnabled(it), salesTracked: it.salesTracked, itemType: it.itemType,
+    purchaseUnit: it.purchaseUnit, packCount: it.packCount ?? "", unitQty: it.unitQty ?? "", unitUOM: it.unitUOM,
+    portionSize: it.portionSize ?? "", portionUOM: it.portionUOM, par: it.par, currentStock: it.currentStock,
+    vendorSkus: snapshotEditorValue(it.vendorSkus || []),
+  };
+}
+function itemFields(form) {
+  const optionalNumber = value => value === "" || value == null ? null : Number(value);
+  return {
+    name: form.name.trim(), storageArea: form.storageArea, active: form.active,
+    countActive: form.countActive, orderEnabled: form.orderEnabled, salesTracked: form.salesTracked, itemType: form.itemType,
+    purchaseUnit: form.purchaseUnit, packCount: optionalNumber(form.packCount), unitQty: optionalNumber(form.unitQty), unitUOM: form.unitUOM,
+    portionSize: optionalNumber(form.portionSize), portionUOM: form.portionUOM,
+    par: Number(form.par) || 0, currentStock: Number(form.currentStock) || 0,
+    vendorSkus: form.vendorSkus.map(v => ({ ...v, price: v.price === "" || v.price == null ? null : v.price,
+      vendorSku: String(v.vendorSku || "").trim(), packDescription: String(v.packDescription ?? ""),
+      purchaseUnit: v.purchaseUnit || form.purchaseUnit || "case", packCount: optionalNumber(v.packCount),
+      unitQty: optionalNumber(v.unitQty), unitUOM: v.unitUOM || null })),
+  };
+}
+const ITEM_GROUPS = [
+  { label: "pack, portion and supplier details", fields: ["itemType", "purchaseUnit", "packCount", "unitQty", "unitUOM", "portionSize", "portionUOM", "vendorSkus"] },
+  { label: "catalog participation", fields: ["active", "countActive", "orderEnabled", "salesTracked"] },
+];
+
 export function SetupTab({ items, revision = 0, persistItems, areas, persistAreas, showToast, showError = () => {}, drafts, rid, onCatalogLinked, onVerifySupplier }) {
   const [form, editForm, clearForm] = useRetainedDraft(`item:${rid}`, emptyForm(areas), drafts);
   const [editingCN, setEditingCN, clearEditing] = useRetainedDraft(`item-edit:${rid}`, null, drafts);
   const [newArea, setNewArea, clearArea] = useRetainedDraft(`area:${rid}`, { name: "", prefix: "" }, drafts);
   const [error, setError] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+  const currentForm = useRef(form); currentForm.current = form;
+  const mounted = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const fail = message => { setError(message); showError(message); };
   const [reviewOnly, setReviewOnly] = useState(false);
   const [vendorEmails, setVendorEmails, loadVendorEmails, emailDirty] = useRetainedDraft(`vendor-emails:${rid}`, {}, drafts);
   const reviewCount = items.filter((it) => it.needsReview).length;
   const editedItem = items.find(it => it.controlNumber === editingCN);
   const sharedProduct = api.catalogMappingEnabled && (items.find(it => it.controlNumber === editingCN)?.sharedStoreCount || 0) > 1;
-  const optionalNumber = value => value === "" || value == null ? null : Number(value);
 
   useEffect(() => {
     if (!rid || api.supplierContactsEnabled) return;
@@ -59,8 +92,8 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
     catch (e) { fail(e?.response?.data?.detail || "Couldn't save that email"); }
   }
 
-  // Keep the version with the retained form, rather than adopting the latest
-  // background refresh. New items capture their version on the first edit.
+  // Keep the opening snapshot/version with the retained form. New drafts may
+  // append to the latest catalog; existing drafts must first match their base.
   function setForm(change) {
     editForm(current => ({ ...change(current), draftRevision: current.draftRevision ?? (editingCN ? null : revision) }));
   }
@@ -68,15 +101,25 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
 
   function startEdit(it) {
     setEditingCN(it.controlNumber);
-    editForm({
-      draftRevision: revision,
-      name: it.name, storageArea: it.storageArea, active: it.active !== false, countActive: isCountActive(it), orderEnabled: isOrderEnabled(it), salesTracked: it.salesTracked, itemType: it.itemType,
-      purchaseUnit: it.purchaseUnit, packCount: it.packCount ?? "", unitQty: it.unitQty ?? "", unitUOM: it.unitUOM,
-      portionSize: it.portionSize ?? "", portionUOM: it.portionUOM, par: it.par, currentStock: it.currentStock,
-      vendorSkus: (it.vendorSkus || []).map((v) => ({ ...v })),
-    });
+    editForm(itemForm(it, revision)); setError("");
   }
   function cancelEdit() { clearEditing(editingCN, null); clearForm(form, emptyForm(areas)); setError(""); }
+
+  async function reviewLatest() {
+    const submitted = form;
+    setReviewing(true);
+    try {
+      const saved = onCatalogLinked ? await onCatalogLinked() : { items, revision };
+      if (!mounted.current || currentForm.current !== submitted) return;
+      if (!saved || !Number.isSafeInteger(saved.revision) || !Array.isArray(saved.items)) throw new Error("Latest catalog data was not confirmed. Your draft is retained.");
+      const latest = saved.items.find(it => it.controlNumber === editingCN);
+      if (!latest || !submitted.draftBase || latest.itemCode !== submitted.draftBase.itemCode) throw new Error("The original item was removed or its identity changed. Your draft is retained.");
+      const merged = mergeEditorFields(itemFields(itemForm(submitted.draftBase)), itemFields(submitted), itemFields(itemForm(latest)), ITEM_GROUPS);
+      if (merged.conflicts.length) throw new Error(`Conflicting item changes: ${merged.conflicts.join(", ")}. Review these fields or cancel; your draft is retained.`);
+      editForm({ ...itemForm(latest, saved.revision), ...merged.data }); setError("");
+    } catch (e) { if (mounted.current) fail(e.message || "Couldn't review latest catalog data. Your draft is retained."); }
+    finally { if (mounted.current) setReviewing(false); }
+  }
 
   function addVendorRow() {
     setForm((f) => ({ ...f, vendorSkus: [...f.vendorSkus, { id: uid("vs"), vendor: VENDORS[0], vendorSku: "", packDescription: "", purchaseUnit: f.purchaseUnit || "case", packCount: f.packCount || "", unitQty: f.unitQty || "", unitUOM: f.unitUOM || "lb", price: "", priceUpdatedAt: "", priceSource: "manual", available: true, preferred: f.vendorSkus.length === 0 }] }));
@@ -101,31 +144,22 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
   async function submit(e) {
     e.preventDefault();
     if (!form.name.trim() || form.vendorSkus.length === 0) return;
-    if (!Number.isSafeInteger(form.draftRevision) || form.draftRevision !== revision) {
-      fail("Saved catalog data changed while this form was open. Your draft is retained. Cancel this form and review the latest item, or start a new item, before saving.");
+    if (editingCN && (!form.draftBase || !editedItem || editedItem.itemCode !== form.draftBase.itemCode || !equalEditorValue(form.draftBase, editedItem))) {
+      fail("This item changed while the form was open. Your draft is retained. Reload latest and keep my changes to review independent edits, or cancel.");
       return;
     }
-    const cleanSkus = form.vendorSkus.map((v) => ({
-      ...v, price: v.price === "" || v.price == null ? null : v.price, vendorSku: String(v.vendorSku || "").trim(), packDescription: String(v.packDescription ?? ""),
-      purchaseUnit: v.purchaseUnit || form.purchaseUnit || "case", packCount: optionalNumber(v.packCount),
-      unitQty: optionalNumber(v.unitQty), unitUOM: v.unitUOM || null,
-    }));
     const record = {
       ...items.find(i => i.controlNumber === editingCN),
-      controlNumber: previewCN, name: form.name.trim(), storageArea: form.storageArea,
-      active: form.active, countActive: form.countActive, orderEnabled: form.orderEnabled,
-      salesTracked: form.salesTracked, itemType: form.itemType,
-      purchaseUnit: form.purchaseUnit, packCount: optionalNumber(form.packCount), unitQty: optionalNumber(form.unitQty), unitUOM: form.unitUOM,
-      portionSize: optionalNumber(form.portionSize), portionUOM: form.portionUOM,
-      par: Number(form.par) || 0, currentStock: Number(form.currentStock) || 0,
+      controlNumber: previewCN, ...itemFields(form),
       lastCounted: items.find((i) => i.controlNumber === editingCN)?.lastCounted || "",
       needsReview: false,
-      vendorSkus: cleanSkus,
     };
     const exists = items.some((it) => it.controlNumber === record.controlNumber);
     const next = exists ? items.map((it) => it.controlNumber === record.controlNumber ? record : it) : [...items, record];
     setError("");
-    if (!(await confirmSave(() => persistItems(next, form.draftRevision), fail))) return;
+    // Latest list + unchanged edited record (or a new record) can safely use
+    // this render's revision. The store/server still reject an unseen race.
+    if (!(await confirmSave(() => persistItems(next, revision), fail))) return;
     showToast(exists ? "Item updated" : `Item ${record.controlNumber} added`);
     if (clearForm(form, emptyForm(areas))) clearEditing(editingCN, null);
   }
@@ -249,6 +283,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
 
         <div className="flex gap-2.5">
           <button type="submit" className={btnAcc} data-testid="item-submit-button"><Plus size={15} /> {editingCN ? "Save Changes" : "Add Item"}</button>
+          {editingCN && <button type="button" className={btnGhost} disabled={reviewing} data-testid="review-item-draft" onClick={reviewLatest}>Reload latest and keep my changes</button>}
           {(editingCN || form.draftRevision != null) && <button type="button" className={btnGhost} onClick={cancelEdit}><X size={15} /> Cancel</button>}
         </div>
       </form>

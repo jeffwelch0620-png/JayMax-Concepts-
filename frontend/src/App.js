@@ -98,7 +98,7 @@ export default function App() {
   const showError = (msg) => { if (store.isCurrent()) toast.error(msg); };
   const persistItems = (next, revision) => store.save("items", next, revision);
   const persistPurchases = next => store.save("purchases", next);
-  const persistDishes = next => store.save("dishes", next);
+  const persistDishes = (next, revision) => store.save("dishes", next, revision);
   const persistAdjustments = next => store.save("adjustments", next);
   const persistReportingPeriods = next => store.save("reportingPeriods", next);
   const persistAreas = next => store.save("areas", next);
@@ -286,7 +286,7 @@ export default function App() {
             {activeTab === "order" && <OrderTab key={loc} items={S.items} showToast={showToast} restaurantName={current.name} rid={loc} onCreatedPO={() => setActiveTab("purchaseOrders")} />}
             {activeTab === "purchaseOrders" && <PurchaseOrdersTab key={loc} rid={loc} showToast={showToast} focusOrder={focusOrder} onInventoryChange={store.refresh} />}
             {activeTab === "menu" && <MenuTab dishes={S.dishes} onAddNew={() => openCosting(null)} onOpenDish={(id) => openCosting(id)} />}
-            {activeTab === "costing" && <CostingTab rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} dishes={S.dishes} persist={persistDishes} showToast={showToast} focusDish={costingFocus} />}
+            {activeTab === "costing" && <CostingTab revision={S.revision} loadLatest={store.refresh} rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} dishes={S.dishes} persist={persistDishes} showToast={showToast} focusDish={costingFocus} />}
             {activeTab === "recipeCards" && <RecipeCardsTab items={S.items} dishes={S.dishes} />}
             {activeTab === "sales" && <SalesTrackingTab revision={S.revision} rid={loc} showError={showError} drafts={drafts.current} key={loc} actualMode={nativeSharedState} items={S.items} dishes={S.dishes} purchases={S.purchases} adjustments={S.adjustments} salesPeriod={S.salesPeriod} persist={persistSalesPeriod} loadLatestSales={loadLatestSales} reportingPeriods={S.reportingPeriods} persistReportingPeriods={persistReportingPeriods} showToast={showToast} />}
             {activeTab === "adjustments" && <AdjustmentsTab readOnly={retainedAdjustments(S)} rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} adjustments={S.adjustments} persist={persistAdjustments} showToast={showToast} />}

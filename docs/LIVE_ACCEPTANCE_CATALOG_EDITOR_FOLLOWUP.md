@@ -37,37 +37,43 @@ not changed.
 revision. `App` sent item saves through the current store revision, bypassing
 the existing original-revision guard after a successful background refresh.
 
-The local follow-up keeps the catalog revision inside the retained form and
-passes it through `App` into `useStoreState.save`. Existing item editors capture
-the revision when opened; new-item forms capture it on their first edit.
-A stale or unverifiable form is refused without clearing entries. Cancel and
-reopen explicitly loads the latest saved item; new drafts can also be cancelled.
-An unchanged revision still saves normally, while an unseen server-side change
-remains protected by the existing revisioned route. No automatic merge or
-conversion recalculation is added.
+The amended follow-up retains the original saved record and revision in both
+item and recipe drafts. An ordinary save proceeds at the current collection
+revision only if the edited record is unchanged. A changed or missing record
+holds the save and preserves the draft. An unseen race still reaches the
+existing store/server revision guard. New items use the latest collection and
+available control number; unrelated revisions no longer force a restart.
 
-This is deliberately conservative: any change to the restaurant's global
-revision can require reopening the form, even when another item changed.
-Field-level merging can be evaluated later rather than silently rebasing today.
+Both editors offer **Reload latest and keep my changes**. This explicitly reads
+latest data and stages independent edits without saving. Competing field edits
+are named and retained for review. Pack, portion and supplier relationships, and
+recipe ingredient/yield relationships, are reconciled together; arrays are
+atomic. Recovery preserves latest metadata and unknown conversions and checks
+recipes against the latest ingredient catalog. It does not recalculate a
+conversion. [The review amendment](PR19_REVIEW_AMENDMENT.md) records the four
+findings, tradeoffs and test coverage.
 
 ## Validation and release status
 
-The focused catalog, save-integrity, App and store suites pass **95 tests**.
-All **527 tests across 63 suites** pass with the reviewed native feature profile.
-The strict production build passes with `CI=true` and ESLint enabled.
-The follow-up on `codex/catalog-editor-revision-integrity` is based on `85cf2b7`
-and prepared for draft PR review. The validated code checkpoint is `6069ce6`;
-the subsequent release-status update changes documentation only. The fix has
-not been merged or deployed. Hosted catalog acceptance must be rerun after a
-separately approved merge and test deployment.
+The amended catalog, recipe, save-integrity, App and store checks pass **125
+focused tests across 7 suites**. All **553 tests across 65 suites** pass with the
+reviewed native feature profile. The strict production build passes with
+`CI=true` and ESLint enabled.
+The original PR19 code checkpoint `6069ce6` passed 527 tests and a strict build;
+the first pushed head `f68596d` added documentation, and its Inventory CI passed.
+The review amendment stays on `codex/catalog-editor-revision-integrity`, based
+on `85cf2b7`, in [draft PR19](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/19).
+It has not been merged or deployed. Hosted item and recipe acceptance must be
+rerun after a separately approved merge and test deployment.
 
 ## Remaining workflow
 
-1. Review the draft catalog fix and require Inventory CI before approving a merge.
-2. Rerun the two-tab catalog conflict test on the deployed fix.
+1. Review the amended item/recipe draft PR and require its current-head Inventory CI before approving a merge.
+2. Rerun the two-tab item check and add the recipe conflict/recovery check on the deployed fix.
 3. Finish independent posting retry acceptance and verify one persisted outcome.
 4. Test employee authorization separately when the authentication workflow resumes.
 5. Rework the growing setup screen in the later UI workflow.
+6. Review cleanup of the labelled fictional fixtures before operational use, preserving this acceptance record.
 
 Cross-tab owner labels briefly survived a session that native reads rejected.
 Normal owner sign-in restored reads and the same saved analytical snapshot.
