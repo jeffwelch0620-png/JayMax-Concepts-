@@ -1,5 +1,22 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local installer and failure-recovery rehearsal - October 9, 2026
+
+The guarded disposable installer now journals intent and expected catalog digests
+before commit, holds uncertain outcomes for fresh-connection reconciliation, and
+checks exact return to the original inventory/account connections before disabling
+replacement test roles. It does not change Supabase or active configuration.
+
+The [local installer checkpoint](docs/LOCAL_PARALLEL_INSTALL_CHECKPOINT.md) records
+failure/cancellation, missing commit acknowledgement, catalog drift, pool cleanup
+and local data/access preservation coverage. Validation passes: 41 cases and 110
+subtests, including two real PostgreSQL cases and exact fixture/server cleanup.
+Native accounting tables are empty in this fixture; a nonempty Food Cost report
+regression remains required. The next requirement is recovery
+from a separately restarted process with independently archived baseline pins.
+Hosted capacity/client registration, secure credential staging and combined
+recovery remain held. **Local only; no push, merge or deployment.**
+
 ## Explicit paired pool preparation and installer plan - October 9, 2026
 
 Both actual pool constructors now support an independently verified, immutable

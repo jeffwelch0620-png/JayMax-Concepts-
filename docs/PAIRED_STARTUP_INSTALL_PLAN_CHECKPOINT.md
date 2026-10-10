@@ -1,5 +1,10 @@
 # Paired connection preparation and installer review plan
 
+Follow-up: the [guarded local installer checkpoint](LOCAL_PARALLEL_INSTALL_CHECKPOINT.md)
+implements the disposable journal/transaction rehearsal below. The review renderer
+remains non-executable and no hosted installer is enabled. Process-restart recovery,
+archived independent pins, capacity and client registration remain prerequisites.
+
 October 9, 2026. Local implementation with read-only verification of unchanged
 hosted credentials. No hosted replacement role, grant, policy, password, active
 configuration, application pool, invoice, inventory fact or migration is changed.

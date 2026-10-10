@@ -1,5 +1,14 @@
 # Hosted Supabase deployment readiness
 
+Latest local implementation: the [disposable installer and recovery checkpoint](LOCAL_PARALLEL_INSTALL_CHECKPOINT.md)
+adds fsynced transaction intent/expectations, fresh-connection reconciliation,
+ordered original-connection restoration and drift/session holds. Its explicit
+loopback boundary rejects hosted targets. No hosted changes or checks occur at
+this checkpoint. Same-process reconciliation is distinct from process-restart
+recovery, which still needs independently archived baseline pins and a reopen
+protocol. Hosted capacity, registered clients, credential staging, combined
+recovery, merge and release gates remain held.
+
 Latest local preparation: [both pool constructors and the installer review plan](PAIRED_STARTUP_INSTALL_PLAN_CHECKPOINT.md)
 support explicitly bound revisions and owned all-or-none pools. No server startup
 automatically loads overlap, and no installer apply entrypoint is enabled. The
