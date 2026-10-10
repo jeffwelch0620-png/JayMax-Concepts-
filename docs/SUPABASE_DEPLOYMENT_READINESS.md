@@ -1,5 +1,12 @@
 # Hosted Supabase deployment readiness
 
+Latest local follow-up: [independent process recovery and populated Food Cost](LOCAL_INSTALL_PROCESS_RECOVERY_CHECKPOINT.md)
+reopens a pinned baseline and journal in separate OS processes. A separate
+supervisor checkpoint prevents accepting a truncated valid journal prefix.
+Fresh original pool checks remain mandatory after restart. This work does not
+clear hosted capacity, credential staging, combined recovery, merge or release
+gates; the historical entries below retain their original evidence scope.
+
 Latest local implementation: the [disposable installer and recovery checkpoint](LOCAL_PARALLEL_INSTALL_CHECKPOINT.md)
 adds fsynced transaction intent/expectations, fresh-connection reconciliation,
 ordered original-connection restoration and drift/session holds. Its explicit

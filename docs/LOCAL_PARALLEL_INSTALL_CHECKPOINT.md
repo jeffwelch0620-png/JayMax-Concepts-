@@ -1,5 +1,10 @@
 # Local parallel-account installer and failure-recovery rehearsal
 
+Follow-up: the [independent process recovery checkpoint](LOCAL_INSTALL_PROCESS_RECOVERY_CHECKPOINT.md)
+adds archived baseline/source pins, an external latest-journal checkpoint and
+fresh-process reconstruction with a populated accounting regression. This page
+retains the earlier same-process evidence and its original limitations.
+
 October 9, 2026. This checkpoint implements the next disposable PostgreSQL trial
 from the [paired startup plan](PAIRED_STARTUP_INSTALL_PLAN_CHECKPOINT.md).
 Hosted Supabase, selected private credentials and active application configuration

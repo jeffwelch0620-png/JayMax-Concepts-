@@ -1,5 +1,18 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Independent process recovery and populated accounting trial - October 9, 2026
+
+The local recovery adapter now requires an independently pinned archive and
+latest journal checkpoint, validates stage history before connecting, and uses
+a fresh catalog to distinguish committed, rolled-back and ambiguous outcomes.
+Verification through actual pools must be repeated after a process restart.
+The [process recovery checkpoint](docs/LOCAL_INSTALL_PROCESS_RECOVERY_CHECKPOINT.md)
+records the preserved $55.00 Food Cost result with $40.00 net food purchases,
+genuine worker exits and remaining recovery/release limits. Eleven tests and 32
+subtests pass, including the populated PostgreSQL case and exact cleanup.
+This is local work; Supabase and active
+configuration remain unchanged. **No push, merge or deployment.**
+
 ## Local installer and failure-recovery rehearsal - October 9, 2026
 
 The guarded disposable installer now journals intent and expected catalog digests
