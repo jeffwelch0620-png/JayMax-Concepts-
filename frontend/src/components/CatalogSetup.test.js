@@ -2,7 +2,8 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { SetupTab } from "./SetupTab";
 import * as api from "../lib/api";
-jest.mock("../lib/api", () => ({ __esModule: true, listVendorContacts: jest.fn(), sharedCatalog: jest.fn(), nativeOperatingSummary: jest.fn(), supplierContacts: jest.fn(), catalogMappingEnabled: false, actualInventoryEnabled: false, supplierContactsEnabled: false }));
+import { resetComponentApiMock } from "../testHelpers/componentApiMock";
+jest.mock("../lib/api", () => require("../testHelpers/componentApiMock").createComponentApiMock());
 const item = { controlNumber: "F01", itemCode: "stable_food", name: "Invented food", storageArea: "Freezer", active: true, countActive: false, orderEnabled: true, salesTracked: true, par: 0,
   baseUnit: "lb", countUnit: "bag", basePerCountUnit: 25, lastCounted: "2026-10-01", lastCountedBy: "Invented counter", currentStock: 7,
   packCount: 4, unitQty: 5, unitUOM: "lb", portionSize: 4, portionUOM: "oz", purchaseUnit: "case", itemType: "portion",
@@ -11,6 +12,7 @@ let root, container, persist, success;
 const find = id => container.querySelector(`[data-testid="${id}"]`);
 const click = id => act(async () => find(id).click());
 beforeEach(async () => {
+  resetComponentApiMock(api);
   global.IS_REACT_ACT_ENVIRONMENT = true; api.listVendorContacts.mockResolvedValue([]);
   api.catalogMappingEnabled=false;api.actualInventoryEnabled=false;api.supplierContactsEnabled=false;api.sharedCatalog.mockResolvedValue({products:[],revision:1});
   api.nativeOperatingSummary.mockResolvedValue({basis:"native_received_purchases_and_explicit_counts",items:[],liveOnHandAvailable:false,countStatus:"scope_missing"});
@@ -70,4 +72,44 @@ test("typing with native catalog and count panels enabled keeps one count panel 
   expect(api.nativeOperatingSummary).toHaveBeenCalledTimes(2);
   expect(api.nativeOperatingSummary).toHaveBeenLastCalledWith("rudds");
   expect(warnings.mock.calls.some(call=>String(call[0]).includes("same key"))).toBe(false);
+});
+
+test("saved unknown supplier conversion opens the existing review and retains the item draft", async () => {
+  api.nativePurchasesEnabled = true;
+  const nullable = { ...item, vendorSkus: [{ ...item.vendorSkus[0], basePerPurchaseUnit: null }] };
+  const review = jest.fn(), drafts = new Map();
+  const props = { rid: "berts", items: [nullable], areas: [{ name: "Freezer", prefix: "F" }], persistItems: persist, persistAreas: persist, showToast: success, onVerifySupplier: review, drafts };
+  // Remount to use the shared App draft cache from the start.
+  await act(async () => root.render(<SetupTab key="review" {...props} />));
+  await click("edit-item-F01"); await click("verify-supplier-0");
+  expect(review).toHaveBeenCalledWith({ itemCode: "stable_food", skuId: "sku" });
+  expect(persist).not.toHaveBeenCalled(); expect(drafts.get("item:berts").vendorSkus[0].basePerPurchaseUnit).toBeNull();
+  await act(async () => root.render(<p>Invoice Master</p>));
+  await act(async () => root.render(<SetupTab {...props} />));
+  expect(find("item-name-input").value).toBe("Invented food");
+  await click("item-submit-button"); expect(persist.mock.calls[0][0][0].vendorSkus[0].basePerPurchaseUnit).toBeNull();
+});
+
+test("pack edits warn without rewriting a stored conversion and must be saved before review", async () => {
+  api.nativePurchasesEnabled = true;
+  const review = jest.fn();
+  await act(async () => root.render(<SetupTab rid="berts" items={[item]} areas={[{name:"Freezer",prefix:"F"}]} persistItems={persist} persistAreas={persist} showToast={success} onVerifySupplier={review} />));
+  await click("edit-item-F01"); expect(find("verify-supplier-0").disabled).toBe(false);
+  const pack = find("vendor-sku-row-0").querySelector('input[type="number"]');
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(pack, "5"); pack.dispatchEvent(new Event("input", {bubbles:true})); });
+  expect(container.textContent).toContain("Stored conversion differs from pack details: confirm or keep");
+  expect(find("verify-supplier-0").disabled).toBe(true); await click("verify-supplier-0"); expect(review).not.toHaveBeenCalled();
+  await click("item-submit-button"); expect(persist.mock.calls[0][0][0].vendorSkus[0].basePerPurchaseUnit).toBe(20);
+  expect(persist.mock.calls[0][0][0].vendorSkus[0].packCount).toBe(5);
+});
+
+test("editing a pack leaves an unknown conversion null and new supplier rows require a save", async () => {
+  api.nativePurchasesEnabled = true;
+  const nullable = { ...item, vendorSkus: [{ ...item.vendorSkus[0], basePerPurchaseUnit: null }] };
+  await act(async () => root.render(<SetupTab rid="berts" items={[nullable]} areas={[{name:"Freezer",prefix:"F"}]} persistItems={persist} persistAreas={persist} showToast={success} onVerifySupplier={jest.fn()} />));
+  await click("edit-item-F01");
+  const pack = find("vendor-sku-row-0").querySelector('input[type="number"]');
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(pack, "6"); pack.dispatchEvent(new Event("input", {bubbles:true})); });
+  await click("add-vendor-sku-button"); expect(find("verify-supplier-1").disabled).toBe(true);
+  await click("item-submit-button"); expect(persist.mock.calls[0][0][0].vendorSkus[0].basePerPurchaseUnit).toBeNull();
 });

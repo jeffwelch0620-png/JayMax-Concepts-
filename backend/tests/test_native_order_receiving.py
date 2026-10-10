@@ -75,6 +75,24 @@ class NativeOrderReceivingTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await conn.fetchval('SELECT base_per_purchase_unit FROM vendor_items WHERE id=$1',self.sku),8)
             self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.actual_purchase_facts'),0)
 
+    async def test_unknown_catalog_factor_has_separate_confirmed_physical_profile(self):
+        async with self.pool.acquire() as conn:
+            await conn.execute('UPDATE vendor_items SET base_per_purchase_unit=NULL WHERE id=$1',self.sku)
+            before=await conn.fetchval("SELECT revision FROM store_state WHERE store_id='berts'")
+        result,_=await self.units()
+        self.assertEqual(result.status_code,200,result.text)
+        profile=result.json()['profile']
+        self.assertEqual(profile['confirmed_by'],'synthetic-manager')
+        self.assertTrue(profile['confirmed_at'])
+        self.assertEqual(profile['base_units_per_source_unit'],'20')
+        self.assertEqual(profile['revision'],1)
+        async with self.pool.acquire() as conn:
+            self.assertIsNone(await conn.fetchval('SELECT base_per_purchase_unit FROM vendor_items WHERE id=$1',self.sku))
+            self.assertEqual(await conn.fetchval("SELECT revision FROM store_state WHERE store_id='berts'"),before+1)
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.actual_purchase_facts'),0)
+        doc=(await self.manual()).json()['documents'][0]
+        self.assertEqual(doc['lines'][0]['unitProfileSuggestion']['base_units_per_source_unit'],'20')
+
     async def test_profile_retry_staleness_and_fixed_base_unit_guards(self):
         key=str(uuid4());r,body=await self.units(key=key);self.assertEqual(r.status_code,200,r.text)
         async with self.pool.acquire() as conn:await conn.execute('UPDATE vendor_items SET unit_qty=10 WHERE id=$1',self.sku)

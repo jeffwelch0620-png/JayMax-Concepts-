@@ -16,8 +16,18 @@ remain unknown; new UI supplier packs still require physical validation. These
 fixes are published in [draft PR18](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18)
 and await review and test deployment. Broad UI rework is a separate later
 workflow. Existing hosting, Supabase connections and credentials are unchanged.
-All **509 frontend tests across 62 suites pass** with the native feature profile;
-the optimized production build passes with the two existing hook warnings.
+All **522 frontend tests across 63 suites pass** with the native feature profile.
+The [PR18 follow-up](docs/PR18_CONVERSION_CI_FOLLOWUP.md) adds a supplier-row link
+to the existing verified conversion review, a non-blocking pack mismatch notice,
+and complete shared component API mocks. Confirmations keep actor/time/evidence
+in immutable native unit profiles; ordinary edits preserve null and positive
+catalog factors. The two existing hook warnings were corrected for the strict
+CI build. Build/database and GitHub check results are recorded in that follow-up.
+
+[Inventory CI](.github/workflows/ci.yml) checks pull requests and `main` with all
+native frontend tests, a strict production build, and selected backend checks
+against fictional fixtures in disposable PostgreSQL. Require its combined status
+before merging; passing CI is separate from deployed workflow acceptance.
 
 ## Claude follow-up corrections - October 10, 2026
 

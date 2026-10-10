@@ -70,6 +70,7 @@ export default function App() {
   const [aiRid, setAiRid] = useState(null);
   const [staffOpen, setStaffOpen] = useState(false);
   const [focusOrder, setFocusOrder] = useState(null);
+  const [unitReviewFocus, setUnitReviewFocus] = useState(null);
   const backupRef = useRef(null);
   const pendingTabRef = useRef(null);
   const drafts = useRef(new Map());
@@ -280,8 +281,8 @@ export default function App() {
             {activeTab === "dashboard" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:report`} restaurantId={loc} view="report" /> : nativeSharedState ? <p>Accounting reports are awaiting Actual Inventory setup and explicit physical count values. Purchases are reviewed in Invoice Master.</p> : <DashboardTab rid={loc} items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />)}
             {activeTab === "prep" && <PrepTab showError={showError} drafts={drafts.current} key={loc} rid={loc} items={S.items} dishes={S.dishes} persistDishes={persistDishes} prepStock={S.prepStock} prepLogs={S.prepLogs} prepReadStatus={S.prepReadStatus} prepCapabilities={S.prepCapabilities} applyPrepResult={applyPrepResult} salesPeriod={S.salesPeriod} showToast={showToast} />}
             {activeTab === "counts" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:counts`} restaurantId={loc} /> : nativeSharedState ? <p>Physical counts are awaiting Actual Inventory setup. Legacy count entry is unavailable.</p> : <CountsTab key={loc} rid={loc} items={S.items} onCountsApplied={(next) => store.apply(p => ({ ...p, items: next }))} showToast={showToast} />)}
-            {activeTab === "setup" && <SetupTab onCatalogLinked={store.refresh} showError={showError} drafts={drafts.current} key={loc} items={S.items} persistItems={persistItems} areas={S.areas} persistAreas={persistAreas} showToast={showToast} rid={loc} />}
-            {activeTab === "invoices" && <InvoicesTab showError={showError} drafts={drafts.current} key={loc} rid={loc} items={S.items} persistItems={persistItems} purchases={S.purchases} persistPurchases={persistPurchases} showToast={showToast} restaurantName={current.name} />}
+            {activeTab === "setup" && <SetupTab onCatalogLinked={store.refresh} onVerifySupplier={selection => { setUnitReviewFocus({ ...selection, restaurantId: loc }); setActiveTab("invoices"); }} showError={showError} drafts={drafts.current} key={loc} items={S.items} persistItems={persistItems} areas={S.areas} persistAreas={persistAreas} showToast={showToast} rid={loc} />}
+            {activeTab === "invoices" && <InvoicesTab unitReviewFocus={unitReviewFocus?.restaurantId === loc ? unitReviewFocus : null} onUnitReviewSaved={store.refresh} showError={showError} drafts={drafts.current} key={loc} rid={loc} items={S.items} persistItems={persistItems} purchases={S.purchases} persistPurchases={persistPurchases} showToast={showToast} restaurantName={current.name} />}
             {activeTab === "order" && <OrderTab key={loc} items={S.items} showToast={showToast} restaurantName={current.name} rid={loc} onCreatedPO={() => setActiveTab("purchaseOrders")} />}
             {activeTab === "purchaseOrders" && <PurchaseOrdersTab key={loc} rid={loc} showToast={showToast} focusOrder={focusOrder} onInventoryChange={store.refresh} />}
             {activeTab === "menu" && <MenuTab dishes={S.dishes} onAddNew={() => openCosting(null)} onOpenDish={(id) => openCosting(id)} />}

@@ -2,17 +2,29 @@ import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { Field, cardCls, inpCls, btnAcc } from "./common";
 
-export function InventoryUnitSetup({ restaurantId }) {
+export function InventoryUnitSetup({ restaurantId, focus, onSaved }) {
   const [data, setData] = useState(null), [itemCode, setItem] = useState(""), [kind, setKind] = useState("count"), [skuId, setSku] = useState("");
   const [base, setBase] = useState(""), [factor, setFactor] = useState(""), [note, setNote] = useState(""), [verified, setVerified] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
   const [conflict, setConflict] = useState(false);
   const pending = useRef(null), mounted = useRef(true);
+  const focused = useRef(null), section = useRef(null);
   useEffect(() => {
     mounted.current = true;
     api.nativeUnitSetup(restaurantId).then(d => mounted.current && setData(d)).catch(e => mounted.current && setError(e?.response?.data?.detail || e.message));
     return () => { mounted.current = false; };
   }, [restaurantId]);
+  useEffect(() => {
+    if (!data || !focus || focus.restaurantId !== restaurantId || focused.current === focus) return;
+    focused.current = focus;
+    const target = data.items.find(i => i.code === focus.itemCode);
+    if (!target?.supplierProducts.some(s => s.id === focus.skuId)) {
+      setError("This saved supplier product is not available for physical conversion review. Refresh Item Setup first."); return;
+    }
+    setItem(target.code); setKind("purchase"); setSku(focus.skuId); setBase(target.native_base_unit || "");
+    setFactor(""); setNote(""); setVerified(false);
+    section.current?.focus(); section.current?.scrollIntoView?.({ block: "start" });
+  }, [data, focus, restaurantId]);
   const item = data?.items.find(i => i.code === itemCode);
   const source = kind === "count" ? item?.countSource : item?.supplierProducts.find(s => s.id === skuId);
   const frozen = busy || !!pending.current;
@@ -28,7 +40,10 @@ export function InventoryUnitSetup({ restaurantId }) {
       const r = await api.saveNativeUnitProfile(restaurantId, pending.current.body, pending.current.key);
       if (!r.profile?.id || r.profile.item_code !== pending.current.body.item_code || r.profile.base_unit !== pending.current.body.base_unit) throw new Error("Saved unit review was not confirmed. Retry the same review.");
       pending.current = null; setVerified(false); setMessage("Unit conversion saved. Counts and invoice lines still require their own confirmation.");
-      try { const d = await api.nativeUnitSetup(restaurantId); if (mounted.current) setData(d); } catch (e) { setError(`Review saved; refresh failed: ${e.message}`); }
+      try {
+        const d = await api.nativeUnitSetup(restaurantId); if (mounted.current) setData(d);
+        await onSaved?.();
+      } catch (e) { if (mounted.current) setError(`Review saved; refresh failed: ${e.message}`); }
     } catch (e) { if (mounted.current) {
       const detail = e?.response?.data?.detail;
       setError(typeof detail === "string" ? detail : (Array.isArray(detail) ? detail.map(d => d.msg).join("; ") : e.message || "Unit review failed"));
@@ -46,7 +61,7 @@ export function InventoryUnitSetup({ restaurantId }) {
     } catch (e) { setError(e?.response?.data?.detail || e.message); }
     finally { setBusy(false); }
   }
-  return <section className={`${cardCls} p-4 space-y-3`} aria-label="Inventory unit setup"><h3 className="font-semibold">Verified inventory units</h3>
+  return <section ref={section} tabIndex={-1} className={`${cardCls} p-4 space-y-3`} aria-label="Inventory unit setup"><h3 className="font-semibold">Verified inventory units</h3>
     <p>Keep physical inventory units separate from recipe portions. Enter the number of fixed inventory units in one count container or supplier purchase unit. If storage mixes different case packs, count in the fixed unit or verify the measured conversion for that count.</p>
     {data && <>
       <Field label="Purchased inventory item"><select aria-label="Unit setup item" className={inpCls} value={itemCode} disabled={frozen} onChange={e => change(() => { setItem(e.target.value); setBase(data.items.find(i => i.code === e.target.value)?.native_base_unit || ""); setSku(""); setFactor(""); })}><option value="">Choose item</option>{data.items.map(i => <option key={i.code} value={i.code}>{i.name}</option>)}</select></Field>
@@ -58,7 +73,7 @@ export function InventoryUnitSetup({ restaurantId }) {
       <Field label="Measurement or pack evidence"><input aria-label="Unit conversion evidence" className={inpCls} value={note} disabled={frozen} onChange={e => change(() => setNote(e.target.value))} /></Field>
       <label><input aria-label="Confirm physical conversion" type="checkbox" checked={verified} disabled={frozen} onChange={e => setVerified(e.target.checked)} /> I verified this physical conversion.</label>
       <button className={btnAcc} disabled={busy || (!pending.current && !verified)} onClick={save}>{pending.current ? "Retry same unit review" : "Save verified unit conversion"}</button>
-      {data.profiles.map(p => <p key={p.id}>{data.items.find(i => i.code === p.item_code)?.name || p.item_code}: 1 {p.source_unit} = {p.base_units_per_source_unit} {p.base_unit} · {p.profile_kind === "count" ? "Counts" : "Purchases"} · {p.stale ? "Setup changed — verify again" : "Verified"} · revision {p.revision}</p>)}
+      {data.profiles.map(p => <p key={p.id}>{data.items.find(i => i.code === p.item_code)?.name || p.item_code}: 1 {p.source_unit} = {p.base_units_per_source_unit} {p.base_unit} · {p.profile_kind === "count" ? "Counts" : "Purchases"} · {p.stale ? "Setup changed — verify again" : "Verified"} · revision {p.revision}{p.confirmed_by && ` · Confirmed by ${p.confirmed_by}`}{p.confirmed_at && ` · ${p.confirmed_at}`}</p>)}
     </>}
     {conflict && <button className={btnAcc} disabled={busy} onClick={refreshReview}>Refresh changed unit setup</button>}
     {item?.issues?.map(issue => <p role="alert" key={issue}>{issue} Update the item setup before verifying this source.</p>)}

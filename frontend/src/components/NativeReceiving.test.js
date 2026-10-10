@@ -36,6 +36,33 @@ test("unit setup requires an entered physical factor and does not adopt catalog 
   expect(container.querySelector('[aria-label="Verified physical conversion"]').value).toBe("");
   expect(api.saveNativeUnitProfile).not.toHaveBeenCalled();
 });
+
+test("supplier-row navigation confirms a separately reviewed profile with provenance and refreshes the item revision", async () => {
+  const supplier = {id:"sku",unit:"case",hash:"saved-pack-hash",snapshot:{supplierProduct:{vendor_sku:"TEST",pack_count:"4",unit_qty:"5",unit_uom:"lb",base_per_purchase_unit:null},item:{}}};
+  const data = {...unitData,items:[{...unitData.items[0],supplierProducts:[supplier]}]};
+  const profile = {id:"profile",item_code:"food",base_unit:"lb",source_unit:"case",profile_kind:"purchase",base_units_per_source_unit:"20",revision:1,confirmed_by:"Fictional reviewer",confirmed_at:"2026-10-10T12:00:00Z"};
+  api.nativeUnitSetup.mockResolvedValueOnce(data).mockResolvedValue({...data,profiles:[profile]});
+  api.saveNativeUnitProfile.mockResolvedValue({profile}); const saved = jest.fn().mockResolvedValue({revision:11});
+  await act(async () => root.render(<InventoryUnitSetup restaurantId="berts" focus={{restaurantId:"berts",itemCode:"food",skuId:"sku"}} onSaved={saved} />));
+  expect(container.querySelector('[aria-label="Unit profile purpose"]').value).toBe("purchase");
+  expect(container.querySelector('[aria-label="Unit setup supplier product"]').value).toBe("sku");
+  expect(container.querySelector('[aria-label="Verified physical conversion"]').value).toBe("");
+  await input("Verified physical conversion","20"); await input("Unit conversion evidence","Verified fictional 4 × 5 lb pack");
+  await click(container.querySelector('[aria-label="Confirm physical conversion"]')); await click(button("Save verified unit conversion"));
+  expect(api.saveNativeUnitProfile).toHaveBeenCalledWith("berts",expect.objectContaining({profile_kind:"purchase",vendor_item_id:"sku",base_units_per_source_unit:"20",expected_source_hash:"saved-pack-hash",verified:true}),"frozen-key");
+  expect(saved).toHaveBeenCalledTimes(1); expect(container.textContent).toContain("Confirmed by Fictional reviewer");
+  expect(container.textContent).toContain("2026-10-10T12:00:00Z");
+  expect(supplier.snapshot.supplierProduct.base_per_purchase_unit).toBeNull();
+  expect(container.querySelector('[aria-label="Verified physical conversion"]').value).toBe("20");
+});
+
+test("conversion confirmation refuses missing physical evidence and ignores another restaurant's focus", async () => {
+  await act(async () => root.render(<InventoryUnitSetup restaurantId="rudds" focus={{restaurantId:"berts",itemCode:"food",skuId:"sku"}} />));
+  expect(container.querySelector('[aria-label="Unit setup item"]').value).toBe("");
+  await input("Unit setup item","food"); await click(container.querySelector('[aria-label="Confirm physical conversion"]'));
+  await click(button("Save verified unit conversion")); expect(api.saveNativeUnitProfile).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Choose the item and verify its physical unit conversion");
+});
 test("unit review interruption retries unchanged decimal text and source fingerprint", async () => {
   api.saveNativeUnitProfile.mockRejectedValueOnce(new Error("Connection lost")).mockResolvedValueOnce({ profile: { id: "profile", item_code: "food", base_unit: "lb" } });
   await act(async () => root.render(<InventoryUnitSetup restaurantId="berts" />)); await input("Unit setup item", "food");

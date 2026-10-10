@@ -68,6 +68,12 @@ commit `da9a917` was pushed as
 [draft PR18](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18).
 It remains unmerged; the deployed frontend has not received these fixes.
 
+**Independent review follow-up:** The conversion-review link, advisory mismatch
+notice, shared component API mock and automated merge checks are described in
+[PR18 conversion and CI follow-up](PR18_CONVERSION_CI_FOLLOWUP.md). The original
+509-test/build result above is the first fix checkpoint; follow-up validation
+is recorded separately. The live fictional item is still unsaved.
+
 Next, publish/review the small fix PR and authorize its merge into the existing
 Render test deployment. Then repeat the failed save through the deployed UI,
 establish the labelled three-item purchased-inventory test scope, and complete

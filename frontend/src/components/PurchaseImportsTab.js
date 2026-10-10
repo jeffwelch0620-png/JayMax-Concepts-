@@ -141,7 +141,7 @@ export function PurchaseCorrectionReview({ document, items, history, onPreview, 
   </section>;
 }
 
-export function PurchaseImportsTab({ restaurantId, restaurantName }) {
+export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFocus, onUnitReviewSaved }) {
   const [files, setFiles] = useState([]), [items, setItems] = useState([]), [history, setHistory] = useState([]);
   const [selected, setSelected] = useState(null), [sourceRows, setSourceRows] = useState(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
@@ -239,7 +239,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName }) {
         <button className={btnAcc} disabled={busy} onClick={capture}>Capture / retry file</button>
       </div>
       {manualReady && <ManualPurchaseEntry key={`${restaurantId}:${manualEpoch}`} vendors={vendors} files={files} onCapture={captureManual} busy={busy} />}
-      {unitsReady && <InventoryUnitSetup key={restaurantId} restaurantId={restaurantId} />}
+      {unitsReady && <InventoryUnitSetup key={restaurantId} restaurantId={restaurantId} focus={unitReviewFocus} onSaved={onUnitReviewSaved} />}
       <div className={`${cardCls} p-4 space-y-2`}>
         <h3 className="font-semibold">Captured files</h3>
         {files.map(f => <button key={f.id} className={`${btnGhost} mr-2`} disabled={busy} onClick={() => action(async () => { setSelected(await api.purchaseFile(restaurantId, f.id)); setPreviewEpoch(n => n + 1); setSourceRows(null); })}>{f.original_filename} · {f.captured_at.slice(0, 10)}</button>)}
