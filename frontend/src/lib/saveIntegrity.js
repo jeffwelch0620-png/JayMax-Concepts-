@@ -66,5 +66,20 @@ export function useRetainedDraft(key, initial, drafts, sync = false) {
     acknowledgements.get(cache)?.get(key)?.forEach(receive => receive(submitted, next));
     return true;
   }
-  return [value, edit, acknowledge, cache.has(key)];
+  // A creation receipt may attach a saved identity to newer typing. Only a
+  // retained draft explicitly matched by the caller may receive this update.
+  function reconcileRetained(matches, update) {
+    if (!cache.has(key)) return false;
+    const retained = cache.get(key);
+    if (!matches(retained)) return false;
+    const next = update(retained);
+    cache.set(key, next);
+    if (current.current === retained) {
+      current.current = next;
+      if (mounted.current) setValue(next);
+    }
+    acknowledgements.get(cache)?.get(key)?.forEach(receive => receive(retained, next));
+    return true;
+  }
+  return [value, edit, acknowledge, cache.has(key), reconcileRetained];
 }

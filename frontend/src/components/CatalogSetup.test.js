@@ -160,6 +160,53 @@ test("late item recovery reads cannot replace typing that happened while reading
   await act(async () => complete({revision:11,items:[{...item,par:1}]}));
   expect(find("item-name-input").value).toBe("Newer typing"); expect(parInput().value).toBe("0");
 });
+
+test.each(["same","returned","away"])("typing during new item creation retains its saved identity across navigation (%s)", async navigate => {
+  const drafts=new Map();
+  let complete;persist.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+  await act(async()=>root.render(<SetupTab key="creation" {...revisionProps(10,[item],drafts)} />));
+  await changeInput(find("item-name-input"),"New fictional item");
+  act(()=>find("item-submit-button").click());await changeInput(find("item-name-input"),"Later fictional name");
+  if(navigate!=="same")await act(async()=>root.render(<p>Other location</p>));
+  if(navigate==="returned")await act(async()=>root.render(<SetupTab {...revisionProps(10,[item],drafts)} />));
+  const submitted=persist.mock.calls[0][0].at(-1),canonical={...submitted,itemCode:"canonical_new_item"};
+  await act(async()=>complete({revision:11,items:[item,canonical]}));
+  await act(async()=>root.render(<SetupTab key={navigate==="same"?"creation":undefined} {...revisionProps(11,[item,canonical],drafts)} />));
+  expect(find("item-name-input").value).toBe("Later fictional name");await click("item-submit-button");
+  expect(persist).toHaveBeenCalledTimes(1);
+  await click("review-item-draft");await click("item-submit-button");
+  expect(persist.mock.calls[1][0]).toHaveLength(2);
+  expect(persist.mock.calls[1][0].find(row=>row.itemCode===canonical.itemCode).name).toBe("Later fictional name");
+  expect(persist.mock.calls[1][0].at(-1)).not.toHaveProperty("draftToken");
+  expect(persist.mock.calls[1][0].at(-1)).not.toHaveProperty("receiptReviewRequired");
+});
+
+test("revision-only native creation receipt keeps the submitted identity until a fresh canonical read",async()=>{
+  api.isPostgres=true;let complete;persist.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+  await act(async()=>root.render(<SetupTab {...revisionProps(10)} />));await changeInput(find("item-name-input"),"New native item");
+  act(()=>find("item-submit-button").click());await changeInput(find("item-name-input"),"Later native name");
+  const submitted=persist.mock.calls[0][0].at(-1);
+  const canonical={...submitted,itemCode:`berts_${submitted.controlNumber}`,basePerCountUnit:20,vendorSkus:[{...submitted.vendorSkus[0],id:"saved_sku",vendorSku:submitted.vendorSkus[0].id,basePerPurchaseUnit:null}]};
+  await act(async()=>complete({revision:11}));await act(async()=>root.render(<SetupTab {...revisionProps(11,[item,canonical])} />));
+  await click("item-submit-button");expect(persist).toHaveBeenCalledTimes(1);
+  await click("review-item-draft");await click("item-submit-button");
+  const saved=persist.mock.calls[1][0].at(-1);
+  expect(saved.itemCode).toBe(canonical.itemCode);expect(saved.basePerCountUnit).toBe(20);
+  expect(saved.vendorSkus).toEqual(canonical.vendorSkus);expect(saved.name).toBe("Later native name");
+});
+
+test("a cancelled creation draft cannot receive the old receipt identity",async()=>{
+  let complete;persist.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+  await act(async()=>root.render(<SetupTab {...revisionProps(10)} />));await changeInput(find("item-name-input"),"First draft");
+  act(()=>find("item-submit-button").click());
+  await act(async()=>[...container.querySelectorAll("button")].find(b=>b.textContent.includes("Cancel")).click());
+  await changeInput(find("item-name-input"),"Different new draft");
+  const canonical={...persist.mock.calls[0][0].at(-1),itemCode:"first_created"};
+  await act(async()=>complete({revision:11,items:[item,canonical]}));
+  await act(async()=>root.render(<SetupTab {...revisionProps(11,[item,canonical])} />));
+  expect(find("review-item-draft")).toBeNull();await click("item-submit-button");
+  expect(persist.mock.calls[1][0]).toHaveLength(3);expect(persist.mock.calls[1][0].at(-1).name).toBe("Different new draft");
+});
 test("an ordinary item edit preserves activation, actor, canonical units and exact supplier fields", async () => {
   await click("edit-item-F01"); await click("item-submit-button");
   const saved=persist.mock.calls[0][0][0];

@@ -6,13 +6,14 @@ import { MENU_CATEGORIES, UOM_OPTIONS, nextMenuCode, normalizeRecipeSchema, reci
 import { PageTitle, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
 
 function emptyDish(type = "menu") {
-  return { id: null, recipeType: type, name: "", menuCategory: MENU_CATEGORIES[0].name, menuCode: "", description: "", photoUrl: "", price: "", targetPct: 30, yieldQty: type === "prep" ? "" : 1, yieldUOM: type === "prep" ? "fl oz" : "each", procedure: "", equipment: "", shelfLife: "", portionNote: "", prepPar: 0, frequency: "daily", lines: [] };
+  return { draftToken: uid("recipe-draft"), receiptReviewRequired: false, id: null, recipeType: type, name: "", menuCategory: MENU_CATEGORIES[0].name, menuCode: "", description: "", photoUrl: "", price: "", targetPct: 30, yieldQty: type === "prep" ? "" : 1, yieldUOM: type === "prep" ? "fl oz" : "each", procedure: "", equipment: "", shelfLife: "", portionNote: "", prepPar: 0, frequency: "daily", lines: [] };
 }
 
 const RECIPE_FIELDS = ["recipeType", "name", "menuCategory", "menuCode", "description", "photoUrl", "price", "targetPct", "yieldQty", "yieldUOM", "procedure", "equipment", "shelfLife", "portionNote", "prepPar", "frequency", "lines"];
 const RECIPE_GROUPS = [{ label: "recipe type, ingredients and yield", fields: ["recipeType", "lines", "yieldQty", "yieldUOM"] }];
 function recipeSnapshot(row) {
   const saved = { ...row }; delete saved.draftBase; delete saved.draftRevision;
+  delete saved.draftToken; delete saved.receiptReviewRequired;
   return snapshotEditorValue(normalizeRecipeSchema(saved));
 }
 function recipeFields(row) {
@@ -21,12 +22,12 @@ function recipeFields(row) {
   return { ...fields, name: fields.name.trim(), price: fields.price === "" || fields.price == null ? null : Number(fields.price), targetPct: Number(fields.targetPct), yieldQty: fields.recipeType === "prep" ? Number(fields.yieldQty) : 1, prepPar: fields.prepPar === "" || fields.prepPar == null ? null : Number(fields.prepPar) };
 }
 function recipeDraft(row, revision) {
-  return { ...recipeSnapshot(row), draftBase: recipeSnapshot(row), draftRevision: revision };
+  return { ...recipeSnapshot(row), draftToken: uid("recipe-draft"), receiptReviewRequired: false, draftBase: recipeSnapshot(row), draftRevision: revision };
 }
 
 export function CostingTab({ items, dishes, revision = 0, loadLatest, persist, showToast, showError = () => {}, rid, drafts, focusDish }) {
   const normalizedRecipes = useMemo(() => dishes.map(normalizeRecipeSchema), [dishes]);
-  const [dish, editDish, clearDish] = useRetainedDraft(`recipe:${rid}`, emptyDish(), drafts);
+  const [dish, editDish, clearDish, , reconcileDish] = useRetainedDraft(`recipe:${rid}`, emptyDish(), drafts);
   const currentDish = useRef(dish); currentDish.current = dish;
   const mounted = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -107,6 +108,7 @@ export function CostingTab({ items, dishes, revision = 0, loadLatest, persist, s
   }
 
   async function saveDish() {
+    if (dish.receiptReviewRequired) { fail("The recipe was created; your later typing is retained. Reload latest and keep my changes before saving again."); return; }
     if (!dish.name.trim()) { fail("Recipe name is required"); return; }
     if (!summary.valid) { fail(summary.validationIssues.join("; ")); return; }
     const latest = dishes.find(row => row.id === dish.id);
@@ -123,7 +125,12 @@ export function CostingTab({ items, dishes, revision = 0, loadLatest, persist, s
     if (!(await confirmSave(async () => { acknowledgement = await persist(next, revision); return acknowledgement; }, fail))) return;
     showToast(saved.recipeType === "prep" ? "Prep recipe saved" : "Menu item saved");
     const savedId = acknowledgement.clientIds?.[saved.id] || saved.id;
-    clearDish(dish, recipeDraft(acknowledgement.dishes?.find(row => row.id === savedId) || { ...saved, id: savedId }, acknowledgement.revision)); setError("");
+    if (!clearDish(dish, recipeDraft(acknowledgement.dishes?.find(row => row.id === savedId) || { ...saved, id: savedId }, acknowledgement.revision)) && !dish.id) {
+      const base = { ...recipeSnapshot(dish), id: savedId };
+      reconcileDish(current => current.draftToken === dish.draftToken,
+        current => ({ ...current, id: savedId, draftBase: base, draftRevision: revision, receiptReviewRequired: true }));
+    }
+    setError("");
   }
   async function deleteDish(id) {
     const usedBy = dishes.filter((r) => (r.lines || []).some((l) => l.sourceType === "prep" && l.recipeId === id));

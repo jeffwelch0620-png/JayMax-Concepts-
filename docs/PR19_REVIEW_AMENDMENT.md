@@ -47,18 +47,34 @@ or a remounted editor. Editor snapshots/revisions are private draft metadata and
 are excluded from outgoing records. Confirmed recipe receipts retain canonical
 database identities; later typing is not cleared by an older save receipt.
 
+A further review reproduced duplicate creation when typing continued during a
+new item or recipe save. The confirmed receipt cleared neither the newer typing
+nor its new-record status, so another Save appended a second record. The fix
+attaches the confirmed saved identity to the matching retained creation draft,
+preserves its typing, and holds further saves for explicit recovery. Recovery
+compares the originally submitted fields with the later typing and fresh saved
+fields, preserving assigned menu codes and canonical supplier details. A private
+draft token prevents receipts from attaching to cancelled or different drafts.
+The matching draft can receive its identity while off-screen or after remounting.
+This covers confirmed receipts; uncertain write outcomes remain separate retry
+acceptance. Null numeric metadata renders as blank without changing its stored
+meaning.
+
 The store's revision refusal now refers to **latest saved data**, covering items,
 recipes and periods without using period-specific wording.
 
 ## Validation
 
-The focused amendment checks pass **125 tests across 7 suites**. They include
+The focused amendment checks pass **134 tests across 7 suites**. They include
 App-to-store revision forwarding, retained navigation, same-record and unrelated
 409 retries, safe independent recovery, overlapping and coupled conflicts,
 deleted records, fresh-read failure, canonical recipe identities, and late reads
-or acknowledgements. All **553 tests across 65 suites** pass with the reviewed
-native profile, and the strict production build passes with `CI=true` and ESLint
-enabled. The live acceptance follow-up records release boundaries separately.
+or acknowledgements, duplicate-creation prevention, navigation during creation,
+revision-only native item receipts and isolation from cancelled/different drafts.
+All **562 tests across 65 suites** pass with the reviewed native profile. The strict
+production build passes with `CI=true` and ESLint enabled. The prior
+amendment at `1ece856` passed 553 tests, a strict build and Inventory CI. The live
+acceptance follow-up records release boundaries separately.
 
 Initial new-test fixture failures and the corrected passing run remain in local
 evidence; an older save-integrity test now verifies failure before polling and
@@ -77,6 +93,8 @@ check and add the equivalent recipe check. Include independent recovery,
 same-field refusal, and an unrelated-refresh save. Independent posting retry
 acceptance remains separate. Remove labelled fictional fixtures through a
 reviewed cleanup before operational use, preserving the acceptance record.
+The [hosted acceptance plan](PR19_HOSTED_ACCEPTANCE_PLAN.md) gives the sequence,
+record fields, restoration checks and timing limitations.
 
 Shared-PIN permissions, global revision scope, migration filename ordering,
 operations tooling location, broad UI rework and deployment architecture remain

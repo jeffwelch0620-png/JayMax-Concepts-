@@ -117,6 +117,42 @@ test("a failed fresh read leaves the recipe draft and base intact",async () => {
   expect(persist).not.toHaveBeenCalled();
 });
 
+test.each(["same","returned","away"])("typing during new recipe creation retains its saved identity across navigation (%s)",async navigate => {
+  const drafts=new Map();
+  let complete;
+  persist.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+  await act(async () => root.render(panel(10,[recipe],{focusDish:null,drafts})));
+  await type("recipe-name-input","New fictional plate");await click("ingredient-add");
+  act(()=>find("save-recipe-button").click());await type("recipe-name-input","Later fictional name");
+  if(navigate!=="same")await act(async()=>root.render(<p>Other location</p>));
+  if(navigate==="returned")await act(async()=>root.render(panel(10,[recipe],{focusDish:null,drafts})));
+  const submitted=persist.mock.calls[0][0].at(-1);
+  const canonical={...submitted,id:"canonical_new_recipe"};
+  await act(async()=>complete({revision:11,clientIds:{[submitted.id]:canonical.id},dishes:[recipe,canonical]}));
+  await act(async()=>root.render(panel(11,[recipe,canonical],{focusDish:null,drafts})));
+  expect(find("recipe-name-input").value).toBe("Later fictional name");
+  await click("save-recipe-button");
+  expect(persist).toHaveBeenCalledTimes(1);
+  await click("review-recipe-draft");await click("save-recipe-button");
+  expect(persist.mock.calls[1][0]).toHaveLength(2);
+  expect(persist.mock.calls[1][0].find(row=>row.id===canonical.id).name).toBe("Later fictional name");
+  expect(persist.mock.calls[1][0].find(row=>row.id===canonical.id).menuCode).toBe(canonical.menuCode);
+  expect(persist.mock.calls[1][0].at(-1)).not.toHaveProperty("draftToken");
+  expect(persist.mock.calls[1][0].at(-1)).not.toHaveProperty("receiptReviewRequired");
+});
+
+test("a creation receipt cannot attach its identity to another loaded recipe",async()=>{
+  let complete;persist.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+  await act(async()=>root.render(panel(10,[recipe],{focusDish:null})));await type("recipe-name-input","First new recipe");await click("ingredient-add");
+  act(()=>find("save-recipe-button").click());await click(`load-recipe-${recipe.id}`);await type("recipe-name-input","Edited existing recipe");
+  const submitted=persist.mock.calls[0][0].at(-1),canonical={...submitted,id:"canonical_new_recipe"};
+  await act(async()=>complete({revision:11,clientIds:{[submitted.id]:canonical.id},dishes:[recipe,canonical]}));
+  await act(async()=>root.render(panel(11,[recipe,canonical],{focusDish:null})));
+  expect(find("recipe-name-input").value).toBe("Edited existing recipe");await click("save-recipe-button");
+  expect(persist.mock.calls[1][0].find(row=>row.id===recipe.id).name).toBe("Edited existing recipe");
+  expect(persist.mock.calls[1][0].find(row=>row.id===canonical.id)).toEqual(canonical);
+});
+
 test("typing during a recipe save survives its acknowledgement and needs review against the new base",async () => {
   let complete;
   persist.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));

@@ -12,10 +12,14 @@ records the results and a reproduced two-tab catalog overwrite. The amended
 [draft PR19](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/19) protects
 both item and recipe editors, permits unrelated-refresh saves and new items,
 and adds explicit recovery that preserves independent edits while holding
-conflicts. The [review response](docs/PR19_REVIEW_AMENDMENT.md) explains the
-boundaries. All **553 frontend tests across 65 suites** pass locally with the
-native profile, and the strict production build passes. Hosted item
-and recipe validation awaits a separately approved merge and test deployment.
+conflicts. The creation-receipt follow-up preserves a saved identity when typing
+continues during creation, preventing another Save from appending a duplicate.
+The [review response](docs/PR19_REVIEW_AMENDMENT.md) explains the boundaries.
+All **562 frontend tests across 65 suites** pass locally with the native profile;
+the strict production build also passes with `CI=true` and ESLint enabled. The preceding amendment
+at `1ece856` passed its strict build and CI. The
+[hosted acceptance plan](docs/PR19_HOSTED_ACCEPTANCE_PLAN.md) prepares item/recipe
+retesting after a separately approved merge and test deployment.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
 locally corrected blockers: duplicate count panels while typing, and unrelated

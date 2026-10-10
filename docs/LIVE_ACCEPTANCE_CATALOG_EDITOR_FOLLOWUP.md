@@ -53,12 +53,20 @@ recipes against the latest ingredient catalog. It does not recalculate a
 conversion. [The review amendment](PR19_REVIEW_AMENDMENT.md) records the four
 findings, tradeoffs and test coverage.
 
+The creation-receipt follow-up also prevents a later Save from appending a
+duplicate when typing continued during a confirmed creation. Saved identities
+are attached only to their matching retained drafts; later typing remains and
+requires explicit recovery against canonical saved fields. Cancelled/different
+drafts cannot receive the old identity. Uncertain network outcomes remain a
+separate retry acceptance case.
+
 ## Validation and release status
 
-The amended catalog, recipe, save-integrity, App and store checks pass **125
-focused tests across 7 suites**. All **553 tests across 65 suites** pass with the
-reviewed native feature profile. The strict production build passes with
-`CI=true` and ESLint enabled.
+The amended catalog, recipe, save-integrity, App and store checks pass **134
+focused tests across 7 suites**. All **562 tests across 65 suites** pass with the
+reviewed native feature profile. The strict production build also passes with
+`CI=true` and ESLint enabled. The preceding amendment `1ece856` passed 553 tests, a strict
+build and Inventory CI.
 The original PR19 code checkpoint `6069ce6` passed 527 tests and a strict build;
 the first pushed head `f68596d` added documentation, and its Inventory CI passed.
 The review amendment stays on `codex/catalog-editor-revision-integrity`, based
@@ -74,6 +82,10 @@ rerun after a separately approved merge and test deployment.
 4. Test employee authorization separately when the authentication workflow resumes.
 5. Rework the growing setup screen in the later UI workflow.
 6. Review cleanup of the labelled fictional fixtures before operational use, preserving this acceptance record.
+
+Use the [hosted acceptance plan](PR19_HOSTED_ACCEPTANCE_PLAN.md) to pin deployment
+revisions, separate observed server conflicts from client refusals, verify one
+created identity after later typing, restore test fields and read back $212.
 
 Cross-tab owner labels briefly survived a session that native reads rejected.
 Normal owner sign-in restored reads and the same saved analytical snapshot.

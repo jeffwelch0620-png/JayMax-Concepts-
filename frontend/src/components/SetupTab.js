@@ -20,7 +20,7 @@ import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnA
 
 function emptyForm(areas) {
   return {
-    draftRevision: null, draftBase: null, name: "", storageArea: (areas[0] || DEFAULT_STORAGE_AREAS[0]).name, active: true, countActive: true, orderEnabled: true, salesTracked: false, itemType: "portion",
+    draftToken: uid("item-draft"), receiptReviewRequired: false, draftRevision: null, draftBase: null, name: "", storageArea: (areas[0] || DEFAULT_STORAGE_AREAS[0]).name, active: true, countActive: true, orderEnabled: true, salesTracked: false, itemType: "portion",
     purchaseUnit: "case", packCount: "", unitQty: "", unitUOM: "lb",
     portionSize: "", portionUOM: "oz", par: "", currentStock: "",
     vendorSkus: [{ id: uid("vs"), vendor: VENDORS[0], vendorSku: "", packDescription: "", purchaseUnit: "case", packCount: "", unitQty: "", unitUOM: "lb", price: "", priceUpdatedAt: "", priceSource: "manual", available: true, preferred: true }],
@@ -29,7 +29,7 @@ function emptyForm(areas) {
 
 function itemForm(it, revision) {
   return {
-    draftRevision: revision, draftBase: snapshotEditorValue(it),
+    draftToken: uid("item-draft"), receiptReviewRequired: false, draftRevision: revision, draftBase: snapshotEditorValue(it),
     name: it.name, storageArea: it.storageArea, active: it.active !== false,
     countActive: isCountActive(it), orderEnabled: isOrderEnabled(it), salesTracked: it.salesTracked, itemType: it.itemType,
     purchaseUnit: it.purchaseUnit, packCount: it.packCount ?? "", unitQty: it.unitQty ?? "", unitUOM: it.unitUOM,
@@ -57,8 +57,9 @@ const ITEM_GROUPS = [
 ];
 
 export function SetupTab({ items, revision = 0, persistItems, areas, persistAreas, showToast, showError = () => {}, drafts, rid, onCatalogLinked, onVerifySupplier }) {
-  const [form, editForm, clearForm] = useRetainedDraft(`item:${rid}`, emptyForm(areas), drafts);
-  const [editingCN, setEditingCN, clearEditing] = useRetainedDraft(`item-edit:${rid}`, null, drafts);
+  const [form, editForm, clearForm, , reconcileForm] = useRetainedDraft(`item:${rid}`, emptyForm(areas), drafts);
+  const [editingKey, setEditingCN, clearEditing] = useRetainedDraft(`item-edit:${rid}`, null, drafts);
+  const editingCN = editingKey || form.draftBase?.controlNumber || null;
   const [newArea, setNewArea, clearArea] = useRetainedDraft(`area:${rid}`, { name: "", prefix: "" }, drafts);
   const [error, setError] = useState("");
   const [reviewing, setReviewing] = useState(false);
@@ -144,6 +145,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
   async function submit(e) {
     e.preventDefault();
     if (!form.name.trim() || form.vendorSkus.length === 0) return;
+    if (form.receiptReviewRequired) { fail("The item was created; your later typing is retained. Reload latest and keep my changes before saving again."); return; }
     if (editingCN && (!form.draftBase || !editedItem || editedItem.itemCode !== form.draftBase.itemCode || !equalEditorValue(form.draftBase, editedItem))) {
       fail("This item changed while the form was open. Your draft is retained. Reload latest and keep my changes to review independent edits, or cancel.");
       return;
@@ -159,9 +161,16 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
     setError("");
     // Latest list + unchanged edited record (or a new record) can safely use
     // this render's revision. The store/server still reject an unseen race.
-    if (!(await confirmSave(() => persistItems(next, revision), fail))) return;
+    let acknowledgement;
+    if (!(await confirmSave(async () => { acknowledgement = await persistItems(next, revision); return acknowledgement; }, fail))) return;
     showToast(exists ? "Item updated" : `Item ${record.controlNumber} added`);
-    if (clearForm(form, emptyForm(areas))) clearEditing(editingCN, null);
+    if (clearForm(form, emptyForm(areas))) clearEditing(editingKey, null);
+    else if (!editingCN) {
+      const canonical = acknowledgement.items?.find(row => row.controlNumber === record.controlNumber);
+      const base = snapshotEditorValue({ ...record, itemCode: canonical?.itemCode ?? (api.isPostgres ? `${rid}_${record.controlNumber}` : record.itemCode) });
+      reconcileForm(current => current.draftToken === form.draftToken,
+        current => ({ ...current, draftBase: base, draftRevision: revision, receiptReviewRequired: true }));
+    }
   }
 
   async function deleteItem(cn) {
@@ -225,16 +234,16 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
         <SectionLabel>Purchasing</SectionLabel>
         <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
           <Field label="Purchase Unit"><select className={inpCls} disabled={sharedProduct} value={form.purchaseUnit} onChange={(e) => update("purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-          <Field label="Par Level (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.par} onChange={(e) => update("par", e.target.value)} /></Field>
-          {api.actualInventoryEnabled ? <p className="text-sm" data-testid="setup-native-count-note">Physical stock and explicit inventory values are recorded in Actual Inventory. Item Setup does not set on-hand quantities.</p> : <Field label="Current Stock (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.currentStock} onChange={(e) => update("currentStock", e.target.value)} /></Field>}
+          <Field label="Par Level (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.par ?? ""} onChange={(e) => update("par", e.target.value)} /></Field>
+          {api.actualInventoryEnabled ? <p className="text-sm" data-testid="setup-native-count-note">Physical stock and explicit inventory values are recorded in Actual Inventory. Item Setup does not set on-hand quantities.</p> : <Field label="Current Stock (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.currentStock ?? ""} onChange={(e) => update("currentStock", e.target.value)} /></Field>}
         </div>
 
         <SectionLabel>Portion Breakdown (per Purchase Unit)</SectionLabel>
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
-          <Field label="Pack Count"><input type="number" step="1" className={inpCls} disabled={sharedProduct} value={form.packCount} onChange={(e) => update("packCount", e.target.value)} placeholder="e.g. 4" /></Field>
-          <Field label="Size per Pack"><input type="number" step="0.01" className={inpCls} disabled={sharedProduct} value={form.unitQty} onChange={(e) => update("unitQty", e.target.value)} placeholder="e.g. 5" /></Field>
+          <Field label="Pack Count"><input type="number" step="1" className={inpCls} disabled={sharedProduct} value={form.packCount ?? ""} onChange={(e) => update("packCount", e.target.value)} placeholder="e.g. 4" /></Field>
+          <Field label="Size per Pack"><input type="number" step="0.01" className={inpCls} disabled={sharedProduct} value={form.unitQty ?? ""} onChange={(e) => update("unitQty", e.target.value)} placeholder="e.g. 5" /></Field>
           <Field label="Size Unit"><select className={inpCls} disabled={sharedProduct} value={form.unitUOM} onChange={(e) => update("unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-          <Field label="Portion Size"><input type="number" step="0.01" className={inpCls} disabled={sharedProduct} value={form.portionSize} onChange={(e) => update("portionSize", e.target.value)} placeholder="e.g. 6" /></Field>
+          <Field label="Portion Size"><input type="number" step="0.01" className={inpCls} disabled={sharedProduct} value={form.portionSize ?? ""} onChange={(e) => update("portionSize", e.target.value)} placeholder="e.g. 6" /></Field>
           <Field label="Portion Unit"><select className={inpCls} disabled={sharedProduct} value={form.portionUOM} onChange={(e) => update("portionUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
         </div>
         {form.packCount ? (
