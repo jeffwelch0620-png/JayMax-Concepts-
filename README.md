@@ -1,5 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+The October 7 correction pass is documented in
+[`docs/PR_REVIEW_CORRECTIONS.md`](docs/PR_REVIEW_CORRECTIONS.md). It records save/retry,
+session-expiry, catalog batching, supplier selection and test-configuration fixes,
+their validation, and remaining review work.
+PRs 14–16 remain draft and unmerged; hosted development validation is still pending.
+
+## Inventory foundation review checkpoint — October 6, 2026
+
+This branch is a **draft PR checkpoint** of the cumulative PostgreSQL inventory work. Read
+[`docs/INVENTORY_FOUNDATION_README.md`](docs/INVENTORY_FOUNDATION_README.md) for completed work,
+the three inventory tracks, validation, all 20 review findings, and the remaining build sequence.
+The checkpoint has six findings fixed within their stated local scope, 13 open, and one deferred.
+
+Actual Food Cost uses purchased-item physical counts with explicit count values and received-date
+purchases. Prep/waste and future Toast sales explain that baseline; they do not change accounting
+inventory. Native workflows remain gated, and the broader legacy operating cutover is unfinished.
+This PR does not apply migrations, import real invoices, enable features, or authorize deployment.
+
+The deployment overview below describes the earlier application configuration. It is not evidence
+that this checkpoint is deployed or that a clean target reproduces every new workflow. Earlier
+milestone documents retain their original local/unpublished status as historical records; this
+checkpoint README is the current publication and remaining-work guide.
+
 A multi-location restaurant operations platform for Bert's Hometown Grill & Pizzeria, Rudd's Pies
 and Fries, and Papa Leoni's Pizza. It covers:
 
@@ -53,7 +76,7 @@ frontend/
 supabase/
   schema.sql           # pg_dump of the live schema
   README.md            # applied migrations, RLS notes
-migrations/            # one-off SQL already applied to Supabase (see supabase/README.md)
+migrations/            # earlier SQL plus new review-only native migrations; see checkpoint README
 scripts/               # data import + Mongo->Postgres transforms (not used: no Mongo data was migrated)
 sample-data/           # sanitized demo dataset (not operational data)
 docs/                  # schema, access policies, hosting, migration plan, PRD

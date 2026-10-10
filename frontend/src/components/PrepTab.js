@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { ChefHat, Play, PackageCheck, Layers, X, Plus, Trash2, Check, Sparkles, ClipboardList, Send, Package } from "lucide-react";
 import { normalizeRecipeSchema, recipeCostSummary, fmtDate, fmtMoney, num, todayISO, FREQS, VESSELS } from "../lib/calc";
 import * as api from "../lib/api";
@@ -54,7 +55,7 @@ function RecurringScheduleFields({ recurDays, toggleDay, fixedQty, setFixedQty, 
   );
 }
 
-export function PrepTab({ rid, items, dishes, persistDishes, prepStock, prepLogs, applyPrepResult, salesPeriod, showToast }) {
+export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, persistDishes, prepStock, prepLogs, applyPrepResult, salesPeriod, showToast }) {
   const [track, setTrack] = useState("daily");
   const [sub, setSub] = useState("list");
   const [prepItems, setPrepItems] = useState([]);
@@ -91,8 +92,8 @@ export function PrepTab({ rid, items, dishes, persistDishes, prepStock, prepLogs
       </div>
       {sub === "list" && <PrepListView rid={rid} track={track} items={items} dishes={dishes} prepItems={prepItems} reloadPrepItems={reloadPrepItems} applyPrepResult={applyPrepResult} showToast={showToast} />}
       {sub === "count" && <EveningCount rid={rid} track={track} showToast={showToast} />}
-      {sub === "inventory" && <InventoryLog rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />}
-      {sub === "planning" && <Planning rid={rid} dishes={dishes} prepItems={prepItems} persistDishes={persistDishes} showToast={showToast} />}
+      {sub === "inventory" && <InventoryLog drafts={drafts} showError={showError} rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />}
+      {sub === "planning" && <Planning showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} persistDishes={persistDishes} showToast={showToast} />}
     </div>
   );
 }
@@ -700,7 +701,7 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
 }
 
 /* ---------------- Prep Inventory, Log & Report ---------------- */
-function InventoryLog({ rid, items, dishes, persistDishes, prepItems, prepStock, prepLogs, applyPrepResult, salesPeriod, showToast }) {
+function InventoryLog({ drafts, showError, rid, items, dishes, persistDishes, prepItems, prepStock, prepLogs, applyPrepResult, salesPeriod, showToast }) {
   const [busy, setBusy] = useState(false);
   const [rFrom, setRFrom] = useState(daysAgoISO(30));
   const [rTo, setRTo] = useState(todayISO());
@@ -710,8 +711,23 @@ function InventoryLog({ rid, items, dishes, persistDishes, prepItems, prepStock,
   const itemStocks = (prepStock || []).filter((s) => s.prepItemId);
   const recentLogs = [...(prepLogs || [])].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 12);
 
+  const [metadata, editMetadata, clearMetadata] = useRetainedDraft(`prep-metadata:${rid}`, {}, drafts);
+  const [metadataError, setMetadataError] = useState("");
   function updateMeta(recipe, field, val) {
-    persistDishes(dishes.map((d) => d.id === recipe.id ? { ...d, [field]: field === "prepPar" ? Number(val) || 0 : val } : d));
+    editMetadata(current => ({ ...current, [recipe.id]: { ...current[recipe.id], [field]: val } }));
+  }
+  async function saveMeta(recipe) {
+    const submitted = metadata;
+    const changes = submitted[recipe.id];
+    if (!changes) return;
+    const next = dishes.map(d => d.id === recipe.id ? { ...d, ...changes,
+      ...(changes.prepPar !== undefined ? { prepPar: Number(changes.prepPar) || 0 } : {}) } : d);
+    if (!(await confirmSave(() => persistDishes(next), message => { setMetadataError(message); showError(message); }))) return;
+    const remaining = { ...submitted }; delete remaining[recipe.id];
+    const cleared = clearMetadata(submitted, remaining);
+    // Other unsaved recipe settings remain in the retained draft cache.
+    if (cleared && Object.keys(remaining).length) editMetadata(remaining);
+    setMetadataError(""); showToast("Prep settings saved");
   }
 
   async function handleApplySales() {
@@ -741,6 +757,8 @@ function InventoryLog({ rid, items, dishes, persistDishes, prepItems, prepStock,
 
   return (
     <div data-testid="prep-inventory-log">
+      {metadataError && <p role="alert">{metadataError}</p>}
+      {Object.keys(metadata).length > 0 && <p role="status">Unsaved prep settings. Use Save prep settings to confirm each recipe. Drafts survive tab changes; save before reloading or signing out.</p>}
       <div className="flex justify-end mb-3">
         <button className={btnGhost} onClick={handleApplySales} disabled={busy} data-testid="apply-sales-usage-button" title="Draw down prep inventory using the quantities entered in Sales Tracking">
           <PackageCheck size={15} /> Deduct Prep Usage from Sales
@@ -769,11 +787,12 @@ function InventoryLog({ rid, items, dishes, persistDishes, prepItems, prepStock,
                 </div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-[11px] text-slate-500">Par:</span>
-                  <input type="number" step="1" className={`${inpCls} w-20 py-1`} data-testid={`prep-par-${r.id}`} value={r.prepPar ?? 0} onChange={(e) => updateMeta(r, "prepPar", e.target.value)} />
+                  <input type="number" step="1" className={`${inpCls} w-20 py-1`} data-testid={`prep-par-${r.id}`} value={metadata[r.id]?.prepPar ?? r.prepPar ?? 0} onChange={(e) => updateMeta(r, "prepPar", e.target.value)} />
                   <span className="text-[11px] text-slate-500">Freq:</span>
-                  <select className={`${inpCls} py-1 text-xs`} data-testid={`prep-freq-select-${r.id}`} value={r.frequency || "daily"} onChange={(e) => updateMeta(r, "frequency", e.target.value)}>
+                  <select className={`${inpCls} py-1 text-xs`} data-testid={`prep-freq-select-${r.id}`} value={metadata[r.id]?.frequency ?? r.frequency ?? "daily"} onChange={(e) => updateMeta(r, "frequency", e.target.value)}>
                     {FREQS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </select>
+                  <button className={btnGhost} disabled={!metadata[r.id]} onClick={() => saveMeta(r)} data-testid={`prep-save-meta-${r.id}`}>Save prep settings</button>
                 </div>
                 {(stock?.containers || []).length > 0 && (
                   <div className="mt-2 border-t border-[#22304A] pt-2">
@@ -888,7 +907,7 @@ function InventoryLog({ rid, items, dishes, persistDishes, prepItems, prepStock,
 }
 
 /* ---------------- Planning: projections, overrides, PIN, AI par advisor ---------------- */
-function Planning({ rid, dishes, prepItems, persistDishes, showToast }) {
+function Planning({ showError, rid, dishes, prepItems, persistDishes, showToast }) {
   const prepRecipes = dishes.filter((d) => d.recipeType === "prep").map(normalizeRecipeSchema);
   const [proj, setProj] = useState({ date: tomorrowISO(), amount: "", note: "" });
   const [projList, setProjList] = useState([]);
@@ -959,11 +978,12 @@ function Planning({ rid, dishes, prepItems, persistDishes, showToast }) {
 
   async function applyRec(rec) {
     try {
+      const saved = await persistDishes(dishes.map((d) => d.id === rec.recipeId ? { ...d, prepPar: rec.recommendedPar } : d));
+      if (!saved) return;
       await api.applyParRec(rid, rec.id);
-      persistDishes(dishes.map((d) => d.id === rec.recipeId ? { ...d, prepPar: rec.recommendedPar } : d));
       setRecs((l) => l.filter((x) => x.id !== rec.id));
       showToast(`Par for ${rec.recipeName} updated to ${num(rec.recommendedPar, 0)}`);
-    } catch (e) { showToast("Couldn't apply the recommendation"); }
+    } catch (e) { showError("Couldn't finish applying the recommendation. Review the saved par before retrying."); }
   }
   async function dismissRec(rec) {
     await api.dismissParRec(rid, rec.id).catch(() => {});

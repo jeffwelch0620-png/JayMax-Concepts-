@@ -1,17 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { Plus, Trash2 } from "lucide-react";
 import { ADJUSTMENT_REASONS, adjustmentReason, adjustmentValue, todayISO, fmtDate, fmtMoney, num, uid } from "../lib/calc";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc } from "./common";
 
-export function AdjustmentsTab({ items, adjustments, persist, showToast }) {
+export function AdjustmentsTab({ rid, drafts, items, adjustments, persist, showToast, showError = () => {} }) {
   const orderItems = useMemo(() => [...items].sort((a, b) => (a.storageArea || "").localeCompare(b.storageArea || "") || (a.name || "").localeCompare(b.name || "")), [items]);
-  const [form, setForm] = useState({ date: todayISO(), controlNumber: orderItems[0]?.controlNumber || "", reason: "waste", qtyBasis: "purchase", qty: "", note: "" });
+  const [form, setForm, clearForm] = useRetainedDraft(`adjustment:${rid}`, { date: todayISO(), controlNumber: orderItems[0]?.controlNumber || "", reason: "waste", qtyBasis: "purchase", qty: "", note: "" }, drafts);
+  const [error, setError] = useState("");
+  const fail = message => { setError(message); showError(message); };
   const [filterReason, setFilterReason] = useState("All");
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!form.controlNumber && orderItems.length) setForm((f) => ({ ...f, controlNumber: orderItems[0].controlNumber }));
-  }, [orderItems, form.controlNumber]);
+  }, [orderItems, form.controlNumber, setForm]);
 
   const selectedItem = items.find((it) => it.controlNumber === form.controlNumber);
   const selectedReason = adjustmentReason(form.reason);
@@ -24,14 +27,14 @@ export function AdjustmentsTab({ items, adjustments, persist, showToast }) {
       id: uid("adj"), date: form.date || todayISO(), controlNumber: form.controlNumber,
       reason: form.reason, qtyBasis: form.qtyBasis, qty: Number(form.qty), note: form.note.trim(), createdAt: new Date().toISOString(),
     };
-    await persist([...adjustments, rec]);
-    setForm((f) => ({ ...f, qty: "", note: "" }));
+    if (!(await confirmSave(() => persist([...adjustments, rec]), fail))) return;
+    clearForm(form, { ...form, qty: "", note: "" }); setError("");
     showToast("Adjustment logged");
   }
 
   async function deleteAdjustment(id) {
     if (!window.confirm("Delete this adjustment?")) return;
-    await persist(adjustments.filter((a) => a.id !== id));
+    if (!(await confirmSave(() => persist(adjustments.filter((a) => a.id !== id)), fail))) return;
     showToast("Adjustment deleted");
   }
 
@@ -57,6 +60,7 @@ export function AdjustmentsTab({ items, adjustments, persist, showToast }) {
   return (
     <div className="fade-slide-in" data-testid="adjustments-tab">
       <PageTitle>Waste / Inventory Adjustments</PageTitle>
+      {error && <p role="alert">{error}</p>}
       <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))" }}>
         <div className={`${cardCls} p-4`}><div className="text-[11px] text-slate-500 uppercase font-bold">Adjustment Records</div><div className="text-2xl font-bold num" style={{ color: "var(--acc)" }}>{adjustments.length}</div></div>
         <div className={`${cardCls} p-4`}><div className="text-[11px] text-slate-500 uppercase font-bold">Removal Value — Last 30 Days</div><div className="text-2xl font-bold num text-red-400">{fmtMoney(last30Value)}</div></div>

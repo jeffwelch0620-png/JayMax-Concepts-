@@ -1,5 +1,5 @@
 import axios from "axios";
-import { calcPortionsPerUnit } from "./calc";
+import { calcPortionsPerUnit, preferredSku } from "./calc";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Supabase migration target -- see docs/SUPABASE_MIGRATION_PLAN.md. Store ids here
@@ -12,8 +12,100 @@ const PG_API = `${API}/pg`;
 // database); only an explicit REACT_APP_USE_PG=false build uses the legacy routes.
 const USE_PG = process.env.REACT_APP_USE_PG !== "false";
 export const isPostgres = USE_PG;
+export const nativePurchasesEnabled = USE_PG && process.env.REACT_APP_NATIVE_PURCHASES === "true";
+export const actualInventoryEnabled = nativePurchasesEnabled && process.env.REACT_APP_ACTUAL_INVENTORY === "true";
+export const catalogMappingEnabled = actualInventoryEnabled && process.env.REACT_APP_CATALOG_MAPPING === "true";
+export const sharedCatalog = rid => axios.get(`${PG_API}/catalog/${pgStoreId(rid)}`).then(r => r.data);
+export const linkSharedItem = (rid, body, revision) => axios.post(`${PG_API}/catalog/${pgStoreId(rid)}/links`, body, { headers: revisionHeaders(revision) }).then(r => r.data);
+export const prepSetupEnabled = nativePurchasesEnabled && process.env.REACT_APP_PREP_SETUP === "true";
+export const prepBatchesEnabled = prepSetupEnabled && process.env.REACT_APP_PREP_BATCHES === "true";
+export const prepObservationsEnabled = prepBatchesEnabled && process.env.REACT_APP_PREP_OBSERVATIONS === "true";
+const retiredWorkflow = message => Promise.reject(Object.assign(new Error(message), { response: { status: 410, data: { detail: message } } }));
 const MONGO_TO_PG_STORE = { berts: "berts", rudds: "rudds", papa_leonis: "papa" };
 const pgStoreId = (rid) => MONGO_TO_PG_STORE[rid] || rid;
+export const purchaseItems = (rid) => pgListItems(pgStoreId(rid));
+const purchaseUrl = (rid) => `${PG_API}/purchases/${pgStoreId(rid)}`;
+export const purchaseCapabilities = (rid) => axios.get(`${purchaseUrl(rid)}/capabilities`).then(r => r.data);
+export const purchaseFiles = (rid, offset = 0) => axios.get(`${purchaseUrl(rid)}/files`, { params: { offset } }).then(r => r.data);
+export const purchaseFile = (rid, id) => axios.get(`${purchaseUrl(rid)}/files/${id}`).then(r => r.data);
+export const purchaseFileDocument = (rid, id) => axios.get(`${purchaseUrl(rid)}/documents/${id}`).then(r => r.data);
+export const capturePurchase = (rid, file, key) => {
+  const form = new FormData(); form.append("file", file);
+  return axios.post(`${purchaseUrl(rid)}/files`, form, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+};
+export const postPurchase = (rid, id, body, key) => axios.post(`${purchaseUrl(rid)}/documents/${id}/post`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const purchaseHistory = (rid) => axios.get(`${purchaseUrl(rid)}/history`).then(r => r.data);
+export const nativeOperatingSummary = (rid) => axios.get(`${purchaseUrl(rid)}/operating-summary`).then(r => r.data);
+export const previewPurchaseCorrection = (rid, id, body) => axios.post(`${purchaseUrl(rid)}/documents/${id}/correction-preview`, body).then(r => r.data);
+export const correctPurchase = (rid, id, body, key) => axios.post(`${purchaseUrl(rid)}/documents/${id}/correct`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const purchaseCorrections = (rid, id) => axios.get(`${purchaseUrl(rid)}/documents/${id}/corrections`).then(r => r.data);
+export const purchaseRawRows = (rid, id, offset = 0) => axios.get(`${purchaseUrl(rid)}/files/${id}/rows`, { params: { offset } }).then(r => r.data);
+export const purchaseSource = (rid, id) => axios.get(`${purchaseUrl(rid)}/files/${id}/source`, { responseType: "blob" }).then(r => r.data);
+export const purchaseVendors = (rid) => axios.get(`${purchaseUrl(rid)}/vendors`).then(r => r.data);
+export const capturePurchaseSource = (rid, file, key) => {
+  const form = new FormData(); form.append("file", file);
+  return axios.post(`${purchaseUrl(rid)}/sources`, form, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+};
+export const captureManualPurchase = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/manual-records`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const nativeUnitSetup = rid => axios.get(`${purchaseUrl(rid)}/unit-setup`).then(r => r.data);
+export const saveNativeUnitProfile = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/unit-profiles`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const nativePrepSetup = rid => axios.get(`${purchaseUrl(rid)}/prep-setup`).then(r => r.data);
+export const nativePrepBatchSetup = rid => axios.get(`${purchaseUrl(rid)}/prep-batches/setup`).then(r => r.data);
+export const nativePrepObservationSetup = rid => axios.get(`${purchaseUrl(rid)}/prep-observations/setup`).then(r => r.data);
+export const nativePrepPeriodCounts = rid => axios.get(`${purchaseUrl(rid)}/prep-periods/counts`).then(r => r.data);
+export const nativePrepOpeningSetup = rid => axios.get(`${purchaseUrl(rid)}/prep-openings/setup`).then(r => r.data);
+export const previewNativePrepOpening = (rid, body) => axios.post(`${purchaseUrl(rid)}/prep-openings/preview`, body).then(r => r.data);
+export const saveNativePrepOpening = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-openings`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const previewNativePrepOpeningVoid = (rid, event, body) => axios.post(`${purchaseUrl(rid)}/prep-openings/${encodeURIComponent(event)}/void-preview`, body).then(r => r.data);
+export const voidNativePrepOpening = (rid, event, body, key) => axios.post(`${purchaseUrl(rid)}/prep-openings/${encodeURIComponent(event)}/void`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const previewNativePrepPeriod = (rid, body) => axios.post(`${purchaseUrl(rid)}/prep-periods/preview`, body).then(r => r.data);
+export const nativePrepPeriodJournal = rid => axios.get(`${purchaseUrl(rid)}/prep-period-journal`).then(r => r.data);
+export const previewNativePrepPeriodClose = (rid, body) => axios.post(`${purchaseUrl(rid)}/prep-period-journal/preview`, body).then(r => r.data);
+export const saveNativePrepPeriodClose = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-period-journal`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const previewNativePrepPeriodReopen = (rid, body) => axios.post(`${purchaseUrl(rid)}/prep-period-journal/reopen-preview`, body).then(r => r.data);
+export const saveNativePrepPeriodReopen = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-period-journal/reopen`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const nativePrepObservationHistory = (rid, purpose, root) => axios.get(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/${encodeURIComponent(root)}/history`).then(r => r.data);
+export const previewNativePrepObservation = (rid, purpose, body) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/preview`, body).then(r => r.data);
+export const saveNativePrepObservation = (rid, purpose, body, key) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const previewNativePrepObservationChange = (rid, purpose, id, body) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/${encodeURIComponent(id)}/change-preview`, body).then(r => r.data);
+export const saveNativePrepObservationChange = (rid, purpose, id, body, key) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/${encodeURIComponent(id)}/changes`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const nativePrepBatchHistory = (rid, root) => axios.get(`${purchaseUrl(rid)}/prep-batches/${encodeURIComponent(root)}/history`).then(r => r.data);
+export const previewNativePrepBatch = (rid, body) => axios.post(`${purchaseUrl(rid)}/prep-batches/preview`, body).then(r => r.data);
+export const saveNativePrepBatch = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-batches`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const previewNativePrepBatchChange = (rid, id, body) => axios.post(`${purchaseUrl(rid)}/prep-batches/${encodeURIComponent(id)}/change-preview`, body).then(r => r.data);
+export const saveNativePrepBatchChange = (rid, id, body, key) => axios.post(`${purchaseUrl(rid)}/prep-batches/${encodeURIComponent(id)}/changes`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const nativePrepHistory = (rid, id) => axios.get(`${purchaseUrl(rid)}/prep-products/${encodeURIComponent(id)}/history`).then(r => r.data);
+export const saveNativePrepProduct = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-products`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const saveNativePrepProfile = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-unit-profiles`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const previewNativePrepRecipe = (rid, body) => axios.post(`${purchaseUrl(rid)}/prep-recipes/preview`, body).then(r => r.data);
+export const saveNativePrepRecipe = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-recipes`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const nativeOrderReceiptSetup = (rid, ref) => axios.get(`${purchaseUrl(rid)}/orders/${encodeURIComponent(ref)}/receipt-setup`).then(r => r.data);
+export const previewNativeOrderReceipt = (rid, ref, body) => axios.post(`${purchaseUrl(rid)}/orders/${encodeURIComponent(ref)}/receipt-preview`, body).then(r => r.data);
+export const linkNativeOrderReceipt = (rid, ref, body, key) => axios.post(`${purchaseUrl(rid)}/orders/${encodeURIComponent(ref)}/receipts`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+const reconciliationUrl = (rid, ref, receipt) => `${purchaseUrl(rid)}/orders/${encodeURIComponent(ref)}/receipts/${encodeURIComponent(receipt)}`;
+export const nativeOrderReconciliationSetup = (rid, ref, receipt) => axios.get(`${reconciliationUrl(rid, ref, receipt)}/reconciliation-setup`).then(r => r.data);
+export const previewNativeOrderReconciliation = (rid, ref, receipt, body) => axios.post(`${reconciliationUrl(rid, ref, receipt)}/reconciliation-preview`, body).then(r => r.data);
+export const reconcileNativeOrderReceipt = (rid, ref, receipt, body, key) => axios.post(`${reconciliationUrl(rid, ref, receipt)}/reconciliations`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+const actualUrl = (rid) => `${PG_API}/actual-inventory/${pgStoreId(rid)}`;
+export const actualSetup = (rid) => axios.get(`${actualUrl(rid)}/setup`).then(r => r.data);
+export const actualScopeDetails = (rid, id) => axios.get(`${actualUrl(rid)}/scopes/${id}`).then(r => r.data);
+export const actualScope = (rid, body, key) => axios.post(`${actualUrl(rid)}/scope`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const actualCounts = (rid) => axios.get(`${actualUrl(rid)}/counts`).then(r => r.data);
+export const actualCount = (rid, id) => axios.get(`${actualUrl(rid)}/counts/${id}`).then(r => r.data);
+export const actualSaveCount = (rid, body, key) => axios.post(`${actualUrl(rid)}/counts`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const staffCountSheets = (rid) => axios.get(`${actualUrl(rid)}/staff-sheets`).then(r => r.data);
+export const issueStaffCountSheet = (rid, body, key) => axios.post(`${actualUrl(rid)}/staff-sheets`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const decideStaffCountSheet = (rid, id, body, key) => axios.post(`${actualUrl(rid)}/staff-sheets/${id}/decision`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const staffCountDrafts = (rid, pin) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/count-drafts`, { pin }).then(r => r.data);
+export const submitStaffCountDraft = (rid, id, body, key) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/count-drafts/${id}/submit`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const actualReport = (rid, opening, closing) => axios.get(`${actualUrl(rid)}/report`, { params: { opening, closing } }).then(r => r.data);
+export const actualClose = (rid, body, key) => axios.post(`${actualUrl(rid)}/close`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const actualClosed = (rid) => axios.get(`${actualUrl(rid)}/closed-periods`).then(r => r.data);
+export const actualReopenPreview = (rid, id) => axios.get(`${actualUrl(rid)}/reopen-preview/${id}`).then(r => r.data);
+export const actualReopen = (rid, body, key) => axios.post(`${actualUrl(rid)}/reopen`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const actualHandoffPreview = (rid, id, target) => axios.get(`${actualUrl(rid)}/scope-handoff-preview/${id}`, { params: { target_count: target } }).then(r => r.data);
+export const actualAcceptHandoff = (rid, body, key) => axios.post(`${actualUrl(rid)}/scope-handoffs`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const actualHandoffs = (rid) => axios.get(`${actualUrl(rid)}/scope-handoffs`).then(r => r.data);
 const TOKEN_KEY = "jaymax_session";
 // Session tokens are "<base64url JSON payload>.<signature>" with an `exp` (unix seconds).
 function tokenExpired(token) {
@@ -26,7 +118,7 @@ function tokenExpired(token) {
 const session = () => {
   try {
     const s = JSON.parse(localStorage.getItem(TOKEN_KEY) || "null");
-    if (s?.token && tokenExpired(s.token)) { localStorage.removeItem(TOKEN_KEY); return null; }
+    if (s?.token && tokenExpired(s.token)) { endSession(); return null; }
     return s;
   } catch { return null; }
 };
@@ -68,6 +160,7 @@ export const fetchState = (rid) => axios.get(`${API}/state/${rid}`).then((r) => 
   : r.data);
 const revisionHeaders = (revision) => revision == null ? {} : { "If-Match": `"${revision}"` };
 export const putCollection = (rid, name, arr, revision) => {
+  if (nativePurchasesEnabled && name === "purchases") return retiredWorkflow("Retain this invoice in Invoice Master, then review its received date, quantities and costs before posting.");
   if (USE_PG && name === "items") return pgPutItems(rid, arr, revision);
   if (USE_PG && name === "purchases") return pgPutPurchases(rid, arr, revision);
   if (USE_PG && name === "dishes") return pgPutDishes(rid, arr, revision);
@@ -136,14 +229,14 @@ export const deleteStaffMember = (rid, staffId) => USE_PG ? pgDeleteStaffMember(
 // submitCounts/itemCountSubmissionHistory keep their legacy URLs because CountsTab.js
 // is not frontend-gated; the backend selects Mongo or Postgres via its own USE_PG flag
 // (see docs/SUPABASE_MIGRATION_PLAN.md, chunk 5.5).
-export const submitCounts = (rid, body) => axios.post(`${API}/counts/${rid}/submit`, body).then((r) => r.data);
+export const submitCounts = (rid, body) => actualInventoryEnabled ? retiredWorkflow("Use Actual Inventory with verified units and explicit count values.") : axios.post(`${API}/counts/${rid}/submit`, body).then((r) => r.data);
 export const itemCountSubmissionHistory = (rid, from, to) => axios.get(`${API}/counts/${rid}/history`, { params: { from, to } }).then((r) => r.data);
 
 export const staffPrepsheet = (rid, pin, track = "daily") => USE_PG ? pgStaffPrepsheet(pgStoreId(rid), pin, track) : axios.post(`${API}/staff/${rid}/prepsheet`, { pin, track }).then((r) => r.data);
 export const staffCompleteTask = (rid, body) => USE_PG ? pgStaffCompleteTask(pgStoreId(rid), body) : axios.post(`${API}/staff/${rid}/prepsheet/complete`, body).then((r) => r.data);
 
-export const staffCounts = (rid, pin) => USE_PG ? pgStaffCounts(pgStoreId(rid), pin) : axios.post(`${API}/staff/${rid}/counts`, { pin }).then((r) => r.data);
-export const staffSaveCounts = (rid, body) => USE_PG ? pgStaffSaveCounts(pgStoreId(rid), body) : axios.post(`${API}/staff/${rid}/counts/save`, body).then((r) => r.data);
+export const staffCounts = (rid, pin) => actualInventoryEnabled ? retiredWorkflow("Ask your manager to open Actual Inventory for the reviewed physical count.") : USE_PG ? pgStaffCounts(pgStoreId(rid), pin) : axios.post(`${API}/staff/${rid}/counts`, { pin }).then((r) => r.data);
+export const staffSaveCounts = (rid, body) => actualInventoryEnabled ? retiredWorkflow("Save purchased-item counts through Actual Inventory with explicit count values.") : USE_PG ? pgStaffSaveCounts(pgStoreId(rid), body) : axios.post(`${API}/staff/${rid}/counts/save`, body).then((r) => r.data);
 
 export const staffTaskInbox = (rid, pin) => USE_PG ? pgStaffTaskInbox(pgStoreId(rid), pin) : axios.post(`${API}/staff/${rid}/tasks`, { pin }).then((r) => r.data);
 export const staffCompleteStaffTask = (rid, taskId, body) => USE_PG ? pgStaffCompleteStaffTask(pgStoreId(rid), taskId, body) : axios.post(`${API}/staff/${rid}/tasks/${taskId}/complete`, body).then((r) => r.data);
@@ -186,7 +279,7 @@ export const pgDeleteItem = (storeId, code) => axios.delete(`${PG_API}/items/${s
 
 // ---- Invoices ----
 export const pgListInvoices = (storeId, from, to) => axios.get(`${PG_API}/invoices/${storeId}`, { params: { from, to } }).then((r) => r.data);
-export const pgCreateInvoice = (storeId, body) => axios.post(`${PG_API}/invoices/${storeId}`, body).then((r) => r.data);
+export const pgCreateInvoice = (storeId, body) => nativePurchasesEnabled ? retiredWorkflow("Use Invoice Master to retain and review this purchase before posting.") : axios.post(`${PG_API}/invoices/${storeId}`, body).then((r) => r.data);
 
 // ---- Dishes (menu items + prep recipes) -- ids are real Postgres uuids, not the
 // Mongo-side "dish_xxx"/"prep_xxx" strings. ----
@@ -240,8 +333,8 @@ export const pgDeleteStaffMember = (storeId, staffId) => axios.delete(`${PG_API}
 export const pgStaffPrepsheet = (storeId, pin, track = "daily") => axios.post(`${PG_API}/staff/${storeId}/prepsheet`, { pin, track }).then((r) => r.data);
 export const pgStaffCompleteTask = (storeId, body) => axios.post(`${PG_API}/staff/${storeId}/prepsheet/complete`, body).then((r) => r.data);
 
-export const pgStaffCounts = (storeId, pin) => axios.post(`${PG_API}/staff/${storeId}/counts`, { pin }).then((r) => r.data);
-export const pgStaffSaveCounts = (storeId, body) => axios.post(`${PG_API}/staff/${storeId}/counts/save`, body).then((r) => r.data);
+export const pgStaffCounts = (storeId, pin) => actualInventoryEnabled ? retiredWorkflow("Ask your manager to use Actual Inventory for reviewed physical counts.") : axios.post(`${PG_API}/staff/${storeId}/counts`, { pin }).then((r) => r.data);
+export const pgStaffSaveCounts = (storeId, body) => actualInventoryEnabled ? retiredWorkflow("Use Actual Inventory with verified units and explicit count values.") : axios.post(`${PG_API}/staff/${storeId}/counts/save`, body).then((r) => r.data);
 
 export const pgStaffTaskInbox = (storeId, pin) => axios.post(`${PG_API}/staff/${storeId}/tasks`, { pin }).then((r) => r.data);
 export const pgStaffCompleteStaffTask = (storeId, taskId, body) => axios.post(`${PG_API}/staff/${storeId}/tasks/${taskId}/complete`, body).then((r) => r.data);
@@ -264,25 +357,40 @@ export const pgPushUnsubscribe = (storeId, body) => axios.post(`${PG_API}/staff/
 // edited or deleted, matching what the current UI (InvoicesTab) actually does.
 const VENDOR_NAME_TO_ID = { "US Foods": "us_foods", "PFG": "pfg", "Sysco": "sysco", "Webstaurant": "webstaurant", "Other": "other" };
 const VENDOR_ID_TO_NAME = Object.fromEntries(Object.entries(VENDOR_NAME_TO_ID).map(([k, v]) => [v, k]));
-const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
+const numOrNull = v => {
+  if (v === "" || v == null) return null;
+  const value = Number(v);
+  if (!Number.isFinite(value)) throw new Error("Enter a finite numeric value before saving.");
+  return value;
+};
+export function catalogPrice(v) {
+  if (v === "" || v == null) return null;
+  const value = String(v).trim();
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) || !Number.isFinite(Number(value))) throw new Error("Enter a non-negative finite supplier price, or leave it unknown.");
+  return value; // Keep the entered decimal digits; catalog price is not a float.
+}
 
 function pgSkuToMongoSku(s) {
   return {
+    vendorId: s.vendor, basePerPurchaseUnit: s.basePerPurchaseUnit,
     id: s.id, vendor: s.vendorName || VENDOR_ID_TO_NAME[s.vendor] || s.vendor, vendorSku: s.vendorSku,
-    packDescription: s.packCount && s.unitQty ? `${s.packCount} x ${s.unitQty}${s.unitUOM || ""}` : "",
+    vendorDescription: s.vendorDescription ?? null,
+    packDescription: s.vendorDescription ?? "",
     purchaseUnit: s.purchaseUnit, packCount: s.packCount ?? "", unitQty: s.unitQty ?? "", unitUOM: s.unitUOM || "",
-    price: s.price ?? 0, priceUpdatedAt: s.priceUpdatedAt || "", priceSource: s.priceSource || "manual",
+    price: s.price ?? null, priceUpdatedAt: s.priceUpdatedAt || "", priceSource: s.priceSource ?? null,
     available: s.available, preferred: s.preferred,
   };
 }
 
-function pgItemToMongoItem(pgItem, rid) {
+export function pgItemToMongoItem(pgItem, rid) {
   const prefix = `${rid}_`;
-  const controlNumber = pgItem.code.startsWith(prefix) ? pgItem.code.slice(prefix.length) : pgItem.code;
-  const preferred = pgItem.vendorSkus.find((s) => s.preferred) || pgItem.vendorSkus[0];
+  const controlNumber = pgItem.controlNumber || (pgItem.code.startsWith(prefix) ? pgItem.code.slice(prefix.length) : pgItem.code);
+  const preferred = preferredSku(pgItem);
   return {
     controlNumber, name: pgItem.name, storageArea: pgItem.storageArea || "",
-    active: pgItem.active, countActive: pgItem.active,
+    itemCode: pgItem.code, baseUnit: pgItem.baseUnit, countUnit: pgItem.countUnit, basePerCountUnit: pgItem.basePerCountUnit,
+    sharedStoreCount: pgItem.sharedStoreCount,
+    catalogActive: pgItem.catalogActive, active: pgItem.active, countActive: pgItem.countActive,
     orderEnabled: pgItem.orderEnabled, salesTracked: pgItem.salesTracked,
     itemType: pgItem.costingType,
     category: pgItem.category, classification: pgItem.itemType,
@@ -290,8 +398,8 @@ function pgItemToMongoItem(pgItem, rid) {
     purchaseUnit: preferred?.purchaseUnit || "case",
     packCount: pgItem.packCount ?? "", unitQty: pgItem.unitQty ?? "", unitUOM: pgItem.unitUOM || "",
     portionSize: pgItem.portionSize ?? "", portionUOM: pgItem.portionUOM || "",
-    par: pgItem.par, currentStock: pgItem.currentStock,
-    lastCounted: pgItem.lastCounted || "", needsReview: pgItem.needsReview,
+    par: pgItem.par, currentStock: actualInventoryEnabled ? null : pgItem.currentStock, stockBasis: pgItem.stockBasis,
+    lastCounted: pgItem.lastCounted ?? null, lastCountedBy: pgItem.lastCountedBy ?? null, needsReview: pgItem.needsReview,
     vendorSkus: pgItem.vendorSkus.map(pgSkuToMongoSku),
   };
 }
@@ -303,20 +411,32 @@ function packTotalFor(sourceObj, item) {
   return { packTotal: packCount * unitQty, unitUOM };
 }
 
-function mongoItemToPgBody(item, rid) {
+const physicalUnits = { lb: ["mass", 453.59237], oz: ["mass", 28.349523125], kg: ["mass", 1000], g: ["mass", 1],
+  gal: ["volume", 3785.411784], fl_oz: ["volume", 29.5735295625], l: ["volume", 1000], ml: ["volume", 1],
+  qt: ["volume", 946.352946], pt: ["volume", 473.176473], cup: ["volume", 236.5882365], each: ["count", 1], dozen: ["count", 12] };
+const physicalUnit = value => value === "fl oz" ? "fl_oz" : value === "ct" ? "each" : value;
+function physicalPackFactor(packTotal, unit, base) {
+  const from = physicalUnits[physicalUnit(unit)], to = physicalUnits[physicalUnit(base)];
+  if (!(packTotal > 0) || !from || !to || from[0] !== to[0]) throw new Error("Confirm a physical pack quantity and compatible inventory unit before saving this item.");
+  return packTotal * from[1] / to[1]; // Catalog metadata only; native profiles require separate decimal review.
+}
+export function mongoItemToPgBody(item, rid) {
   const skus = item.vendorSkus || [];
-  const preferred = skus.find((s) => s.preferred) || skus[0];
+  const preferred = preferredSku(item);
   const { packTotal, unitUOM } = packTotalFor(preferred, item);
-  const basePerCountUnit = calcPortionsPerUnit(packTotal, unitUOM, item.portionSize, item.portionUOM).value || 1;
+  const nativeBase = physicalUnit(item.baseUnit || item.unitUOM || unitUOM);
+  const basePerCountUnit = nativePurchasesEnabled ? item.basePerCountUnit ?? physicalPackFactor(packTotal, unitUOM, nativeBase)
+    : calcPortionsPerUnit(packTotal, unitUOM, item.portionSize, item.portionUOM).value || 1;
   const countActive = !!(item.countActive ?? item.active);
   return {
-    code: `${rid}_${item.controlNumber}`, name: item.name, base_unit: item.portionUOM || "each",
+    code: item.itemCode || `${rid}_${item.controlNumber}`, name: item.name, base_unit: nativePurchasesEnabled ? nativeBase : item.portionUOM || "each",
+    ...(catalogMappingEnabled ? { control_number: item.controlNumber } : {}),
     category: item.category, item_type: item.classification,
     is_high_value: item.isHighValue, notes: item.notes,
     costing_type: item.itemType || "portion",
     pack_count: numOrNull(item.packCount), unit_qty: numOrNull(item.unitQty), unit_uom: item.unitUOM || null,
     portion_size: numOrNull(item.portionSize), portion_uom: item.portionUOM || null,
-    count_unit: item.purchaseUnit || preferred?.purchaseUnit || "case",
+    count_unit: nativePurchasesEnabled ? item.countUnit || item.purchaseUnit || preferred?.purchaseUnit || "case" : item.purchaseUnit || preferred?.purchaseUnit || "case",
     base_per_count_unit: basePerCountUnit,
     storage_area: item.storageArea || null,
     counted_nightly: countActive,
@@ -327,13 +447,14 @@ function mongoItemToPgBody(item, rid) {
     needs_review: !!item.needsReview,
     vendor_skus: skus.map((s) => {
       const { packTotal: skuPackTotal, unitUOM: skuUOM } = packTotalFor(s, item);
-      const basePerPurchaseUnit = calcPortionsPerUnit(skuPackTotal, skuUOM, item.portionSize, item.portionUOM).value || null;
+      const basePerPurchaseUnit = nativePurchasesEnabled ? s.basePerPurchaseUnit ?? physicalPackFactor(skuPackTotal, skuUOM, nativeBase)
+        : calcPortionsPerUnit(skuPackTotal, skuUOM, item.portionSize, item.portionUOM).value || null;
       return {
-        vendor_id: VENDOR_NAME_TO_ID[s.vendor] || "other", vendor_sku: s.vendorSku || s.id || "",
-        vendor_description: s.packDescription || null, purchase_unit: s.purchaseUnit || item.purchaseUnit || "case",
+        vendor_id: s.vendorId || VENDOR_NAME_TO_ID[s.vendor] || "other", vendor_sku: s.vendorSku || s.id || "",
+        vendor_description: s.packDescription === "" && s.vendorDescription === null ? null : s.packDescription ?? s.vendorDescription ?? null, purchase_unit: s.purchaseUnit || item.purchaseUnit || "case",
         base_per_purchase_unit: basePerPurchaseUnit,
         pack_count: numOrNull(s.packCount), unit_qty: numOrNull(s.unitQty), unit_uom: s.unitUOM || null,
-        price: numOrNull(s.price), preferred: !!s.preferred, available: s.available !== false,
+        price: catalogPrice(s.price), preferred: !!s.preferred, available: s.available !== false,
       };
     }),
   };
@@ -341,7 +462,7 @@ function mongoItemToPgBody(item, rid) {
 
 async function pgFetchItemsAndPurchases(rid) {
   const storeId = pgStoreId(rid);
-  const [pgItems, pgInvoices] = await Promise.all([pgListItems(storeId), pgListInvoices(storeId)]);
+  const [pgItems, pgInvoices] = await Promise.all([pgListItems(storeId), nativePurchasesEnabled ? Promise.resolve([]) : pgListInvoices(storeId)]);
   const items = pgItems.map((it) => pgItemToMongoItem(it, rid));
   const purchases = [];
   for (const inv of pgInvoices) {

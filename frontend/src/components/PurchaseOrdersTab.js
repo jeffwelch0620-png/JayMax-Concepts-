@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Check, X, Send, PackageCheck, Trash2, RotateCcw, ClipboardList, ShieldCheck, Mail, AlertTriangle, FileText } from "lucide-react";
 import { fmtMoney, fmtDate, num } from "../lib/calc";
 import * as api from "../lib/api";
+import { NativeOrderReceiving } from "./NativeOrderReceiving";
 import { PageTitle, EmptyState, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
 
 const STATUS_META = {
@@ -10,9 +11,10 @@ const STATUS_META = {
   approved: { label: "Approved", color: "#10B981", bg: "rgba(16,185,129,0.12)" },
   sent: { label: "Sent to Supplier", color: "#38BDF8", bg: "rgba(56,189,248,0.12)" },
   received: { label: "Received", color: "#A78BFA", bg: "rgba(167,139,250,0.12)" },
+  receiving: { label: "Partially received", color: "#38BDF8", bg: "rgba(56,189,248,0.12)" },
   rejected: { label: "Rejected", color: "#EF4444", bg: "rgba(239,68,68,0.12)" },
 };
-const FILTERS = ["all", "draft", "pending", "approved", "sent", "received", "rejected"];
+const FILTERS = ["all", "draft", "pending", "approved", "sent", "receiving", "received", "rejected"];
 
 function StatusPill({ status }) {
   const m = STATUS_META[status] || STATUS_META.draft;
@@ -81,6 +83,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
     setRejecting(null);
   }
   async function confirmReceive() {
+    if (api.nativePurchasesEnabled) { showToast("Use the invoice-linked delivery review below."); return; }
     const lines = Object.entries(receiving.lines).map(([controlNumber, receivedQty]) => ({ controlNumber, receivedQty: Number(receivedQty) || 0 }));
     const po = await act(api.receiveOrder, receiving.oid, person, lines, (receiving.invoiceNumber || "").trim());
     if (po) {
@@ -175,7 +178,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
             const isReceiving = receiving?.oid === po.id;
             const isRejecting = rejecting?.oid === po.id;
             const isEmailing = emailing?.oid === po.id;
-            const rm = po.receiptMatch;
+            const rm = po.receiptMatch?.native ? null : po.receiptMatch;
             return (
               <div key={po.id} className={`${cardCls} p-4 transition ${highlightId === po.id ? "ring-2 ring-[var(--acc)]" : ""}`} data-testid={`po-card-${po.id}`}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -205,7 +208,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
                       <button className={btnAcc} data-testid={`po-email-${po.id}`} onClick={() => openEmail(po)}><Mail size={13} /> Email Supplier</button>
                       <button className={btnGhost} data-testid={`po-send-${po.id}`} onClick={() => doSend(po.id)}><Send size={13} /> Mark Sent</button>
                     </>}
-                    {po.status === "sent" && <>
+                    {(po.status === "sent" || (api.nativePurchasesEnabled && po.status === "receiving")) && <>
                       <button className={btnGhost} data-testid={`po-email-${po.id}`} onClick={() => openEmail(po)}><Mail size={13} /> Email Again</button>
                       <button className={btnAcc} data-testid={`po-receive-${po.id}`} onClick={() => openReceive(po)}><PackageCheck size={13} /> Receive Delivery</button>
                     </>}
@@ -224,7 +227,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
 
                 <div className="mt-3 overflow-x-auto">
                   <table className="ops-table">
-                    <thead><tr><th>Item</th><th>SKU</th><th>Qty</th><th>Unit Cost</th><th>Line Total</th>{po.status === "received" && <th>Received</th>}</tr></thead>
+                    <thead><tr><th>Item</th><th>SKU</th><th>Qty</th><th>Unit Cost</th><th>Line Total</th>{po.status === "received" && !api.nativePurchasesEnabled && <th>Received</th>}</tr></thead>
                     <tbody>
                       {po.lines.map((l) => (
                         <tr key={l.controlNumber}>
@@ -233,7 +236,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
                           <td className="num">{num(l.qty, 1)} {l.purchaseUnit}</td>
                           <td className="num">{fmtMoney(l.unitCost)}</td>
                           <td className="num font-semibold">{fmtMoney(l.lineTotal)}</td>
-                          {po.status === "received" && <td className="num" style={{ color: (l.receivedQty !== l.qty) ? "#F59E0B" : "#10B981" }}>{num(l.receivedQty, 1)}</td>}
+                          {po.status === "received" && !api.nativePurchasesEnabled && <td className="num" style={{ color: (l.receivedQty !== l.qty) ? "#F59E0B" : "#10B981" }}>{num(l.receivedQty, 1)}</td>}
                         </tr>
                       ))}
                     </tbody>
@@ -245,7 +248,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
                     <div className="text-xs font-bold mb-2 flex items-center gap-1.5" style={{ color: rm.invoiceFound ? (rm.flaggedCount ? "#F59E0B" : "#10B981") : "#EF4444" }}>
                       <AlertTriangle size={13} /> Invoice {rm.invoiceNumber} — {rm.invoiceFound ? (rm.flaggedCount ? `${rm.flaggedCount} discrepanc${rm.flaggedCount === 1 ? "y" : "ies"} vs Invoice Master` : "matches Invoice Master, no discrepancies") : "not found in Invoice Master"}
                     </div>
-                    {rm.invoiceFound && rm.lines.some((l) => l.onInvoice && l.flagged && Math.abs(l.priceDiff || 0) > 0.001 && l.invoiceUnitCost > 0) && (
+                    {!api.nativePurchasesEnabled && rm.invoiceFound && rm.lines.some((l) => l.onInvoice && l.flagged && Math.abs(l.priceDiff || 0) > 0.001 && l.invoiceUnitCost > 0) && (
                       <div className="mb-2">
                         <button className={btnAcc} data-testid={`po-apply-prices-${po.id}`} onClick={() => applyPrices(po)}>Update saved prices to invoice</button>
                       </div>
@@ -291,7 +294,8 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
                   </div>
                 )}
 
-                {isReceiving && (
+                {api.nativePurchasesEnabled && (isReceiving || po.receiptMatch?.native) && <NativeOrderReceiving key={`${po.id}:${po.receiptMatch?.receiptId || "new"}`} restaurantId={rid} orderRef={po.id} onSaved={async result => { setReceiving(null); showToast(result?.reconciliation ? "Order comparison reconciled." : "Delivery linked to recorded purchase."); await refresh(); }} />}
+                {isReceiving && !api.nativePurchasesEnabled && (
                   <div className="mt-3 bg-[#0F1626] border border-sky-500/30 rounded-lg p-3" data-testid={`po-receive-form-${po.id}`}>
                     <div className="flex items-center gap-2 flex-wrap mb-3">
                       <span className="text-xs font-bold text-slate-300">Invoice # (optional — matches against Invoice Master):</span>

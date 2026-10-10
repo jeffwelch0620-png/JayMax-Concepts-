@@ -1,36 +1,57 @@
 import React, { useState, useEffect } from "react";
+import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { Plus, Trash2, Star, X } from "lucide-react";
 import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, nextControlNumber, itemDerived, isCountActive, isOrderEnabled, uid, fmtMoney, num } from "../lib/calc";
 import * as api from "../lib/api";
+import { NativeInventoryPosition } from "./NativeInventoryPosition";
+import { PreparedItemSetup } from "./PreparedItemSetup";
+import { PreparedBatchLedger } from "./PreparedBatchLedger";
+import { PrepObservations } from "./PrepObservations";
+import { PrepPeriodComparison } from "./PrepPeriodComparison";
+import { PrepOpeningStock } from "./PrepOpeningStock";
+import { PrepPeriodJournal } from "./PrepPeriodJournal";
+import { SharedCatalogLink } from "./SharedCatalogLink";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
 
 function emptyForm(areas) {
   return {
-    name: "", storageArea: (areas[0] || DEFAULT_STORAGE_AREAS[0]).name, countActive: true, orderEnabled: true, salesTracked: false, itemType: "portion",
+    name: "", storageArea: (areas[0] || DEFAULT_STORAGE_AREAS[0]).name, active: true, countActive: true, orderEnabled: true, salesTracked: false, itemType: "portion",
     purchaseUnit: "case", packCount: "", unitQty: "", unitUOM: "lb",
     portionSize: "", portionUOM: "oz", par: "", currentStock: "",
     vendorSkus: [{ id: uid("vs"), vendor: VENDORS[0], vendorSku: "", packDescription: "", purchaseUnit: "case", packCount: "", unitQty: "", unitUOM: "lb", price: "", priceUpdatedAt: "", priceSource: "manual", available: true, preferred: true }],
   };
 }
 
-export function SetupTab({ items, persistItems, areas, persistAreas, showToast, rid }) {
-  const [form, setForm] = useState(() => emptyForm(areas));
-  const [editingCN, setEditingCN] = useState(null);
-  const [newArea, setNewArea] = useState({ name: "", prefix: "" });
+export function SetupTab({ items, persistItems, areas, persistAreas, showToast, showError = () => {}, drafts, rid, onCatalogLinked }) {
+  const [form, setForm, clearForm] = useRetainedDraft(`item:${rid}`, emptyForm(areas), drafts);
+  const [editingCN, setEditingCN, clearEditing] = useRetainedDraft(`item-edit:${rid}`, null, drafts);
+  const [newArea, setNewArea, clearArea] = useRetainedDraft(`area:${rid}`, { name: "", prefix: "" }, drafts);
+  const [error, setError] = useState("");
+  const fail = message => { setError(message); showError(message); };
   const [reviewOnly, setReviewOnly] = useState(false);
-  const [vendorEmails, setVendorEmails] = useState({});
+  const [vendorEmails, setVendorEmails, loadVendorEmails, emailDirty] = useRetainedDraft(`vendor-emails:${rid}`, {}, drafts);
   const reviewCount = items.filter((it) => it.needsReview).length;
+  const sharedProduct = api.catalogMappingEnabled && (items.find(it => it.controlNumber === editingCN)?.sharedStoreCount || 0) > 1;
+  const optionalNumber = value => value === "" || value == null ? null : Number(value);
 
   useEffect(() => {
     if (!rid) return;
+    let active = true;
     api.listVendorContacts(rid).then((list) => {
-      const m = {}; (list || []).forEach((c) => (m[c.vendor] = c.orderEmail || "")); setVendorEmails(m);
+      if (!active) return;
+      const m = {}; (list || []).forEach((c) => (m[c.vendor] = c.orderEmail || "")); if (!emailDirty) loadVendorEmails(vendorEmails, m);
     }).catch(() => {});
-  }, [rid]);
+    return () => { active = false; };
+  }, [rid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveVendorEmail(vendor) {
-    try { await api.putVendorContact(rid, vendor, (vendorEmails[vendor] || "").trim()); showToast(`${vendor} order email saved`); }
-    catch (e) { showToast(e?.response?.data?.detail || "Couldn't save that email"); }
+    try {
+      const email = (vendorEmails[vendor] || "").trim();
+      const result = await api.putVendorContact(rid, vendor, email);
+      if (result?.ok !== true || result.vendor !== vendor || result.orderEmail !== email) throw new Error("Supplier email save was not confirmed. Your entry is retained.");
+      showToast(`${vendor} order email saved`);
+    }
+    catch (e) { fail(e?.response?.data?.detail || "Couldn't save that email"); }
   }
 
   function update(field, val) { setForm((f) => ({ ...f, [field]: val })); }
@@ -38,19 +59,19 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
   function startEdit(it) {
     setEditingCN(it.controlNumber);
     setForm({
-      name: it.name, storageArea: it.storageArea, countActive: isCountActive(it), orderEnabled: isOrderEnabled(it), salesTracked: it.salesTracked, itemType: it.itemType,
-      purchaseUnit: it.purchaseUnit, packCount: it.packCount, unitQty: it.unitQty, unitUOM: it.unitUOM,
-      portionSize: it.portionSize, portionUOM: it.portionUOM, par: it.par, currentStock: it.currentStock,
+      name: it.name, storageArea: it.storageArea, active: it.active !== false, countActive: isCountActive(it), orderEnabled: isOrderEnabled(it), salesTracked: it.salesTracked, itemType: it.itemType,
+      purchaseUnit: it.purchaseUnit, packCount: it.packCount ?? "", unitQty: it.unitQty ?? "", unitUOM: it.unitUOM,
+      portionSize: it.portionSize ?? "", portionUOM: it.portionUOM, par: it.par, currentStock: it.currentStock,
       vendorSkus: (it.vendorSkus || []).map((v) => ({ ...v })),
     });
   }
-  function cancelEdit() { setEditingCN(null); setForm(emptyForm(areas)); }
+  function cancelEdit() { clearEditing(editingCN, null); clearForm(form, emptyForm(areas)); setError(""); }
 
   function addVendorRow() {
     setForm((f) => ({ ...f, vendorSkus: [...f.vendorSkus, { id: uid("vs"), vendor: VENDORS[0], vendorSku: "", packDescription: "", purchaseUnit: f.purchaseUnit || "case", packCount: f.packCount || "", unitQty: f.unitQty || "", unitUOM: f.unitUOM || "lb", price: "", priceUpdatedAt: "", priceSource: "manual", available: true, preferred: f.vendorSkus.length === 0 }] }));
   }
   function updateVendorRow(id, field, val) {
-    setForm((f) => ({ ...f, vendorSkus: f.vendorSkus.map((v) => v.id === id ? { ...v, [field]: val } : v) }));
+    setForm((f) => ({ ...f, vendorSkus: f.vendorSkus.map((v) => v.id === id ? { ...v, [field]: val, ...(field === "vendor" ? { vendorId: undefined, basePerPurchaseUnit: undefined } : {}) } : v) }));
   }
   function setPreferred(id) {
     setForm((f) => ({ ...f, vendorSkus: f.vendorSkus.map((v) => ({ ...v, preferred: v.id === id })) }));
@@ -70,16 +91,17 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
     e.preventDefault();
     if (!form.name.trim() || form.vendorSkus.length === 0) return;
     const cleanSkus = form.vendorSkus.map((v) => ({
-      ...v, price: Number(v.price) || 0, vendorSku: String(v.vendorSku || "").trim(), packDescription: String(v.packDescription || "").trim(),
-      purchaseUnit: v.purchaseUnit || form.purchaseUnit || "case", packCount: Number(v.packCount) || 0,
-      unitQty: Number(v.unitQty) || 0, unitUOM: v.unitUOM || form.unitUOM || "each",
+      ...v, price: v.price === "" || v.price == null ? null : v.price, vendorSku: String(v.vendorSku || "").trim(), packDescription: String(v.packDescription ?? ""),
+      purchaseUnit: v.purchaseUnit || form.purchaseUnit || "case", packCount: optionalNumber(v.packCount),
+      unitQty: optionalNumber(v.unitQty), unitUOM: v.unitUOM || null,
     }));
     const record = {
+      ...items.find(i => i.controlNumber === editingCN),
       controlNumber: previewCN, name: form.name.trim(), storageArea: form.storageArea,
-      active: form.countActive, countActive: form.countActive, orderEnabled: form.orderEnabled,
+      active: form.active, countActive: form.countActive, orderEnabled: form.orderEnabled,
       salesTracked: form.salesTracked, itemType: form.itemType,
-      purchaseUnit: form.purchaseUnit, packCount: Number(form.packCount) || 0, unitQty: Number(form.unitQty) || 0, unitUOM: form.unitUOM,
-      portionSize: Number(form.portionSize) || 0, portionUOM: form.portionUOM,
+      purchaseUnit: form.purchaseUnit, packCount: optionalNumber(form.packCount), unitQty: optionalNumber(form.unitQty), unitUOM: form.unitUOM,
+      portionSize: optionalNumber(form.portionSize), portionUOM: form.portionUOM,
       par: Number(form.par) || 0, currentStock: Number(form.currentStock) || 0,
       lastCounted: items.find((i) => i.controlNumber === editingCN)?.lastCounted || "",
       needsReview: false,
@@ -87,24 +109,25 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
     };
     const exists = items.some((it) => it.controlNumber === record.controlNumber);
     const next = exists ? items.map((it) => it.controlNumber === record.controlNumber ? record : it) : [...items, record];
-    await persistItems(next);
+    setError("");
+    if (!(await confirmSave(() => persistItems(next), fail))) return;
     showToast(exists ? "Item updated" : `Item ${record.controlNumber} added`);
-    cancelEdit();
+    if (clearForm(form, emptyForm(areas))) clearEditing(editingCN, null);
   }
 
   async function deleteItem(cn) {
-    if (!window.confirm(`Delete ${cn}? This cannot be undone.`)) return;
-    await persistItems(items.filter((it) => it.controlNumber !== cn));
+    if (!window.confirm(`Retire ${cn} from ordering and sales? Its history and physical counts will remain available.`)) return;
+    if (!(await confirmSave(() => persistItems(items.map(it => it.controlNumber === cn ? { ...it, active: false, orderEnabled: false, salesTracked: false } : it)), fail))) return;
     if (editingCN === cn) cancelEdit();
-    showToast("Item deleted");
+    showToast("Item retired; history and physical counts retained");
   }
 
   async function addArea() {
     const name = newArea.name.trim(), prefix = newArea.prefix.trim().toUpperCase();
     if (!name || !prefix) return;
     if (areas.some((a) => a.name === name)) { showToast("That storage area already exists"); return; }
-    await persistAreas([...areas, { name, prefix }]);
-    setNewArea({ name: "", prefix: "" });
+    if (!(await confirmSave(() => persistAreas([...areas, { name, prefix }]), fail))) return;
+    clearArea(newArea, { name: "", prefix: "" });
     showToast("Storage area added");
   }
 
@@ -113,25 +136,36 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
   return (
     <div className="fade-slide-in" data-testid="setup-tab">
       <PageTitle>Item Setup</PageTitle>
+      {api.catalogMappingEnabled && <SharedCatalogLink key={rid} restaurantId={rid} drafts={drafts} onLinked={onCatalogLinked} showToast={showToast} />}
+      {error && <p role="alert">{error}</p>}
+      {api.actualInventoryEnabled && <NativeInventoryPosition key={rid} restaurantId={rid} />}
+      {api.prepSetupEnabled && <PreparedItemSetup key={`prep-${rid}`} restaurantId={rid} />}
+      {api.prepBatchesEnabled && <PreparedBatchLedger key={`prep-batches-${rid}`} restaurantId={rid} />}
+      {api.prepObservationsEnabled && <PrepObservations key={`prep-observations-${rid}`} restaurantId={rid} />}
+      {api.prepObservationsEnabled && <PrepPeriodComparison key={`prep-periods-${rid}`} restaurantId={rid} />}
+      {api.prepObservationsEnabled && <PrepPeriodJournal key={`prep-journal-${rid}`} restaurantId={rid} />}
+      {api.prepObservationsEnabled && <PrepOpeningStock key={`prep-openings-${rid}`} restaurantId={rid} />}
       <form onSubmit={submit} className={`${cardCls} p-5 mb-6`}>
+        {sharedProduct && <p>This product is shared across locations. Product and pack changes require shared catalog review; location flags, pars and supplier prices remain editable.</p>}
         <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
           <SectionLabel className="mb-0">{editingCN ? `Editing ${editingCN}` : "New Item"}</SectionLabel>
           <Pill testId="control-number-preview" color="var(--acc)" bg="rgba(249,115,22,0.12)">Control #: {previewCN || "—"}</Pill>
         </div>
         <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-          <Field label="Item Name"><input data-testid="item-name-input" className={inpCls} value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="e.g. Ground Beef 80/20" /></Field>
+          <Field label="Item Name"><input data-testid="item-name-input" className={inpCls} disabled={sharedProduct} value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="e.g. Ground Beef 80/20" /></Field>
           <Field label="Storage Area">
             <select data-testid="storage-area-select" className={inpCls} value={form.storageArea} onChange={(e) => update("storageArea", e.target.value)}>
               {areas.map((a) => <option key={a.name} value={a.name}>{a.prefix ? `${a.name} (${a.prefix})` : a.name}</option>)}
             </select>
           </Field>
           <Field label="Item Type">
-            <select className={inpCls} value={form.itemType} onChange={(e) => update("itemType", e.target.value)}>
+            <select className={inpCls} disabled={sharedProduct} value={form.itemType} onChange={(e) => update("itemType", e.target.value)}>
               {ITEM_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
           </Field>
         </div>
         <div className="flex gap-5 mb-4 flex-wrap">
+          <label className="text-[13px] flex items-center gap-1.5 font-semibold text-slate-300"><input type="checkbox" data-testid="item-active-toggle" checked={form.active} onChange={(e) => update("active", e.target.checked)} /> Active catalog item</label>
           <label className="text-[13px] flex items-center gap-1.5 font-semibold text-slate-300"><input type="checkbox" data-testid="count-active-toggle" checked={form.countActive} onChange={(e) => update("countActive", e.target.checked)} /> Include in Biweekly Inventory Count</label>
           <label className="text-[13px] flex items-center gap-1.5 font-semibold text-slate-300"><input type="checkbox" data-testid="order-enabled-toggle" checked={form.orderEnabled} onChange={(e) => update("orderEnabled", e.target.checked)} /> Include in Order Generator</label>
           <label className="text-[13px] flex items-center gap-1.5 font-semibold text-slate-300"><input type="checkbox" data-testid="sales-tracked-toggle" checked={form.salesTracked} onChange={(e) => update("salesTracked", e.target.checked)} /> Track against Toast sales</label>
@@ -139,18 +173,18 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
 
         <SectionLabel>Purchasing</SectionLabel>
         <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
-          <Field label="Purchase Unit"><select className={inpCls} value={form.purchaseUnit} onChange={(e) => update("purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
+          <Field label="Purchase Unit"><select className={inpCls} disabled={sharedProduct} value={form.purchaseUnit} onChange={(e) => update("purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
           <Field label="Par Level (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.par} onChange={(e) => update("par", e.target.value)} /></Field>
-          <Field label="Current Stock (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.currentStock} onChange={(e) => update("currentStock", e.target.value)} /></Field>
+          {api.actualInventoryEnabled ? <p className="text-sm" data-testid="setup-native-count-note">Physical stock and explicit inventory values are recorded in Actual Inventory. Item Setup does not set on-hand quantities.</p> : <Field label="Current Stock (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.currentStock} onChange={(e) => update("currentStock", e.target.value)} /></Field>}
         </div>
 
         <SectionLabel>Portion Breakdown (per Purchase Unit)</SectionLabel>
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
-          <Field label="Pack Count"><input type="number" step="1" className={inpCls} value={form.packCount} onChange={(e) => update("packCount", e.target.value)} placeholder="e.g. 4" /></Field>
-          <Field label="Size per Pack"><input type="number" step="0.01" className={inpCls} value={form.unitQty} onChange={(e) => update("unitQty", e.target.value)} placeholder="e.g. 5" /></Field>
-          <Field label="Size Unit"><select className={inpCls} value={form.unitUOM} onChange={(e) => update("unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-          <Field label="Portion Size"><input type="number" step="0.01" className={inpCls} value={form.portionSize} onChange={(e) => update("portionSize", e.target.value)} placeholder="e.g. 6" /></Field>
-          <Field label="Portion Unit"><select className={inpCls} value={form.portionUOM} onChange={(e) => update("portionUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
+          <Field label="Pack Count"><input type="number" step="1" className={inpCls} disabled={sharedProduct} value={form.packCount} onChange={(e) => update("packCount", e.target.value)} placeholder="e.g. 4" /></Field>
+          <Field label="Size per Pack"><input type="number" step="0.01" className={inpCls} disabled={sharedProduct} value={form.unitQty} onChange={(e) => update("unitQty", e.target.value)} placeholder="e.g. 5" /></Field>
+          <Field label="Size Unit"><select className={inpCls} disabled={sharedProduct} value={form.unitUOM} onChange={(e) => update("unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
+          <Field label="Portion Size"><input type="number" step="0.01" className={inpCls} disabled={sharedProduct} value={form.portionSize} onChange={(e) => update("portionSize", e.target.value)} placeholder="e.g. 6" /></Field>
+          <Field label="Portion Unit"><select className={inpCls} disabled={sharedProduct} value={form.portionUOM} onChange={(e) => update("portionUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
         </div>
         {form.packCount ? (
           <div className={`mt-3 px-3.5 py-2.5 rounded-lg text-[13.5px] flex gap-5 flex-wrap ${previewBg}`} data-testid="portion-preview">
@@ -173,21 +207,21 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
               <button type="button" title="Set preferred" data-testid={`vendor-preferred-${idx}`} onClick={() => setPreferred(v.id)} className="pb-2 text-amber-400 hover:scale-110 transition">
                 <Star size={18} fill={v.preferred ? "#EAB308" : "none"} />
               </button>
-              <Field label="Vendor"><select className={inpCls} value={v.vendor} onChange={(e) => updateVendorRow(v.id, "vendor", e.target.value)}>{VENDORS.map((ve) => <option key={ve} value={ve}>{ve}</option>)}</select></Field>
-              <Field label="Vendor SKU"><input className={`${inpCls} w-28`} value={v.vendorSku} onChange={(e) => updateVendorRow(v.id, "vendorSku", e.target.value)} placeholder="—" /></Field>
-              <Field label="Pack Description"><input className={`${inpCls} w-32`} value={v.packDescription} onChange={(e) => updateVendorRow(v.id, "packDescription", e.target.value)} placeholder="e.g. 4/5lb" /></Field>
-              <Field label="Purchase Unit"><select className={inpCls} value={v.purchaseUnit || form.purchaseUnit} onChange={(e) => updateVendorRow(v.id, "purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-              <Field label="Pack Count"><input type="number" step="1" className={`${inpCls} w-20`} value={v.packCount ?? ""} onChange={(e) => updateVendorRow(v.id, "packCount", e.target.value)} /></Field>
-              <Field label="Qty / Pack"><input type="number" step="0.01" className={`${inpCls} w-20`} value={v.unitQty ?? ""} onChange={(e) => updateVendorRow(v.id, "unitQty", e.target.value)} /></Field>
-              <Field label="Pack UOM"><select className={inpCls} value={v.unitUOM || form.unitUOM} onChange={(e) => updateVendorRow(v.id, "unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-              <Field label="Price ($)"><input type="number" step="0.01" className={`${inpCls} w-24`} value={v.price} onChange={(e) => updateVendorRow(v.id, "price", e.target.value)} /></Field>
-              <Field label="Price Date"><input type="date" className={inpCls} value={v.priceUpdatedAt || ""} onChange={(e) => updateVendorRow(v.id, "priceUpdatedAt", e.target.value)} /></Field>
+              <Field label="Vendor"><select className={inpCls} disabled={sharedProduct} value={v.vendor} onChange={(e) => updateVendorRow(v.id, "vendor", e.target.value)}>{VENDORS.map((ve) => <option key={ve} value={ve}>{ve}</option>)}</select></Field>
+              <Field label="Vendor SKU"><input className={`${inpCls} w-28`} disabled={sharedProduct} value={v.vendorSku} onChange={(e) => updateVendorRow(v.id, "vendorSku", e.target.value)} placeholder="—" /></Field>
+              <Field label="Pack Description"><input className={`${inpCls} w-32`} disabled={sharedProduct} value={v.packDescription} onChange={(e) => updateVendorRow(v.id, "packDescription", e.target.value)} placeholder="e.g. 4/5lb" /></Field>
+              <Field label="Purchase Unit"><select className={inpCls} disabled={sharedProduct} value={v.purchaseUnit || form.purchaseUnit} onChange={(e) => updateVendorRow(v.id, "purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
+              <Field label="Pack Count"><input type="number" step="1" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.packCount ?? ""} onChange={(e) => updateVendorRow(v.id, "packCount", e.target.value)} /></Field>
+              <Field label="Qty / Pack"><input type="number" step="0.01" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.unitQty ?? ""} onChange={(e) => updateVendorRow(v.id, "unitQty", e.target.value)} /></Field>
+              <Field label="Pack UOM"><select className={inpCls} disabled={sharedProduct} value={v.unitUOM || form.unitUOM} onChange={(e) => updateVendorRow(v.id, "unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
+              <Field label="Price ($)"><input aria-label={`Supplier price ${v.id}`} type="number" step="0.01" className={`${inpCls} w-24`} value={v.price ?? ""} onChange={(e) => updateVendorRow(v.id, "price", e.target.value)} /></Field>
+              <Field label="Price Date"><input type="date" className={inpCls} value={(v.priceUpdatedAt || "").slice(0, 10)} readOnly /></Field>
               <label className="text-xs flex items-center gap-1 pb-2 text-slate-400"><input type="checkbox" checked={v.available !== false} onChange={(e) => updateVendorRow(v.id, "available", e.target.checked)} /> Available</label>
               <button type="button" aria-label={`Remove vendor SKU${v.vendor ? ` for ${v.vendor}` : ""}`} className={`${btnDanger} mb-0.5`} onClick={() => removeVendorRow(v.id)} disabled={form.vendorSkus.length === 1}><Trash2 size={14} /></button>
             </div>
           ))}
         </div>
-        <button type="button" className={`${btnGhost} mb-4`} data-testid="add-vendor-sku-button" onClick={addVendorRow}><Plus size={14} /> Add Vendor SKU</button>
+        <button type="button" className={`${btnGhost} mb-4`} data-testid="add-vendor-sku-button" disabled={sharedProduct} onClick={addVendorRow}><Plus size={14} /> Add Vendor SKU</button>
 
         <div className="flex gap-2.5">
           <button type="submit" className={btnAcc} data-testid="item-submit-button"><Plus size={15} /> {editingCN ? "Save Changes" : "Add Item"}</button>
@@ -253,7 +287,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
                       <td>
                         <div className="flex gap-1.5">
                           <button className={btnGhost} data-testid={`edit-item-${it.controlNumber}`} onClick={() => startEdit(it)}>Edit</button>
-                          <button aria-label={`Delete ${it.name}`} className={btnDanger} data-testid={`delete-item-${it.controlNumber}`} onClick={() => deleteItem(it.controlNumber)}><Trash2 size={14} /></button>
+                          <button aria-label={`Retire ${it.name}`} className={btnDanger} data-testid={`delete-item-${it.controlNumber}`} onClick={() => deleteItem(it.controlNumber)}><Trash2 size={14} /></button>
                         </div>
                       </td>
                     </tr>

@@ -1,0 +1,268 @@
+{
+  "status": "Invented design fixtures only; never operational import",
+  "protein": {
+    "raw": {
+      "identity": "raw-protein",
+      "unit": "lb",
+      "opening": "100",
+      "received": "20",
+      "closing": "50",
+      "opening_value": "200",
+      "received_food_cost": "40",
+      "closing_value": "100"
+    },
+    "production": {
+      "gross_raw_input": "60",
+      "usable_output": "48",
+      "included_trim": "12",
+      "source_cost": "120"
+    },
+    "raw_explanation": {
+      "standalone_waste": "2",
+      "direct_use": "5",
+      "expected_closing": "53",
+      "unexplained": "3"
+    },
+    "prep": {
+      "identity": "trimmed-protein",
+      "unit": "lb",
+      "opening": "10",
+      "closing": "18",
+      "waste": "4",
+      "sales_expected": "34",
+      "depletion": "40",
+      "residual": "2",
+      "carryover_increase": "8"
+    },
+    "raw_equivalents": {
+      "assumption": "Opening and current prep share the verified illustrative 60/48 yield; not universal",
+      "factor": "1.25",
+      "sales": "42.5",
+      "carryover": "10",
+      "prep_waste": "5",
+      "prep_residual": "2.5"
+    },
+    "expected": {
+      "actual_usage": "70",
+      "food_cost": "140",
+      "prep_unit_cost": "2.5",
+      "prep_waste_cost": "10"
+    }
+  },
+  "appetizers": {
+    "raw": {
+      "identity": "individual-appetizer",
+      "unit": "each",
+      "opening": "200",
+      "received": "100",
+      "closing": "180",
+      "opening_value": "100",
+      "received_food_cost": "50",
+      "closing_value": "90"
+    },
+    "production": {
+      "gross_raw_input": "120",
+      "usable_output": "15",
+      "included_trim": "0",
+      "source_cost": "60"
+    },
+    "profile": {
+      "source_identity": "individual-appetizer",
+      "output_identity": "eight-appetizer-bag",
+      "raw_each_per_bag": "8",
+      "prep_base_unit": "each",
+      "count_unit": "bag",
+      "prep_base_units_per_bag": "1",
+      "verified": true
+    },
+    "raw_explanation": {
+      "standalone_waste": "0",
+      "direct_use": "0",
+      "expected_closing": "180",
+      "unexplained": "0"
+    },
+    "prep": {
+      "identity": "eight-appetizer-bag",
+      "unit": "each",
+      "opening": "2",
+      "closing": "4",
+      "waste": "1",
+      "sales_expected": "11",
+      "depletion": "13",
+      "residual": "1",
+      "carryover_increase": "2"
+    },
+    "raw_equivalents": {
+      "assumption": "All opening/current bags contain eight individual appetizers",
+      "factor": "8",
+      "sales": "88",
+      "carryover": "16",
+      "prep_waste": "8",
+      "prep_residual": "8"
+    },
+    "expected": {
+      "actual_usage": "120",
+      "food_cost": "60",
+      "prep_unit_cost": "4",
+      "prep_waste_cost": "4"
+    }
+  },
+  "nested_sauce": {
+    "recipes": [
+      {
+        "id": "sauce-A-v1",
+        "prepared_inputs": []
+      },
+      {
+        "id": "sauce-B-v1",
+        "prepared_inputs": [
+          "sauce-A-v1"
+        ]
+      }
+    ],
+    "batches": [
+      {
+        "id": "A",
+        "recipe": "sauce-A-v1",
+        "raw_inputs": [
+          {
+            "identity": "tomato",
+            "qty": "36",
+            "unit": "lb",
+            "cost": "36"
+          },
+          {
+            "identity": "spice",
+            "qty": "3",
+            "unit": "oz",
+            "cost": "6"
+          }
+        ],
+        "prepared_inputs": [],
+        "output": {
+          "identity": "sauce-A",
+          "qty": "6",
+          "unit": "gal"
+        },
+        "expected_cost": "42"
+      },
+      {
+        "id": "B",
+        "recipe": "sauce-B-v1",
+        "raw_inputs": [
+          {
+            "identity": "honey",
+            "qty": "1",
+            "unit": "lb",
+            "cost": "4"
+          }
+        ],
+        "prepared_inputs": [
+          {
+            "batch": "A",
+            "identity": "sauce-A",
+            "qty": "2",
+            "unit": "gal",
+            "assigned_lot_cost": "14",
+            "raw_ancestry": [
+              {
+                "identity": "tomato",
+                "qty": "12",
+                "unit": "lb"
+              },
+              {
+                "identity": "spice",
+                "qty": "1",
+                "unit": "oz"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "identity": "sauce-B",
+          "qty": "3",
+          "unit": "gal"
+        },
+        "expected_cost": "18"
+      }
+    ],
+    "expected_raw_withdrawals": {
+      "tomato": "36",
+      "spice": "3",
+      "honey": "1"
+    },
+    "expected_prepared_closing": {
+      "sauce-A": "4",
+      "sauce-B": "3"
+    },
+    "expected_output_unit_cost": {
+      "A": "7",
+      "B": "6"
+    },
+    "mass_balance": "No addition of lb, oz and gal into a scalar total"
+  },
+  "correction": {
+    "original": {
+      "raw": "-60",
+      "prepared": "48",
+      "trim": "12"
+    },
+    "reversal": {
+      "raw": "60",
+      "prepared": "-48",
+      "trim": "-12"
+    },
+    "replacement": {
+      "raw": "-60",
+      "prepared": "54",
+      "trim": "6"
+    },
+    "expected_net": {
+      "raw": "-60",
+      "prepared": "54",
+      "trim": "6"
+    },
+    "track1_changes": false
+  },
+  "partial_container": {
+    "identity": "sauce-A",
+    "containers": "2",
+    "nominal_capacity_gal": "1",
+    "measured_fill_gal_each": "0.6",
+    "expected_quantity_gal": "1.2"
+  },
+  "location_transfer": {
+    "identity": "sauce-A",
+    "unit": "gal",
+    "from_location": "walk-in",
+    "to_location": "service-line",
+    "quantity": "2",
+    "expected_scope_net": "0",
+    "expected_consumption": "0"
+  },
+  "unknown_inputs": {
+    "blank_count": null,
+    "explicit_zero_count": "0",
+    "missing_cost": null,
+    "unverified_profile": {
+      "source_unit": "pan",
+      "factor": null
+    },
+    "missing_yield": null,
+    "expected": "Unknown stays unknown; unverified quantity/yield holds promotion; quantity with unavailable cost can remain valid"
+  },
+  "invalid_recipe_graph": [
+    {
+      "id": "cycle-A",
+      "prepared_inputs": [
+        "cycle-B"
+      ]
+    },
+    {
+      "id": "cycle-B",
+      "prepared_inputs": [
+        "cycle-A"
+      ]
+    }
+  ]
+}

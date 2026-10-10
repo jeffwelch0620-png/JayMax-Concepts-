@@ -1,0 +1,681 @@
+[
+  {
+    "vendor": "US Foods",
+    "header": "DocumentNumber",
+    "occurrence": 1,
+    "target": "documents.document_number",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "DocumentType",
+    "occurrence": 1,
+    "target": "documents.document_type_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "DocumentDate",
+    "occurrence": 1,
+    "target": "documents.invoice_date",
+    "type": "date"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "CustomerNumber",
+    "occurrence": 1,
+    "target": "documents.customer_number",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "CustomerName",
+    "occurrence": 1,
+    "target": "documents.customer_name_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "AccountNumber",
+    "occurrence": 1,
+    "target": "documents.account_number",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "PurchaseOrder",
+    "occurrence": 1,
+    "target": "documents.purchase_order_reference",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "USFSalesLocation",
+    "occurrence": 1,
+    "target": "documents.vendor_branch_reference",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "USFSalesRep",
+    "occurrence": 1,
+    "target": "documents.sales_representative_reference",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "DateOrdered",
+    "occurrence": 1,
+    "target": "documents.ordered_date",
+    "type": "date"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "OrderNumber",
+    "occurrence": 1,
+    "target": "documents.vendor_order_number",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "PaymentTerms",
+    "occurrence": 1,
+    "target": "documents.payment_terms_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "DateShipped",
+    "occurrence": 1,
+    "target": "documents.shipped_date",
+    "type": "date"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "DeliveryAdjustment",
+    "occurrence": 1,
+    "target": "documents.delivery_adjustment_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "NetAmountAfter Adjustment",
+    "occurrence": 1,
+    "target": "documents.net_after_adjustment_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "NetAmountBefore Adj",
+    "occurrence": 1,
+    "target": "documents.net_before_adjustment_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "CreditMemoNumber",
+    "occurrence": 1,
+    "target": "documents.credit_memo_reference",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "CreditMemoDate",
+    "occurrence": 1,
+    "target": "documents.credit_memo_date",
+    "type": "date"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "BillToName",
+    "occurrence": 1,
+    "target": "parties.bill_to.name_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "BillToStreet",
+    "occurrence": 1,
+    "target": "parties.bill_to.address_line_1",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "BillToStreet",
+    "occurrence": 2,
+    "target": "parties.bill_to.address_line_2",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "BillToCity",
+    "occurrence": 1,
+    "target": "parties.bill_to.city",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "BillToState",
+    "occurrence": 1,
+    "target": "parties.bill_to.state",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "BillToZip",
+    "occurrence": 1,
+    "target": "parties.bill_to.postal_code",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "BillToPhone",
+    "occurrence": 1,
+    "target": "parties.bill_to.phone_text",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "BillToAttn",
+    "occurrence": 1,
+    "target": "parties.bill_to.attention_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipToName",
+    "occurrence": 1,
+    "target": "parties.ship_to.name_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipToStreet",
+    "occurrence": 1,
+    "target": "parties.ship_to.address_line_1",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipToStreet",
+    "occurrence": 2,
+    "target": "parties.ship_to.address_line_2",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipToCity",
+    "occurrence": 1,
+    "target": "parties.ship_to.city",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipToState",
+    "occurrence": 1,
+    "target": "parties.ship_to.state",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipToZip",
+    "occurrence": 1,
+    "target": "parties.ship_to.postal_code",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipToPhone",
+    "occurrence": 1,
+    "target": "parties.ship_to.phone_text",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipToDept",
+    "occurrence": 1,
+    "target": "parties.ship_to.department_reference",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipToDeptName",
+    "occurrence": 1,
+    "target": "parties.ship_to.department_name",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "RemitToName",
+    "occurrence": 1,
+    "target": "parties.remit_to.name_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "RemitToStreet1",
+    "occurrence": 1,
+    "target": "parties.remit_to.address_line_1",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "RemitToStreet2",
+    "occurrence": 1,
+    "target": "parties.remit_to.address_line_2",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "RemitToCity",
+    "occurrence": 1,
+    "target": "parties.remit_to.city",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "RemitToState",
+    "occurrence": 1,
+    "target": "parties.remit_to.state",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "RemitToZip",
+    "occurrence": 1,
+    "target": "parties.remit_to.postal_code",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "RemitToPhone",
+    "occurrence": 1,
+    "target": "parties.remit_to.phone_text",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipFromStreet1",
+    "occurrence": 1,
+    "target": "parties.ship_from.address_line_1",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipFromStreet2",
+    "occurrence": 1,
+    "target": "parties.ship_from.address_line_2",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipFromCity",
+    "occurrence": 1,
+    "target": "parties.ship_from.city",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ShipFromState",
+    "occurrence": 1,
+    "target": "parties.ship_from.state",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ProductNumber",
+    "occurrence": 1,
+    "target": "lines.vendor_sku_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ProductDescription",
+    "occurrence": 1,
+    "target": "lines.description_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "Product Label",
+    "occurrence": 1,
+    "target": "lines.product_label_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "PackingSize",
+    "occurrence": 1,
+    "target": "lines.pack_description_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "Weight",
+    "occurrence": 1,
+    "target": "lines.weight_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "QtyOrder",
+    "occurrence": 1,
+    "target": "lines.ordered_quantity_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "QtyShip",
+    "occurrence": 1,
+    "target": "lines.shipped_quantity_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "QtyAdjust",
+    "occurrence": 1,
+    "target": "lines.adjusted_quantity_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "PricingUnit",
+    "occurrence": 1,
+    "target": "lines.pricing_unit_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "UnitPrice",
+    "occurrence": 1,
+    "target": "lines.unit_price_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "US Foods",
+    "header": "ExtendedPrice",
+    "occurrence": 1,
+    "target": "lines.extended_amount_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Customer #",
+    "occurrence": 1,
+    "target": "documents.customer_number",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Customer OpCo",
+    "occurrence": 1,
+    "target": "documents.vendor_branch_reference",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Invoice Subtotal",
+    "occurrence": 1,
+    "target": "documents.subtotal_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Invoice Discount",
+    "occurrence": 1,
+    "target": "documents.discount_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Invoice Charges Fees",
+    "occurrence": 1,
+    "target": "documents.fees_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Invoice Total Tax",
+    "occurrence": 1,
+    "target": "documents.tax_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Invoice Total",
+    "occurrence": 1,
+    "target": "documents.total_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Total Qty Ordered",
+    "occurrence": 1,
+    "target": "documents.ordered_quantity_control_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Total Qty Shipped",
+    "occurrence": 1,
+    "target": "documents.shipped_quantity_control_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Vendor #",
+    "occurrence": 1,
+    "target": "lines.vendor_reference_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Manufacturer Name",
+    "occurrence": 1,
+    "target": "lines.manufacturer_name_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Manufacturer Product #",
+    "occurrence": 1,
+    "target": "lines.manufacturer_product_number",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Product #",
+    "occurrence": 1,
+    "target": "lines.vendor_sku_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Product Description",
+    "occurrence": 1,
+    "target": "lines.description_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Brand",
+    "occurrence": 1,
+    "target": "lines.brand_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Pack Size",
+    "occurrence": 1,
+    "target": "lines.pack_description_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "UOM",
+    "occurrence": 1,
+    "target": "lines.vendor_uom_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Net Price",
+    "occurrence": 1,
+    "target": "lines.net_price_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Qty Ordered",
+    "occurrence": 1,
+    "target": "lines.ordered_quantity_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Qty Shipped",
+    "occurrence": 1,
+    "target": "lines.shipped_quantity_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Weight",
+    "occurrence": 1,
+    "target": "lines.weight_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Unit Price",
+    "occurrence": 1,
+    "target": "lines.unit_price_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Ext. Price",
+    "occurrence": 1,
+    "target": "lines.extended_amount_source",
+    "type": "numeric"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Printed Sequence",
+    "occurrence": 1,
+    "target": "lines.printed_sequence_reference",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Customer Name",
+    "occurrence": 1,
+    "target": "parties.customer.name_snapshot",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Address",
+    "occurrence": 1,
+    "target": "parties.customer.address_line_1",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "City",
+    "occurrence": 1,
+    "target": "parties.customer.city",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "State",
+    "occurrence": 1,
+    "target": "parties.customer.state",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Zip Code",
+    "occurrence": 1,
+    "target": "parties.customer.postal_code",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Invoice Date",
+    "occurrence": 1,
+    "target": "documents.invoice_date",
+    "type": "date"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Invoice Number",
+    "occurrence": 1,
+    "target": "documents.document_number",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Invoice Order Number",
+    "occurrence": 1,
+    "target": "documents.vendor_order_number",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Invoice Type",
+    "occurrence": 1,
+    "target": "documents.document_type_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "PO Number",
+    "occurrence": 1,
+    "target": "documents.purchase_order_reference",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Route Number",
+    "occurrence": 1,
+    "target": "documents.route_number",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Route Stop Number",
+    "occurrence": 1,
+    "target": "documents.route_stop_reference",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Category/Class",
+    "occurrence": 1,
+    "target": "lines.vendor_category_raw",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "GTIN",
+    "occurrence": 1,
+    "target": "lines.gtin_text",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Custom Product Number",
+    "occurrence": 1,
+    "target": "lines.custom_product_number",
+    "type": "text"
+  },
+  {
+    "vendor": "PFG",
+    "header": "Custom Product Description",
+    "occurrence": 1,
+    "target": "lines.custom_product_description",
+    "type": "text"
+  }
+]

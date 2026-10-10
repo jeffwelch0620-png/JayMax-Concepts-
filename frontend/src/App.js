@@ -2,14 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
 import {
   LayoutDashboard, ClipboardList, ClipboardCheck, Settings, FileText, ShoppingCart, BookOpen, ChefHat,
-  Printer, Activity, AlertTriangle, TrendingUp, Building2, Download, Upload, Sparkles, Boxes, CalendarClock, Users,
+  Printer, Activity, AlertTriangle, TrendingUp, Building2, Sparkles, Boxes, CalendarClock, Users,
 } from "lucide-react";
 import { RESTAURANTS, OWNER, isOrderEnabled, statusOf, downloadJSON, todayISO, workweekRange } from "./lib/calc";
 import * as api from "./lib/api";
+import { useStoreState } from "./lib/useStoreState";
+import { hasUnsavedDrafts, useDraftUnloadWarning } from "./lib/saveIntegrity";
 import { DashboardTab } from "./components/DashboardTab";
 import { CountsTab } from "./components/CountsTab";
 import { SetupTab } from "./components/SetupTab";
 import { InvoicesTab } from "./components/InvoicesTab";
+import { ActualInventoryTab } from "./components/ActualInventoryTab";
+import { BackupControls } from "./components/BackupControls";
 import { OrderTab } from "./components/OrderTab";
 import { PurchaseOrdersTab } from "./components/PurchaseOrdersTab";
 import { MenuTab } from "./components/MenuTab";
@@ -18,6 +22,7 @@ import { RecipeCardsTab } from "./components/RecipeCardsTab";
 import { SalesTrackingTab } from "./components/SalesTrackingTab";
 import { AdjustmentsTab } from "./components/AdjustmentsTab";
 import { HistoryTab } from "./components/HistoryTab";
+import { NativePurchaseHistory } from "./components/NativePurchaseHistory";
 import { PrepTab } from "./components/PrepTab";
 import { SchedulingTab } from "./components/SchedulingTab";
 import { StaffTab } from "./components/StaffTab";
@@ -57,7 +62,6 @@ export default function App() {
   }, []);
   const [loc, setLoc] = useState(() => api.currentSession()?.user?.role === "owner" ? "owner" : (api.currentSession()?.user?.locations || [])[0] || "berts");
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [S, setS] = useState(null);
   const [historyFocusCN, setHistoryFocusCN] = useState(null);
   const [dashboardFlaggedOnly, setDashboardFlaggedOnly] = useState(false);
   const [costingFocus, setCostingFocus] = useState(null);
@@ -67,17 +71,11 @@ export default function App() {
   const [focusOrder, setFocusOrder] = useState(null);
   const backupRef = useRef(null);
   const pendingTabRef = useRef(null);
-  // Always holds the most recently selected location, read inside async callbacks
-  // below to discard a response that arrives after the user has already switched
-  // locations again (a slow fetch for the old location landing after a newer one).
-  const locRef = useRef(loc);
-  locRef.current = loc;
-  // Latest known store revision. Saves read and update this directly instead of the
-  // rendered `S.revision`: back-to-back saves (Restore, quick edits) run before React
-  // re-renders, and a stale revision makes the server refuse every save after the first.
-  const revisionRef = useRef(null);
-  useEffect(() => { revisionRef.current = S?.revision; }, [S?.revision]);
-
+  const drafts = useRef(new Map());
+  useDraftUnloadWarning(drafts);
+  useEffect(() => { drafts.current.clear(); }, [session]);
+  const store = useStoreState(loc, session, EMPTY_STATE, message => toast.error(message));
+  const S = store.state;
   const isOwner = !!session && loc === "owner" && session.user.role === "owner";
   const current = isOwner ? OWNER : RESTAURANTS.find((r) => r.id === loc) || RESTAURANTS[0];
   const accessibleRestaurants = RESTAURANTS.filter((r) => session?.user?.role === "owner" || session?.user?.locations?.includes(r.id));
@@ -88,69 +86,40 @@ export default function App() {
       : TABS;
 
   useEffect(() => {
-    if (!session || isOwner) return;
-    setS(null);
+    setCostingFocus(null);
     setActiveTab(pendingTabRef.current || "dashboard");
     pendingTabRef.current = null;
-    const requestedLoc = loc;
-    api.fetchState(loc)
-      .then((data) => { if (locRef.current === requestedLoc) setS({ ...EMPTY_STATE, ...data }); })
-      .catch((err) => toast.error(err?.response?.data?.detail
-        ? `Couldn't load location data: ${err.response.data.detail}`
-        : "Couldn't reach the server. Check your connection, or the API may still be starting."));
-  }, [loc, isOwner, session]);
+  }, [loc, session]);
 
-  useEffect(() => {
-    if (!session || isOwner) return undefined;
-    const timer = setInterval(() => {
-      api.fetchState(loc).then((data) => {
-        if (locRef.current === loc) setS((previous) => ({ ...previous, ...data }));
-      }).catch(() => {});
-    }, 15000);
-    return () => clearInterval(timer);
-  }, [loc, isOwner, session]);
-
-  const showToast = (msg) => toast.success(msg);
-
-  function persistCollection(name, next) {
-    setS((p) => ({ ...p, [name]: next }));
-    return api.putCollection(loc, name, next, revisionRef.current).then((result) => {
-      if (result.revision != null) revisionRef.current = result.revision;
-      setS((p) => ({ ...p, ...(result.dishes ? { dishes: result.dishes } : {}),
-        revision: result.revision ?? p.revision }));
-      return result;
-    }).catch((err) => {
-      toast.error(err?.response?.status === 409 ? "This data changed elsewhere — reload before saving" : `Couldn't save ${name} — check your connection`);
-      return null;
-    });
-  }
-  const persistItems = (next) => persistCollection("items", next);
-  const persistPurchases = (next) => persistCollection("purchases", next);
-  const persistDishes = (next) => persistCollection("dishes", next);
-  const persistAdjustments = (next) => persistCollection("adjustments", next);
-  const persistReportingPeriods = (next) => persistCollection("reportingPeriods", next);
-  const persistAreas = (next) => persistCollection("areas", next);
-  function persistSalesPeriod(next) {
-    setS((p) => ({ ...p, salesPeriod: next }));
-    return api.putSalesPeriod(loc, next, revisionRef.current).then((result) => {
-      if (result.revision != null) revisionRef.current = result.revision;
-      setS((p) => ({ ...p, revision: result.revision ?? p.revision }));
-      return result;
-    }).catch((err) => {
-      toast.error(err?.response?.status === 409 ? "This data changed elsewhere — reload before saving" : "Couldn't save the sales period");
-      return null;
-    });
+  const showToast = (msg) => { if (store.isCurrent()) toast.success(msg); };
+  const showError = (msg) => { if (store.isCurrent()) toast.error(msg); };
+  const persistItems = next => store.save("items", next);
+  const persistPurchases = next => store.save("purchases", next);
+  const persistDishes = next => store.save("dishes", next);
+  const persistAdjustments = next => store.save("adjustments", next);
+  const persistReportingPeriods = next => store.save("reportingPeriods", next);
+  const persistAreas = next => store.save("areas", next);
+  const persistSalesPeriod = (next, revision) => store.save("salesPeriod", next, revision);
+  const loadLatestSales = async () => {
+    const latest = await store.refresh();
+    return latest ? { data: latest.salesPeriod, revision: latest.revision } : null;
+  };
+  function signOut() {
+    if (hasUnsavedDrafts(drafts.current) && !window.confirm("You have unsaved drafts. Sign out and discard them?")) return;
+    api.authLogout(); setSession(null);
   }
   function applyPrepResult(res) {
-    setS((p) => ({ ...p, items: res.items ?? p.items, prepStock: res.prepStock ?? p.prepStock, prepLogs: res.log ? [res.log, ...(p.prepLogs || [])] : p.prepLogs }));
+    store.apply(p => ({ ...p, items: res.items ?? p.items, prepStock: res.prepStock ?? p.prepStock,
+      prepLogs: res.log ? [res.log, ...(p.prepLogs || [])] : p.prepLogs }));
   }
 
   function openCosting(dishId) { setCostingFocus({ id: dishId, nonce: Date.now() + Math.random() }); setActiveTab("costing"); }
   function openOrder(rid, orderId) { pendingTabRef.current = "purchaseOrders"; setFocusOrder({ id: orderId, nonce: Date.now() + Math.random() }); if (rid === loc) { setActiveTab("purchaseOrders"); } else { setLoc(rid); } }
 
-  const alertCount = useMemo(() => !S ? 0 : S.items.filter((it) => isOrderEnabled(it) && statusOf(it).key !== "ok").length, [S]);
+  const alertCount = useMemo(() => !S || api.actualInventoryEnabled ? 0 : S.items.filter((it) => isOrderEnabled(it) && statusOf(it).key !== "ok").length, [S]);
 
   function backupAll() {
+    if (api.nativePurchasesEnabled) { toast.error("App files cannot provide a complete inventory backup. Complete recovery is awaiting setup."); return; }
     if (!S) return;
     downloadJSON(`${current.short.replace(/\W+/g, "")}_backup_${todayISO()}.json`, {
       exportedAt: new Date().toISOString(), restaurant: loc,
@@ -160,10 +129,12 @@ export default function App() {
   }
 
   function restoreBackup(e) {
+    if (api.nativePurchasesEnabled) { toast.error("App files omit inventory history and cannot restore this inventory mode."); return; }
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
+      if (!store.isCurrent()) return;
       try {
         const data = JSON.parse(String(reader.result || "{}"));
         if (!Array.isArray(data.items) || !Array.isArray(data.purchases)) { toast.error("That file doesn't look like a backup"); return; }
@@ -175,7 +146,7 @@ export default function App() {
         // saved so the final message reflects what really happened, instead of always
         // claiming success.
         const failed = [];
-        const step = async (label, fn) => { if (!(await fn())) failed.push(label); };
+        const step = async (label, fn) => { if (!store.isCurrent() || !(await fn())) failed.push(label); };
         await step("items", () => persistItems(data.items || []));
         await step("purchases", () => persistPurchases(data.purchases || []));
         await step("dishes", () => persistDishes(data.dishes || []));
@@ -183,12 +154,13 @@ export default function App() {
         if (data.salesPeriod) await step("sales period", () => persistSalesPeriod(data.salesPeriod));
         await step("adjustments", () => persistAdjustments(data.adjustments || []));
         await step("reporting periods", () => persistReportingPeriods(data.reportingPeriods || []));
+        if (!store.isCurrent()) return;
         if (failed.length) {
           toast.error(`Restore finished with problems — ${failed.join(", ")} did not save. Re-check those sections and try again.`);
         } else {
           showToast("Backup restored");
         }
-      } catch (err) { toast.error("Couldn't read that file"); }
+      } catch (err) { if (store.isCurrent()) toast.error("Couldn't read that file"); }
     };
     reader.readAsText(file);
     if (backupRef.current) backupRef.current.value = "";
@@ -229,9 +201,9 @@ export default function App() {
               )}
               {!isOwner && (
                 <>
-                  <button onClick={backupAll} className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border border-[#334155] bg-[#161F30] text-slate-300 hover:border-[var(--acc)] transition" data-testid="backup-button"><Download size={13} /> Backup</button>
-                  <button onClick={() => backupRef.current?.click()} className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border border-[#334155] bg-[#161F30] text-slate-300 hover:border-[var(--acc)] transition" data-testid="restore-button"><Upload size={13} /> Restore</button>
-                  <input ref={backupRef} type="file" accept=".json,application/json" onChange={restoreBackup} className="hidden" />
+                  <button onClick={store.refresh} data-testid="refresh-location-data" className="text-xs text-slate-300">Refresh saved data</button>
+                  <BackupControls nativeMode={api.nativePurchasesEnabled} onBackup={backupAll} onRestore={() => backupRef.current?.click()} />
+                  {!api.nativePurchasesEnabled && <input ref={backupRef} type="file" accept=".json,application/json" onChange={restoreBackup} className="hidden" />}
                 </>
               )}
               <button
@@ -266,7 +238,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          <button onClick={() => { api.authLogout(); setSession(null); }} className="mt-2 text-xs text-slate-500 hover:text-white">Sign out ({session.user.email})</button>
+          <button onClick={signOut} data-testid="sign-out" className="mt-2 text-xs text-slate-500 hover:text-white">Sign out ({session.user.email})</button>
 
           {!isOwner && (
             <nav className="flex gap-0.5 mt-2 overflow-x-auto" data-testid="main-nav">
@@ -297,21 +269,21 @@ export default function App() {
           <div className="text-slate-500 text-sm p-10 text-center" data-testid="loading-state">Loading {current.name}…</div>
         ) : (
           <>
-            {activeTab === "dashboard" && <DashboardTab rid={loc} items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />}
-            {activeTab === "prep" && <PrepTab rid={loc} items={S.items} dishes={S.dishes} persistDishes={persistDishes} prepStock={S.prepStock} prepLogs={S.prepLogs} applyPrepResult={applyPrepResult} salesPeriod={S.salesPeriod} showToast={showToast} />}
-            {activeTab === "counts" && <CountsTab rid={loc} items={S.items} onCountsApplied={(next) => setS((p) => ({ ...p, items: next }))} showToast={showToast} />}
-            {activeTab === "setup" && <SetupTab items={S.items} persistItems={persistItems} areas={S.areas} persistAreas={persistAreas} showToast={showToast} rid={loc} />}
-            {activeTab === "invoices" && <InvoicesTab items={S.items} persistItems={persistItems} purchases={S.purchases} persistPurchases={persistPurchases} showToast={showToast} restaurantName={current.name} />}
-            {activeTab === "order" && <OrderTab items={S.items} showToast={showToast} restaurantName={current.name} rid={loc} onCreatedPO={() => setActiveTab("purchaseOrders")} />}
-            {activeTab === "purchaseOrders" && <PurchaseOrdersTab rid={loc} showToast={showToast} focusOrder={focusOrder} onInventoryChange={() => { const requestedLoc = loc; api.fetchState(loc).then((data) => { if (locRef.current === requestedLoc) setS({ ...EMPTY_STATE, ...data }); }); }} />}
+            {activeTab === "dashboard" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:report`} restaurantId={loc} view="report" /> : api.nativePurchasesEnabled ? <p>Accounting reports are awaiting Actual Inventory setup and explicit physical count values. Purchases are reviewed in Invoice Master.</p> : <DashboardTab rid={loc} items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />)}
+            {activeTab === "prep" && <PrepTab showError={showError} drafts={drafts.current} key={loc} rid={loc} items={S.items} dishes={S.dishes} persistDishes={persistDishes} prepStock={S.prepStock} prepLogs={S.prepLogs} applyPrepResult={applyPrepResult} salesPeriod={S.salesPeriod} showToast={showToast} />}
+            {activeTab === "counts" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:counts`} restaurantId={loc} /> : <CountsTab key={loc} rid={loc} items={S.items} onCountsApplied={(next) => store.apply(p => ({ ...p, items: next }))} showToast={showToast} />)}
+            {activeTab === "setup" && <SetupTab onCatalogLinked={store.refresh} showError={showError} drafts={drafts.current} key={loc} items={S.items} persistItems={persistItems} areas={S.areas} persistAreas={persistAreas} showToast={showToast} rid={loc} />}
+            {activeTab === "invoices" && <InvoicesTab showError={showError} drafts={drafts.current} key={loc} rid={loc} items={S.items} persistItems={persistItems} purchases={S.purchases} persistPurchases={persistPurchases} showToast={showToast} restaurantName={current.name} />}
+            {activeTab === "order" && <OrderTab key={loc} items={S.items} showToast={showToast} restaurantName={current.name} rid={loc} onCreatedPO={() => setActiveTab("purchaseOrders")} />}
+            {activeTab === "purchaseOrders" && <PurchaseOrdersTab key={loc} rid={loc} showToast={showToast} focusOrder={focusOrder} onInventoryChange={store.refresh} />}
             {activeTab === "menu" && <MenuTab dishes={S.dishes} onAddNew={() => openCosting(null)} onOpenDish={(id) => openCosting(id)} />}
-            {activeTab === "costing" && <CostingTab items={S.items} dishes={S.dishes} persist={persistDishes} showToast={showToast} focusDish={costingFocus} />}
+            {activeTab === "costing" && <CostingTab rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} dishes={S.dishes} persist={persistDishes} showToast={showToast} focusDish={costingFocus} />}
             {activeTab === "recipeCards" && <RecipeCardsTab items={S.items} dishes={S.dishes} />}
-            {activeTab === "sales" && <SalesTrackingTab items={S.items} dishes={S.dishes} purchases={S.purchases} adjustments={S.adjustments} salesPeriod={S.salesPeriod} persist={persistSalesPeriod} reportingPeriods={S.reportingPeriods} persistReportingPeriods={persistReportingPeriods} showToast={showToast} />}
-            {activeTab === "adjustments" && <AdjustmentsTab items={S.items} adjustments={S.adjustments} persist={persistAdjustments} showToast={showToast} />}
-            {activeTab === "history" && <HistoryTab items={S.items} purchases={S.purchases} focusControlNumber={historyFocusCN} />}
-            {activeTab === "scheduling" && <SchedulingTab rid={loc} showToast={showToast} />}
-            {activeTab === "team" && <StaffTab rid={loc} showToast={showToast} />}
+            {activeTab === "sales" && <SalesTrackingTab revision={S.revision} rid={loc} showError={showError} drafts={drafts.current} key={loc} actualMode={api.nativePurchasesEnabled} items={S.items} dishes={S.dishes} purchases={S.purchases} adjustments={S.adjustments} salesPeriod={S.salesPeriod} persist={persistSalesPeriod} loadLatestSales={loadLatestSales} reportingPeriods={S.reportingPeriods} persistReportingPeriods={persistReportingPeriods} showToast={showToast} />}
+            {activeTab === "adjustments" && <AdjustmentsTab rid={loc} showError={showError} drafts={drafts.current} key={loc} items={S.items} adjustments={S.adjustments} persist={persistAdjustments} showToast={showToast} />}
+            {activeTab === "history" && (api.nativePurchasesEnabled ? <NativePurchaseHistory key={loc} restaurantId={loc} onOpenInvoices={() => setActiveTab("invoices")} /> : <HistoryTab items={S.items} purchases={S.purchases} focusControlNumber={historyFocusCN} />)}
+            {activeTab === "scheduling" && <SchedulingTab key={loc} rid={loc} showToast={showToast} />}
+            {activeTab === "team" && <StaffTab key={loc} rid={loc} showToast={showToast} />}
           </>
         )}
       </main>

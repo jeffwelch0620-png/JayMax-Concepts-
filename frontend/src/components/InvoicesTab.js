@@ -1,7 +1,10 @@
 import React, { useMemo, useRef, useState } from "react";
+import { confirmSave } from "../lib/saveIntegrity";
 import { Plus, Trash2, Save, Upload, ChevronDown, ChevronRight } from "lucide-react";
 import { VENDORS, PURCHASE_UNITS, todayISO, fmtDate, fmtMoney, uid, parseCSV, detectVendorFormat, rowsToObjects, normalizePFGRows, normalizeUSFoodsRows, matchRowToItem, suggestMatch } from "../lib/calc";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost } from "./common";
+import * as api from "../lib/api";
+import { PurchaseImportsTab } from "./PurchaseImportsTab";
 
 function isoOf(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
 const DATE_FILTERS = [
@@ -11,7 +14,18 @@ const DATE_FILTERS = [
   { id: "custom", label: "Custom Range" },
 ];
 
-export function InvoicesTab({ items, persistItems, purchases, persistPurchases, showToast, restaurantName }) {
+export function InvoicesTab(props) {
+  if (api.nativePurchasesEnabled) return props.rid
+    ? <PurchaseImportsTab key={props.rid} restaurantId={props.rid} restaurantName={props.restaurantName} />
+    : <p role="alert">Open your restaurant's Invoice Master to retain and review this purchase.</p>;
+  return <LegacyInvoicesTab {...props} />;
+}
+
+function LegacyInvoicesTab({ items, persistItems, purchases, persistPurchases, showToast, showError = () => {}, restaurantName }) {
+  const [error, setError] = useState("");
+  const [partialSave, setPartialSave] = useState(false);
+  const fail = message => { setError(message); showError(message); };
+  const failPartial = message => { setPartialSave(true); fail(message); };
   const [mode, setMode] = useState("auto");
   const [header, setHeader] = useState({ invoiceDate: todayISO(), invoiceNumber: "", vendor: VENDORS[0] });
   const [lines, setLines] = useState([]);
@@ -45,6 +59,7 @@ export function InvoicesTab({ items, persistItems, purchases, persistPurchases, 
   }
 
   async function saveInvoice() {
+    if (partialSave) { fail("Review the partially saved purchase and item prices before any further invoice imports. Reload after review."); return; }
     if (!header.invoiceNumber.trim() || lines.length === 0) return;
     if (invoiceAlreadyExists(header.vendor, header.invoiceNumber, header.invoiceDate)) { showToast(`Invoice ${header.invoiceNumber} is already in purchase history`); return; }
     const invoiceId = uid("inv");
@@ -52,8 +67,8 @@ export function InvoicesTab({ items, persistItems, purchases, persistPurchases, 
       id: uid("pl"), invoiceId, invoiceDate: header.invoiceDate, invoiceNumber: header.invoiceNumber.trim(), vendor: header.vendor,
       controlNumber: l.controlNumber, itemName: l.itemName, qty: l.qty, unit: l.unit, unitCost: l.unitCost, extendedCost: l.qty * l.unitCost,
     }));
-    await persistPurchases([...purchases, ...newPurchases]);
-    await persistItems(applyPriceUpdates(items, newPurchases, header.vendor));
+    if (!(await confirmSave(() => persistPurchases([...purchases, ...newPurchases]), fail))) return;
+    if (!(await confirmSave(() => persistItems(applyPriceUpdates(items, newPurchases, header.vendor)), () => failPartial("Purchase history saved, but item prices did not. Review Item Setup; do not import this invoice again.")))) return;
     showToast(`Invoice ${header.invoiceNumber} logged — ${newPurchases.length} line item${newPurchases.length !== 1 ? "s" : ""}`);
     setLines([]);
     setHeader((h) => ({ ...h, invoiceNumber: "" }));
@@ -129,6 +144,7 @@ export function InvoicesTab({ items, persistItems, purchases, persistPurchases, 
   const autoUnresolvedCount = autoResolved.filter((x) => !x.resolved.item).length;
 
   async function commitAuto() {
+    if (partialSave) { fail("Review the partially saved purchase and item prices before any further invoice imports. Reload after review."); return; }
     const matchedRows = autoResolved.filter((x) => x.resolved.item && x.r.qty > 0 && !duplicateAutoGroups.has(`${x.r.vendor}|${x.r.invoiceNumber}`)).map((x) => ({ ...x.r, item: x.resolved.item }));
     if (matchedRows.length === 0) return;
     const invoiceIdByGroup = {};
@@ -159,8 +175,8 @@ export function InvoicesTab({ items, persistItems, purchases, persistPurchases, 
       });
       return { ...it, vendorSkus: skus };
     });
-    await persistPurchases([...purchases, ...newPurchases]);
-    await persistItems(nextItems);
+    if (!(await confirmSave(() => persistPurchases([...purchases, ...newPurchases]), fail))) return;
+    if (!(await confirmSave(() => persistItems(nextItems), () => failPartial("Purchase history saved, but item prices did not. Review Item Setup; do not import these invoices again.")))) return;
     showToast(`Imported ${newPurchases.length} line item${newPurchases.length !== 1 ? "s" : ""} across ${Object.keys(invoiceIdByGroup).length} invoice${Object.keys(invoiceIdByGroup).length !== 1 ? "s" : ""}`);
     setAutoRows([]); setSkippedFiles([]); setOverrides({});
   }
@@ -242,6 +258,7 @@ export function InvoicesTab({ items, persistItems, purchases, persistPurchases, 
   }, [csvRows, mapping, csvHeaders, items]);
 
   async function commitCSV() {
+    if (partialSave) { fail("Review the partially saved purchase and item prices before any further invoice imports. Reload after review."); return; }
     const matched = csvPreview.filter((r) => r.match && r.qty > 0);
     if (matched.length === 0) return;
     const invoiceId = uid("inv");
@@ -249,8 +266,8 @@ export function InvoicesTab({ items, persistItems, purchases, persistPurchases, 
       id: uid("pl"), invoiceId, invoiceDate: header.invoiceDate, invoiceNumber: header.invoiceNumber.trim() || `CSV-${invoiceId.slice(-6)}`, vendor: header.vendor,
       controlNumber: r.match.controlNumber, itemName: r.match.name, qty: r.qty, unit: r.unit, unitCost: r.unitCost, extendedCost: r.qty * r.unitCost,
     }));
-    await persistPurchases([...purchases, ...newPurchases]);
-    await persistItems(applyPriceUpdates(items, newPurchases, header.vendor));
+    if (!(await confirmSave(() => persistPurchases([...purchases, ...newPurchases]), fail))) return;
+    if (!(await confirmSave(() => persistItems(applyPriceUpdates(items, newPurchases, header.vendor)), () => failPartial("Purchase history saved, but item prices did not. Review Item Setup; do not import this invoice again.")))) return;
     showToast(`Imported ${newPurchases.length} line item${newPurchases.length !== 1 ? "s" : ""}`);
     setCsvRows(null); setCsvHeaders([]); setMapping({ item: "", qty: "", unit: "", cost: "" });
     if (fileRef.current) fileRef.current.value = "";
@@ -263,6 +280,7 @@ export function InvoicesTab({ items, persistItems, purchases, persistPurchases, 
   return (
     <div className="fade-slide-in" data-testid="invoices-tab">
       <PageTitle>Invoice Master</PageTitle>
+      {error && <p role="alert">{error}</p>}
       <div className="flex gap-2 mb-4 flex-wrap">
         <button data-testid="invoice-mode-auto" className={modeBtn("auto")} onClick={() => setMode("auto")}><Upload size={14} /> US Foods / PFG Import</button>
         <button data-testid="invoice-mode-manual" className={modeBtn("manual")} onClick={() => setMode("manual")}>Manual Entry</button>

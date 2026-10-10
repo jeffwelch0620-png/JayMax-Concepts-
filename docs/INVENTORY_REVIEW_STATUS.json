@@ -1,0 +1,729 @@
+{
+  "version": "inventory-foundation-draft-pr-2026-10-06",
+  "checkpoint_date": "2026-10-06",
+  "baseline": "1a5e97243009a922d38596d6559c6d9be7f6b5f3",
+  "original_review": {
+    "file": "JayMax-review-findings.json",
+    "sha256": "8d334e760ce754928a865e38fe7dd9e207831a02ac113888a088fc76adec626c",
+    "findings": 20
+  },
+  "status_totals": {
+    "open": 13,
+    "fixed": 6,
+    "intentionally_deferred": 1
+  },
+  "status_definitions": {
+    "fixed": "Implemented and tested locally for the stated native workflow or client boundary; not deployed and not a claim of complete legacy operating cutover.",
+    "open": "A part of the original supported write/read/UI/schema contract remains unfixed or its acceptance is incomplete. Native partial fixes/guards are recorded without closing the whole finding.",
+    "intentionally_deferred": "Directly reserved by the user for future work; interim native controls and missing acceptance are explicit."
+  },
+  "evidence_limits": "226 frontend checks/28 suites; production build with three existing warnings; 32 catalog/receiving/entry checks, two final targeted guard/constraint reruns, 23 offline checks. Fresh whole synthetic restore verifies independent store settings and equal actual report. Earlier prep proof retained separately. No live, production/browser or managed-platform proof.",
+  "latest_implementation_evidence": {
+    "frontend": 226,
+    "frontend_suites": 28,
+    "new_frontend_cases": 9,
+    "native_backend_checks": 32,
+    "new_shared_catalog_backend_checks": 9,
+    "focused_reruns": 2,
+    "offline_checks": 23,
+    "production_build": "passed with three existing warnings"
+  },
+  "findings": [
+    {
+      "id": "R01",
+      "original_priority": "P1",
+      "original_title": "Item-sourced prep tasks violate the checked-in task-type constraint",
+      "status": "open",
+      "conclusion": "The legacy vessel-task schema conflict remains.",
+      "current_assessment": "Native batch entry supplies a separate reviewed production path, but the old generator still inserts vessel tasks into a baseline constraint permitting only batch/task. No additive migration in the snapshot repairs that constraint.",
+      "next_step_or_limit": "Fix the constraint and prove the complete retained task workflow, or retire the generator and supply an equivalent native task workflow without old stock writes.",
+      "original_acceptance": "Load the baseline schema into disposable Postgres; generate, edit, release and complete an item-sourced task successfully.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "supabase/schema.sql",
+          "line": 425,
+          "sha256": "ba53f9c7a731eb471b34a2f36b1b75b30fa45f614e292af86b69eebef1ed6cb2"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 4628,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "original_priority": "P1",
+      "original_title": "Daily and bulk prep lists collide on the same date",
+      "status": "open",
+      "conclusion": "The legacy daily/bulk prep-list key conflict remains.",
+      "current_assessment": "The generator distinguishes count_type, while the baseline still uniquely constrains store_id/prep_date. The new journals do not repair this legacy list key.",
+      "next_step_or_limit": "Backfill an explicit track, migrate the unique key and keep locking consistent; test both tracks and simultaneous same-track generation, or retire this list storage.",
+      "original_acceptance": "Both tracks coexist on one date; concurrent creation of the same track produces exactly one list.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "supabase/schema.sql",
+          "line": 948,
+          "sha256": "ba53f9c7a731eb471b34a2f36b1b75b30fa45f614e292af86b69eebef1ed6cb2"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 4521,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        }
+      ]
+    },
+    {
+      "id": "R03",
+      "original_priority": "P1",
+      "original_title": "Direct prep stock changes and audit logs are not one transaction",
+      "status": "open",
+      "conclusion": "Native production/waste are atomic; the legacy workflow cutover is incomplete.",
+      "current_assessment": "Reviewed native events use transactions, immutable movements, exact request replay and shared lot limits. Legacy direct completion/sales/container functions retain their old multi-statement stock code and are blocked only when the native prep pilot is enabled. The main Prep tab remains the legacy component.",
+      "next_step_or_limit": "Route or deliberately retire every legacy prep/task/container writer and reader; leave Track 1 independent and verify failures/concurrent use through the actual operating workflow.",
+      "original_acceptance": "Injected failure at every statement leaves all balances and logs unchanged; parallel deductions preserve both movements.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/prep_batches.py",
+          "line": 89,
+          "sha256": "a3b9919538e5e07231ee1a11b050ac52b412f99eadaa0a4a66e038f91d843c65"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 4262,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "frontend/src/App.js",
+          "line": 263,
+          "sha256": "b4b519cdeda6650652afe06f013754df1c6bf8cd81321cf28ebd160f11294bf8"
+        }
+      ]
+    },
+    {
+      "id": "R04",
+      "original_priority": "P1",
+      "original_title": "PO receiving can commit stock and strand the order in receiving",
+      "status": "fixed",
+      "conclusion": "Fixed locally for the native invoice-linked receiving workflow.",
+      "current_assessment": "Purchases are posted once as authoritative received facts. Order linking records its header, lines and status atomically and never adds stock again. Legacy stock-add receipt calls are rejected in native purchase mode; failed linking cannot duplicate a posted purchase.",
+      "next_step_or_limit": "Retain the native route and its guard during cutover. Mixed/unmapped orders, splits, draft-order retry identity and recovery of existing operational stuck orders remain separate open work; none is claimed tested in production.",
+      "original_acceptance": "Failure after stock or during matching rolls back all receipt effects; replaying one command changes stock once.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/server.py",
+          "line": 2939,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/native_order_receiving.py",
+          "line": 158,
+          "sha256": "6a3ecb7d2ebbdb4134dd37a54ff9317af004a3bae6aaf014c6ef47a3a4d6fff5"
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "original_priority": "P1",
+      "original_title": "Count units, supplier units, base units and portions are mixed",
+      "status": "open",
+      "conclusion": "Canonical native quantities are fixed; the full legacy unit/cost surface is not.",
+      "current_assessment": "Native purchase/count/unit profiles and prep recipes freeze explicit physical conversions, with Decimal quantities and explicit Track 1 values. Catalog adapters now preserve canonical count fields. Legacy prep and costing/report helpers still use preferred packs and portions, and their operational replacement is incomplete.",
+      "next_step_or_limit": "Finish the canonical field contract and remaining costing/prep/screen cutover; prove independent supplier, count and portion units on every supported path. Catalog numeric metadata must never override reviewed physical facts.",
+      "original_acceptance": "Table-driven round trips for case/bag/lb/oz/each and different supplier packs; changing supplier preference leaves physical stock invariant. Frontend and backend return the same quantities and costs.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/native_units.py",
+          "line": 13,
+          "sha256": "f451228defc4120f4e78c796027f839f3888b5db5f6d451f8688ca49d6005c98"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 423,
+          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+        },
+        {
+          "path": "frontend/src/lib/calc.js",
+          "line": 404,
+          "sha256": "9c63d92748744f3bcc679d7a7b6b8534b361b97889175118567ad9ba64e40381"
+        }
+      ]
+    },
+    {
+      "id": "R06",
+      "original_priority": "P1",
+      "original_title": "Invoice imports can permanently lose their inventory mapping",
+      "status": "fixed",
+      "conclusion": "Fixed locally in the native retained-source purchase import.",
+      "current_assessment": "Original source bytes and all positional fields survive capture. Explicit reviewed line-to-item mappings are stored independently of a current supplier SKU join and committed with immutable posting facts. Unresolved rows are held for review. Native mode rejects the old invoice writer.",
+      "next_step_or_limit": "Enable only after cutover checks; retain source rows, stable item identities and audited correction history. This finding does not resolve the separate global supplier/catalog relationship in R10.",
+      "original_acceptance": "First purchase from a new supplier remains linked after reload; a mid-import failure leaves no partial invoice or item-price changes.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/purchase_api.py",
+          "line": 283,
+          "sha256": "dc19c853aac335e854c3a335101455f19ebca85a0ecce279160f0c3f3e273433"
+        },
+        {
+          "path": "backend/purchase_api.py",
+          "line": 344,
+          "sha256": "dc19c853aac335e854c3a335101455f19ebca85a0ecce279160f0c3f3e273433"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 3889,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        }
+      ]
+    },
+    {
+      "id": "R07",
+      "original_priority": "P1",
+      "original_title": "Failed saves clear user input and announce success",
+      "status": "open",
+      "conclusion": "Collection saves and principal forms fixed locally; legacy operating surface remains open.",
+      "current_assessment": "App applies saved state only after a valid acknowledgement. Item/area save, delete, adjustments, recipes, working sales periods, reporting snapshots and all three legacy invoice entry modes check confirmation. Drafts remain on failure; acknowledgements cannot erase newer typing. Supplier contacts check their specific response. Legacy split invoice saves disclose partial failure and block resubmission. Prep par/frequency uses retained drafts and explicit save. Broader direct task/count/container/projection APIs still need their own acknowledgement/draft contract as part of operational cutover.",
+      "next_step_or_limit": "Carry the same contract through direct legacy operating APIs during Step 4; supply native equivalents or retire those paths. Do not treat split legacy invoice/restore requests as an atomic transaction. In-memory drafts do not survive logout/reload.",
+      "original_acceptance": "Simulated 409, 422, 500 and connection failures retain entries, produce no success message and do not contaminate saved state.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "frontend/src/lib/saveIntegrity.js",
+          "line": 8,
+          "sha256": "3b0469dff316a3720daeb9e1937475adb75597dfb69f65aaa7cd3ae045529414"
+        },
+        {
+          "path": "frontend/src/lib/useStoreState.js",
+          "line": 53,
+          "sha256": "2486782b03de11bd8ad8393aee478eac95df8e7163e146e8dc80a0c1060db183"
+        },
+        {
+          "path": "frontend/src/components/SetupTab.js",
+          "line": 113,
+          "sha256": "5b65d0b5993e1fd1af9455bb3253112074020737d7c3f65233aeb992d77a58e2"
+        },
+        {
+          "path": "frontend/src/components/AdjustmentsTab.js",
+          "line": 30,
+          "sha256": "c2e5c0e6d9875e57f254a6d04c010f974fe3bd272e10cb021ce0642a184c9d97"
+        },
+        {
+          "path": "frontend/src/components/InvoicesTab.js",
+          "line": 62,
+          "sha256": "147a9e5631ad65a609e1342e35f6d5ed5f75244534e59ad5a6c384fc4a78fbb2"
+        },
+        {
+          "path": "frontend/src/components/PrepTab.js",
+          "line": 719,
+          "sha256": "a63ac6156056aaa9782a0b57566a669735e52be717b4b25b5125a7de09ac1867"
+        }
+      ]
+    },
+    {
+      "id": "R08",
+      "original_priority": "P1",
+      "original_title": "The in-app backup/restore is not a complete restore",
+      "status": "fixed",
+      "conclusion": "The incomplete app restore is replaced/blocked in native mode; local recovery is proven.",
+      "current_assessment": "Native mode disables the partial app backup/restore. The native recovery tool captures the whole database and schema/ACL manifests from one exported snapshot, restores only into a verified empty disposable database, and verifies hashes/references. The latest proof includes all 16 private prep tables and saved/handoff/reopening history.",
+      "next_step_or_limit": "Production backup scheduling, storage, operator access and managed-platform restoration still require deployment rehearsal under R19. The legacy app export is not a disaster-recovery backup.",
+      "original_acceptance": "Export to an isolated DB, change data, restore and reconcile every included entity, balance and reference. Reject a wrong-store file. Inject failures and prove atomicity or a clearly resumable staged import.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "frontend/src/App.js",
+          "line": 122,
+          "sha256": "b4b519cdeda6650652afe06f013754df1c6bf8cd81321cf28ebd160f11294bf8"
+        },
+        {
+          "path": "frontend/src/components/BackupControls.js",
+          "line": 6,
+          "sha256": "0113466695c9599467ed7a0f08dcf7fb0e10ce3fb271df99c6d895034091885b"
+        },
+        {
+          "path": "backend/native_backup.py",
+          "line": 157,
+          "sha256": "3c9bbeb4d6e207f879dc5a5b68397aec4a2f95febad374d0e6fe79f539535cc6"
+        }
+      ]
+    },
+    {
+      "id": "R09",
+      "original_priority": "P1",
+      "original_title": "Applying the same sales period deducts prep repeatedly",
+      "status": "intentionally_deferred",
+      "conclusion": "Future sales ingestion is deferred; old stock deductions are guarded in native prep mode.",
+      "current_assessment": "The user changed the target relationship: sales are theoretical Track 3 evidence and must never change Track 1. The legacy repeated-deduction endpoint is rejected when native prep is enabled. No Toast ingestion or sales revision ledger has been implemented.",
+      "next_step_or_limit": "In the future Toast build, retain source event/revision identities, corrections and sync completeness; compare theoretical usage with the same physical count boundaries. Do not implement a sales-to-actual-stock deduction as the original recommendation suggested.",
+      "original_acceptance": "Identical replay has zero effect; revised totals and voids apply only the appropriate delta; simultaneous retries create one movement set.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/server.py",
+          "line": 4281,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/prep_batches.py",
+          "line": 89,
+          "sha256": "a3b9919538e5e07231ee1a11b050ac52b412f99eadaa0a4a66e038f91d843c65"
+        },
+        {
+          "path": "docs/TOAST_COMPARISON_RULES.md",
+          "line": 1,
+          "sha256": "7aa0ba1889bc1ff857444aecc7af35f411a6a850dace1f5a40cab99a6d0c4d0e"
+        }
+      ]
+    },
+    {
+      "id": "R10",
+      "original_priority": "P1",
+      "original_title": "Global supplier SKUs conflict with store-prefixed catalog identity",
+      "status": "fixed",
+      "conclusion": "Fixed locally for explicit shared product/SKU linkage and independent store ownership.",
+      "current_assessment": "Existing global product and vendor/SKU IDs remain stable. A manager explicitly links one purchased product to another restaurant with a unique local alias, independent count metadata/par and separate supplier preference, availability and exact planning price/provenance. Linking infers no stock/value/fixed base or reviewed physical profile. Shared product/pack edits are held in ordinary store saves; no name-based merge or silent SKU reassignment occurs. Stale hash/revision, wrong SKU, alias conflict and racing duplicate links are rejected atomically. Composite foreign keys pin the product relationship.",
+      "next_step_or_limit": "Dedicated global product/pack amendment workflow remains held for future review. Existing duplicate products are not merged automatically. Broader global vendor/operating command concurrency remains R17. Feature flags are disabled and this is local proof only.",
+      "original_acceptance": "Same supplier SKU can serve two stores without conflicting; each store has independent stock/par, and a catalog key survives all round trips unchanged.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/catalog_mapping.py",
+          "line": 115,
+          "sha256": "9808a9241447ca7772b10eca98fe68713423f3c39ba43e4174a3a01b39d70ff6"
+        },
+        {
+          "path": "backend/catalog_mapping.py",
+          "line": 61,
+          "sha256": "9808a9241447ca7772b10eca98fe68713423f3c39ba43e4174a3a01b39d70ff6"
+        },
+        {
+          "path": "migrations/20261006_shared_catalog.sql",
+          "line": 22,
+          "sha256": "a188c02af266feca0fcc8e1e04be18e37b3a441369cf0e4cac5ecbba6e961c8e"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 387,
+          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+        }
+      ]
+    },
+    {
+      "id": "R11",
+      "original_priority": "P1",
+      "original_title": "Incomplete recipes and invalid quantities can become apparently valid stock/cost data",
+      "status": "open",
+      "conclusion": "Strict native validation exists; legacy menu/catalog validation and unknown costs remain gaps.",
+      "current_assessment": "Native recipes enforce physical units, positive yields, store membership, source exclusivity and cycle checks; native counts reject invalid amounts and costs stay unknown. The active legacy DishIn/DishLineIn models still accept unconstrained floats/optional sources, and legacy cost recursion returns zero for missing/cyclic sources.",
+      "next_step_or_limit": "Apply the same complete validation contract to supported menu/catalog endpoints and costing screens. Display unknown/incomplete cost rather than a trusted zero; preserve explicit valid purchase credits.",
+      "original_acceptance": "Invalid commands return actionable 4xx errors before any writes. Valid credits remain supported. Incomplete recipes cannot mutate stock or report a trusted zero cost.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/prep_mapping.py",
+          "line": 82,
+          "sha256": "ae780566b368f4b9da0b7d0fd1f7608f1b41cd2644682bf96e80be42b4657eca"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 3931,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "frontend/src/lib/calc.js",
+          "line": 368,
+          "sha256": "9c63d92748744f3bcc679d7a7b6b8534b361b97889175118567ad9ba64e40381"
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "original_priority": "P1",
+      "original_title": "Invoice financial facts and exact supplier identity are lost or overwritten",
+      "status": "open",
+      "conclusion": "Catalog provenance round trips fixed locally; effective-dated price policy remains open.",
+      "current_assessment": "Native invoice facts remain retained and independent of current catalog prices. Shared mode now stores exact planning prices and their provenance per restaurant; unchanged prices keep invoice dates/source, changes/clears are local manual events and new links have unknown prices. Exact supplier descriptions remain. Effective-dated history and unusual invoice/discount/adjustment policy remain open.",
+      "next_step_or_limit": "Finish effective-dated price history and outstanding invoice policy without using mutable catalog prices to value Track 1.",
+      "original_acceptance": "Invoices with credits, discounts and two packs of the same item reconcile to their source totals. Reload preserves supplier SKU and provenance; importing older invoices does not overwrite a newer effective price.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/server.py",
+          "line": 3744,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 366,
+          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 378,
+          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+        },
+        {
+          "path": "backend/catalog_mapping.py",
+          "line": 46,
+          "sha256": "9808a9241447ca7772b10eca98fe68713423f3c39ba43e4174a3a01b39d70ff6"
+        }
+      ]
+    },
+    {
+      "id": "R13",
+      "original_priority": "P1",
+      "original_title": "Closed reporting periods change when current recipes and prices change",
+      "status": "fixed",
+      "conclusion": "Native actual and prep analytical periods retain immutable historical results.",
+      "current_assessment": "Track 1 closures use explicit count values and received purchase facts, independently of current recipes/prices. Corrections retain original closures and require reviewed reopening/reclose. Prep snapshots freeze count/activity evidence, mark later history drift and reopen the exact affected suffix. Native sales mode hides the old close/load workflow.",
+      "next_step_or_limit": "Keep current replacement-cost/menu estimates distinct from saved actual reports. Toast/recipe-cost historical analytics remain future work, and null prep costs are not evidence of a selected valuation method.",
+      "original_acceptance": "A closed-period result remains unchanged after catalog edits. An explicit corrected/reclosed version records what changed and reconciles to source movements.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/actual_inventory_api.py",
+          "line": 339,
+          "sha256": "b2f4bcd377782752a9ca99cd6c1aa1d43f412e5f1a7b32ec8c214820c2fec59c"
+        },
+        {
+          "path": "backend/prep_period_journal.py",
+          "line": 92,
+          "sha256": "e740e3f48506d8f28906bbbd657f3c7e3d5dacc88e7f9770be6e889ea16b91cb"
+        },
+        {
+          "path": "frontend/src/components/SalesTrackingTab.js",
+          "line": 168,
+          "sha256": "2f5e99ce98daa668a20bea20761d25438c4e6e2d96ea3c8a91567232f3bd8369"
+        }
+      ]
+    },
+    {
+      "id": "R14",
+      "original_priority": "P2",
+      "original_title": "Sending one container deletes the whole container group",
+      "status": "open",
+      "conclusion": "The legacy container-group bug remains; native container/service replacement is pending.",
+      "current_assessment": "The old helper still removes the entire selected container entry while subtracting one size. Native prep mode holds that writer, but individual/container-group identities, service transfers and a replacement operating screen are not delivered.",
+      "next_step_or_limit": "Implement measured container identities or correct decrementing groups with transactional/idempotent movement semantics; define service transfer versus consumption without changing Track 1 or duplicating sales usage.",
+      "original_acceptance": "Three successive service moves preserve counts 2,1,0 and balances 10,5,0; concurrent moves cannot lose container records.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/server.py",
+          "line": 1047,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/prep_batches.py",
+          "line": 89,
+          "sha256": "a3b9919538e5e07231ee1a11b050ac52b412f99eadaa0a4a66e038f91d843c65"
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "original_priority": "P2",
+      "original_title": "Adapter round trips lose independent item settings and metadata",
+      "status": "open",
+      "conclusion": "Identified flag/text/price/actor losses fixed locally; full mapping contract remains open.",
+      "current_assessment": "Independent active/count/order controls, stable canonical IDs, local aliases, supplier text, exact price/null and supplied count actor survive tested adapter/editor paths. Empty pack/portion metadata is now retained as null. Shared product fields are disabled in store editing while local price/flags stay editable. Full all-field/unit/menu mapping and legacy reader contract remain open; native mode deliberately hides legacy on-hand/count attribution.",
+      "next_step_or_limit": "Finish the full field/null/unit and menu contract; do not treat targeted lossless fields as proof for every legacy reader.",
+      "original_acceptance": "Round-trip property tests cover all fields, nulls, independent flags and supplier metadata without changes to untouched values.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "frontend/src/components/SetupTab.js",
+          "line": 101,
+          "sha256": "5b65d0b5993e1fd1af9455bb3253112074020737d7c3f65233aeb992d77a58e2"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 377,
+          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+        },
+        {
+          "path": "frontend/src/lib/api.js",
+          "line": 402,
+          "sha256": "08525cc4f6243dc2dfb5d7e067ed2113d45fe72a007d6c129eea87c3909c84ff"
+        }
+      ]
+    },
+    {
+      "id": "R16",
+      "original_priority": "P2",
+      "original_title": "Prep count history is mutable and concurrent session creation is unsafe",
+      "status": "open",
+      "conclusion": "Native counts are immutable; old prep sessions still mutate submissions and race creation.",
+      "current_assessment": "Manager native prep observations and purchased-item staff drafts retain immutable generations and reviewed corrections. Old prep-count GET/save endpoints remain: SELECT-then-INSERT creation and in-place submitted-line edits are still present. The main legacy Prep workflow has not been replaced.",
+      "next_step_or_limit": "Route all supported prep/staff counts to immutable native submissions, retire old writes/GET mutations, and verify concurrent creation and business-date filtering through the operating screens.",
+      "original_acceptance": "Two clients create one session/one line per source; editing requires a new revision; historical submissions remain unchanged and date filters match their displayed meaning.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/server.py",
+          "line": 4368,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 4438,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/prep_observations.py",
+          "line": 76,
+          "sha256": "898225719196ffe074608877f28a292a883c3feeb7374efc1a24dbb7a273cad5"
+        }
+      ]
+    },
+    {
+      "id": "R17",
+      "original_priority": "P2",
+      "original_title": "Concurrency checks cover only part of the write surface",
+      "status": "open",
+      "conclusion": "New journals serialize/replay; legacy shared metadata and status transitions remain uncovered.",
+      "current_assessment": "Native fact commands serialize/replay. Catalog create/replace/retire/link serialize before store revisions; link requires current revision/hash and invalidates stale collection replacements. Shared product/pack edits are held in the ordinary store API, preventing cross-store metadata overwrite. Granular dish/global vendor edits, general draft-order idempotency and racing order/list state transitions remain uncovered.",
+      "next_step_or_limit": "Apply consistent versioning to every supported shared metadata mutation and lock/conditionally update order/list state in the same transaction as dependent lines. Include durable draft-order request identities.",
+      "original_acceptance": "A stale whole-list save conflicts after every metadata mutation; racing submit/edit or release/edit cannot alter approved/released content.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/server.py",
+          "line": 3777,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 3983,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 4663,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 2925,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        }
+      ]
+    },
+    {
+      "id": "R18",
+      "original_priority": "P2",
+      "original_title": "Hard deletion conflicts with retained inventory and purchasing history",
+      "status": "open",
+      "conclusion": "Purchased catalog/store retirement implemented locally; broader retirement remains open.",
+      "current_assessment": "Purchased-item store retirement retains references, stock/count participation and unchanged actual reports. Supplier removal/availability is now local in shared mode and does not change another store. New order lines check local item and matching supplier availability. Shared global product retirement, racing order/retirement transitions and prep scope removal remain separate open workflows.",
+      "next_step_or_limit": "Complete independent store/global availability and reviewed prep count-scope retirement. Coordinate racing catalog/order commands under R17. Do not drop physically counted stock solely because a product is retired.",
+      "original_acceptance": "Retiring a purchased item hides it from new operations while historical reports remain resolvable. Removing a referenced SKU consistently changes availability without deleting history.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "backend/server.py",
+          "line": 3809,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 3770,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "backend/server.py",
+          "line": 2682,
+          "sha256": "2167737730b80a3c095701792b22aea9a7ee06b90b7cbcf28fe67fc5ab8ffbbb"
+        },
+        {
+          "path": "frontend/src/components/SetupTab.js",
+          "line": 119,
+          "sha256": "5b65d0b5993e1fd1af9455bb3253112074020737d7c3f65233aeb992d77a58e2"
+        },
+        {
+          "path": "backend/prep_period_journal.py",
+          "line": 63,
+          "sha256": "e740e3f48506d8f28906bbbd657f3c7e3d5dacc88e7f9770be6e889ea16b91cb"
+        }
+      ]
+    },
+    {
+      "id": "R19",
+      "original_priority": "P2",
+      "original_title": "Database/bootstrap documentation and migration assets do not fully reproduce the current deployment",
+      "status": "open",
+      "conclusion": "Local migrations/recovery are substantially improved; production bootstrap/docs remain incomplete.",
+      "current_assessment": "Versioned native migrations and disposable restore tests now cover the implementation. The public schema remains a reference snapshot; private Toast deployment assets and a complete supported bootstrap/seed/grant sequence are not delivered. DATABASE_SCHEMA/KNOWN_GAPS still describe older Mongo/no-auth behavior, and old migration/import scripts still use name joins or Mongo writes.",
+      "next_step_or_limit": "Produce a supported baseline plus ordered migrations/seeds/grants, guard/archive legacy loaders, refresh canonical docs and rehearse managed-platform recovery and flags/roles/storage. Synthetic tests are not live deployment inspection.",
+      "original_acceptance": "A fresh disposable database bootstraps reproducibly, including private schemas. Import tooling refuses the wrong backend and produces a reconciliation report with no unexplained skipped records.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "supabase/README.md",
+          "line": 3,
+          "sha256": "534a91c333203a5706a51986677a62562f41dc183b83a0204d8a1612b270f56e"
+        },
+        {
+          "path": "docs/DATABASE_SCHEMA.md",
+          "line": 3,
+          "sha256": "b0e39bac0c7d32f6257b48bb424a4c5917ee81bd0fecad500584a07c66d2ff44"
+        },
+        {
+          "path": "docs/KNOWN_GAPS.md",
+          "line": 4,
+          "sha256": "804c2f12e0174f51eae6686f89a7fa8c0eb552bb76fc28fffa061391dbe9998f"
+        },
+        {
+          "path": "scripts/migrate_dishes.py",
+          "line": 74,
+          "sha256": "80dee92278a337282630815024792353fa20ede52a18e73ce5191f5fcf6f5763"
+        },
+        {
+          "path": "scripts/import_invoices.py",
+          "line": 103,
+          "sha256": "6e479f72ef324fc04d20297756734826ee4d1299b944a3721f926b5391e4f904"
+        }
+      ]
+    },
+    {
+      "id": "R20",
+      "original_priority": "P2",
+      "original_title": "Polling and late saves can replace local drafts or cross location UI state",
+      "status": "fixed",
+      "conclusion": "Fixed locally for App state/revisions and retained sales/form drafts.",
+      "current_assessment": "Restaurant/session generations guard every App collection/sales acknowledgement, state callback and refresh. A\u2192B\u2192A and old callbacks cannot update the new scope. Writes capture their own revision; outstanding writes block stale overlapping replacements and invalidate overtaken reads. Sales polling preserves dirty inputs and original revision; changed revisions block overwrite. Debounce timers clear on firing/unmount, no unmount duplicate write occurs, and retained drafts require explicit save on return. Main App navigation plus component-level races are tested.",
+      "next_step_or_limit": "Granular backend concurrency remains R17; direct legacy workflow draft contracts remain R07/Step 4. Current form drafts are session memory, not a persistent offline queue. No production/browser proof claimed.",
+      "original_acceptance": "Polling cannot erase unsaved edits; a delayed old-store save cannot change the selected store's data/revision; switching tabs causes no duplicate completed save.",
+      "evidence_limit": "Current local source verified. Current catalog/receiving/entry checks and synthetic shared-catalog restore; prior prep/recovery evidence preserved separately. No deployment or full cutover claim.",
+      "current_source_evidence": [
+        {
+          "path": "frontend/src/App.js",
+          "line": 75,
+          "sha256": "b4b519cdeda6650652afe06f013754df1c6bf8cd81321cf28ebd160f11294bf8"
+        },
+        {
+          "path": "frontend/src/lib/useStoreState.js",
+          "line": 13,
+          "sha256": "2486782b03de11bd8ad8393aee478eac95df8e7163e146e8dc80a0c1060db183"
+        },
+        {
+          "path": "frontend/src/lib/useStoreState.js",
+          "line": 71,
+          "sha256": "2486782b03de11bd8ad8393aee478eac95df8e7163e146e8dc80a0c1060db183"
+        },
+        {
+          "path": "frontend/src/lib/saveIntegrity.js",
+          "line": 20,
+          "sha256": "3b0469dff316a3720daeb9e1937475adb75597dfb69f65aaa7cd3ae045529414"
+        },
+        {
+          "path": "frontend/src/components/SalesTrackingTab.js",
+          "line": 10,
+          "sha256": "2f5e99ce98daa668a20bea20761d25438c4e6e2d96ea3c8a91567232f3bd8369"
+        },
+        {
+          "path": "frontend/src/components/SalesTrackingTab.js",
+          "line": 21,
+          "sha256": "2f5e99ce98daa668a20bea20761d25438c4e6e2d96ea3c8a91567232f3bd8369"
+        }
+      ]
+    }
+  ],
+  "fix_sequence": [
+    {
+      "step": 1,
+      "title": "Reliable saves and location-safe drafts",
+      "findings": [
+        "R07",
+        "R20"
+      ],
+      "deliverable": "One acknowledged-save contract across all callers, retained drafts on failures, location/generation guards on responses/rollbacks and completed-timer cleanup.",
+      "completion": "409/422/500/network failures never clear input or announce success; polling and delayed old-location responses cannot overwrite a draft or the selected location.",
+      "status": "Completed for App collection saves and retained forms; residual R07 operating APIs assigned to Step 4"
+    },
+    {
+      "step": 2,
+      "title": "Finish the catalog and mapping contract",
+      "findings": [
+        "R05",
+        "R10",
+        "R11",
+        "R12",
+        "R15",
+        "R18"
+      ],
+      "deliverable": "Stable product versus store identity, supplier-product relationships, independent flags, lossless descriptions, validated units/menu recipes, price-change provenance and retirement.",
+      "completion": "Two stores share a supplier product safely; every supported field survives a UI round trip; catalog edits do not change historical quantities/values/provenance; invalid recipes/costs are held.",
+      "status": "Shared product/SKU identity milestone completed locally; remaining unit/menu and price policy work open"
+    },
+    {
+      "step": 3,
+      "title": "Shared edit and order/list transition controls",
+      "findings": [
+        "R17"
+      ],
+      "deliverable": "Consistent revisions for all metadata mutations, atomic state transitions and durable draft-order replay keys.",
+      "completion": "Granular edits invalidate stale whole-state saves; concurrent draft/edit/submit/release actions cannot change approved content; uncertain draft-order retries create one order."
+    },
+    {
+      "step": 4,
+      "title": "Complete the prep, task and count cutover",
+      "findings": [
+        "R01",
+        "R02",
+        "R03",
+        "R14",
+        "R16",
+        "R07"
+      ],
+      "deliverable": "Resolve retained task/list schema keys or retire those paths; connect staff/tasks/counts/containers and service semantics to native facts; remove competing stock writers/readers. Carry acknowledgement and draft protection through every direct operating API.",
+      "completion": "Daily and bulk workflows coexist; vessel tasks can complete safely or have an equivalent native workflow; submitted counts are immutable; container moves preserve identity/quantity; no prep/service/sales writeback to Track 1."
+    },
+    {
+      "step": 5,
+      "title": "Reproducible deployment and operational recovery",
+      "findings": [
+        "R19"
+      ],
+      "deliverable": "Canonical bootstrap/migration/seed/grant instructions, legacy-loader guards, current docs, managed-platform recovery, role/flag/storage alignment and volume checks.",
+      "completion": "A clean target boots all supported modules and restores/reconciles their history; operator backup procedures and runtime configuration are verified before enablement."
+    }
+  ],
+  "future_work_explicitly_deferred": [
+    {
+      "work": "Toast / Track 3",
+      "reason": "User plans a future integration; R09 remains deferred with native legacy-deduction guard. Sales are theoretical explanations only, never Track 1 writes."
+    },
+    {
+      "work": "Scheduling and Operations imports",
+      "reason": "User explicitly reserved these modules for future functionality; inventory identity and data contracts must be settled first."
+    },
+    {
+      "work": "Expanded analytics and complete service variance",
+      "reason": "Current analytical periods retain partial coverage. No final expected closing quantity or unexplained variance until required event/mapping coverage is complete."
+    },
+    {
+      "work": "Login/PIN redesign",
+      "reason": "User explicitly deferred login authentication redesign to a future build. Existing authorization boundaries were tested but no redesign is claimed."
+    }
+  ],
+  "additional_policy_and_acceptance_work": [
+    "Track 1 remains purchased inventory only, with explicit count values and received-date purchases; taxes/fees stay separate.",
+    "Track 2 prep and waste explain actual usage without changing accounting facts. Track 3 sales remain theoretical.",
+    "Batch analytical costing is unselected and stays null/not_calculated. Overnight prep policy, byproducts/zero outputs, date-moving/dependent corrections and nonzero historical stock need deliberate design.",
+    "Zero-only scope additions are implemented; retirement/transfers and nonzero historical reconciliation remain open.",
+    "Mixed/nonfood/unmapped orders, invoice splits, invoice-number reuse/unnumbered receipt policy and unusual adjustments remain acceptance gaps beyond the narrow fixed R04/R06 scope."
+  ],
+  "local_evidence_archive": {
+    "file": "JayMax-shared-catalog-2026-10-06-review-package.zip",
+    "sha256": "20ba0f8ec5fbfe4bfa3629f21adf441766eecc861d653adc0a9eae90eac6fb96",
+    "source_paths_verified": 143
+  },
+  "publication_boundary": "Draft PR review checkpoint. No merge, operational migration, real invoice import, feature enablement, or deployment authorized. Historical local evidence retained outside Git."
+}

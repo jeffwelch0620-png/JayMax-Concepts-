@@ -135,7 +135,7 @@ export function calcPortionsPerUnit(yieldQty, yieldUOM, portionSize, portionUOM)
 }
 
 export function preferredSku(item) {
-  const skus = item.vendorSkus || [];
+  const skus = (item.vendorSkus || []).filter(s => s.available !== false);
   return skus.find((s) => s.preferred) || skus[0] || null;
 }
 export function isCountActive(item) { return item.countActive !== undefined ? !!item.countActive : item.active !== false; }
