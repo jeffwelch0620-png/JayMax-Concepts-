@@ -1,5 +1,15 @@
 # Hosted Supabase deployment readiness
 
+Latest local preparation: [both pool constructors and the installer review plan](PAIRED_STARTUP_INSTALL_PLAN_CHECKPOINT.md)
+support explicitly bound revisions and owned all-or-none pools. No server startup
+automatically loads overlap, and no installer apply entrypoint is enabled. The
+next rehearsal is local journal/rollback reconciliation; hosted pooler capacity,
+registered clients, promotion and recovery remain separate held gates.
+Thirty-six local tests and 93 subtests pass. Fresh read-only hosted checks verify
+both unchanged original profiles/default pools and metadata preservation. A
+PostgreSQL capacity sample does not establish the pooler's limits or client count;
+installation capacity remains held. The earlier interrupted attempt is retained.
+
 Latest local prerequisite: the [transition permission checker](TRANSITION_PERMISSION_CHECKPOINT.md)
 accepts only independently pinned same-profile overlap during explicit diagnostics.
 Normal startup remains singleton-only. Before any hosted TO-list change, prepare

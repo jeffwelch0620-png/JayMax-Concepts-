@@ -1,5 +1,10 @@
 # Restricted-account transition permission checker
 
+Follow-up: [paired pool preparation and the installer review plan](PAIRED_STARTUP_INSTALL_PLAN_CHECKPOINT.md)
+now implement the explicit constructor path and ordered review SQL. Pools remain
+owned and unpromoted; no hosted overlap or active configuration is installed.
+That checkpoint also clarifies the separate default inventory preflight.
+
 October 9, 2026. Local implementation; hosted verification is read-only.
 No hosted accounts, passwords, grants, policies, application configuration or
 business rows change. The combined rotation/recovery and merge gates remain held.

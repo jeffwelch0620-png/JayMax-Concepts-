@@ -34,13 +34,26 @@ def same_target(primary, auxiliary):
         return False
 
 
-async def _try_connect(url):
+async def _try_connect(url, *, transition=None):
     candidate = None
     try:
+        init = db_pg._init_connection
+        extra_timeout = 0
+        if transition is not None:
+            import connection_transition
+            if not isinstance(transition, connection_transition.ClientRevision):
+                raise ValueError('Bound client revision required')
+            transition.validate(url, 'accounts')
+            async def init(conn):
+                await db_pg._init_connection(conn)
+                await connection_transition.inspect_connection(conn, url, 'accounts', transition)
+            extra_timeout = connection_transition.CHECK_TIMEOUT['accounts']
         candidate = await asyncio.wait_for(asyncpg.create_pool(
-            url, min_size=1, max_size=2, statement_cache_size=0, init=db_pg._init_connection,
+            url, min_size=1, max_size=2, statement_cache_size=0, init=init,
             ssl=connection_tls(url), timeout=db_pg.CONNECT_TIMEOUT,
-            command_timeout=30), db_pg.CONNECT_TIMEOUT + 5)
+            command_timeout=30), db_pg.CONNECT_TIMEOUT + 5 + extra_timeout)
+        if transition is not None:
+            return candidate
         async with candidate.acquire() as conn:
             report = await auxiliary_permissions.inspect(conn)
         if report['status'] != 'passed':

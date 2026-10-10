@@ -275,9 +275,9 @@ async def inspect(conn, role, reference='local', *, transition=None):
                     issue('runtime_function_ownership', row['signature'])
                 if row['delegate_access']:
                     issue('function_grant_option', row['signature'])
-                reference = expected['functions'].get(row['signature'])
-                required = bool(reference and not reference['securityDefiner'] and
-                                (row['schema'] == 'public' or not reference['trigger']))
+                function_reference = expected['functions'].get(row['signature'])
+                required = bool(function_reference and not function_reference['securityDefiner'] and
+                                (row['schema'] == 'public' or not function_reference['trigger']))
                 if required != row['permitted']:
                     issue('missing_function_execute' if required else 'excess_function_execute', row['signature'])
             # Require the exact per-verb backend policies; inherited/public

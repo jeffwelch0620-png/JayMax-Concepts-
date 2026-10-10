@@ -1,5 +1,26 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Explicit paired pool preparation and installer plan - October 9, 2026
+
+Both actual pool constructors now support an independently verified, immutable
+client revision with per-physical-connection identity and permission checks.
+The paired preparer returns both owned pools or cleans up its partial attempt;
+it never promotes pools or changes active configuration. Defaults remain intact.
+The review-only installer plan renders the exact profile grants, 66 policy
+additions/restorations, capacity holds and ordered rollback without password SQL
+or an apply entrypoint. Inventory's catalog-reference receipt label is corrected.
+
+Validation passes: 36 tests and 93 subtests, including both actual constructors,
+physical reconnects and an original-singleton return on disposable PostgreSQL.
+Fresh hosted checks pass for both unchanged original profiles/default pools and
+metadata preservation. Pooler capacity and registered client count remain unmeasured.
+
+The [paired startup and installer checkpoint](docs/PAIRED_STARTUP_INSTALL_PLAN_CHECKPOINT.md)
+records what is implemented and the remaining local installer/journal rehearsal,
+hosted pooler-capacity, client-registration and promotion gates. **Combined recovery,
+merge and active-cutover gates remain held.** No hosted accounts or policies change;
+local only, no push or deployment.
+
 ## Default-strict transition permission checker - October 9, 2026
 
 The local diagnostic checker permits only independently recorded, same-profile

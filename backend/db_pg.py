@@ -44,13 +44,24 @@ async def init_pool():
             _retry_task = asyncio.create_task(_retry_until_connected(database_url))
     return _pool
 
-async def _try_connect(database_url):
+async def _try_connect(database_url, *, transition=None):
     try:
+        init = _init_connection
+        extra_timeout = 0
+        if transition is not None:
+            import connection_transition
+            if not isinstance(transition, connection_transition.ClientRevision):
+                raise ValueError('Bound client revision required')
+            transition.validate(database_url, 'inventory')
+            async def init(conn):
+                await _init_connection(conn)
+                await connection_transition.inspect_connection(conn, database_url, 'inventory', transition)
+            extra_timeout = connection_transition.CHECK_TIMEOUT['inventory']
         return await asyncio.wait_for(
             asyncpg.create_pool(database_url, min_size=1, max_size=2, statement_cache_size=0,
-                                init=_init_connection, ssl=connection_tls(database_url),
+                                init=init, ssl=connection_tls(database_url),
                                 timeout=CONNECT_TIMEOUT),
-            CONNECT_TIMEOUT + 5)
+            CONNECT_TIMEOUT + 5 + extra_timeout)
     except Exception as exc:
         # Driver errors can contain credentials; log only the exception class.
         logger.warning('Postgres unavailable (%s); database routes will 503', type(exc).__name__)
