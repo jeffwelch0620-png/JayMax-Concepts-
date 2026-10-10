@@ -63,6 +63,11 @@ async def progress_installed(conn):
     return await conn.fetchval("SELECT to_regprocedure('prep_inventory.task_progress(uuid)') IS NOT NULL")
 
 
+def event_record(row):
+    # Internal acceptance transaction metadata must not alter old reviewed JSON.
+    return {k:v for k,v in dict(row).items() if k != 'created_xid'}
+
+
 class Commit(mapping.Strict):
     command: Command
     expected_review_hash: str = Field(pattern=r'^[0-9a-f]{64}$')
@@ -79,7 +84,7 @@ async def state(conn, store, day, track):
     current = await drafts.latest(conn, store, day, track)
     events = []
     if current:
-        events = [dict(r) for r in await conn.fetch('SELECT * FROM prep_inventory.execution_events WHERE list_id=$1 ORDER BY revision', UUID(current['list_id']))]
+        events = [event_record(r) for r in await conn.fetch('SELECT * FROM prep_inventory.execution_events WHERE list_id=$1 ORDER BY revision', UUID(current['list_id']))]
     phase = next((e for e in reversed(events) if e['action'] in ('release','reopen')), None)
     status = 'released' if phase and phase['action'] == 'release' else 'draft'
     tasks = [] if not current else [dict(r) for r in await conn.fetch('SELECT * FROM prep_inventory.day_tasks WHERE version_id=$1 ORDER BY ordinal', UUID(current['id']))]
@@ -163,23 +168,28 @@ async def commit(pool, store, day, track, actor, body, expected, key):
         old = await conn.fetchrow('SELECT * FROM prep_inventory.execution_events WHERE request_key=$1', key)
         if old:
             if old['request_fingerprint'] != digest: raise HTTPException(409, 'Request key belongs to another execution command')
-            return serial({'request_key':key, 'event':dict(old), 'current':await state(conn, store, day, track), 'replayed':True})
+            return serial({'request_key':key, 'event':event_record(old), 'current':await state(conn, store, day, track), 'replayed':True})
         await conn.execute('LOCK TABLE public.items,public.store_items,public.dishes,public.dish_lines,public.prep_items IN SHARE MODE')
         plan = await preview(conn, store, day, track, body.command, expected)
         if plan['reviewHash'] != body.expected_review_hash: raise HTTPException(409, 'Draft or production evidence changed. Review a fresh command.')
-        p = plan['review']; current = await drafts.latest(conn, store, day, track)
-        def uid(value): return UUID(value) if value else None
-        extra = ',link_event_id,task_complete' if body.command.action in ('link','finish','reconcile') else ''
-        extra_values = ',$17,$18' if extra else ''
-        row = await conn.fetchrow('''INSERT INTO prep_inventory.execution_events(list_id,store_id,revision,predecessor_id,action,draft_version_id,
-            release_event_id,task_id,batch_event_id,batch_root_id,reason,actor,review_snapshot,review_hash,request_key,request_fingerprint)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *'''.replace('request_fingerprint)', 'request_fingerprint'+extra+')').replace('$16)', '$16'+extra_values+')'),
-            UUID(current['list_id']), store, expected+1,
-            await conn.fetchval('SELECT id FROM prep_inventory.execution_events WHERE list_id=$1 ORDER BY revision DESC LIMIT 1', UUID(current['list_id'])),
-            body.command.action, body.command.draft_version_id, uid(p['release_event_id']), body.command.task_id, body.command.batch_event_id,
-            uid(p['batch']['root_id']) if p['batch'] else None, body.command.reason, actor, p, bytes.fromhex(plan['reviewHash']), key, digest,
-            *([body.command.link_event_id, body.command.task_complete] if extra else []))
-        return serial({'request_key':key, 'event':dict(row), 'current':await state(conn, store, day, track), 'replayed':False})
+        row = await persist(conn, store, body.command, plan, expected, key, digest, actor)
+        return serial({'request_key':key, 'event':row, 'current':await state(conn, store, day, track), 'replayed':False})
+
+
+async def persist(conn, store, command, plan, expected, key, digest, actor):
+    p = plan['review']; current = await drafts.latest(conn, store, date.fromisoformat(p['prep_date']), p['track'])
+    def uid(value): return UUID(value) if value else None
+    extra = ',link_event_id,task_complete' if command.action in ('link','finish','reconcile') else ''
+    extra_values = ',$17,$18' if extra else ''
+    row = await conn.fetchrow('''INSERT INTO prep_inventory.execution_events(list_id,store_id,revision,predecessor_id,action,draft_version_id,
+        release_event_id,task_id,batch_event_id,batch_root_id,reason,actor,review_snapshot,review_hash,request_key,request_fingerprint)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *'''.replace('request_fingerprint)', 'request_fingerprint'+extra+')').replace('$16)', '$16'+extra_values+')'),
+        UUID(current['list_id']), store, expected+1,
+        await conn.fetchval('SELECT id FROM prep_inventory.execution_events WHERE list_id=$1 ORDER BY revision DESC LIMIT 1', UUID(current['list_id'])),
+        command.action, command.draft_version_id, uid(p['release_event_id']), command.task_id, command.batch_event_id,
+        uid(p['batch']['root_id']) if p['batch'] else None, command.reason, actor, p, bytes.fromhex(plan['reviewHash']), key, digest,
+        *([command.link_event_id, command.task_complete] if extra else []))
+    return serial(event_record(row))
 
 
 def install_routes(router, context):

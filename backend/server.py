@@ -202,7 +202,9 @@ async def collaboration_security(request: Request, call_next):
     if request.method != "GET":
         if role == "readonly":
             return JSONResponse({"detail": "Read-only access"}, status_code=403)
-        count_draft_path = bool(re.fullmatch(r'/staff/[^/]+/count-drafts(?:/[^/]+/submit)?', route_path))
+        count_draft_path = bool(re.fullmatch(r'/staff/[^/]+/(?:count-drafts|prep-count-drafts)(?:/[^/]+/submit)?', route_path)
+            or re.fullmatch(r'/staff/[^/]+/prep-task-plan', route_path)
+            or re.fullmatch(r'/staff/[^/]+/prep-production/\d{4}-\d{2}-\d{2}/(?:setup|preview|submissions)', route_path))
         if role == "staff" and not (route_path.startswith(STAFF_WRITE_PATHS) or count_draft_path):
             return JSONResponse({"detail": "Staff access is limited to prep workflow"}, status_code=403)
         if route_path.startswith(STAFF_PATHS) and role not in ("owner", "manager", "staff"):
@@ -4265,6 +4267,7 @@ async def pg_prep_state(store_id: str):
 async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind, name):
     from prep_batches import reject_legacy_write
     reject_legacy_write()
+    await prep_containers.hold_legacy(conn)
     store_items = await conn.fetch(
         "SELECT item_code, current_stock, count_unit FROM store_items WHERE store_id=$1 ORDER BY item_code FOR UPDATE",
         store_id)
@@ -4305,6 +4308,7 @@ async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind
 async def _pg_deduct_item_and_stock(conn, store_id, pitem, vessels):
     from prep_batches import reject_legacy_write
     reject_legacy_write()
+    await prep_containers.hold_legacy(conn)
     if not pitem["item_code"]:
         raise HTTPException(400, "prep item has no linked inventory item")
     si = await conn.fetchrow(
@@ -4356,6 +4360,7 @@ async def pg_complete_prep(store_id: str, body: PgPrepCompleteIn):
         raise HTTPException(400, "batches must be greater than zero")
     conn = await db_pg.pool().acquire()
     try:
+        await prep_containers.hold_legacy(conn)
         recipe = await conn.fetchrow("SELECT * FROM dishes WHERE id=$1 AND store_id=$2 AND recipe_type='prep'", body.recipeId, store_id)
         if not recipe:
             raise HTTPException(404, "prep recipe not found")
@@ -4373,6 +4378,7 @@ async def pg_apply_sales(store_id: str, body: PgApplySalesIn):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
+        await prep_containers.hold_legacy(conn)
         dishes = await conn.fetch("SELECT * FROM dishes WHERE store_id=$1", store_id)
         by_id = {str(d["id"]): dict(d) for d in dishes}
         usage_by_recipe = {}
@@ -4417,6 +4423,7 @@ async def pg_use_container(store_id: str, body: PgUseContainerIn):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
+        await prep_containers.hold_legacy(conn)
         stock = await conn.fetchrow("SELECT * FROM prep_recipe_stock WHERE store_id=$1 AND dish_id=$2", store_id, body.recipeId)
         if not stock:
             raise HTTPException(404, "prep stock not found")
@@ -4448,6 +4455,7 @@ async def _pg_prep_universe_for_track(conn, store_id, track):
     return direct_recipes, prep_items, all_recipes_by_id
 
 async def _pg_get_or_create_session(conn, store_id, date, track):
+    await staff_prep_counts.hold_legacy(conn)
     count_type = TRACK_TO_COUNT_TYPE.get(track, "nightly_prep")
     pg_date = _pg_date(date)
     s = await conn.fetchrow("SELECT * FROM count_sessions WHERE store_id=$1 AND count_date=$2 AND count_type=$3",
@@ -4512,6 +4520,7 @@ async def pg_save_count_entry(store_id: str, sid: str, body: PgCountEntryIn):
         raise HTTPException(400, "Blank counts are not saved — enter a number")
     conn = await db_pg.pool().acquire()
     try:
+        await staff_prep_counts.hold_legacy(conn)
         s = await conn.fetchrow("SELECT * FROM count_sessions WHERE id=$1 AND store_id=$2", sid, store_id)
         if not s:
             raise HTTPException(404, "session not found")
@@ -4538,6 +4547,7 @@ async def pg_submit_count(store_id: str, sid: str, body: dict):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
+        await staff_prep_counts.hold_legacy(conn)
         s = await conn.fetchrow("SELECT * FROM count_sessions WHERE id=$1 AND store_id=$2", sid, store_id)
         if not s:
             raise HTTPException(404, "session not found")
@@ -5131,7 +5141,14 @@ async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemb
 async def pg_delete_staff_member(store_id: str, staff_id: str, request: Request):
     check_store_id(store_id)
     _require_manager(request)
-    await db_pg.pool().execute("DELETE FROM staff_members WHERE id=$1 AND store_id=$2", staff_id, store_id)
+    async with db_pg.pool().acquire() as conn:
+        if await conn.fetchval("SELECT to_regclass('prep_inventory.task_assignments') IS NOT NULL"):
+            if await conn.fetchval('SELECT 1 FROM prep_inventory.task_assignments WHERE staff_member_id=$1 AND store_id=$2', uuid.UUID(staff_id),store_id):
+                raise HTTPException(409, 'This roster identity has assignment history. Set it inactive to retain that history.')
+    try:
+        await db_pg.pool().execute("DELETE FROM staff_members WHERE id=$1 AND store_id=$2", staff_id, store_id)
+    except asyncpg.ForeignKeyViolationError:
+        raise HTTPException(409, 'This roster identity has retained history. Set it inactive instead of deleting it.')
     return {"ok": True}
 
 # ---------------- PIN verify / identify ----------------
@@ -5188,6 +5205,7 @@ async def pg_staff_identify(store_id: str, body: dict):
 
 # ---------------- Staff prep sheet (read-only view + completion, reuses Prep's own logic) ----------------
 async def _pg_staff_prepsheet(conn, store_id, track):
+    await staff_prep_tasks.hold_legacy(conn)
     count_type = TRACK_TO_COUNT_TYPE.get(track, "nightly_prep")
     today = _pg_today()
     plist = await conn.fetchrow(
@@ -5252,6 +5270,7 @@ async def pg_staff_complete(store_id: str, body: PgStaffCompleteIn, request: Req
         raise HTTPException(400, "Enter your name so the task is attributed")
     conn = await db_pg.pool().acquire()
     try:
+        await staff_prep_tasks.hold_legacy(conn)
         if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
             raise HTTPException(403, "Invalid PIN")
         async with conn.transaction():
@@ -5573,6 +5592,13 @@ async def _staff_count_actor(request, conn, store_id, pin):
 
 import staff_count_drafts
 app.include_router(staff_count_drafts.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
+import staff_prep_counts
+app.include_router(staff_prep_counts.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
+import staff_prep_tasks
+app.include_router(staff_prep_tasks.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
+import staff_prep_production
+app.include_router(staff_prep_production.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
+import prep_containers
 
 def _cors_origins(raw):
     # Browsers send the Origin with no trailing slash; tolerate the usual copy-paste
