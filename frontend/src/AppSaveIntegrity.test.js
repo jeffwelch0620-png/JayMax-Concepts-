@@ -8,6 +8,8 @@ jest.mock("./lib/api", () => ({ currentSession: jest.fn(), authLogout: jest.fn()
 jest.mock("sonner", () => ({ Toaster: () => null, toast: { success: jest.fn(), error: jest.fn() } }));
 let mockSetupProps;
 let mockInvoiceProps;
+let mockCostingProps;
+jest.mock("./components/CostingTab", () => ({ CostingTab: props => { mockCostingProps = props; return <p>Recipe costing</p>; } }));
 jest.mock("./components/InvoicesTab", () => ({ InvoicesTab: props => { mockInvoiceProps = props; return <p>Invoice Master</p>; } }));
 jest.mock("./components/SetupTab", () => ({ SetupTab: props => { mockSetupProps = props; return <p>Item setup</p>; } }));
 jest.mock("./components/DashboardTab", () => ({ DashboardTab: props => <p data-testid="saved-items">{props.items.map(i => i.name).join(",")}</p> }));
@@ -32,6 +34,33 @@ test("supplier review navigation scopes focus to its restaurant and refreshes th
   const reads = api.fetchState.mock.calls.length;
   await act(async () => mockInvoiceProps.onUnitReviewSaved()); expect(api.fetchState.mock.calls.length).toBe(reads + 1);
   await click("location-tab-rudds"); await click("nav-tab-invoices"); expect(mockInvoiceProps.unitReviewFocus).toBeNull();
+});
+
+test("App passes the catalog editor version through to the store after polling", async () => {
+  await act(async () => root.render(<App />)); await click("nav-tab-setup");
+  expect(mockSetupProps.revision).toBe(10);
+  const openedRevision = mockSetupProps.revision;
+  api.fetchState.mockResolvedValueOnce(state("berts",11));
+  await act(async () => jest.advanceTimersByTime(15000));
+  expect(mockSetupProps.revision).toBe(11);
+  await act(async () => expect(mockSetupProps.persistItems([{...item,par:2}],openedRevision)).resolves.toBeNull());
+  expect(api.putCollection).not.toHaveBeenCalled();
+  api.putCollection.mockResolvedValueOnce({revision:12});
+  await act(async () => mockSetupProps.persistItems([{...item,par:1}],11));
+  expect(api.putCollection).toHaveBeenCalledWith("berts","items",[{...item,par:1}],11);
+});
+
+test("App passes recipe revision and refresh through to the guarded store", async () => {
+  await act(async () => root.render(<App />)); await click("nav-tab-costing");
+  expect(mockCostingProps.revision).toBe(10);
+  api.fetchState.mockResolvedValueOnce(state("berts",11));
+  await act(async () => expect(mockCostingProps.loadLatest()).resolves.toMatchObject({revision:11}));
+  expect(mockCostingProps.revision).toBe(11);
+  await act(async () => expect(mockCostingProps.persist([{id:"dish",name:"Old draft"}],10)).resolves.toBeNull());
+  expect(api.putCollection).not.toHaveBeenCalled();
+  api.putCollection.mockResolvedValueOnce({revision:12});
+  await act(async () => mockCostingProps.persist([{id:"dish",name:"Reviewed draft"}],11));
+  expect(api.putCollection).toHaveBeenCalledWith("berts","dishes",[{id:"dish",name:"Reviewed draft"}],11);
 });
 
 test("failed initial load exposes a location error and a working retry", async () => {

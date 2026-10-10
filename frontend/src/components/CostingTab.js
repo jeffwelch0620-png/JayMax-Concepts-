@@ -1,16 +1,44 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
+import { equalEditorValue, mergeEditorFields, snapshotEditorValue } from "../lib/editorDraft";
 import { Plus, Trash2, Save } from "lucide-react";
 import { MENU_CATEGORIES, UOM_OPTIONS, nextMenuCode, normalizeRecipeSchema, recipeCostSummary, uid, fmtPlanningCost, num, FREQS } from "../lib/calc";
 import { PageTitle, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
 
 function emptyDish(type = "menu") {
-  return { id: null, recipeType: type, name: "", menuCategory: MENU_CATEGORIES[0].name, menuCode: "", description: "", photoUrl: "", price: "", targetPct: 30, yieldQty: type === "prep" ? "" : 1, yieldUOM: type === "prep" ? "fl oz" : "each", procedure: "", equipment: "", shelfLife: "", portionNote: "", prepPar: 0, frequency: "daily", lines: [] };
+  return { draftToken: uid("recipe-draft"), receiptReviewRequired: false, id: null, recipeType: type, name: "", menuCategory: MENU_CATEGORIES[0].name, menuCode: "", description: "", photoUrl: "", price: "", targetPct: 30, yieldQty: type === "prep" ? "" : 1, yieldUOM: type === "prep" ? "fl oz" : "each", procedure: "", equipment: "", shelfLife: "", portionNote: "", prepPar: 0, frequency: "daily", lines: [] };
 }
 
-export function CostingTab({ items, dishes, persist, showToast, showError = () => {}, rid, drafts, focusDish }) {
+const RECIPE_FIELDS = ["recipeType", "name", "menuCategory", "menuCode", "description", "photoUrl", "price", "targetPct", "yieldQty", "yieldUOM", "procedure", "equipment", "shelfLife", "portionNote", "prepPar", "frequency", "lines"];
+const RECIPE_GROUPS = [{ label: "recipe type, ingredients and yield", fields: ["recipeType", "lines", "yieldQty", "yieldUOM"] }];
+function recipeSnapshot(row) {
+  const saved = { ...row }; delete saved.draftBase; delete saved.draftRevision;
+  delete saved.draftToken; delete saved.receiptReviewRequired;
+  return snapshotEditorValue(normalizeRecipeSchema(saved));
+}
+function recipeFields(row) {
+  const normalized = { ...emptyDish(row.recipeType), ...normalizeRecipeSchema(row) };
+  const fields = Object.fromEntries(RECIPE_FIELDS.map(key => [key, normalized[key]]));
+  return { ...fields, name: fields.name.trim(), price: fields.price === "" || fields.price == null ? null : Number(fields.price), targetPct: Number(fields.targetPct), yieldQty: fields.recipeType === "prep" ? Number(fields.yieldQty) : 1, prepPar: fields.prepPar === "" || fields.prepPar == null ? null : Number(fields.prepPar) };
+}
+function recipeDraft(row, revision) {
+  return { ...recipeSnapshot(row), draftToken: uid("recipe-draft"), receiptReviewRequired: false, draftBase: recipeSnapshot(row), draftRevision: revision };
+}
+
+export function CostingTab({ items, dishes, revision = 0, loadLatest, persist, showToast, showError = () => {}, rid, drafts, focusDish }) {
   const normalizedRecipes = useMemo(() => dishes.map(normalizeRecipeSchema), [dishes]);
-  const [dish, setDish, clearDish] = useRetainedDraft(`recipe:${rid}`, emptyDish(), drafts);
+  const [dish, editDish, clearDish, , reconcileDish] = useRetainedDraft(`recipe:${rid}`, emptyDish(), drafts);
+  const currentDish = useRef(dish); currentDish.current = dish;
+  const mounted = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [reviewing, setReviewing] = useState(false);
+  function setDish(change) {
+    editDish(current => {
+      const next = typeof change === "function" ? change(current) : change;
+      return next.id === current.id ? { ...next, draftBase: current.draftBase, draftRevision: current.draftRevision } : next;
+    });
+  }
+  function openDish(row) { editDish(recipeDraft(row, revision)); setError(""); }
   const focusSeen = useRef(drafts?.get(`recipe-focus:${rid}`));
   const [error, setError] = useState("");
   const fail = message => { setError(message); showError(message); };
@@ -27,7 +55,7 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
     if (!focusDish || focusSeen.current === focusDish) return;
     focusSeen.current = focusDish;
     if (drafts) drafts.set(`recipe-focus:${rid}`, focusDish);
-    if (focusDish.id) { const found = dishes.find((d) => d.id === focusDish.id); if (found) setDish(normalizeRecipeSchema(found)); }
+    if (focusDish.id) { const found = dishes.find((d) => d.id === focusDish.id); if (found) openDish(found); }
     else setDish(emptyDish("menu"));
   // A polling refresh must not reload the focused recipe over its draft.
   }, [focusDish]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -60,25 +88,54 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
   const suggestedPrice = dish.recipeType === "menu" && summary.complete && targetPct > 0 ? totalCost / (targetPct / 100) : null;
   const cycleDetected = summary.cycle;
 
+  async function reviewLatest() {
+    const submitted = dish;
+    setReviewing(true);
+    try {
+      const saved = loadLatest ? await loadLatest() : { items, dishes, revision };
+      if (!mounted.current || currentDish.current !== submitted) return;
+      if (!saved || !Number.isSafeInteger(saved.revision) || !Array.isArray(saved.dishes) || !Array.isArray(saved.items)) throw new Error("Latest recipe data could not be confirmed. Your draft is retained.");
+      const latest = saved.dishes.find(row => row.id === submitted.id);
+      if (!latest || !submitted.draftBase) throw new Error("The original recipe was removed or its identity changed. Your draft is retained.");
+      const merged = mergeEditorFields(recipeFields(submitted.draftBase), recipeFields(submitted), recipeFields(latest), RECIPE_GROUPS);
+      if (merged.conflicts.length) throw new Error(`Conflicting recipe changes: ${merged.conflicts.join(", ")}. Review these fields or reload the recipe; your draft is retained.`);
+      const next = { ...recipeDraft(latest, saved.revision), ...merged.data };
+      const checked = recipeCostSummary(next, saved.items, saved.dishes.map(row => row.id === next.id ? next : row));
+      if (!checked.valid) throw new Error(`Latest recipe cannot accept these changes: ${checked.validationIssues.join("; ")}. Your draft is retained.`);
+      editDish(next); setError("");
+    } catch (e) { if (mounted.current) fail(e.message || "Latest recipe data could not be confirmed. Your draft is retained."); }
+    finally { if (mounted.current) setReviewing(false); }
+  }
+
   async function saveDish() {
+    if (dish.receiptReviewRequired) { fail("The recipe was created; your later typing is retained. Reload latest and keep my changes before saving again."); return; }
     if (!dish.name.trim()) { fail("Recipe name is required"); return; }
     if (!summary.valid) { fail(summary.validationIssues.join("; ")); return; }
+    const latest = dishes.find(row => row.id === dish.id);
+    if (dish.id && (!dish.draftBase || !latest || !equalEditorValue(dish.draftBase, recipeSnapshot(latest)))) {
+      fail("This recipe changed since you opened it. Your draft is retained. Reload latest and keep my changes, or reload the recipe to discard the draft."); return;
+    }
     const menuOnly = dishes.filter((x) => (x.recipeType || "menu") !== "prep");
     const cat = MENU_CATEGORIES.find((c) => c.name === dish.menuCategory);
     const code = dish.recipeType === "menu" ? (String(dish.menuCode || "").trim() || (cat ? nextMenuCode(cat.code, menuOnly) : "")) : "";
-    const saved = normalizeRecipeSchema({ ...dish, id: dish.id || uid(dish.recipeType === "prep" ? "prep" : "dish"), name: dish.name.trim(), menuCode: code, price: dish.price === "" || dish.price == null ? null : Number(dish.price), yieldQty: dish.recipeType === "prep" ? Number(dish.yieldQty) : 1, prepPar: dish.prepPar === "" || dish.prepPar == null ? null : Number(dish.prepPar) });
+    const saved = normalizeRecipeSchema({ ...latest, ...recipeFields(dish), id: dish.id || uid(dish.recipeType === "prep" ? "prep" : "dish"), menuCode: code });
     const exists = dishes.some((d) => d.id === saved.id);
     const next = exists ? dishes.map((d) => d.id === saved.id ? saved : d) : [...dishes, saved];
     let acknowledgement;
-    if (!(await confirmSave(async () => { acknowledgement = await persist(next); return acknowledgement; }, fail))) return;
+    if (!(await confirmSave(async () => { acknowledgement = await persist(next, revision); return acknowledgement; }, fail))) return;
     showToast(saved.recipeType === "prep" ? "Prep recipe saved" : "Menu item saved");
     const savedId = acknowledgement.clientIds?.[saved.id] || saved.id;
-    clearDish(dish, acknowledgement.dishes?.find(row => row.id === savedId) || { ...saved, id: savedId }); setError("");
+    if (!clearDish(dish, recipeDraft(acknowledgement.dishes?.find(row => row.id === savedId) || { ...saved, id: savedId }, acknowledgement.revision)) && !dish.id) {
+      const base = { ...recipeSnapshot(dish), id: savedId };
+      reconcileDish(current => current.draftToken === dish.draftToken,
+        current => ({ ...current, id: savedId, draftBase: base, draftRevision: revision, receiptReviewRequired: true }));
+    }
+    setError("");
   }
   async function deleteDish(id) {
     const usedBy = dishes.filter((r) => (r.lines || []).some((l) => l.sourceType === "prep" && l.recipeId === id));
     if (usedBy.length) { showToast(`Can't delete — used by ${usedBy.length} recipe${usedBy.length !== 1 ? "s" : ""}`); return; }
-    if (!(await confirmSave(() => persist(dishes.filter((d) => d.id !== id)), fail))) return;
+    if (!(await confirmSave(() => persist(dishes.filter((d) => d.id !== id), revision), fail))) return;
     if (dish.id === id) setDish(emptyDish());
     showToast("Recipe deleted");
   }
@@ -172,6 +229,7 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
           </div>
         )}
         <button className={btnAcc} onClick={saveDish} data-testid="save-recipe-button"><Save size={15} /> Save {dish.recipeType === "prep" ? "Prep Recipe" : "Menu Item"}</button>
+        {dish.id && <button className={btnGhost} disabled={reviewing} onClick={reviewLatest} data-testid="review-recipe-draft">Reload latest and keep my changes</button>}
       </div>
 
       {normalizedRecipes.length > 0 && (
@@ -193,7 +251,7 @@ export function CostingTab({ items, dishes, persist, showToast, showError = () =
                         <td className="num" title={s.issues.join("; ")}>{r.recipeType === "prep" ? `${fmtPlanningCost(s.costPerYieldUnit)} / ${r.yieldUOM || "Unknown unit"}` : fmtPlanningCost(s.totalCost)}</td>
                         <td>
                           <div className="flex gap-1.5">
-                            <button className={btnGhost} data-testid={`load-recipe-${r.id}`} onClick={() => setDish(r)}>Load</button>
+                            <button className={btnGhost} data-testid={`load-recipe-${r.id}`} onClick={() => openDish(r)}>Load</button>
                             <button aria-label={`Delete ${r.name}`} className={btnDanger} data-testid={`delete-recipe-${r.id}`} onClick={() => deleteDish(r.id)}><Trash2 size={14} /></button>
                           </div>
                         </td>

@@ -56,7 +56,7 @@ export function useStoreState(rid, session, empty, onError) {
       return null;
     }
     if (expectedRevision != null && expectedRevision !== scope.revision) {
-      errors.current("This draft is based on older data. Review the latest saved period before replacing it.");
+      errors.current("This draft is based on older data. Review the latest saved data before replacing it.");
       return null;
     }
     const revision = scope.revision;

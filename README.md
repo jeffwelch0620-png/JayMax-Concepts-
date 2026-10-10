@@ -2,21 +2,33 @@
 
 ## Deployed walkthrough and item setup corrections - October 10, 2026
 
-PR14–17 are merged into the existing Render test deployment. The owner-session
-walkthrough confirmed labelled fictional source retention, missing-value holds,
-nonfood posting/correction and location separation. The next live test uses
-**Bert's with clearly labelled fictional items and count history**. The full
-food/count workflow and staff permissions remain unaccepted; the separate hosted
-rollback control matched **$212 Actual Food Cost**.
+PR14–18 are merged into the existing Render test deployment. The approved
+**Bert's fictional walkthrough** confirms **$212 Actual Food Cost**, preserved
+close/reopen/reclose history, separate prep/waste explanation and the staff
+quantity/manager acceptance workflow, including refusal of a stale review.
+Independent employee authorization and posting retries remain outstanding.
+The [live acceptance follow-up](docs/LIVE_ACCEPTANCE_CATALOG_EDITOR_FOLLOWUP.md)
+records the results and a reproduced two-tab catalog overwrite. The amended
+[draft PR19](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/19) protects
+both item and recipe editors, permits unrelated-refresh saves and new items,
+and adds explicit recovery that preserves independent edits while holding
+conflicts. The creation-receipt follow-up preserves a saved identity when typing
+continues during creation, preventing another Save from appending a duplicate.
+The [review response](docs/PR19_REVIEW_AMENDMENT.md) explains the boundaries.
+All **562 frontend tests across 65 suites** pass locally with the native profile;
+the strict production build also passes with `CI=true` and ESLint enabled. The preceding amendment
+at `1ece856` passed its strict build and CI. The
+[hosted acceptance plan](docs/PR19_HOSTED_ACCEPTANCE_PLAN.md) prepares item/recipe
+retesting after a separately approved merge and test deployment.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
 locally corrected blockers: duplicate count panels while typing, and unrelated
 item saves blocked by a stored unknown supplier conversion. Unknown conversions
 remain unknown; new UI supplier packs still require physical validation. These
-fixes are published in [draft PR18](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18)
-and await review and test deployment. Broad UI rework is a separate later
+fixes are merged in [PR18](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18)
+and deployed at `85cf2b7`. Broad UI rework is a separate later
 workflow. Existing hosting, Supabase connections and credentials are unchanged.
-All **522 frontend tests across 63 suites pass** with the native feature profile.
+PR18 validation passed **522 frontend tests across 63 suites** with the native feature profile.
 The [PR18 follow-up](docs/PR18_CONVERSION_CI_FOLLOWUP.md) adds a supplier-row link
 to the existing verified conversion review, a non-blocking pack mismatch notice,
 and complete shared component API mocks. Confirmations keep actor/time/evidence

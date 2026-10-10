@@ -175,10 +175,12 @@ test.each([false, true])("A to B to A acknowledgement preserves newer typing (%s
 test("recipe failure and polling preserve draft; deletion never claims unconfirmed success", async () => {
   save.mockResolvedValue(null); const focus = { id: "dish" };
   await render(costing({ focusDish: focus })); await input("recipe-name-input", "Edited recipe");
+  await click(find("save-recipe-button")); expect(save).toHaveBeenCalledTimes(1);
   await render(costing({ focusDish: focus, dishes: [{ ...recipe, name: "Polling value" }] })); expect(find("recipe-name-input").value).toBe("Edited recipe");
   await click(find("save-recipe-button")); expect(find("recipe-name-input").value).toBe("Edited recipe"); expect(success).not.toHaveBeenCalled();
   expect(save).toHaveBeenCalledTimes(1);
   await click(find("delete-recipe-dish")); expect(find("recipe-row-dish")).not.toBeNull(); expect(success).not.toHaveBeenCalled();
+  expect(save).toHaveBeenCalledTimes(2);
 });
 
 test("supplier response cannot clear an email entered while contacts are loading", async () => {
