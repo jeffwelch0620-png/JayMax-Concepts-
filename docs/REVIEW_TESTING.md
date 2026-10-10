@@ -63,8 +63,8 @@ live Render environment. Existing build warnings must be reported separately.
 ## GitHub merge checks
 
 `.github/workflows/ci.yml` runs for pull requests (including drafts) and pushes to
-`main`. Its stable **Inventory CI** result succeeds only when both frontend and
-backend jobs succeed. Actions are pinned to commit SHAs, permissions are limited
+`main`. Its stable **Inventory CI** result succeeds only when the frontend,
+disposable PostgreSQL and Windows offline jobs all succeed. Actions are pinned to commit SHAs, permissions are limited
 to `contents: read`, and checkout does not retain credentials. There are no
 deployment steps, hosted database credentials, operational CSVs or repository
 secrets. Do not use `pull_request_target` to run contributed code.
@@ -76,12 +76,22 @@ without importing backend code and selects the full native browser profile.
 Jest runs all component/adapter tests, then `CI=true` makes production-build
 warnings fail the job. This does not alter Render's dashboard settings.
 
-The backend installs the existing pinned requirements, runs both selected review
-profiles, and requires nonzero executed tests with no skips, failures or errors.
+The backend jobs install the existing pinned requirements, run both selected review
+profiles, and require nonzero executed tests with no skips, failures or errors.
 It uses a disposable PostgreSQL 17 service and matching backup client. The literal
 synthetic service password belongs only to this job and is not an application
 credential. Fixtures install migrations in their own disposable databases and
 exercise accounting isolation, corrections, exact replay and restore.
+
+Offline private-credential/backup checks run on **Windows 2025** so their Windows
+ACL checks execute on the intended operating system. CI redirects `LOCALAPPDATA`
+to a disposable runner directory; no developer private directory is used.
+Database acceptance runs on Linux with its PostgreSQL service. `.gitattributes`
+preserves each reviewed SQL file's pinned checkout bytes on both operating systems
+(including the LF-only private-access migration). No migration fingerprint was
+replaced and no drift check was relaxed. Use a Git checkout honoring these
+attributes; a source ZIP or other byte-normalizing export requires independent
+fingerprint verification before it can be used as a reviewed install source.
 
 After a successful GitHub run, require the **Inventory CI** status on `main`.
 This is a merge gate; it does not authorize merging a draft or accepting the live

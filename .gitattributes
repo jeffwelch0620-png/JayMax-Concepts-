@@ -1,0 +1,32 @@
+# Preserve the reviewed raw SQL fingerprints on Windows and Linux checkouts.
+# These attributes do not change SQL content or the existing manifest hashes.
+migrations/20261004_native_purchase_import.sql text eol=crlf
+migrations/20261004_actual_inventory_counts.sql text eol=crlf
+migrations/20261004_actual_inventory_corrections.sql text eol=crlf
+migrations/20261004_actual_inventory_scope_bridges.sql text eol=crlf
+migrations/20261004_posted_invoice_corrections.sql text eol=crlf
+migrations/20261005_manual_purchase_sources.sql text eol=crlf
+migrations/20261005_native_order_receiving.sql text eol=crlf
+migrations/20261005_po_receipt_reconciliation.sql text eol=crlf
+migrations/20261005_staff_count_drafts.sql text eol=crlf
+migrations/20261005_prep_mapping_foundation.sql text eol=crlf
+migrations/20261005_prep_batch_events.sql text eol=crlf
+migrations/20261005_prep_observations.sql text eol=crlf
+migrations/20261005_prep_opening_sources.sql text eol=crlf
+migrations/20261005_prep_period_journal.sql text eol=crlf
+migrations/20261006_shared_catalog.sql text eol=crlf
+migrations/20261006_supplier_price_history.sql text eol=crlf
+migrations/20261006_order_commands.sql text eol=crlf
+migrations/20261006_supplier_contacts.sql text eol=crlf
+migrations/20261007_prep_planning.sql text eol=crlf
+migrations/20261007_prep_day_tasks.sql text eol=crlf
+migrations/20261007_prep_execution.sql text eol=crlf
+migrations/20261007_prep_progress.sql text eol=crlf
+migrations/20261007_staff_prep_counts.sql text eol=crlf
+migrations/20261007_prep_containers.sql text eol=crlf
+migrations/20261007_staff_prep_tasks.sql text eol=crlf
+migrations/20261007_container_waste.sql text eol=crlf
+migrations/20261007_staff_prep_production.sql text eol=crlf
+migrations/20261008_container_waste_corrections.sql text eol=crlf
+migrations/20261007_native_private_access.sql text eol=lf
+supabase/schema.sql text eol=crlf

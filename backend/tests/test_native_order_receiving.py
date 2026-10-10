@@ -78,6 +78,7 @@ class NativeOrderReceivingTests(unittest.IsolatedAsyncioTestCase):
     async def test_unknown_catalog_factor_has_separate_confirmed_physical_profile(self):
         async with self.pool.acquire() as conn:
             await conn.execute('UPDATE vendor_items SET base_per_purchase_unit=NULL WHERE id=$1',self.sku)
+            await conn.execute("INSERT INTO store_state(store_id,revision) VALUES('berts',10) ON CONFLICT(store_id) DO NOTHING")
             before=await conn.fetchval("SELECT revision FROM store_state WHERE store_id='berts'")
         result,_=await self.units()
         self.assertEqual(result.status_code,200,result.text)
