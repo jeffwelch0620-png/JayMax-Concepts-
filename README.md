@@ -1,5 +1,31 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Current stack review and test-deployment merge path - October 9, 2026
+
+The corrected PR14–16 stack and its local continuation now have combined source
+acceptance: **205 backend tests with 309 subtests**, **494 frontend tests across
+61 suites in each of three configurations**, a passing optimized build, and
+**19 distinct disposable PostgreSQL acceptance cases**. These checks preserve
+received-date purchases, explicit count values and Track 1 independence through
+prep/waste corrections and whole recovery. Two existing frontend hook warnings
+remain. Initial fixture/runner failures are retained alongside the passing repeats.
+
+The [current merge checklist](docs/MERGE_READINESS_CHECKLIST.md) separates this
+code-only build/test review from operational release. The owner confirmed Render
+automatically deploys the repository, is unused, and contains no operational data.
+An authorized merge will refresh that test deployment. Startup does not apply
+migrations; the designated hosted build database's existing native installation
+remains recorded in its checkpoint. Live Render flags were not inspected here.
+
+Review order is **PR14 → PR15 → PR16 → the deployment/recovery continuation**,
+retargeting and checking each dependent PR after its predecessor merges. Prefer
+merge commits to preserve the reviewed stack. Publication of this continuation
+is a draft PR; no merge or manual deployment is part of this checkpoint.
+Authentication redesign, broader history/paging review, future modules and
+operational recovery/credential-promotion gates remain separate tracked work.
+Earlier local-only and merge-hold statements below describe their original
+snapshots; this checklist governs the current build/test merge recommendation.
+
 ## Persistent supervisor checkpoints and client handoff review - October 9, 2026
 
 Independent recovery checkpoints now survive supervising-process exits in a

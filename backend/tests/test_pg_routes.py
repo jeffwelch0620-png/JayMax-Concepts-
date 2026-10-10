@@ -223,6 +223,7 @@ def test_revision_update_uses_atomic_compare_and_swap(monkeypatch):
             return dict(self.current)
 
     versions = Versions()
+    monkeypatch.setattr(server, "USE_PG", False)
     monkeypatch.setattr(server, "db", type("Database", (), {"state_versions": versions})())
     request = make_request("/api/state/papa_leonis/items", "PUT", revision=7)
 

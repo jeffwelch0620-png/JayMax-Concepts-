@@ -1,5 +1,15 @@
 # Hosted Supabase deployment readiness
 
+Current code-only review: [stack merge checklist](MERGE_READINESS_CHECKLIST.md).
+The owner confirmed that the auto-deployed Render app is an unused build/test
+environment without operational data. Its test refresh is an expected merge
+consequence. The combined local acceptance now supports review of the corrected
+stack and continuation for that purpose. It does not approve operational use,
+feature activation, hosted credential replacement or manual deployment.
+Earlier merge/release holds below describe their original checkpoints; remaining
+operational capacity, registration, secure-credential and combined-recovery
+requirements continue to apply before those separate actions.
+
 Latest local checkpoint: [persistent supervisor metadata and client handoff review](LOCAL_SUPERVISOR_HANDOFF_CHECKPOINT.md)
 survive process exits and reject checkpoint gaps, conflicting writers and
 incomplete client declarations. Candidate encrypted credential storage and
