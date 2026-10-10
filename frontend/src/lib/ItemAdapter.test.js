@@ -78,6 +78,20 @@ test.each([true,false])("supplier selection uses an available row and retains un
   expect(ui.purchaseUnit).toBe("case"); expect(ui.vendorSkus).toHaveLength(2);
   expect(mongoItemToPgBody(ui,"berts").vendor_skus[0].available).toBe(false);
 });
+test.each([null, 4])("an explicitly unknown supplier conversion stays unknown with pack count %j", packCount => {
+  const source = { ...item, vendorSkus: [{ ...item.vendorSkus[0], basePerPurchaseUnit: null,
+    packCount, unitQty: packCount == null ? null : 5 }] };
+  const saved = mongoItemToPgBody(pgItemToMongoItem(source, "berts"), "berts");
+  expect(saved.vendor_skus[0].base_per_purchase_unit).toBeNull();
+  expect(saved.vendor_skus[0].pack_count).toBe(packCount);
+});
+test("a new supplier without a conversion still requires verified physical pack metadata", () => {
+  const ui = pgItemToMongoItem(item, "berts");
+  ui.vendorSkus = [{ vendor: "PFG", vendorSku: "NEW", packCount: "", unitQty: "", unitUOM: "lb" }];
+  expect(() => mongoItemToPgBody(ui, "berts")).toThrow("Confirm a physical pack quantity");
+  ui.vendorSkus[0] = { ...ui.vendorSkus[0], packCount: 4, unitQty: 5 };
+  expect(mongoItemToPgBody(ui, "berts").vendor_skus[0].base_per_purchase_unit).toBe(20);
+});
 
 test.each([true, false])("changing available supplier pack retains stored count conversion (native %s)", native => {
   load(native);
