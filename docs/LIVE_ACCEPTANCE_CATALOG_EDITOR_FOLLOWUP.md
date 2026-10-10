@@ -55,13 +55,15 @@ Field-level merging can be evaluated later rather than silently rebasing today.
 The focused catalog, save-integrity, App and store suites pass **95 tests**.
 All **527 tests across 63 suites** pass with the reviewed native feature profile.
 The strict production build passes with `CI=true` and ESLint enabled.
-The follow-up is local on `codex/catalog-editor-revision-integrity`, based on
-`85cf2b7`; it is unpushed and has not been deployed. Hosted catalog acceptance
-must be rerun after a separately approved PR and test deployment.
+The follow-up on `codex/catalog-editor-revision-integrity` is based on `85cf2b7`
+and prepared for draft PR review. The validated code checkpoint is `6069ce6`;
+the subsequent release-status update changes documentation only. The fix has
+not been merged or deployed. Hosted catalog acceptance must be rerun after a
+separately approved merge and test deployment.
 
 ## Remaining workflow
 
-1. Review and publish the narrow catalog fix when approved; require Inventory CI.
+1. Review the draft catalog fix and require Inventory CI before approving a merge.
 2. Rerun the two-tab catalog conflict test on the deployed fix.
 3. Finish independent posting retry acceptance and verify one persisted outcome.
 4. Test employee authorization separately when the authentication workflow resumes.

@@ -9,8 +9,8 @@ quantity/manager acceptance workflow, including refusal of a stale review.
 Independent employee authorization and posting retries remain outstanding.
 The [live acceptance follow-up](docs/LIVE_ACCEPTANCE_CATALOG_EDITOR_FOLLOWUP.md)
 records the results and a reproduced two-tab catalog overwrite. Its narrow
-revision-retention fix is local and unpushed; hosted validation of that fix is
-pending a separately approved deployment. All **527 frontend tests across 63
+revision-retention fix is prepared for draft PR review; hosted validation of that
+fix is pending a separately approved deployment. All **527 frontend tests across 63
 suites** and the strict production build pass locally for this follow-up.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
