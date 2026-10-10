@@ -13,7 +13,8 @@ The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents tw
 locally corrected blockers: duplicate count panels while typing, and unrelated
 item saves blocked by a stored unknown supplier conversion. Unknown conversions
 remain unknown; new UI supplier packs still require physical validation. These
-fixes await a new PR and test deployment. Broad UI rework is a separate later
+fixes are published in [draft PR18](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18)
+and await review and test deployment. Broad UI rework is a separate later
 workflow. Existing hosting, Supabase connections and credentials are unchanged.
 All **509 frontend tests across 62 suites pass** with the native feature profile;
 the optimized production build passes with the two existing hook warnings.

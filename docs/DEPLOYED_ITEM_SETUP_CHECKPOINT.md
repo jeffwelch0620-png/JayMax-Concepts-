@@ -63,6 +63,11 @@ or deployment has occurred at this checkpoint. The live session subsequently
 expired; the existing browser-filled owner sign-in recovered it. The test app
 is open again, with no new count scope or count history configured.
 
+**Publication update:** After the user approved draft publication, the local fix
+commit `da9a917` was pushed as
+[draft PR18](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18).
+It remains unmerged; the deployed frontend has not received these fixes.
+
 Next, publish/review the small fix PR and authorize its merge into the existing
 Render test deployment. Then repeat the failed save through the deployed UI,
 establish the labelled three-item purchased-inventory test scope, and complete
