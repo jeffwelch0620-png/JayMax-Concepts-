@@ -63,7 +63,6 @@ jobs:
       PYTHON_DOTENV_DISABLED: '1'
       NATIVE_PURCHASE_TEST_DSN: postgresql://purchase_implementation_test:synthetic-ci-password-only@127.0.0.1:5432/native_purchase_test_control
       NATIVE_BACKUP_PG_DUMP: /usr/lib/postgresql/17/bin/pg_dump
-      NATIVE_BACKUP_EVIDENCE: ${{ runner.temp }}/synthetic-backup-evidence
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -84,6 +83,8 @@ jobs:
       - name: Run offline backend review checks
         run: python tools/run_review_tests.py offline --report "$RUNNER_TEMP/review-offline.xml"
       - name: Run disposable database accounting and restore checks
+        env:
+          NATIVE_BACKUP_EVIDENCE: ${{ runner.temp }}/synthetic-backup-evidence
         run: python tools/run_review_tests.py database --report "$RUNNER_TEMP/review-database.xml"
 
   required:
