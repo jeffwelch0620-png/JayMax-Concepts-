@@ -17,6 +17,7 @@ from starlette.requests import Request
 
 import server
 import db_pg
+import db_auxiliary
 
 
 class FakeTransaction:
@@ -339,7 +340,7 @@ def test_pg_login_uses_app_users_and_issues_same_token_shape(monkeypatch):
     monkeypatch.setattr(server, "USE_PG", True)
     row = {"id": "usr_abc", "email": "gm@example.test", "role": "manager", "locations": ["papa_leonis"],
            "password_hash": server._password_hash("correct horse battery")}
-    monkeypatch.setattr(db_pg, "pool", lambda: FakeStatePool(users=[row]))
+    monkeypatch.setattr(db_auxiliary, "pool", lambda: FakeStatePool(users=[row]))
 
     ok = asyncio.run(server.auth_login(server.LoginIn(email=" GM@example.test ", password="correct horse battery")))
     assert ok["user"] == {"id": "usr_abc", "email": "gm@example.test", "role": "manager", "locations": ["papa_leonis"]}
@@ -354,7 +355,7 @@ def test_pg_bootstrap_refuses_once_any_user_exists(monkeypatch):
     monkeypatch.setattr(server, "USE_PG", True)
     monkeypatch.setattr(server, "BOOTSTRAP_TOKEN", "boot")
     row = {"id": "usr_x", "email": "o@example.test", "role": "owner", "locations": [], "password_hash": "x"}
-    monkeypatch.setattr(db_pg, "pool", lambda: FakeStatePool(users=[row]))
+    monkeypatch.setattr(db_auxiliary, "pool", lambda: FakeStatePool(users=[row]))
     with pytest.raises(HTTPException) as exc:
         asyncio.run(server.auth_bootstrap(server.BootstrapIn(
             bootstrapToken="boot", email="new@example.test", password="a-long-enough-pass")))

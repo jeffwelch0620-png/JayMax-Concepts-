@@ -8,8 +8,8 @@ const empty = { items: [], dishes: [], salesPeriod: {} };
 const session = { user: { role: "manager" } };
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 let root, container, controller, errors;
-function Screen({ rid = "berts" }) {
-  controller = useStoreState(rid, session, empty, errors);
+function Screen({ rid = "berts", auth = session }) {
+  controller = useStoreState(rid, auth, empty, errors);
   return <div>{controller.state ? JSON.stringify(controller.state) : "Loading"}</div>;
 }
 const render = rid => act(async () => root.render(<Screen rid={rid} />));
@@ -93,7 +93,7 @@ test("A save cannot update B, and returning A reloads after that save finishes",
   await render("rudds"); expect(controller.state.revision).toBe(80);
   await render("berts"); expect(container.textContent).toBe("Loading");
   api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["fresh saved A"] });
-  await act(async () => { saving.resolve({ revision: 11 }); expect(await request).toBeNull(); });
+  await act(async () => { saving.resolve({ revision: 11 }); expect(await request).toEqual({ revision: 11 }); });
   expect(container.textContent).toContain("fresh saved A");
   await act(async () => expect(oldController.save("items", ["stale callback"])).resolves.toBeNull());
   expect(api.putCollection).toHaveBeenCalledTimes(1);
@@ -122,7 +122,17 @@ test("unmount discards late callbacks and clears the poll timer", async () => {
 test("malformed location collections remain unavailable instead of becoming saved data", async () => {
   api.fetchState.mockResolvedValueOnce({ revision: 10, items: "malformed" });
   await render("berts"); expect(container.textContent).toBe("Loading"); expect(errors).toHaveBeenCalled();
+  expect(controller.loadError).toBeTruthy();
   await act(async () => controller.refresh()); expect(controller.state.items).toEqual(["berts"]);
+  expect(controller.loadError).toBeNull();
+});
+
+test("a confirmed write cannot acknowledge drafts in a replacement login session", async () => {
+  await render("berts"); const saving = deferred(); api.putCollection.mockReturnValue(saving.promise);
+  let request; act(() => { request = controller.save("items", ["old session"]); });
+  await act(async () => root.render(<Screen rid="berts" auth={{ user: { role: "manager" } }} />));
+  await act(async () => { saving.resolve({ revision: 11 }); expect(await request).toBeNull(); });
+  expect(container.textContent).not.toContain("old session");
 });
 test("poll failures notify once until a successful refresh resets the failure streak", async () => {
   await render("berts"); api.fetchState.mockRejectedValue(new Error("Offline"));

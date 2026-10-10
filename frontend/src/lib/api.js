@@ -476,18 +476,20 @@ export function mongoItemToPgBody(item, rid) {
   const preferred = preferredSku(item);
   const { packTotal, unitUOM } = packTotalFor(preferred, item);
   const nativeBase = physicalUnit(item.baseUnit || item.unitUOM || unitUOM);
-  const basePerCountUnit = nativePurchasesEnabled ? item.basePerCountUnit ?? physicalPackFactor(packTotal, unitUOM, nativeBase)
-    : calcPortionsPerUnit(packTotal, unitUOM, item.portionSize, item.portionUOM).value || 1;
+  const basePerCountUnit = item.basePerCountUnit != null ? numOrNull(item.basePerCountUnit)
+    : nativePurchasesEnabled ? physicalPackFactor(packTotal, unitUOM, nativeBase)
+      : calcPortionsPerUnit(packTotal, unitUOM, item.portionSize, item.portionUOM).value || 1;
+  if (!(basePerCountUnit > 0)) throw new Error("Confirm a positive stored count conversion before saving this item.");
   const countActive = !!(item.countActive ?? item.active);
   return {
-    code: item.itemCode || `${rid}_${item.controlNumber}`, name: item.name, base_unit: nativePurchasesEnabled ? nativeBase : item.portionUOM || "each",
+    code: item.itemCode || `${rid}_${item.controlNumber}`, name: item.name, base_unit: item.baseUnit || (nativePurchasesEnabled ? nativeBase : item.portionUOM || "each"),
     ...(catalogMappingEnabled ? { control_number: item.controlNumber } : {}),
     category: item.category, item_type: item.classification,
     is_high_value: item.isHighValue, notes: item.notes,
     costing_type: item.itemType || "portion",
     pack_count: numOrNull(item.packCount), unit_qty: numOrNull(item.unitQty), unit_uom: item.unitUOM || null,
     portion_size: numOrNull(item.portionSize), portion_uom: item.portionUOM || null,
-    count_unit: nativePurchasesEnabled ? item.countUnit || item.purchaseUnit || preferred?.purchaseUnit || "case" : item.purchaseUnit || preferred?.purchaseUnit || "case",
+    count_unit: item.countUnit || item.purchaseUnit || preferred?.purchaseUnit || "case",
     base_per_count_unit: basePerCountUnit,
     storage_area: item.storageArea || null,
     counted_nightly: countActive,
@@ -498,8 +500,9 @@ export function mongoItemToPgBody(item, rid) {
     needs_review: !!item.needsReview,
     vendor_skus: skus.map((s) => {
       const { packTotal: skuPackTotal, unitUOM: skuUOM } = packTotalFor(s, item);
-      const basePerPurchaseUnit = nativePurchasesEnabled ? s.basePerPurchaseUnit ?? physicalPackFactor(skuPackTotal, skuUOM, nativeBase)
-        : calcPortionsPerUnit(skuPackTotal, skuUOM, item.portionSize, item.portionUOM).value || null;
+      const basePerPurchaseUnit = s.basePerPurchaseUnit != null ? s.basePerPurchaseUnit
+        : nativePurchasesEnabled ? physicalPackFactor(skuPackTotal, skuUOM, nativeBase)
+          : calcPortionsPerUnit(skuPackTotal, skuUOM, item.portionSize, item.portionUOM).value || null;
       return {
         vendor_id: s.vendorId || VENDOR_NAME_TO_ID[s.vendor] || "other", vendor_sku: s.vendorSku || s.id || "",
         vendor_description: s.packDescription === "" && s.vendorDescription === null ? null : s.packDescription ?? s.vendorDescription ?? null, purchase_unit: s.purchaseUnit || item.purchaseUnit || "case",
@@ -532,7 +535,14 @@ async function pgFetchItemsAndPurchases(rid) {
 
 async function pgPutItems(rid, arr, revision) {
   const storeId = pgStoreId(rid);
-  return axios.put(`${PG_API}/items/${storeId}`, arr.map((it) => mongoItemToPgBody(it, rid)),
+  const current = await pgListItems(storeId);
+  const prior = new Map(current.map(item => [item.code, JSON.stringify(mongoItemToPgBody(pgItemToMongoItem(item, rid), rid))]));
+  const bodies = arr.map(item => mongoItemToPgBody(item, rid));
+  const retained = new Set(bodies.map(item => item.code));
+  return axios.post(`${PG_API}/items/${storeId}/changes`, {
+    upserts: bodies.filter(item => prior.get(item.code) !== JSON.stringify(item)),
+    retire_codes: current.filter(item => !retained.has(item.code)).map(item => item.code),
+  },
     { headers: revisionHeaders(revision) }).then((r) => r.data);
 }
 

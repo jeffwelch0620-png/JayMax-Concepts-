@@ -1,5 +1,13 @@
 # Corrected stack and continuation: build/test merge review
 
+October 10 follow-up: [the focused PR14-17 corrections](CLAUDE_PR14_17_FOLLOWUP.md)
+supersede the acceptance counts below for current PR17. The correction passes
+211 selected backend tests/323 subtests, 504 frontend tests/62 suites in each of
+three configurations, the optimized build, and 24 selected local database
+cases/7 subtests. The two existing hook warnings remain. The current Supabase
+connection standard is retained during build; connection architecture decisions
+are deferred. Live Render feature pairing remains unverified. No PR is merged.
+
 October 9, 2026. Continuation branch: `codex/deployment-reconciliation-review`.
 This is a code-review and draft-publication checkpoint. No PR has been merged by
 this checkpoint, no manual deployment is initiated, and no operational invoice

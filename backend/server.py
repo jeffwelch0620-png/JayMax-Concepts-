@@ -3648,6 +3648,11 @@ class ItemIn(BaseModel):
     needs_review: bool = False
     vendor_skus: List[VendorSkuIn] = []
 
+class ItemChanges(BaseModel):
+    model_config = {"extra": "forbid"}
+    upserts: List[ItemIn] = Field(default_factory=list, max_length=10000)
+    retire_codes: List[str] = Field(default_factory=list, max_length=10000)
+
 async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None, *, catalog_checked=False, shared_meta=None):
     if not catalog_checked:
         await catalog_mapping.reject_legacy_schema(conn)
@@ -3883,6 +3888,34 @@ async def pg_create_item(store_id: str, body: ItemIn, request: Request):
             revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
             result = await _pg_save_item(conn, store_id, body)
             return {**result, "revision": revision}
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/items/{store_id}/changes")
+async def pg_change_items(store_id: str, body: ItemChanges, request: Request):
+    check_store_id(store_id)
+    actor = _purchase_actor(request, store_id, True)
+    if request.headers.get("If-Match") is None:
+        raise HTTPException(428, "Item changes require the reviewed location revision (If-Match)")
+    codes = [item.code for item in body.upserts]
+    retired = body.retire_codes
+    if (len(codes) != len(set(codes)) or len(retired) != len(set(retired))
+            or set(codes) & set(retired) or any(not code.strip() for code in codes + retired)):
+        raise HTTPException(422, "Submit unique item codes; an item cannot be edited and retired together")
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            await catalog_mapping.lock_catalog(conn)
+            await conn.execute("SELECT set_config('jmax.price_actor',$1,true)", actor)
+            revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
+            linked = await conn.fetch("SELECT item_code FROM store_items WHERE store_id=$1 FOR UPDATE", store_id)
+            if not set(retired).issubset({row["item_code"] for row in linked}):
+                raise HTTPException(422, "Retire only items linked to this location")
+            for item in body.upserts:
+                await _pg_save_item(conn, store_id, item)
+            for code in retired:
+                await _pg_delete_item_in_conn(conn, store_id, code)
+        return {"ok": True, "revision": revision}
     finally:
         await db_pg.pool().release(conn)
 

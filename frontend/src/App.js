@@ -268,7 +268,13 @@ export default function App() {
         {isOwner ? (
           <OwnerDashboard onOpenLocation={(id) => setLoc(id)} onOpenOrder={openOrder} />
         ) : !S ? (
-          <div className="text-slate-500 text-sm p-10 text-center" data-testid="loading-state">Loading {current.name}…</div>
+          <div className="text-slate-500 text-sm p-10 text-center" data-testid="loading-state">
+            {store.loadError ? <>
+              <p role="alert">{store.loadError}</p>
+              <p>Location data could not be loaded. If this test database has native inventory installed, ask the build administrator to check the matching application feature settings.</p>
+              <button className="mt-3 text-slate-200" onClick={store.refresh}>Retry loading location</button>
+            </> : <>Loading {current.name}…</>}
+          </div>
         ) : (
           <>
             {activeTab === "dashboard" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:report`} restaurantId={loc} view="report" /> : nativeSharedState ? <p>Accounting reports are awaiting Actual Inventory setup and explicit physical count values. Purchases are reviewed in Invoice Master.</p> : <DashboardTab rid={loc} items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />)}

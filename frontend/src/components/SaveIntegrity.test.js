@@ -152,6 +152,26 @@ test("adjustment failure retains quantity and note; delete failure leaves saved 
   await click(find("adj-delete-old")); expect(find("adj-row-old")).not.toBeNull(); expect(success).not.toHaveBeenCalled();
   await render(<p>Other tab</p>); await render(adjustments()); expect(find("adj-note").value).toBe("Dropped pan");
 });
+
+test("a confirmed adjustment clears its retained draft after leaving the form", async () => {
+  const pending = deferred(); save.mockReturnValueOnce(pending.promise);
+  await render(adjustments()); await input("adj-qty", "3"); await click(find("log-adjustment-button"));
+  await render(<p>Another location</p>); await act(async () => pending.resolve({ revision: 11 }));
+  await render(adjustments()); expect(find("adj-qty").value).toBe("");
+  await click(find("log-adjustment-button")); expect(save).toHaveBeenCalledTimes(1); expect(drafts.has("adjustment:berts")).toBe(false);
+});
+
+test.each([false, true])("A to B to A acknowledgement preserves newer typing (%s)", async newer => {
+  const pending = deferred(); save.mockReturnValueOnce(pending.promise);
+  await render(adjustments()); await input("adj-qty", "3"); await click(find("log-adjustment-button"));
+  await render(<AdjustmentsTab rid="rudds" key="rudds" drafts={drafts} items={[item]} adjustments={[]} persist={save} showToast={success} showError={errors} />);
+  await input("adj-qty", "9");
+  await render(adjustments()); if (newer) await input("adj-qty", "4");
+  await act(async () => pending.resolve({ revision: 11 }));
+  expect(find("adj-qty").value).toBe(newer ? "4" : "");
+  expect(drafts.has("adjustment:berts")).toBe(newer);
+  expect(drafts.get("adjustment:rudds").qty).toBe("9"); expect(save).toHaveBeenCalledTimes(1);
+});
 test("recipe failure and polling preserve draft; deletion never claims unconfirmed success", async () => {
   save.mockResolvedValue(null); const focus = { id: "dish" };
   await render(costing({ focusDish: focus })); await input("recipe-name-input", "Edited recipe");

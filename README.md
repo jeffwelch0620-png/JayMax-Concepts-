@@ -1,5 +1,27 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Claude follow-up corrections - October 10, 2026
+
+The [focused correction review](docs/CLAUDE_PR14_17_FOLLOWUP.md) preserves stored
+physical count and supplier conversions, sends only changed item definitions
+and explicit retirements, and reconciles confirmed saves after location changes
+without clearing newer drafts. Missing prep progress and assignment records are
+held for review. Initial location-load failures now show a retry and diagnosis.
+
+[Repeatable review checks](docs/REVIEW_TESTING.md), the checked
+[migration apply order](migrations/APPLY_ORDER.md), and a matched
+[native testing feature profile](docs/BUILD_TEST_FEATURE_PROFILE.md) are included.
+The feature profile is preparation, not verification of the live Render flags.
+Frontend and backend for the partial-item route must be deployed together.
+Current Supabase connections and private credentials remain unchanged; paid
+IPv4 and connection changes are deferred. PRs remain draft and unmerged.
+
+Validation for this correction: **211 selected backend tests and 323 subtests**,
+**504 frontend tests across 62 suites in each of three configurations**, a passing
+optimized build, and **24 selected disposable PostgreSQL cases plus 7 subtests**.
+No selected checks were skipped. Two existing frontend hook warnings remain.
+Local database/role inventory and the protected 40-path continuation were preserved.
+
 ## Current stack review and test-deployment merge path - October 9, 2026
 
 The corrected PR14–16 stack and its local continuation now have combined source

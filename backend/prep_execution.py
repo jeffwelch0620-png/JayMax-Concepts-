@@ -128,10 +128,16 @@ async def preview(conn, store, day, track, body, expected):
         if not task or not task['included'] or task['planned_quantity'] is None or Decimal(task['planned_quantity']) <= 0:
             raise HTTPException(422, 'Select an included task with a positive reviewed planned quantity')
         progress = next((p for p in s['task_progress'] if p['task_id'] == str(body.task_id)), None)
+        if extended and progress is None:
+            raise HTTPException(409, 'Task progress is incomplete. Refresh and review the current plan.')
         if body.action == 'complete' and any(c['task_id'] == str(body.task_id) for c in s['completions']): raise HTTPException(409, 'This task already has production evidence; use progress and finish commands')
         if body.action in ('link','finish') and (progress['closed'] or progress['needs_review']): raise HTTPException(409, 'Task is finished or has changed production evidence requiring reconciliation')
         if body.action == 'finish':
-            if Decimal(progress['reviewed_base_quantity']) <= 0: raise HTTPException(409, 'Finish requires current reviewed positive production')
+            try:
+                quantity = Decimal(progress.get('reviewed_base_quantity'))
+            except (TypeError, ValueError, ArithmeticError):
+                raise HTTPException(409, 'Finish requires verified measured production. Refresh and review the task.') from None
+            if not quantity.is_finite() or quantity <= 0: raise HTTPException(409, 'Finish requires current reviewed positive production')
         else:
             row = await conn.fetchrow('''SELECT * FROM prep_inventory.batch_events e WHERE id=$1 AND store_id=$2
                 AND source_kind='production' AND NOT EXISTS(SELECT 1 FROM prep_inventory.batch_events WHERE predecessor_id=e.id)''', body.batch_event_id, store)
@@ -142,6 +148,7 @@ async def preview(conn, store, day, track, body, expected):
                 original = next((e for e in s['history'] if e['id'] == str(body.link_event_id) and e['action'] in ('complete','link') and e['task_id'] == str(body.task_id)), None)
                 linked = next((c for c in s['completions'] if c['execution_id'] == str(body.link_event_id)), None)
                 if not original or original['batch_root_id'] != batch['root_id']: raise HTTPException(422, 'Reconcile the same original production root and task')
+                if linked is None: raise HTTPException(409, 'Linked production is incomplete. Refresh and review the task.')
                 if not linked['needs_review']: raise HTTPException(409, 'This production version is already reviewed')
                 if body.task_complete and (row['kind'] == 'void' or any(c['needs_review'] and c['execution_id'] != str(body.link_event_id) for c in s['completions'] if c['task_id'] == str(body.task_id))):
                     raise HTTPException(409, 'A void must reopen the task; other changed production must be reconciled before finishing')
