@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
+import { supplierConversionMismatch, supplierReviewSaved } from "../lib/supplierConversion";
 import { Plus, Trash2, Star, X } from "lucide-react";
 import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, nextControlNumber, itemDerived, isCountActive, isOrderEnabled, uid, fmtMoney, num } from "../lib/calc";
 import * as api from "../lib/api";
@@ -25,7 +26,7 @@ function emptyForm(areas) {
   };
 }
 
-export function SetupTab({ items, persistItems, areas, persistAreas, showToast, showError = () => {}, drafts, rid, onCatalogLinked }) {
+export function SetupTab({ items, persistItems, areas, persistAreas, showToast, showError = () => {}, drafts, rid, onCatalogLinked, onVerifySupplier }) {
   const [form, setForm, clearForm] = useRetainedDraft(`item:${rid}`, emptyForm(areas), drafts);
   const [editingCN, setEditingCN, clearEditing] = useRetainedDraft(`item-edit:${rid}`, null, drafts);
   const [newArea, setNewArea, clearArea] = useRetainedDraft(`area:${rid}`, { name: "", prefix: "" }, drafts);
@@ -34,6 +35,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
   const [reviewOnly, setReviewOnly] = useState(false);
   const [vendorEmails, setVendorEmails, loadVendorEmails, emailDirty] = useRetainedDraft(`vendor-emails:${rid}`, {}, drafts);
   const reviewCount = items.filter((it) => it.needsReview).length;
+  const editedItem = items.find(it => it.controlNumber === editingCN);
   const sharedProduct = api.catalogMappingEnabled && (items.find(it => it.controlNumber === editingCN)?.sharedStoreCount || 0) > 1;
   const optionalNumber = value => value === "" || value == null ? null : Number(value);
 
@@ -139,9 +141,9 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
   return (
     <div className="fade-slide-in" data-testid="setup-tab">
       <PageTitle>Item Setup</PageTitle>
-      {api.catalogMappingEnabled && <SharedCatalogLink key={rid} restaurantId={rid} drafts={drafts} onLinked={onCatalogLinked} showToast={showToast} />}
+      {api.catalogMappingEnabled && <SharedCatalogLink key={`catalog-${rid}`} restaurantId={rid} drafts={drafts} onLinked={onCatalogLinked} showToast={showToast} />}
       {error && <p role="alert">{error}</p>}
-      {api.actualInventoryEnabled && <NativeInventoryPosition key={rid} restaurantId={rid} />}
+      {api.actualInventoryEnabled && <NativeInventoryPosition key={`inventory-position-${rid}`} restaurantId={rid} />}
       {api.prepSetupEnabled && <PreparedItemSetup key={`prep-${rid}`} restaurantId={rid} />}
       {api.prepPlanningEnabled && <PrepPlanning rid={rid} drafts={drafts} showToast={showToast}/>}
       {api.prepBatchesEnabled && <PreparedBatchLedger key={`prep-batches-${rid}`} restaurantId={rid} />}
@@ -223,6 +225,13 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
               <Field label="Price Recorded"><input type="date" className={inpCls} value={(v.priceUpdatedAt || "").slice(0, 10)} readOnly /></Field>
               <label className="text-xs flex items-center gap-1 pb-2 text-slate-400"><input type="checkbox" checked={v.available !== false} onChange={(e) => updateVendorRow(v.id, "available", e.target.checked)} /> Available</label>
               <button type="button" aria-label={`Remove vendor SKU${v.vendor ? ` for ${v.vendor}` : ""}`} className={`${btnDanger} mb-0.5`} onClick={() => removeVendorRow(v.id)} disabled={form.vendorSkus.length === 1}><Trash2 size={14} /></button>
+              {api.nativePurchasesEnabled && <div className="w-full text-xs space-y-2">
+                {supplierConversionMismatch(v, editedItem?.baseUnit) && <p role="status">Stored conversion differs from pack details: confirm or keep. Stored values are unchanged.</p>}
+                <p>{v.basePerPurchaseUnit == null ? "Catalog conversion unknown." : `Catalog conversion: ${v.basePerPurchaseUnit} ${editedItem?.baseUnit || "inventory units"} per purchase unit.`} Physical conversions are confirmed in Invoice Master → Verified inventory units.</p>
+                {onVerifySupplier && <button type="button" className={btnGhost} data-testid={`verify-supplier-${idx}`}
+                  disabled={!supplierReviewSaved(editedItem, v, form)} onClick={() => onVerifySupplier({ itemCode: editedItem.itemCode, skuId: v.id })}>Review verified conversion</button>}
+                {!supplierReviewSaved(editedItem, v, form) && <p>Save the item and supplier pack details before reviewing a purchased inventory conversion.</p>}
+              </div>}
             </div>
           ))}
         </div>
@@ -244,7 +253,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
         </div>
       </div>
 
-      {api.supplierContactsEnabled ? <SupplierContacts key={rid} rid={rid} drafts={drafts} onSaved={onCatalogLinked} showToast={showToast}/> : <div className={`${cardCls} p-4 mb-6`} data-testid="vendor-emails-card">
+      {api.supplierContactsEnabled ? <SupplierContacts key={`supplier-contacts-${rid}`} rid={rid} drafts={drafts} onSaved={onCatalogLinked} showToast={showToast}/> : <div className={`${cardCls} p-4 mb-6`} data-testid="vendor-emails-card">
         <SectionLabel>Supplier Order Emails</SectionLabel>
         <div className="text-[11px] text-slate-500 mb-3">Saved addresses are used as the default recipient when emailing a Purchase Order to a supplier (editable at send time).</div>
         <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))" }}>

@@ -1,5 +1,35 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Deployed walkthrough and item setup corrections - October 10, 2026
+
+PR14–17 are merged into the existing Render test deployment. The owner-session
+walkthrough confirmed labelled fictional source retention, missing-value holds,
+nonfood posting/correction and location separation. The next live test uses
+**Bert's with clearly labelled fictional items and count history**. The full
+food/count workflow and staff permissions remain unaccepted; the separate hosted
+rollback control matched **$212 Actual Food Cost**.
+
+The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
+locally corrected blockers: duplicate count panels while typing, and unrelated
+item saves blocked by a stored unknown supplier conversion. Unknown conversions
+remain unknown; new UI supplier packs still require physical validation. These
+fixes are published in [draft PR18](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18)
+and await review and test deployment. Broad UI rework is a separate later
+workflow. Existing hosting, Supabase connections and credentials are unchanged.
+All **522 frontend tests across 63 suites pass** with the native feature profile.
+The [PR18 follow-up](docs/PR18_CONVERSION_CI_FOLLOWUP.md) adds a supplier-row link
+to the existing verified conversion review, a non-blocking pack mismatch notice,
+and complete shared component API mocks. Confirmations keep actor/time/evidence
+in immutable native unit profiles; ordinary edits preserve null and positive
+catalog factors. The two existing hook warnings were corrected for the strict
+CI build, which passes in GitHub's fresh install. Build/database and GitHub check
+results are recorded in that follow-up.
+
+[Inventory CI](.github/workflows/ci.yml) checks pull requests and `main` with all
+native frontend tests, a strict production build, and selected backend checks
+against fictional fixtures in disposable PostgreSQL. Require its combined status
+before merging; passing CI is separate from deployed workflow acceptance.
+
 ## Claude follow-up corrections - October 10, 2026
 
 The [focused correction review](docs/CLAUDE_PR14_17_FOLLOWUP.md) preserves stored
@@ -14,7 +44,8 @@ held for review. Initial location-load failures now show a retry and diagnosis.
 The feature profile is preparation, not verification of the live Render flags.
 Frontend and backend for the partial-item route must be deployed together.
 Current Supabase connections and private credentials remain unchanged; paid
-IPv4 and connection changes are deferred. PRs remain draft and unmerged.
+IPv4 and connection changes are deferred. This review describes the correction
+package before PR14–17 were merged on October 10; validation is retained below.
 
 Validation for this correction: **211 selected backend tests and 323 subtests**,
 **504 frontend tests across 62 suites in each of three configurations**, a passing

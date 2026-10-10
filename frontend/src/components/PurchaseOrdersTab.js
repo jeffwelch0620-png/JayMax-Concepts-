@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, X, Send, PackageCheck, Trash2, RotateCcw, ClipboardList, ShieldCheck, Mail, AlertTriangle, FileText } from "lucide-react";
 import { fmtMoney, fmtDate, num } from "../lib/calc";
 import * as api from "../lib/api";
@@ -35,17 +35,19 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
   const [reorderVendor, setReorderVendor] = useState("");
   const [highlightId, setHighlightId] = useState(null);
 
-  async function refresh() {
+  const toastRef = useRef(showToast);
+  useEffect(() => { toastRef.current = showToast; }, [showToast]);
+  const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const [os, vc] = await Promise.all([api.listOrders(rid), api.listVendorContacts(rid).catch(() => [])]);
       setOrders(os);
       const map = {}; (vc || []).forEach((c) => (map[c.vendor] = c.orderEmail));
       setContacts(map);
-    } catch { showToast("Couldn't load purchase orders"); }
+    } catch { toastRef.current?.("Couldn't load purchase orders"); }
     setLoading(false);
-  }
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [rid]);
+  }, [rid]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
     if (!focusOrder?.id) return;

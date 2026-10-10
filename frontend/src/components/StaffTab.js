@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Users, Plus, Trash2 } from "lucide-react";
 import { PageTitle, cardCls, inpCls, btnAcc, btnGhost, btnDanger, Pill, EmptyState } from "./common";
 import * as api from "../lib/api";
@@ -20,11 +20,11 @@ export function StaffTab({ rid, showToast }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     if (!rid) return;
     try { setMembers(await api.listStaffMembers(rid)); } catch { setMembers([]); }
-  }
-  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [rid]);
+  }, [rid]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   async function add() {
     setErr("");

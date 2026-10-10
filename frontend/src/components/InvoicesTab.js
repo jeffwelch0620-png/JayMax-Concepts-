@@ -16,7 +16,7 @@ const DATE_FILTERS = [
 
 export function InvoicesTab(props) {
   if (api.nativePurchasesEnabled) return props.rid
-    ? <PurchaseImportsTab key={props.rid} restaurantId={props.rid} restaurantName={props.restaurantName} />
+    ? <PurchaseImportsTab key={props.rid} restaurantId={props.rid} restaurantName={props.restaurantName} unitReviewFocus={props.unitReviewFocus} onUnitReviewSaved={props.onUnitReviewSaved} />
     : <p role="alert">Open your restaurant's Invoice Master to retain and review this purchase.</p>;
   return <LegacyInvoicesTab {...props} />;
 }

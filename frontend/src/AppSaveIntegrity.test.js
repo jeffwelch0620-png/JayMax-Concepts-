@@ -7,6 +7,8 @@ import { toast } from "sonner";
 jest.mock("./lib/api", () => ({ currentSession: jest.fn(), authLogout: jest.fn(), fetchState: jest.fn(), putCollection: jest.fn(), putSalesPeriod: jest.fn(), SESSION_EXPIRED_EVENT: "test-expired" }));
 jest.mock("sonner", () => ({ Toaster: () => null, toast: { success: jest.fn(), error: jest.fn() } }));
 let mockSetupProps;
+let mockInvoiceProps;
+jest.mock("./components/InvoicesTab", () => ({ InvoicesTab: props => { mockInvoiceProps = props; return <p>Invoice Master</p>; } }));
 jest.mock("./components/SetupTab", () => ({ SetupTab: props => { mockSetupProps = props; return <p>Item setup</p>; } }));
 jest.mock("./components/DashboardTab", () => ({ DashboardTab: props => <p data-testid="saved-items">{props.items.map(i => i.name).join(",")}</p> }));
 jest.mock("./components/AiAssistant", () => ({ AiAssistant: () => null }));
@@ -22,6 +24,15 @@ beforeEach(() => {
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.useRealTimers(); });
+
+test("supplier review navigation scopes focus to its restaurant and refreshes the saved revision", async () => {
+  await act(async () => root.render(<App />)); await click("nav-tab-setup");
+  await act(async () => mockSetupProps.onVerifySupplier({itemCode:"food",skuId:"sku"}));
+  expect(mockInvoiceProps.unitReviewFocus).toEqual({restaurantId:"berts",itemCode:"food",skuId:"sku"});
+  const reads = api.fetchState.mock.calls.length;
+  await act(async () => mockInvoiceProps.onUnitReviewSaved()); expect(api.fetchState.mock.calls.length).toBe(reads + 1);
+  await click("location-tab-rudds"); await click("nav-tab-invoices"); expect(mockInvoiceProps.unitReviewFocus).toBeNull();
+});
 
 test("failed initial load exposes a location error and a working retry", async () => {
   api.fetchState.mockRejectedValueOnce({ response: { status: 503, data: { detail: "Catalog feature settings need review" } } });

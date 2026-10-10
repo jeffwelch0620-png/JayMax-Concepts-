@@ -500,7 +500,9 @@ export function mongoItemToPgBody(item, rid) {
     needs_review: !!item.needsReview,
     vendor_skus: skus.map((s) => {
       const { packTotal: skuPackTotal, unitUOM: skuUOM } = packTotalFor(s, item);
-      const basePerPurchaseUnit = s.basePerPurchaseUnit != null ? s.basePerPurchaseUnit
+      // An explicit null is a stored unconfirmed conversion, not permission to infer one.
+      // Only a new/changed supplier with no stored factor derives it from pack metadata.
+      const basePerPurchaseUnit = s.basePerPurchaseUnit !== undefined ? s.basePerPurchaseUnit
         : nativePurchasesEnabled ? physicalPackFactor(skuPackTotal, skuUOM, nativeBase)
           : calcPortionsPerUnit(skuPackTotal, skuUOM, item.portionSize, item.portionUOM).value || null;
       return {

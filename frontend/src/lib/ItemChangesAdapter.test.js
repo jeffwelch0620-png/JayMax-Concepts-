@@ -27,3 +27,19 @@ test("a stale or rejected acknowledgement is not replaced by a retry with a newe
   await expect(api.putCollection("berts", "items", [], 7)).rejects.toMatchObject({ response: { status: 409 } });
   expect(axios.post).toHaveBeenCalledTimes(1); expect(axios.post.mock.calls[0][2].headers["If-Match"]).toBe('"7"');
 });
+test("adding a verified item is not blocked by an unrelated stored unknown supplier conversion", async () => {
+  const current = [item("one"), { ...item("two"), vendorSkus: [{ id: "unconfirmed", vendor: "usfoods",
+    vendorSku: "two-unconfirmed", purchaseUnit: "case", basePerPurchaseUnit: null,
+    packCount: null, unitQty: null, unitUOM: null }] }];
+  axios.get.mockResolvedValue({ data: current });
+  const newItem = { ...item("new"), vendorSkus: [{ vendor: "PFG", vendorSku: "TEST-NEW",
+    packCount: 1, unitQty: 20, unitUOM: "lb", purchaseUnit: "case" }] };
+  await api.putCollection("berts", "items", [...current.map(value => api.pgItemToMongoItem(value, "berts")),
+    api.pgItemToMongoItem(newItem, "berts")], 7);
+  const [, body, options] = axios.post.mock.calls[0];
+  expect(body.upserts.map(value => value.code)).toEqual(["new"]);
+  expect(body.upserts[0].vendor_skus[0].base_per_purchase_unit).toBe(20);
+  expect(body.retire_codes).toEqual([]);
+  expect(options.headers["If-Match"]).toBe('"7"');
+  expect(axios.post).toHaveBeenCalledTimes(1);
+});
