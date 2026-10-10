@@ -52,8 +52,11 @@ second confirmation ledger. Ordinary saves retain the stored factor.
 The focused supplier-review, draft/navigation and receiving checks pass **38
 tests in four suites**. All **522 frontend tests in 63 suites** pass with the
 native feature profile. Selected offline backend checks pass **211 tests and
-323 subtests**, with no skipped checks. Production build, disposable database
-and first GitHub CI results are recorded in the publication update below.
+323 subtests**, with no skipped checks. The strict production build also passes
+in GitHub's fresh Linux install. The local database selection passed 25 cases
+and seven subtests; the added unknown-factor case required an explicit fixture
+revision row and then passed in its corrected focused rerun. The complete CI
+selection reruns all 26 database cases together, with no skipped cases accepted.
 
 The existing PurchaseOrdersTab and StaffTab hook warnings were corrected using
 stable refresh callbacks. Changing a toast callback does not cause extra order
@@ -65,6 +68,23 @@ The backend runs the existing selected review runner, extended with the unknown
 catalog-factor confirmation and stale-source/fixed-unit guards. Its disposable
 PostgreSQL service contains fictional fixtures only. See
 [repeatable checks](REVIEW_TESTING.md) for exact scope and local commands.
+
+GitHub's Linux runner exposed checkout normalization of pinned SQL bytes.
+`.gitattributes` now preserves the already-reviewed CRLF/LF bytes by file on
+both platforms; no SQL body, manifest hash or drift guard was changed. Offline
+Windows ACL and process-witness tests run on Windows with canonical disposable
+scratch paths. The ordinary-role recovery fixture uses its own invented password
+so it can run against password-authenticated PostgreSQL rather than relying on
+the local cluster's trust authentication. No application credential is involved.
+
+The authoritative result for the current branch head is the combined **Inventory
+CI** status in [PR18 checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18/checks).
+Earlier failed setup attempts remain in the run history. These are selected
+backend acceptance checks, not the entire historical backend suite. The local
+test server was shut down after its owned run and its database/role inventory
+matched the opening inventory. Local compilation was interrupted when available
+memory became very low; the passing fresh GitHub production build supplies the
+build evidence. Deployed UI acceptance remains pending.
 
 ## Next acceptance checkpoint
 

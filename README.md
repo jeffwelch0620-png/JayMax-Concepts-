@@ -22,7 +22,8 @@ to the existing verified conversion review, a non-blocking pack mismatch notice,
 and complete shared component API mocks. Confirmations keep actor/time/evidence
 in immutable native unit profiles; ordinary edits preserve null and positive
 catalog factors. The two existing hook warnings were corrected for the strict
-CI build. Build/database and GitHub check results are recorded in that follow-up.
+CI build, which passes in GitHub's fresh install. Build/database and GitHub check
+results are recorded in that follow-up.
 
 [Inventory CI](.github/workflows/ci.yml) checks pull requests and `main` with all
 native frontend tests, a strict production build, and selected backend checks
