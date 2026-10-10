@@ -12,6 +12,15 @@ afterAll(() => {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }
 });
+
+test("state loading preserves unavailable prep balances and still loads the location", async () => {
+  load();
+  axios.get.mockImplementation(url => Promise.resolve({ data:
+    url.includes('/prep/berts/state') ? { prepStock: null, prepLogs: null, prepReadStatus: { available: false, basis: "legacy_prep_retired" } } :
+    url.includes('/state/berts') ? { revision: 11, prepStock: [], prepLogs: [] } : [] }));
+  const result = await api.fetchState("berts");
+  expect(result).toMatchObject({ revision: 11, items: [], dishes: [], prepStock: null, prepLogs: null, prepReadStatus: { available: false } });
+});
 test.each([{ rows: [] }, { rows: [{ invoiceId: "already-known", invoiceNumber: "KNOWN", vendor: "PFG" }] }])("native purchase snapshots reject even empty or already-known input without making requests", async ({ rows }) => {
   load(); await expect(api.putCollection("berts", "purchases", rows, 9)).rejects.toMatchObject({ response: { status: 410 } });
   expect(axios.get).not.toHaveBeenCalled(); expect(axios.put).not.toHaveBeenCalled(); expect(axios.post).not.toHaveBeenCalled();

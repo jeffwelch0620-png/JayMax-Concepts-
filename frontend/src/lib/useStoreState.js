@@ -10,6 +10,7 @@ export function useStoreState(rid, session, empty, onError) {
   const alive = useRef(true);
   const errors = useRef(onError); errors.current = onError;
   const [snapshot, setSnapshot] = useState(null);
+  const [failure, setFailure] = useState(null);
   const isCurrent = useCallback(() => alive.current && active.current === scope, [scope]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
@@ -20,17 +21,23 @@ export function useStoreState(rid, session, empty, onError) {
       const data = await api.fetchState(rid);
       if (!isCurrent() || read !== scope.reads || generation !== (writes.current.get(rid) || 0) || pending.current.has(rid)) return;
       if (!data || !Number.isSafeInteger(data.revision) || data.revision < 0) throw new Error("Location data was not confirmed.");
+      const prepUnavailable = data.prepReadStatus?.available === false && data.prepReadStatus.basis === "legacy_prep_retired";
+      if (prepUnavailable && (data.prepStock !== null || data.prepLogs !== null)) throw new Error("Retired prep balances were not confirmed unavailable.");
       for (const name of ["items", "dishes", "purchases", "areas", "adjustments", "reportingPeriods", "prepStock", "prepLogs"]) {
+        if (prepUnavailable && ["prepStock", "prepLogs"].includes(name)) continue;
         if (data[name] !== undefined && !Array.isArray(data[name])) throw new Error("Location collections were not confirmed.");
       }
       if (scope.loaded && data.revision < scope.revision) return;
       scope.revision = data.revision; scope.loaded = true;
       scope.readFailed = false;
+      setFailure(null);
       setSnapshot({ scope, data: { ...empty, ...data } });
       return data;
     } catch (error) {
       if (isCurrent() && read === scope.reads && generation === (writes.current.get(rid) || 0) && !pending.current.has(rid)) {
-        if (!scope.readFailed) errors.current(error?.response?.data?.detail || error.message || "Couldn't load location data.");
+        const message = error?.response?.data?.detail || error.message || "Couldn't load location data.";
+        setFailure({ scope, message });
+        if (!scope.readFailed) errors.current(message);
         scope.readFailed = true;
       }
     }
@@ -60,7 +67,9 @@ export function useStoreState(rid, session, empty, onError) {
       if (!confirmed(result) || result.revision < revision) throw new Error("Save was not confirmed. Refresh and review before retrying.");
       if (name !== "salesPeriod" && result[name] !== undefined && !Array.isArray(result[name])) throw new Error("Saved collection was not confirmed.");
       if (name === "salesPeriod" && result[name] !== undefined && (!result[name] || typeof result[name] !== "object" || Array.isArray(result[name]))) throw new Error("Saved sales period was not confirmed.");
-      if (!isCurrent()) return null;
+      // A confirmed receipt still belongs to the submitting form. It may clear
+      // that form's unchanged draft, but cannot update another scope or session.
+      if (!isCurrent()) return alive.current && active.current.session === scope.session ? result : null;
       scope.revision = result.revision;
       setSnapshot(previous => previous?.scope === scope ? { scope, data: {
         ...previous.data, [name]: result[name] ?? next, revision: result.revision,
@@ -82,5 +91,6 @@ export function useStoreState(rid, session, empty, onError) {
     if (isCurrent()) setSnapshot(previous => previous?.scope === scope
       ? { scope, data: update(previous.data) } : previous);
   }, [scope, isCurrent]);
-  return { state: snapshot?.scope === scope ? snapshot.data : null, save, refresh, apply, isCurrent };
+  return { state: snapshot?.scope === scope ? snapshot.data : null,
+    loadError: failure?.scope === scope ? failure.message : null, save, refresh, apply, isCurrent };
 }

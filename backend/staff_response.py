@@ -1,5 +1,6 @@
 """Staff-facing projections keep audit identities in the private retained journal."""
-AUDIT_IDENTITY_KEYS = frozenset({'submitted_by', 'recorded_by', 'issued_by', 'actor', 'email'})
+AUDIT_IDENTITY_KEYS = frozenset({'submitted_by', 'recorded_by', 'issued_by',
+    'reviewed_by', 'confirmed_by', 'created_by', 'actor', 'email'})
 
 
 def staff_view(value):

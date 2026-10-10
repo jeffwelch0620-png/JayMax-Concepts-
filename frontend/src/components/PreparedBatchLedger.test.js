@@ -8,6 +8,7 @@ let root, container;
 const recipe = { id: "recipe", revision: 1, outputUnit: "lb", reviewNeeded: false, review_snapshot: { product: { name: "Prepared protein" } },
   lines: [{ id: "line", source_kind: "raw", raw_item_code: "protein", source_unit: "lb", factor: "1" }] };
 const data = { recipes: [recipe], events: [], lots: [], policy: null };
+const coverage = { waste: "not_installed", containers: "not_installed", tasks: "not_installed", staffProduction: "not_installed", periods: "not_installed" };
 const preview = (rid, body) => Promise.resolve({ reviewHash: "hash", review: { kind: "initial", business_date: body.business_date, timezone_name: body.timezone_name,
   usableBaseOutput: body.output_quantity, standardBaseOutput: "48", base_unit: "lb", inputs: body.inputs.map(x => ({ ...x, base_quantity: x.quantity,
     base_unit: "lb", standardBaseQuantity: "60", includedLossBaseQuantity: x.included_loss_quantity })) } });
@@ -76,9 +77,33 @@ test("prepared inputs require a recorded lot and preserve its source identity", 
   await input("Prepared source lot 1", "source"); await approve(); await click(button("Save reviewed batch")); expect(api.saveNativePrepBatch.mock.calls[0][1].batch.inputs[0].source_batch_id).toBe("source");
 });
 test("void records use a reason and independent review without new quantities", async () => {
+  api.nativePrepCorrectionReview.mockResolvedValue({ store_id: "berts", selectedEventId: "old", readOnly: true, track1Writeback: false,
+    gate: { status: "eligible_for_preview", reason: "Review the correction" }, coverage, reviewHash: "a".repeat(64),
+    lots: [], preparedInputHistory: [], containers: [], wasteHistory: [], taskLinks: [], staffDecisions: [], savedPeriods: [] });
   api.nativePrepBatchSetup.mockResolvedValue({ ...data, events: [{ id: "old", root_id: "root", kind: "initial", revision: 1, business_date: "2026-10-05", review_snapshot: { batch: null } }] });
   api.previewNativePrepBatchChange.mockResolvedValue({ reviewHash: "void-hash", review: { kind: "void", business_date: "2026-10-05", timezone_name: "America/New_York", usableBaseOutput: null, inputs: [] } });
   api.saveNativePrepBatchChange.mockResolvedValue({ event: { id: "new", store_id: "berts", kind: "void", predecessor_id: "old", review_hash: "void-hash" } });
   await render(); await input("Record action", "void"); await input("Current batch", "old"); await input("Correction reason", "Entered in error"); await approve(); await click(button("Save reviewed batch"));
   expect(api.saveNativePrepBatchChange.mock.calls[0]).toEqual(["berts", "old", { change: { kind: "void", reason: "Entered in error", replacement: null }, expected_review_hash: "void-hash", reviewed: true }, "batch-key"]);
+});
+
+test("a held dependency review keeps the proposed batch correction unavailable", async () => {
+  api.nativePrepBatchSetup.mockResolvedValue({ ...data, events: [{ id: "old", kind: "initial", review_snapshot: { batch: null } }] });
+  api.nativePrepCorrectionReview.mockResolvedValue({ store_id: "berts", selectedEventId: "old", readOnly: true, track1Writeback: false,
+    gate: { status: "held", reason: "Measured waste uses this lot" }, coverage, reviewHash: "a".repeat(64),
+    lots: [], preparedInputHistory: [], containers: [], wasteHistory: [], taskLinks: [], staffDecisions: [], savedPeriods: [] });
+  await render(); await input("Record action", "void"); await input("Current batch", "old");
+  expect(button("Review batch quantities").disabled).toBe(true); expect(container.textContent).toContain("Measured waste uses this lot");
+  expect(api.previewNativePrepBatchChange).not.toHaveBeenCalled(); expect(api.saveNativePrepBatchChange).not.toHaveBeenCalled();
+});
+
+test("dependency refresh failure removes the earlier quantity approval and retains the correction reason", async () => {
+  api.nativePrepBatchSetup.mockResolvedValue({ ...data, events: [{ id: "old", kind: "initial", review_snapshot: { batch: null } }] });
+  api.nativePrepCorrectionReview.mockResolvedValueOnce({ store_id: "berts", selectedEventId: "old", readOnly: true, track1Writeback: false,
+    gate: { status: "eligible_for_preview", reason: "Review quantities" }, coverage, reviewHash: "a".repeat(64),
+    lots: [], preparedInputHistory: [], containers: [], wasteHistory: [], taskLinks: [], staffDecisions: [], savedPeriods: [] }).mockRejectedValueOnce(new Error("Dependency refresh unavailable"));
+  api.previewNativePrepBatchChange.mockResolvedValue({ reviewHash: "void-hash", review: { kind: "void", inputs: [], usableBaseOutput: null } });
+  await render(); await input("Record action", "void"); await input("Current batch", "old"); await input("Correction reason", "Keep this explanation"); await approve();
+  await click(button("Refresh dependency review")); expect(button("Save reviewed batch")).toBeUndefined(); expect(button("Review batch quantities").disabled).toBe(true);
+  expect(container.querySelector('[aria-label="Correction reason"]').value).toBe("Keep this explanation"); expect(api.saveNativePrepBatchChange).not.toHaveBeenCalled();
 });

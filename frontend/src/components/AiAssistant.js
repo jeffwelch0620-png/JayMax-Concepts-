@@ -12,47 +12,85 @@ const SUGGESTIONS = [
 ];
 
 export function AiAssistant({ rid, setRid, open, onClose }) {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(null);
+  const [capabilities, setCapabilities] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const bottomRef = useRef(null);
+  const generation = useRef(0), operation = useRef(false), controller = useRef(null);
 
   useEffect(() => {
-    if (open) api.aiHistory(rid).then(setMessages).catch(() => setMessages([]));
-  }, [open, rid]);
+    const lifecycle = generation, streamController = controller;
+    const active = ++generation.current;
+    controller.current?.abort(); operation.current = false;
+    setMessages(null); setCapabilities(null); setStreaming(false); setClearing(false); setError("");
+    if (open) {
+      setLoading(true);
+      Promise.all([api.aiHistory(rid), api.aiCapabilities(rid)]).then(([history, status]) => {
+        if (generation.current !== active) return;
+        if (!Array.isArray(history) || history.some(m => m.restaurantId !== rid || !["user", "assistant"].includes(m.role) || typeof m.content !== "string")
+            || status?.storeId !== (rid === "papa_leonis" ? "papa" : rid) || status.basis !== "ai_conversation_storage" || status.accounting !== false
+            || ["historyAvailable", "chatAvailable", "clearAvailable"].some(key => typeof status[key] !== "boolean") || !status.historyAvailable) {
+          throw new Error("Conversation history was not confirmed.");
+        }
+        setMessages(history); setCapabilities(status);
+      }).catch(e => { if (generation.current === active) setError(e?.response?.data?.detail || e.message || "Conversation history unavailable."); })
+        .finally(() => { if (generation.current === active) setLoading(false); });
+    }
+    return () => { ++lifecycle.current; streamController.current?.abort(); };
+  }, [open, rid, retry]);
+  useEffect(() => { setInput(""); }, [rid]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, open]);
 
   async function send(text) {
     const msg = (text ?? input).trim();
-    if (!msg || streaming) return;
-    setInput("");
+    if (!msg || operation.current || error || !capabilities?.chatAvailable || messages === null) return;
+    const active = generation.current;
+    operation.current = true; controller.current = new AbortController(); setError("");
     setStreaming(true);
     setMessages((m) => [...m, { role: "user", content: msg }, { role: "assistant", content: "", pending: true }]);
-    let gotError = null;
-    await api.streamChat(rid, msg, {
-      onDelta: (t) => setMessages((m) => {
+    let gotError = null, received = "";
+    try { await api.streamChat(rid, msg, {
+      signal: controller.current.signal,
+      onDelta: (t) => { received += t; if (generation.current === active) setMessages((m) => {
         const next = [...m];
         const last = next[next.length - 1];
         if (last?.pending) next[next.length - 1] = { ...last, content: last.content + t };
         return next;
-      }),
+      }); },
       onError: (e) => { gotError = e; },
       onDone: () => {
+        if (generation.current !== active) return;
+        if (!gotError && !received) gotError = "No response was confirmed.";
         setMessages((m) => {
           const next = [...m];
           const last = next[next.length - 1];
-          if (last?.pending) next[next.length - 1] = { role: "assistant", content: gotError || last.content || "No response — try again." };
+          if (last?.pending) next[next.length - 1] = { role: "assistant", content: last.content, pending: false };
           return next;
         });
         setStreaming(false);
+        if (gotError) setError(`${gotError} Your entry is retained. Refresh history before retrying.`);
+        else setInput(p => p.trim() === msg ? "" : p);
       },
-    });
+    }); } catch (e) { if (generation.current === active) setError("Conversation failed. Your entry is retained; refresh history before retrying."); }
+    finally { if (generation.current === active) { operation.current = false; setStreaming(false); } }
   }
 
   async function clearHistory() {
-    await api.aiClear(rid).catch(() => {});
-    setMessages([]);
+    if (operation.current || !capabilities?.clearAvailable || messages === null) return;
+    const active = generation.current; operation.current = true; setClearing(true); setError("");
+    try {
+      const result = await api.aiClear(rid);
+      if (generation.current !== active) return;
+      if (result?.ok !== true) throw new Error("Conversation clear was not confirmed.");
+      setMessages([]);
+    } catch (e) { if (generation.current === active) setError(e?.response?.data?.detail || e.message || "Could not clear conversation. History is retained."); }
+    finally { if (generation.current === active) { operation.current = false; setClearing(false); } }
   }
 
   if (!open) return null;
@@ -66,20 +104,24 @@ export function AiAssistant({ rid, setRid, open, onClose }) {
           </span>
           <div>
             <div className="font-display font-bold text-sm text-slate-100">Sous — AI Kitchen Copilot</div>
-            <div className="text-[10px] text-slate-500">Powered by ChatGPT · reads live {RESTAURANTS.find((r) => r.id === rid)?.short || ""} data</div>
+            <div className="text-[10px] text-slate-500">{RESTAURANTS.find((r) => r.id === rid)?.short || ""} · Conversation history</div>
           </div>
         </div>
         <div className="flex items-center gap-1">
           <select className={`${inpCls} py-1 px-2 text-xs`} data-testid="ai-location-select" value={rid} onChange={(e) => setRid(e.target.value)}>
             {RESTAURANTS.map((r) => <option key={r.id} value={r.id}>{r.short}</option>)}
           </select>
-          <button onClick={clearHistory} className="p-1.5 text-slate-500 hover:text-red-400 transition" title="Clear conversation" aria-label="Clear conversation" data-testid="ai-clear-button"><Trash2 size={15} /></button>
+          <button onClick={clearHistory} disabled={streaming || clearing || !capabilities?.clearAvailable || messages === null} className="p-1.5 text-slate-500 hover:text-red-400 transition" title="Clear conversation" aria-label="Clear conversation" data-testid="ai-clear-button"><Trash2 size={15} /></button>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white transition" data-testid="ai-close-button"><X size={17} /></button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {messages.length === 0 && (
+        {loading && <p role="status">Loading conversation history…</p>}
+        {error && <p role="alert">{error}</p>}
+        {capabilities && !capabilities.chatAvailable && <p data-testid="ai-readonly-status">History is available for reference. Chat is unavailable until conversation storage is enabled.</p>}
+        <button disabled={streaming || clearing || loading} onClick={() => setRetry(n => n + 1)} data-testid="ai-history-retry">Refresh history</button>
+        {messages?.length === 0 && capabilities?.chatAvailable && (
           <div className="mt-4">
             <div className="text-xs text-slate-500 mb-3">Ask about inventory, food costs, prep, or margins — I can see this location's live data. Try one of these:</div>
             <div className="flex flex-col gap-2">
@@ -91,7 +133,7 @@ export function AiAssistant({ rid, setRid, open, onClose }) {
             </div>
           </div>
         )}
-        {messages.map((m, i) => (
+        {messages?.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`} data-testid={`ai-message-${i}`}>
             <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap ${m.role === "user" ? "bg-[var(--acc)] text-[#0B0F17] font-medium" : "bg-[#161F30] border border-[#28354A] text-slate-200"}`}>
               {m.content}
@@ -111,9 +153,9 @@ export function AiAssistant({ rid, setRid, open, onClose }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") send(); }}
-            disabled={streaming}
+            disabled={streaming || clearing || !capabilities?.chatAvailable || messages === null}
           />
-          <button className={btnAcc} onClick={() => send()} disabled={streaming || !input.trim()} data-testid="ai-assistant-send-button">
+          <button className={btnAcc} onClick={() => send()} disabled={streaming || clearing || !!error || !capabilities?.chatAvailable || messages === null || !input.trim()} data-testid="ai-assistant-send-button">
             <Send size={15} />
           </button>
         </div>

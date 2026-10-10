@@ -88,6 +88,20 @@ test("native ownership rejects an old rollup instead of silently displaying lega
   api.ownerSummary.mockResolvedValue({ stores: [store], totals: { inventoryValue: 9999 } });
   await render(<OwnerDashboard />); expect(container.querySelector('[data-testid="owner-error"]')).not.toBeNull(); expect(container.textContent).not.toContain("9999");
 });
+
+test("retired and failed prep summaries cannot display zero cost or retain old prep pills", async () => {
+  api.ownerPrepSummary.mockResolvedValue({ available: false, message: "Historical prep figures are retained for review.", stores: [{ id: "berts", tasksDone: null, tasksTotal: null, prepCost7d: null }] });
+  await render(<OwnerDashboard />);
+  expect(container.querySelector('[data-testid="prep-unavailable-berts"]').textContent).toContain("Historical prep figures");
+  expect(container.querySelector('[data-testid="prep-summary-berts"]')).toBeNull();
+  api.ownerPrepSummary.mockResolvedValue({ stores: [{ id: "berts", countStatus: "submitted", tasksDone: 2, tasksTotal: 3, prepCost7d: 25 }] });
+  await click(container.querySelector('[data-testid="owner-refresh"]'));
+  expect(container.querySelector('[data-testid="prep-summary-berts"]').textContent).toContain("Tasks 2/3");
+  api.ownerPrepSummary.mockRejectedValue(new Error("Connection lost"));
+  await click(container.querySelector('[data-testid="owner-refresh"]'));
+  expect(container.querySelector('[data-testid="prep-summary-berts"]')).toBeNull();
+  expect(container.querySelector('[data-testid="prep-unavailable-berts"]').textContent).toContain("could not be confirmed");
+});
 test("native Item Setup offers dated counts instead of an editable current-stock field", async () => {
   await render(<SetupTab items={[]} areas={[{ name: "Dry storage", prefix: "DR" }]} rid="berts" />);
   expect(container.querySelector('[data-testid="setup-native-count-note"]')).not.toBeNull(); expect(container.textContent).not.toContain("Current Stock (purchase units)"); expect(container.querySelector('[data-testid="native-inventory-position"]')).not.toBeNull();

@@ -78,3 +78,14 @@ test.each([true,false])("supplier selection uses an available row and retains un
   expect(ui.purchaseUnit).toBe("case"); expect(ui.vendorSkus).toHaveLength(2);
   expect(mongoItemToPgBody(ui,"berts").vendor_skus[0].available).toBe(false);
 });
+
+test.each([true, false])("changing available supplier pack retains stored count conversion (native %s)", native => {
+  load(native);
+  const ui = pgItemToMongoItem({ ...item, basePerCountUnit: 80, countUnit: "count-case", vendorSkus: [
+    { ...item.vendorSkus[0], preferred: true, available: false, basePerPurchaseUnit: 80 },
+    { ...item.vendorSkus[0], id: "new", vendorSku: "NEW", preferred: false, available: true, packCount: 8, basePerPurchaseUnit: 40 }
+  ] }, "berts");
+  const saved = mongoItemToPgBody({ ...ui, portionSize: 8 }, "berts");
+  expect(saved.base_per_count_unit).toBe(80); expect(saved.count_unit).toBe("count-case"); expect(saved.base_unit).toBe("lb");
+  expect(saved.vendor_skus.map(sku => sku.base_per_purchase_unit)).toEqual([80, 40]);
+});

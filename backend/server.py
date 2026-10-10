@@ -5,7 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 from typing import Optional, List, Annotated, Any
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from pathlib import Path
 import os, json, math, re, uuid, logging, ipaddress, io, base64, hashlib, hmac, secrets, time, asyncio
@@ -18,12 +18,15 @@ from pymongo.errors import DuplicateKeyError
 import asyncpg
 import anthropic
 import db_pg
+import db_auxiliary
 import catalog_mapping
 import menu_contract
 import order_commands
 import supplier_contacts
 import prep_planning
 import prep_day_tasks
+import manual_forecasts
+import ai_storage
 from menu_contract import DishIn, DishLineIn
 try:
     from pywebpush import webpush, WebPushException
@@ -597,7 +600,7 @@ def _pg_user_row(row):
 
 async def _pg_insert_user(user):
     try:
-        await db_pg.pool().execute(
+        await db_auxiliary.pool().execute(
             "INSERT INTO app_users (id, email, password_hash, role, locations) VALUES ($1,$2,$3,$4,$5)",
             user["id"], user["email"], user["passwordHash"], user["role"], user["locations"])
     except asyncpg.UniqueViolationError:
@@ -607,7 +610,7 @@ async def _pg_insert_user(user):
 async def auth_bootstrap(body: BootstrapIn):
     if not BOOTSTRAP_TOKEN or not hmac.compare_digest(body.bootstrapToken, BOOTSTRAP_TOKEN):
         raise HTTPException(403, "Invalid bootstrap token")
-    existing = (await db_pg.pool().fetchval("SELECT count(*) FROM app_users")) if USE_PG else await db.users.count_documents({})
+    existing = (await db_auxiliary.pool().fetchval("SELECT count(*) FROM app_users")) if USE_PG else await db.users.count_documents({})
     if existing:
         raise HTTPException(409, "Bootstrap has already been completed")
     if body.role != "owner" or not body.email.strip() or len(body.password) < 12:
@@ -625,7 +628,7 @@ async def auth_bootstrap(body: BootstrapIn):
 async def auth_login(body: LoginIn):
     email = body.email.strip().lower()
     if USE_PG:
-        row = await db_pg.pool().fetchrow("SELECT * FROM app_users WHERE email=$1", email)
+        row = await db_auxiliary.pool().fetchrow("SELECT * FROM app_users WHERE email=$1", email)
         user = _pg_user_row(row) if row else None
     else:
         user = await db.users.find_one({"email": email})
@@ -655,7 +658,7 @@ class PasswordIn(BaseModel):
 async def auth_list_users(request: Request):
     _require_owner(request)
     if USE_PG:
-        rows = await db_pg.pool().fetch("SELECT id, email, role, locations, created_at FROM app_users ORDER BY email")
+        rows = await db_auxiliary.pool().fetch("SELECT id, email, role, locations, created_at FROM app_users ORDER BY email")
         return [{"id": r["id"], "email": r["email"], "role": r["role"], "locations": list(r["locations"] or []),
                  "createdAt": r["created_at"].isoformat() if r["created_at"] else None} for r in rows]
     docs = await db.users.find({}, {"_id": 0, "passwordHash": 0}).sort("email", 1).to_list(1000)
@@ -668,7 +671,7 @@ async def auth_reset_password(user_id: str, body: PasswordIn, request: Request):
         raise HTTPException(400, "Password must be at least 12 characters")
     pw_hash = _password_hash(body.password)
     if USE_PG:
-        found = await db_pg.pool().fetchval("UPDATE app_users SET password_hash=$2 WHERE id=$1 RETURNING id", user_id, pw_hash)
+        found = await db_auxiliary.pool().fetchval("UPDATE app_users SET password_hash=$2 WHERE id=$1 RETURNING id", user_id, pw_hash)
     else:
         found = (await db.users.update_one({"id": user_id}, {"$set": {"passwordHash": pw_hash}})).matched_count
     if not found:
@@ -681,7 +684,7 @@ async def auth_delete_user(user_id: str, request: Request):
     if user_id == actor.get("sub"):
         raise HTTPException(400, "You can't remove your own account")
     if USE_PG:
-        found = await db_pg.pool().fetchval("DELETE FROM app_users WHERE id=$1 RETURNING id", user_id)
+        found = await db_auxiliary.pool().fetchval("DELETE FROM app_users WHERE id=$1 RETURNING id", user_id)
     else:
         found = (await db.users.delete_one({"id": user_id})).deleted_count
     if not found:
@@ -741,6 +744,7 @@ async def _pg_replace_adjustments(rid, rows, conn=None):
     conn = conn or await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await legacy_shared_state.hold_write(conn, 'adjustments')
             await conn.execute("DELETE FROM adjustments WHERE store_id=$1", store_id)
             # item_code links to the catalog when the item still exists; control_number is the source of truth.
             await conn.executemany(
@@ -756,7 +760,7 @@ async def _pg_list_adjustments(rid):
     rows = await db_pg.pool().fetch("SELECT * FROM adjustments WHERE store_id=$1 ORDER BY date, created_at",
                                     RESTAURANT_TO_PG_STORE.get(rid, rid))
     return [{"id": r["ref"], "date": r["date"].isoformat(), "controlNumber": r["control_number"], "reason": r["reason"],
-             "qtyBasis": r["qty_basis"], "qty": f(r["qty"]), "note": r["note"] or "",
+             "qtyBasis": r["qty_basis"], "qty": purchase_api.serial(r["qty"]), "note": r["note"] or "",
              "createdAt": _ts_out(r["created_at"])} for r in rows]
 
 def _pg_period_rows(rid, payload):
@@ -781,6 +785,7 @@ async def _pg_replace_reporting_periods(rid, rows, conn=None):
     conn = conn or await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await legacy_shared_state.hold_write(conn, 'reportingPeriods')
             await conn.execute("DELETE FROM reporting_periods WHERE store_id=$1", store_id)
             await conn.executemany(
                 """INSERT INTO reporting_periods (store_id, ref, name, period_start, period_end, status, dish_sales,
@@ -816,6 +821,13 @@ async def get_state(rid: str):
         state["adjustments"] = await _pg_list_adjustments(rid)
         state["reportingPeriods"] = await _pg_list_reporting_periods(rid)
         state.update(await _pg_get_store_state(rid))
+        async with db_pg.pool().acquire() as conn:
+            status = await legacy_shared_state.capabilities(conn)
+        state['legacyStateCapabilities'] = status
+        state['legacyStateBasis'] = {
+            'adjustments': legacy_shared_state.basis(status['adjustmentsAvailable'], 'legacy_adjustments'),
+            'reportingPeriods': legacy_shared_state.basis(status['reportingPeriodsAvailable'], 'legacy_reporting_periods'),
+        }
         return state
     await ensure_seed(rid)
     state = {}
@@ -875,10 +887,11 @@ async def put_collection(rid: str, collection: str, payload: List[Any], request:
         if collection not in _PG_REPLACERS:
             # items/purchases/dishes have their own /api/pg/* writers; nothing may land in Mongo.
             raise HTTPException(400, f"{collection} is saved through /api/pg in Postgres mode")
-        rows = _PG_REPLACERS[collection][0](rid, payload)  # validate before bumping the revision
         conn = await db_pg.pool().acquire()
         try:
             async with conn.transaction():
+                await legacy_shared_state.hold_write(conn, collection)
+                rows = _PG_REPLACERS[collection][0](rid, payload)  # validate before bumping the revision
                 revision = await _check_and_bump_revision(rid, request, conn)
                 await _PG_REPLACERS[collection][1](rid, rows, conn)
         finally:
@@ -1483,15 +1496,10 @@ async def delete_override(rid: str, oid: str):
     return {"ok": True}
 
 # ---------------- Projected sales ----------------
-class ProjectionIn(BaseModel):
-    date: str
-    amount: float = 0
-    note: str = ""
-    enteredBy: str = ""
+ProjectionIn = manual_forecasts.ForecastIn
 
 def _pg_projection_doc(rid, r):
-    return {"date": r["date"].isoformat(), "amount": f(r["amount"]), "note": r["note"], "enteredBy": r["entered_by"],
-            "restaurantId": rid, "updatedAt": _ts_out(r["updated_at"])}
+    return manual_forecasts.document(rid,r)
 
 async def _projections_for(rid, limit=200):
     """Newest first. Postgres: store_sales_projections, one row per store and date."""
@@ -1507,23 +1515,22 @@ async def get_projections(rid: str):
     check_rid(rid)
     return await _projections_for(rid, 60)
 
+@api_router.get("/projections/{rid}/review")
+async def review_projection(rid: str, date: date):
+    check_rid(rid)
+    if not USE_PG:raise HTTPException(503,'Reviewed forecasts require PostgreSQL mode')
+    return await manual_forecasts.review(db_pg.pool(),rid,RESTAURANT_TO_PG_STORE.get(rid,rid),date)
+
 @api_router.put("/projections/{rid}")
-async def put_projection(rid: str, body: ProjectionIn):
+async def put_projection(rid: str, body: ProjectionIn, request: Request):
     check_rid(rid)
     if USE_PG:
-        try:
-            day = _pg_date(body.date)
-        except ValueError:
-            day = None
-        if not day:
-            raise HTTPException(400, "date must be YYYY-MM-DD")
-        await db_pg.pool().execute(
-            """INSERT INTO store_sales_projections (store_id, date, amount, note, entered_by) VALUES ($1, $2, $3, $4, $5)
-               ON CONFLICT (store_id, date) DO UPDATE SET amount=$3, note=$4, entered_by=$5, updated_at=now()""",
-            RESTAURANT_TO_PG_STORE.get(rid, rid), day, body.amount, body.note, body.enteredBy)
-        return {"ok": True}
-    await db.projected_sales.update_one({"restaurantId": rid, "date": body.date},
-        {"$set": {**body.model_dump(), "restaurantId": rid, "updatedAt": _now_iso()}}, upsert=True)
+        user=_require_manager(request)
+        actor=user.get('sub')
+        if not isinstance(actor,str) or not actor:raise HTTPException(403,'Signed manager identity required')
+        return await manual_forecasts.save(db_pg.pool(),rid,RESTAURANT_TO_PG_STORE.get(rid,rid),body,request.headers.get('if-match'),actor)
+    await db.projected_sales.update_one({"restaurantId": rid, "date": str(body.date)},
+        {"$set": {**body.model_dump(mode='json'), "restaurantId": rid, "updatedAt": _now_iso()}}, upsert=True)
     return {"ok": True}
 
 # ---------------- Staff PIN & prep sheet ----------------
@@ -2025,6 +2032,8 @@ async def _pg_prep_report_sources(rid, frm, to):
     start, end = _pg_date(frm), _pg_date(to)
     conn = await db_pg.pool().acquire()
     try:
+        from legacy_prep_views import hold_report
+        await hold_report(conn)
         session_rows = await conn.fetch(
             """SELECT * FROM count_sessions WHERE store_id=$1 AND count_date BETWEEN $2 AND $3
                ORDER BY count_date LIMIT 500""", store_id, start, end)
@@ -2098,6 +2107,12 @@ async def owner_prep_summary():
         stores = []
         conn = await db_pg.pool().acquire()
         try:
+            from legacy_prep_views import reporting_retired, unavailable
+            if await reporting_retired(conn):
+                return {**unavailable(), 'stores': [
+                    {**{k: r[k] for k in ('id', 'short', 'accent')},
+                     'countStatus': 'unavailable', 'tasksTotal': None,
+                     'tasksDone': None, 'prepCost7d': None} for r in RESTAURANTS]}
             for r in RESTAURANTS:
                 store_id = RESTAURANT_TO_PG_STORE[r["id"]]
                 session = await conn.fetchrow(
@@ -2200,7 +2215,6 @@ PAR_ADVISOR_SCHEMA = {
 @api_router.post("/ai/par-advisor/{rid}")
 async def run_par_advisor(rid: str):
     check_rid(rid)
-    client = _ai()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).date().isoformat()
     if USE_PG:
         sessions, logs, recipes, _ = await _pg_prep_report_sources(rid, cutoff, _today())
@@ -2208,6 +2222,7 @@ async def run_par_advisor(rid: str):
         recipes = await _prep_recipes(rid)
         sessions = await db.prep_count_sessions.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(200)
         logs = await db.prep_logs.find({"restaurantId": rid, "date": {"$gte": cutoff}}, {"_id": 0}).to_list(500)
+    client = _ai()
     if not recipes:
         raise HTTPException(400, "No prep recipes yet")
     projections = await _projections_for(rid)
@@ -2296,6 +2311,8 @@ async def apply_par_rec(rid: str, rec_id: str):
         conn = await db_pg.pool().acquire()
         try:
             async with conn.transaction():
+                from legacy_prep_views import hold_report
+                await hold_report(conn)
                 rec = await conn.fetchrow(
                     "SELECT recipe_id, recommended_par FROM par_recommendations WHERE store_id=$1 AND id=$2 FOR UPDATE",
                     store_id, rec_id)
@@ -2413,8 +2430,8 @@ async def store_summary(r):
                           "price": price, "pct": round(pct, 1) if pct is not None else None,
                           "target": f(d.get("targetPct"), 30)})
     pcts = [x["pct"] for x in dish_rows if x["pct"] is not None]
-    stock_by_recipe = {s["recipeId"]: s for s in prep_stock}
-    prep_low = sum(1 for d in dishes if d.get("recipeType") == "prep" and f(d.get("prepPar")) > 0
+    stock_by_recipe = {s["recipeId"]: s for s in (prep_stock or [])}
+    prep_low = None if prep_stock is None else sum(1 for d in dishes if d.get("recipeType") == "prep" and f(d.get("prepPar")) > 0
                    and f((stock_by_recipe.get(d["id"]) or {}).get("onHand")) < f(d.get("prepPar")))
     return {**r, "inventoryValue": native_summary['inventoryValue'] if native_summary else round(inv_value, 2), "orderAlerts": alerts, "spend30": spend30,
             "nativeInventory": native_summary,
@@ -2475,7 +2492,9 @@ def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock, nat
     if menu_lines:
         lines.append("MENU COSTING: " + " | ".join(menu_lines[:40]))
     preps = [d for d in dishes if d.get("recipeType") == "prep"]
-    if preps:
+    if prep_stock is None:
+        lines.append('TRACK 2: legacy prep on-hand is unavailable after cutover. Do not infer zero stock, prep shortfalls or consumption from retained legacy records. Use reviewed prep counts, production and period reports.')
+    elif preps:
         stock_map = {s["recipeId"]: s for s in prep_stock}
         lines.append("PREP INVENTORY: " + "; ".join(
             f"{p.get('name','')} on-hand {f((stock_map.get(p['id']) or {}).get('onHand')):g} {p.get('yieldUOM','')} (par {f(p.get('prepPar')):g}, {p.get('frequency','daily')}, yield {f(p.get('yieldQty')):g} {p.get('yieldUOM','')}/batch, shelf life {p.get('shelfLife','n/a')})"
@@ -2499,7 +2518,7 @@ async def _chat_history(rid, limit, oldest_first=False):
     oldest_first, the first `limit` messages ever (matching the history screen's query)."""
     if USE_PG:
         rows = await db_pg.pool().fetch(
-            f"SELECT role, content, ts FROM ai_chat_messages WHERE store_id=$1 ORDER BY ts {'ASC' if oldest_first else 'DESC'} LIMIT {int(limit)}",
+            f"SELECT role, content, ts FROM ai_chat_messages WHERE store_id=$1 ORDER BY ts {'ASC' if oldest_first else 'DESC'},id {'ASC' if oldest_first else 'DESC'} LIMIT {int(limit)}",
             RESTAURANT_TO_PG_STORE.get(rid, rid))
         msgs = [{"restaurantId": rid, "role": r["role"], "content": r["content"], "ts": _ts_out(r["ts"])} for r in rows]
     else:
@@ -2520,6 +2539,8 @@ async def ai_chat(body: ChatIn, request: Request):
     user = _decode_token(token)
     if user and user.get("role") != "owner" and body.restaurantId not in user.get("locations", []):
         raise HTTPException(403, "Location access denied")
+    if USE_PG:
+        await ai_storage.require(db_pg.pool(),RESTAURANT_TO_PG_STORE.get(body.restaurantId,body.restaurantId),'chatAvailable')
     client = _ai()
     rid = body.restaurantId
     await ensure_seed(rid)
@@ -2577,12 +2598,20 @@ async def ai_chat(body: ChatIn, request: Request):
 @api_router.get("/ai/history/{rid}")
 async def ai_history(rid: str):
     check_rid(rid)
+    if USE_PG:await ai_storage.require(db_pg.pool(),RESTAURANT_TO_PG_STORE.get(rid,rid),'historyAvailable')
     return await _chat_history(rid, 100, oldest_first=True)
+
+@api_router.get("/ai/capabilities/{rid}")
+async def ai_capabilities(rid: str):
+    check_rid(rid)
+    if USE_PG:return await ai_storage.capabilities(db_pg.pool(),RESTAURANT_TO_PG_STORE.get(rid,rid))
+    return {'storeId':RESTAURANT_TO_PG_STORE.get(rid,rid),'basis':'ai_conversation_storage','historyAvailable':True,'chatAvailable':True,'clearAvailable':True,'accounting':False}
 
 @api_router.delete("/ai/history/{rid}")
 async def ai_clear(rid: str):
     check_rid(rid)
     if USE_PG:
+        await ai_storage.require(db_pg.pool(),RESTAURANT_TO_PG_STORE.get(rid,rid),'clearAvailable')
         await db_pg.pool().execute("DELETE FROM ai_chat_messages WHERE store_id=$1", RESTAURANT_TO_PG_STORE.get(rid, rid))
     else:
         await db.chat_messages.delete_many({"restaurantId": rid})
@@ -3619,6 +3648,11 @@ class ItemIn(BaseModel):
     needs_review: bool = False
     vendor_skus: List[VendorSkuIn] = []
 
+class ItemChanges(BaseModel):
+    model_config = {"extra": "forbid"}
+    upserts: List[ItemIn] = Field(default_factory=list, max_length=10000)
+    retire_codes: List[str] = Field(default_factory=list, max_length=10000)
+
 async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None, *, catalog_checked=False, shared_meta=None):
     if not catalog_checked:
         await catalog_mapping.reject_legacy_schema(conn)
@@ -3854,6 +3888,34 @@ async def pg_create_item(store_id: str, body: ItemIn, request: Request):
             revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
             result = await _pg_save_item(conn, store_id, body)
             return {**result, "revision": revision}
+    finally:
+        await db_pg.pool().release(conn)
+
+@pg_router.post("/items/{store_id}/changes")
+async def pg_change_items(store_id: str, body: ItemChanges, request: Request):
+    check_store_id(store_id)
+    actor = _purchase_actor(request, store_id, True)
+    if request.headers.get("If-Match") is None:
+        raise HTTPException(428, "Item changes require the reviewed location revision (If-Match)")
+    codes = [item.code for item in body.upserts]
+    retired = body.retire_codes
+    if (len(codes) != len(set(codes)) or len(retired) != len(set(retired))
+            or set(codes) & set(retired) or any(not code.strip() for code in codes + retired)):
+        raise HTTPException(422, "Submit unique item codes; an item cannot be edited and retired together")
+    conn = await db_pg.pool().acquire()
+    try:
+        async with conn.transaction():
+            await catalog_mapping.lock_catalog(conn)
+            await conn.execute("SELECT set_config('jmax.price_actor',$1,true)", actor)
+            revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
+            linked = await conn.fetch("SELECT item_code FROM store_items WHERE store_id=$1 FOR UPDATE", store_id)
+            if not set(retired).issubset({row["item_code"] for row in linked}):
+                raise HTTPException(422, "Retire only items linked to this location")
+            for item in body.upserts:
+                await _pg_save_item(conn, store_id, item)
+            for code in retired:
+                await _pg_delete_item_in_conn(conn, store_id, code)
+        return {"ok": True, "revision": revision}
     finally:
         await db_pg.pool().release(conn)
 
@@ -4240,6 +4302,9 @@ def _pg_log_to_api(row):
             "createdAt": row["created_at"].isoformat() if row["created_at"] else None}
 
 async def _pg_prep_stock_list(conn, store_id):
+    from legacy_prep_views import stock_retired
+    if await stock_retired(conn):
+        return None
     rows = await conn.fetch(
         """SELECT prs.dish_id, prs.prep_item_id, prs.on_hand, prs.containers,
                   COALESCE(d.name, pi.name) AS name, COALESCE(d.yield_uom, pi.container) AS yield_uom
@@ -4257,10 +4322,15 @@ async def pg_prep_state(store_id: str):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
+        from legacy_prep_views import stock_retired, unavailable, capabilities
+        prep_capabilities = await capabilities(conn)
+        if await stock_retired(conn):
+            return {'prepStock': None, 'prepLogs': None, 'prepReadStatus': unavailable(), 'prepCapabilities': prep_capabilities}
         logs = await conn.fetch(
             "SELECT * FROM prep_logs WHERE store_id=$1 ORDER BY created_at DESC LIMIT 20000", store_id)
         return {"prepStock": await _pg_prep_stock_list(conn, store_id),
-               "prepLogs": [_pg_log_to_api(row) for row in logs]}
+               "prepLogs": [_pg_log_to_api(row) for row in logs],
+               'prepReadStatus': {'available': True, 'basis': 'legacy_prep'}, 'prepCapabilities': prep_capabilities}
     finally:
         await db_pg.pool().release(conn)
 
@@ -4500,6 +4570,7 @@ async def _pg_get_or_create_session(conn, store_id, date, track):
 @pg_router.get("/prepcount/{store_id}/session")
 async def pg_get_count_session(store_id: str, date: str = Query(""), track: str = Query("daily")):
     check_store_id(store_id)
+    if track not in TRACK_TO_COUNT_TYPE: raise HTTPException(422, 'Select daily or bulk prep')
     conn = await db_pg.pool().acquire()
     try:
         return await _pg_get_or_create_session(conn, store_id, date or _pg_today(), track)
@@ -4562,12 +4633,15 @@ async def pg_submit_count(store_id: str, sid: str, body: dict):
         await db_pg.pool().release(conn)
 
 @pg_router.get("/prepcount/{store_id}/history")
-async def pg_count_history(store_id: str):
+async def pg_count_history(store_id: str, archive: bool = False):
     check_store_id(store_id)
-    rows = await db_pg.pool().fetch("SELECT * FROM count_sessions WHERE store_id=$1 ORDER BY count_date DESC LIMIT 60", store_id)
+    from legacy_prep_views import counts_retired, hold_read, archive_basis
+    hold_read(await counts_retired(db_pg.pool()), archive, 'counts')
+    rows = await db_pg.pool().fetch("SELECT * FROM count_sessions WHERE store_id=$1 AND count_type=ANY($2::text[]) ORDER BY count_date DESC LIMIT 60", store_id, list(TRACK_TO_COUNT_TYPE.values()))
     return [{"id": str(r["id"]), "date": r["count_date"].isoformat(), "track": COUNT_TYPE_TO_TRACK.get(r["count_type"], "daily"),
              "status": r["status"], "countedBy": r["counted_by_name"] or "",
-             "submittedAt": r["submitted_at"].isoformat() if r["submitted_at"] else None} for r in rows]
+             "submittedAt": r["submitted_at"].isoformat() if r["submitted_at"] else None,
+             **(archive_basis() if archive else {})} for r in rows]
 
 # ---------------- Prep lists (Postgres) ----------------
 async def _pg_prep_list_to_api(conn, plist):
@@ -4596,14 +4670,17 @@ async def _pg_prep_list_to_api(conn, plist):
     }
 
 @pg_router.get("/preplists/{store_id}")
-async def pg_get_prep_list(store_id: str, date: str = Query(""), track: str = Query("daily")):
+async def pg_get_prep_list(store_id: str, date: str = Query(""), track: str = Query("daily"), archive: bool = False):
     check_store_id(store_id)
+    if track not in TRACK_TO_COUNT_TYPE: raise HTTPException(422, 'Select daily or bulk prep')
     count_type = TRACK_TO_COUNT_TYPE.get(track, "nightly_prep")
     conn = await db_pg.pool().acquire()
     try:
+        from legacy_prep_views import lists_retired, hold_read, archive_basis
+        hold_read(await lists_retired(conn), archive, 'lists')
         plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE store_id=$1 AND prep_date=$2 AND count_type=$3",
                                      store_id, _pg_date(date or _pg_today()), count_type)
-        return {"list": await _pg_prep_list_to_api(conn, plist) if plist else None}
+        return {"list": await _pg_prep_list_to_api(conn, plist) if plist else None, **(archive_basis() if archive else {})}
     finally:
         await db_pg.pool().release(conn)
 
@@ -5016,15 +5093,17 @@ def _pg_override_to_api(row):
             "note": row["note"] or "", "createdBy": row["created_by"] or ""}
 
 @pg_router.get("/prep-overrides/{store_id}")
-async def pg_list_overrides(store_id: str, date: str = Query("")):
+async def pg_list_overrides(store_id: str, date: str = Query(""), archive: bool = False):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
+        from legacy_prep_views import lists_retired, hold_read, archive_basis
+        hold_read(await lists_retired(conn), archive, 'day overrides')
         if date:
             rows = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 AND date=$2 ORDER BY date DESC", store_id, _pg_date(date))
         else:
             rows = await conn.fetch("SELECT * FROM prep_overrides WHERE store_id=$1 ORDER BY date DESC LIMIT 500", store_id)
-        return [_pg_override_to_api(r) for r in rows]
+        return [{**_pg_override_to_api(r), **(archive_basis() if archive else {})} for r in rows]
     finally:
         await db_pg.pool().release(conn)
 
@@ -5121,12 +5200,12 @@ async def pg_create_staff_member(store_id: str, body: PgStaffMemberIn, request: 
     _require_manager(request)
     name = _pg_validate_staff_member(body)
     row = await db_pg.pool().fetchrow(
-        "INSERT INTO staff_members (store_id, name, role, active) VALUES ($1,$2,$3,TRUE) RETURNING *",
-        store_id, name, body.role)
+        "INSERT INTO staff_members (store_id, name, role, active) VALUES ($1,$2,$3,$4) RETURNING *",
+        store_id, name, body.role, body.active)
     return _pg_staff_member_to_api(row)
 
 @pg_router.put("/staff/{store_id}/members/{staff_id}")
-async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemberIn, request: Request):
+async def pg_update_staff_member(store_id: str, staff_id: uuid.UUID, body: PgStaffMemberIn, request: Request):
     check_store_id(store_id)
     _require_manager(request)
     name = _pg_validate_staff_member(body)
@@ -5138,12 +5217,12 @@ async def pg_update_staff_member(store_id: str, staff_id: str, body: PgStaffMemb
     return _pg_staff_member_to_api(row)
 
 @pg_router.delete("/staff/{store_id}/members/{staff_id}")
-async def pg_delete_staff_member(store_id: str, staff_id: str, request: Request):
+async def pg_delete_staff_member(store_id: str, staff_id: uuid.UUID, request: Request):
     check_store_id(store_id)
     _require_manager(request)
     async with db_pg.pool().acquire() as conn:
         if await conn.fetchval("SELECT to_regclass('prep_inventory.task_assignments') IS NOT NULL"):
-            if await conn.fetchval('SELECT 1 FROM prep_inventory.task_assignments WHERE staff_member_id=$1 AND store_id=$2', uuid.UUID(staff_id),store_id):
+            if await conn.fetchval('SELECT 1 FROM prep_inventory.task_assignments WHERE staff_member_id=$1 AND store_id=$2', staff_id,store_id):
                 raise HTTPException(409, 'This roster identity has assignment history. Set it inactive to retain that history.')
     try:
         await db_pg.pool().execute("DELETE FROM staff_members WHERE id=$1 AND store_id=$2", staff_id, store_id)
@@ -5385,7 +5464,7 @@ class PgStaffTaskIn(BaseModel):
     note: str = ""
 
 def _pg_staff_task_to_api(row):
-    return {"id": str(row["id"]), "taskType": row["task_type"], "title": row["title"],
+    return {"id": str(row["id"]), "storeId": row["store_id"], "taskType": row["task_type"], "title": row["title"],
             "dueDate": row["due_date"].isoformat(), "recurrence": row["recurrence"],
             "assignedTo": row["assigned_to"] or "", "track": row["track"], "note": row["note"] or "",
             "status": row["status"], "completedBy": row["completed_by"] or "",
@@ -5395,7 +5474,7 @@ def _pg_staff_task_to_api(row):
 async def _pg_notify_new_staff_task(store_id, task):
     if not PUSH_ENABLED:
         return
-    subs = await db_pg.pool().fetch("SELECT endpoint, keys FROM push_subscriptions WHERE store_id=$1", store_id)
+    subs = await db_auxiliary.pool().fetch("SELECT endpoint, keys FROM push_subscriptions WHERE store_id=$1", store_id)
     if not subs:
         return
     label = "Count" if task.get("taskType") == "count" else "Prep"
@@ -5415,14 +5494,18 @@ async def _pg_notify_new_staff_task(store_id, task):
         except Exception:
             logger.exception("web push delivery error")
     for endpoint in stale:
-        await db_pg.pool().execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, endpoint)
+        await db_auxiliary.pool().execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, endpoint)
 
 @pg_router.get("/staff-tasks/{store_id}")
-async def pg_list_staff_tasks(store_id: str, request: Request):
+async def pg_list_staff_tasks(store_id: str, request: Request, archive: bool = False):
     check_store_id(store_id)
     _require_manager(request)
-    rows = await db_pg.pool().fetch("SELECT * FROM staff_tasks WHERE store_id=$1 ORDER BY due_date DESC", store_id)
-    return [_pg_staff_task_to_api(r) for r in rows]
+    import legacy_staff_tasks as legacy
+    async with db_pg.pool().acquire() as conn:
+        legacy.hold_read(await legacy.retired(conn), archive)
+        rows = await conn.fetch("SELECT * FROM staff_tasks WHERE store_id=$1 ORDER BY due_date DESC,id", store_id)
+    basis = legacy.archive_basis() if archive else {}
+    return [{**_pg_staff_task_to_api(r), **basis} for r in rows]
 
 @pg_router.post("/staff-tasks/{store_id}")
 async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Request):
@@ -5432,11 +5515,14 @@ async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Requ
     if body.recurrence not in ("once", "daily", "weekly"):
         raise HTTPException(400, "recurrence must be once, daily, or weekly")
     user = _require_manager(request)
-    row = await db_pg.pool().fetchrow(
-        """INSERT INTO staff_tasks (store_id, task_type, title, due_date, recurrence, assigned_to, track, note, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
-        store_id, body.taskType, body.title, _pg_date(body.dueDate), body.recurrence, body.assignedTo, body.track, body.note,
-        (user or {}).get("email", ""))
+    from legacy_staff_tasks import hold_write
+    async with db_pg.pool().acquire() as conn:
+        await hold_write(conn)
+        row = await conn.fetchrow(
+            """INSERT INTO staff_tasks (store_id, task_type, title, due_date, recurrence, assigned_to, track, note, created_by)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
+            store_id, body.taskType, body.title, _pg_date(body.dueDate), body.recurrence, body.assignedTo, body.track, body.note,
+            (user or {}).get("email", ""))
     task = _pg_staff_task_to_api(row)
     await _pg_notify_new_staff_task(store_id, task)
     return task
@@ -5445,11 +5531,15 @@ async def pg_create_staff_task(store_id: str, body: PgStaffTaskIn, request: Requ
 async def pg_delete_staff_task(store_id: str, task_id: str, request: Request):
     check_store_id(store_id)
     _require_manager(request)
-    await db_pg.pool().execute("DELETE FROM staff_tasks WHERE id=$1 AND store_id=$2", task_id, store_id)
+    from legacy_staff_tasks import hold_write
+    async with db_pg.pool().acquire() as conn:
+        await hold_write(conn)
+        await conn.execute("DELETE FROM staff_tasks WHERE id=$1 AND store_id=$2", task_id, store_id)
     return {"ok": True}
 
 @pg_router.post("/staff/{store_id}/tasks")
 async def pg_staff_task_inbox(store_id: str, body: PgPinBodyIn, request: Request):
+    import legacy_staff_tasks as legacy
     check_store_id(store_id)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
@@ -5457,6 +5547,7 @@ async def pg_staff_task_inbox(store_id: str, body: PgPinBodyIn, request: Request
     try:
         if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
             raise HTTPException(403, "Invalid PIN")
+        legacy.hold_read(await legacy.retired(conn))
         today = _pg_today()
         rows = await conn.fetch(
             "SELECT * FROM staff_tasks WHERE store_id=$1 AND status='pending' AND due_date<=$2 ORDER BY due_date",
@@ -5471,6 +5562,7 @@ class PgStaffTaskCompleteIn(BaseModel):
 
 @pg_router.post("/staff/{store_id}/tasks/{task_id}/complete")
 async def pg_staff_task_complete(store_id: str, task_id: str, body: PgStaffTaskCompleteIn, request: Request):
+    from legacy_staff_tasks import hold_write
     check_store_id(store_id)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
@@ -5481,6 +5573,7 @@ async def pg_staff_task_complete(store_id: str, task_id: str, body: PgStaffTaskC
     try:
         if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
             raise HTTPException(403, "Invalid PIN")
+        await hold_write(conn)
         async with conn.transaction():
             task = await conn.fetchrow("SELECT * FROM staff_tasks WHERE id=$1 AND store_id=$2 FOR UPDATE", task_id, store_id)
             if not task:
@@ -5522,19 +5615,18 @@ async def pg_push_subscribe(store_id: str, body: PgPushSubscriptionIn, request: 
     check_store_id(store_id)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    conn = await db_pg.pool().acquire()
-    try:
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
-            raise HTTPException(403, "Invalid PIN")
-        if not body.endpoint or not body.keys.get("p256dh") or not body.keys.get("auth"):
-            raise HTTPException(400, "Invalid push subscription")
+    if not user:
+        async with db_pg.pool().acquire() as conn:
+            if body.pin != await _pg_get_staff_pin(conn, store_id):
+                raise HTTPException(403, "Invalid PIN")
+    if not body.endpoint or not body.keys.get("p256dh") or not body.keys.get("auth"):
+        raise HTTPException(400, "Invalid push subscription")
+    async with db_auxiliary.pool().acquire() as conn:
         await conn.execute(
             """INSERT INTO push_subscriptions (store_id, endpoint, keys) VALUES ($1,$2,$3)
                ON CONFLICT (endpoint) DO UPDATE SET store_id=$1, keys=$3""",
             store_id, body.endpoint, body.keys)
         return {"ok": True}
-    finally:
-        await db_pg.pool().release(conn)
 
 class PgPushUnsubscribeIn(BaseModel):
     pin: str = ""
@@ -5545,17 +5637,19 @@ async def pg_push_unsubscribe(store_id: str, body: PgPushUnsubscribeIn, request:
     check_store_id(store_id)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    conn = await db_pg.pool().acquire()
-    try:
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
-            raise HTTPException(403, "Invalid PIN")
+    if not user:
+        async with db_pg.pool().acquire() as conn:
+            if body.pin != await _pg_get_staff_pin(conn, store_id):
+                raise HTTPException(403, "Invalid PIN")
+    async with db_auxiliary.pool().acquire() as conn:
         await conn.execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, body.endpoint)
         return {"ok": True}
-    finally:
-        await db_pg.pool().release(conn)
 
 app.include_router(api_router)
 app.include_router(pg_router)
+import prep_list_archive
+import legacy_shared_state
+app.include_router(prep_list_archive.create_router(db_pg.pool, check_store_id, _require_manager, lambda: USE_PG))
 
 # Purchase authorization is explicit even when development disables blanket auth.
 import purchase_api
@@ -5619,9 +5713,12 @@ async def startup_pg_pool():
     if not USE_PG:
         await db.state_versions.create_index("restaurantId", unique=True)
     await db_pg.init_pool()
+    if USE_PG:
+        await db_auxiliary.init_pool()
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
     if client is not None:
         client.close()
+    await db_auxiliary.close_pool()
     await db_pg.close_pool()

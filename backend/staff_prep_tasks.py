@@ -84,7 +84,9 @@ async def preview(conn, store, day, track, body):
     progress = next((p for p in e['task_progress'] if p['task_id'] == str(body.task_id)), None)
     if not progress: raise HTTPException(503, 'Assignments require native task progress')
     if progress['closed'] or progress['needs_review']: raise HTTPException(409, 'Finished or changed production must be reviewed before assignment')
-    prior = next(a['current'] for a in s['assignments'] if a['task_id'] == str(body.task_id))
+    assignment = next((a for a in s['assignments'] if a['task_id'] == str(body.task_id)), None)
+    if assignment is None: raise HTTPException(409, 'Task assignment state is incomplete. Refresh and review the current plan.')
+    prior = assignment['current']
     if body.expected_revision != (prior['revision'] if prior else 0): raise HTTPException(409, 'Assignment changed; refresh and review the retained draft')
     member = next((m for m in s['members'] if m['id'] == str(body.staff_member_id) and m['active']), None)
     if body.staff_member_id and not member: raise HTTPException(422, 'Choose active roster staff at this location')

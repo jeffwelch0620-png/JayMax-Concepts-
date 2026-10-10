@@ -1,5 +1,700 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Claude follow-up corrections - October 10, 2026
+
+The [focused correction review](docs/CLAUDE_PR14_17_FOLLOWUP.md) preserves stored
+physical count and supplier conversions, sends only changed item definitions
+and explicit retirements, and reconciles confirmed saves after location changes
+without clearing newer drafts. Missing prep progress and assignment records are
+held for review. Initial location-load failures now show a retry and diagnosis.
+
+[Repeatable review checks](docs/REVIEW_TESTING.md), the checked
+[migration apply order](migrations/APPLY_ORDER.md), and a matched
+[native testing feature profile](docs/BUILD_TEST_FEATURE_PROFILE.md) are included.
+The feature profile is preparation, not verification of the live Render flags.
+Frontend and backend for the partial-item route must be deployed together.
+Current Supabase connections and private credentials remain unchanged; paid
+IPv4 and connection changes are deferred. PRs remain draft and unmerged.
+
+Validation for this correction: **211 selected backend tests and 323 subtests**,
+**504 frontend tests across 62 suites in each of three configurations**, a passing
+optimized build, and **24 selected disposable PostgreSQL cases plus 7 subtests**.
+No selected checks were skipped. Two existing frontend hook warnings remain.
+Local database/role inventory and the protected 40-path continuation were preserved.
+
+## Current stack review and test-deployment merge path - October 9, 2026
+
+The corrected PR14–16 stack and its local continuation now have combined source
+acceptance: **205 backend tests with 309 subtests**, **494 frontend tests across
+61 suites in each of three configurations**, a passing optimized build, and
+**19 distinct disposable PostgreSQL acceptance cases**. These checks preserve
+received-date purchases, explicit count values and Track 1 independence through
+prep/waste corrections and whole recovery. Two existing frontend hook warnings
+remain. Initial fixture/runner failures are retained alongside the passing repeats.
+
+The [current merge checklist](docs/MERGE_READINESS_CHECKLIST.md) separates this
+code-only build/test review from operational release. The owner confirmed Render
+automatically deploys the repository, is unused, and contains no operational data.
+An authorized merge will refresh that test deployment. Startup does not apply
+migrations; the designated hosted build database's existing native installation
+remains recorded in its checkpoint. Live Render flags were not inspected here.
+
+Review order is **PR14 → PR15 → PR16 → the deployment/recovery continuation**,
+retargeting and checking each dependent PR after its predecessor merges. Prefer
+merge commits to preserve the reviewed stack. Publication of this continuation
+is a draft PR; no merge or manual deployment is part of this checkpoint.
+Authentication redesign, broader history/paging review, future modules and
+operational recovery/credential-promotion gates remain separate tracked work.
+Earlier local-only and merge-hold statements below describe their original
+snapshots; this checklist governs the current build/test merge recommendation.
+
+## Persistent supervisor checkpoints and client handoff review - October 9, 2026
+
+Independent recovery checkpoints now survive supervising-process exits in a
+separate metadata store. Conflicting writers and journal/checkpoint gaps hold
+progress. The client handoff contract requires exact instance/source/revision
+declarations and both database/pooler capacity measurements; declarations alone
+never authorize promotion. **21 tests and 61 subtests pass.**
+
+The [supervisor and handoff checkpoint](docs/LOCAL_SUPERVISOR_HANDOFF_CHECKPOINT.md)
+records the process trials, credential-storage contract and remaining encrypted
+credential/live-client/combined recovery requirements. PostgreSQL remains the
+application data source; this store contains recovery metadata, no business data or
+credentials. **Local only; no push, hosted change, merge or deployment.**
+
+## Independent process recovery and populated accounting trial - October 9, 2026
+
+The local recovery adapter now requires an independently pinned archive and
+latest journal checkpoint, validates stage history before connecting, and uses
+a fresh catalog to distinguish committed, rolled-back and ambiguous outcomes.
+Verification through actual pools must be repeated after a process restart.
+The [process recovery checkpoint](docs/LOCAL_INSTALL_PROCESS_RECOVERY_CHECKPOINT.md)
+records the preserved $55.00 Food Cost result with $40.00 net food purchases,
+genuine worker exits and remaining recovery/release limits. Eleven tests and 32
+subtests pass, including the populated PostgreSQL case and exact cleanup.
+This is local work; Supabase and active
+configuration remain unchanged. **No push, merge or deployment.**
+
+## Local installer and failure-recovery rehearsal - October 9, 2026
+
+The guarded disposable installer now journals intent and expected catalog digests
+before commit, holds uncertain outcomes for fresh-connection reconciliation, and
+checks exact return to the original inventory/account connections before disabling
+replacement test roles. It does not change Supabase or active configuration.
+
+The [local installer checkpoint](docs/LOCAL_PARALLEL_INSTALL_CHECKPOINT.md) records
+failure/cancellation, missing commit acknowledgement, catalog drift, pool cleanup
+and local data/access preservation coverage. Validation passes: 41 cases and 110
+subtests, including two real PostgreSQL cases and exact fixture/server cleanup.
+Native accounting tables are empty in this fixture; a nonempty Food Cost report
+regression remains required. The next requirement is recovery
+from a separately restarted process with independently archived baseline pins.
+Hosted capacity/client registration, secure credential staging and combined
+recovery remain held. **Local only; no push, merge or deployment.**
+
+## Explicit paired pool preparation and installer plan - October 9, 2026
+
+Both actual pool constructors now support an independently verified, immutable
+client revision with per-physical-connection identity and permission checks.
+The paired preparer returns both owned pools or cleans up its partial attempt;
+it never promotes pools or changes active configuration. Defaults remain intact.
+The review-only installer plan renders the exact profile grants, 66 policy
+additions/restorations, capacity holds and ordered rollback without password SQL
+or an apply entrypoint. Inventory's catalog-reference receipt label is corrected.
+
+Validation passes: 36 tests and 93 subtests, including both actual constructors,
+physical reconnects and an original-singleton return on disposable PostgreSQL.
+Fresh hosted checks pass for both unchanged original profiles/default pools and
+metadata preservation. Pooler capacity and registered client count remain unmeasured.
+
+The [paired startup and installer checkpoint](docs/PAIRED_STARTUP_INSTALL_PLAN_CHECKPOINT.md)
+records what is implemented and the remaining local installer/journal rehearsal,
+hosted pooler-capacity, client-registration and promotion gates. **Combined recovery,
+merge and active-cutover gates remain held.** No hosted accounts or policies change;
+local only, no push or deployment.
+
+## Default-strict transition permission checker - October 9, 2026
+
+The local diagnostic checker permits only independently recorded, same-profile
+original/replacement role pairs. All effective privilege and inventory catalog
+checks remain in place. Account policies now receive exact per-verb/cohort checks,
+including rejection of extra PUBLIC/restrictive policies. Actual application
+startup retains singleton policies and has no overlap environment toggle.
+
+Validation passes: 29 tests and 91 subtests, including real disposable PostgreSQL
+policy/privilege regressions. Both unchanged hosted credentials pass their
+read-only default permission profiles; role/policy/membership metadata is preserved.
+
+The [transition permission checkpoint](docs/TRANSITION_PERMISSION_CHECKPOINT.md)
+documents record provenance, exact administrative membership pins, the tests and
+remaining installer/startup/client-registry work. No hosted role, credential,
+grant, policy or application configuration changes occur here. **Combined recovery,
+merge and active-cutover gates remain held.** Local only; no push or deployment.
+
+## Parallel-account rotation review and current pooler checks - October 9, 2026
+
+Read-only review passes for both current permission profiles and all six original
+session-pooler connection samples. Six direct connection samples time out; DNS
+resolves the direct endpoint to IPv6 and the pooler to IPv4. All 58 inventory and
+8 account policies match the reviewed contract, and role/policy/membership
+metadata is unchanged. No credentials, roles, grants, policies or settings changed.
+
+The [parallel rotation review](docs/PARALLEL_ROTATION_REVIEW_CHECKPOINT.md) recommends
+keeping the current port-5432 pooler and private credentials while preparing
+replacement accounts beside them. It identifies the strict singleton-policy
+verifier prerequisite and the staged grant/policy/client/retirement process.
+The review planner emits no SQL. Five guards and 20 subtests pass.
+
+Follow-up: the [transition checker](docs/TRANSITION_PERMISSION_CHECKPOINT.md) now
+implements the diagnostic prerequisite; journaled installation and explicit
+startup/client integration remain to be prepared. **Combined rotation/recovery,
+merge and active-cutover gates remain held.** Local only; no push or deployment.
+
+## Combined rehearsal held; original pooled access and data verified - October 9, 2026
+
+Temporary credentials authenticated, old passwords were rejected, both actual
+application pools reconnected, and both controlled NOLOGIN comparisons passed.
+The complete rehearsal then held on password-authentication/recovery verification.
+Separate read-only checks verify both original application credentials, rejection
+of temporary passwords and preservation of all 120 table/sequence fingerprints,
+13 catalog groups, Track 1, the complete ledger and original role attributes.
+Direct connections later timed out; the application session-pooler path is verified.
+
+Original private configuration remains current. Temporary credentials are inactive.
+Fifty-eight guards and 101 subtests pass. The
+[combined rehearsal checkpoint](docs/COMBINED_ROTATION_REHEARSAL_CHECKPOINT.md)
+preserves the held attempt, separate recovery evidence, exact hosted source and
+locally tested recovery refinements. No further password rotations were run.
+
+Next: review parallel new-role rotation and direct-path reliability before another
+credential mutation, then finish the deployment/PR checklist. **Keep merges and
+active cutover held.** Local only; nothing pushed, merged or deployed.
+
+## Corroborated pooler denial verified for both roles - October 9, 2026
+
+The controlled accounts and inventory comparisons pass under the new versioned
+denial contract. Each exact role was confirmed NOLOGIN, rejected fresh direct
+access, and rejected both fresh pooler requests after closing only its verified
+owned test connection. The exact provider lookup response qualifies only with
+independent witnesses; arbitrary internal errors remain held. The native-only
+strict-pass flags and historical held receipts retain their original meaning.
+
+Both unchanged original credentials and LOGINs are restored. All 120 table/sequence
+fingerprints, 13 catalog groups, Track 1, the complete ledger and original role
+attributes are preserved. Thirty-four guards and 73 subtests pass. The
+[corroborated denial checkpoint](docs/CORROBORATED_POOLER_DENIAL_CHECKPOINT.md)
+records the measured results, acceptance contract and limits.
+
+Next: integrate this narrow qualification into the combined credential rotation,
+pool-reconnect and recovery probe, then verify that workflow separately.
+**Continue holding merges and active cutover.** Local only; no push or deployment.
+
+## Controlled pooler drain and recovered hold - October 9, 2026
+
+The owner confirmed inventory NOLOGIN, direct PostgreSQL returned the known 28000
+denial, and only the verified owned pooler test connection was closed. Both fresh
+pooler attempts then rejected access with the specific EAUTHQUERY lookup error.
+The strict native-denial guard held; the accounts-role disable was not run.
+LOGIN and unchanged original credentials are recovered on both paths, and all
+120 table/sequence fingerprints, 13 catalog groups, Track 1, the complete ledger
+and role attributes are preserved. Twenty-three guards and 18 subtests pass.
+
+The [controlled drain checkpoint](docs/OWNED_POOLER_DRAIN_CHECKPOINT.md) records
+the initial setup/data-comparison holds and the final recovered evidence.
+Next: review the independently corroborated provider-denial contract and prove
+the accounts-role case before changing combined rotation/recovery handling.
+**Continue holding merges and active cutover.** Local only; no push or deployment.
+
+## Verified owned-connection signal rehearsal - October 9, 2026
+
+The owner successfully closed one newly created read-only test connection for
+each retained build account. Both backends disappeared and unchanged original
+credentials reconnected. No existing application connection was targeted.
+Ten guard tests and 15 subtests pass. A separate read-only reconciliation verifies
+original application records, Track 1, the complete ledger, catalog/access and
+role attributes against the preserved recovered baseline.
+
+The [signal checkpoint](docs/OWNED_SESSION_SIGNAL_CHECKPOINT.md) retains the
+interrupted journal as held and records its passing reconciliation separately.
+Next: compare a disabled login after draining only its explicitly owned pooler
+test connection. Actual pooled-login retirement and the combined recovery
+checkpoint remain unverified. **Continue holding merges and active cutover.**
+This checkpoint is local only; nothing was pushed, merged or deployed.
+
+## Verified encrypted application backup and local restore - October 9, 2026
+
+The manual hosted export and isolated local restore pass: all 8,335 records, 120
+table/sequence fingerprints and 13 catalog groups match across six application
+and migration schemas. Thirty migration-file hashes are captured. Hosted data
+and the baseline are preserved, restored access boundaries pass, and the disposable
+database/role stubs were cleaned up. Ten local backup guards pass.
+
+See the [backup verification checkpoint](docs/HOSTED_BACKUP_VERIFICATION_CHECKPOINT.md)
+and [manual recovery workflow](docs/HOSTED_TO_LOCAL_BACKUP_WORKFLOW.md). Data and
+the separate encryption key remain private. This verifies application-scope
+recovery; managed services, credential retirement and remaining release checks
+are still pending. Backups are not scheduled. **Merges and active cutover remain
+held.** This checkpoint is local only; nothing was pushed, merged or deployed.
+
+## Verified TLS and hosted-to-local recovery plan - October 9, 2026
+
+Both reviewed application pools now require certificate and hostname verification
+for remote PostgreSQL, use conservative two-connection caps, and safely hold failed
+connections. Fifteen local tests and both hosted read-only pool checks pass. The
+session pooler on 5432 remains the connection plan; no paid IPv4 add-on, credential
+change, private configuration activation or deployment occurred.
+
+The [TLS checkpoint](docs/TLS_AND_LOCAL_BACKUP_CHECKPOINT.md) records the evidence
+and corrects the earlier pooler/backend SSL measurement. The
+[local recovery workflow](docs/HOSTED_TO_LOCAL_BACKUP_WORKFLOW.md) covers all three
+inventory tracks, original source fields, integration data and migration history.
+The application export/restore subsequently passed, as recorded above.
+**Merges and active cutover remain held** on the separate credential
+retirement/recovery and release gates. This checkpoint is local only.
+
+## Isolated LOGIN revocation hold - October 9, 2026
+
+The owner confirmed inventory NOLOGIN and direct PostgreSQL rejected a fresh
+client, but the session pooler accepted a fresh client as that role after 15
+seconds. The role was restored immediately and both original accounts reconnected
+on both paths. The test stopped before disabling the account role. Passwords,
+business data, application settings and the strict combined probe are unchanged.
+Four local classification guards pass. See the
+[isolated comparison checkpoint](docs/ISOLATED_LOGIN_COMPARISON_CHECKPOINT.md).
+**Continue holding merges and active cutover.** Review the intended direct/pooler
+connection and exact-role retirement behavior before another combined rotation.
+
+## Read-only pooler diagnosis - October 9, 2026
+
+Both original retained LOGINs authenticate directly to PostgreSQL over IPv6.
+The hosted pooler log identifies an EAUTHQUERY lookup failure during the held
+disable interval, but its detail does not identify the role. The
+[diagnostic checkpoint](docs/POOLER_DIAGNOSIS_CHECKPOINT.md) distinguishes observed
+evidence from the likely lookup mechanism and specifies an isolated comparison
+before another password rotation. No application connection path, credential,
+role or business data changed. **Continue holding merges and active cutover.**
+
+## Credential rotation checks and recovered hold - October 9, 2026
+
+Replacement credential authentication, rejection of both old credentials and
+reconnection of both pools passed. The combined hosted LOGIN-disable check held
+on internal pooler errors, including its bounded retry. Both original passwords
+and LOGIN ability were restored; fresh original-file connections and the full
+application/native, Track 1, ledger, catalog/access and role baseline passed.
+Replacement files remain inactive, and eight local guards pass.
+
+The [credential recovery checkpoint](docs/BUILD_CREDENTIAL_RECOVERY_CHECKPOINT.md)
+records all recovered holds and the isolated inventory authorization-denial test.
+Next: read-only pooler-log/direct-connection diagnosis before another rotation.
+Account-role disable and later checks remain unrun. **Continue holding merges**;
+active application settings, schema/migrations and application routing are unchanged.
+
+
+## Enabled hosted workflows with retained LOGINs - October 9, 2026
+
+Selected account, manual-forecast and prep workflows now pass through the retained
+inventory/account connections. Prep submission/acceptance retries create exactly
+one measured batch; explicit completion and replay through a fresh connection
+pass. Account cleanup, exact forecast cents, stale-save rejection and forecast
+rollback pass. Six local probe guards also pass.
+
+Independent verification preserves all global Track 1 rows, the complete ledger,
+prior prep history and other locations' state rows. Only exact labelled new prep
+records and the test location's revision/update time are allowed; its stable
+fields are preserved. The [retained LOGIN workflow checkpoint](docs/RETAINED_LOGIN_WORKFLOW_CHECKPOINT.md)
+records passing evidence and all reconciled probe holds. Active configuration,
+application routing, schema/migrations and the permission matrix remain unchanged.
+**Continue holding merges.** Next: credential rotation/reconnect and recovery,
+then remaining browser, deployment and sequential PR checks.
+
+
+## Retained build connections in private local configuration - October 9, 2026
+
+Two retained build LOGINs and their reviewed grants/policies are now provisioned.
+Their connection file is staged outside Git in an access-restricted local folder.
+Eight simultaneous authenticated clients pass the inventory/account assessments
+and deny prohibited cross-boundary reads; four local provisioning guards pass.
+Independent verification confirms pre-existing permissions/policies and the
+catalog, migration ledger and observed counts are preserved. No business rows
+are written, and active application settings/feature flags are unchanged.
+
+The [private build connection checkpoint](docs/PRIVATE_BUILD_CONNECTIONS_CHECKPOINT.md)
+records safe evidence, the retained initial ACL-check hold and the next controlled
+workflow/rotation/recovery steps. Credentials and owner configuration are excluded
+from shared review artifacts. The inventory matrix, application routing/pools,
+catalog references and all 29 migration hashes remain unchanged. **Continue
+holding merges** until enabled-workflow, recovery and remaining deployment checks
+are completed.
+
+## Hosted two-pool verification - October 9, 2026
+
+The hosted build trial passes with **16 authenticated clients** across two fresh
+rounds of simultaneous inventory and account/notification pools. Both permission
+assessments pass and prohibited cross-boundary reads are denied. Independent
+verification confirms temporary roles/grants/policies are removed and the
+catalog, effective object permissions, policies, migration ledger and observed
+row counts match the starting snapshot. Three target-guard tests also pass.
+
+The [hosted two-pool checkpoint](docs/HOSTED_TWO_POOL_CHECKPOINT.md) records the
+passing evidence and an earlier interrupted attempt with verified recovery.
+No business writes, permanent credentials or saved application configuration
+changes occur. The next credential step will use private local configuration
+for continued build/testing. **Continue holding merges** for permanent connection
+and workflow validation, recovery, browser/Data API and sequential PR checks.
+
+## Separate account/notification connection - October 9, 2026
+
+The backend now supports an optional separately restricted connection for
+accounts and push subscriptions in the same PostgreSQL database. Inventory
+and staff PIN queries retain the primary pool. Seven connection unit tests,
+two existing account compatibility tests and both local tests with independent
+restricted LOGIN pools pass. Account/push changes leave native accounting
+records and the physical-count Food Cost report unchanged; five excess-access
+variants are rejected. External push delivery is mocked.
+
+Configure both connection URLs before replacing the owner connection with the
+restricted inventory role. When explicitly configured, an invalid or unavailable
+auxiliary connection is held without falling back to inventory access. See the
+[auxiliary connection checkpoint](docs/AUXILIARY_CONNECTION_CHECKPOINT.md) for
+permissions, retained failures, test evidence and rollout limits. All 29 migration
+hashes and both catalog/permission references remain unchanged. This checkpoint
+is committed locally; saved credentials and hosted configuration are unchanged.
+**Continue holding merges** pending hosted two-role validation, permanent
+credentials/recovery and the remaining deployment checks.
+
+## Restricted LOGIN workflows and permanent connection plan - October 8, 2026
+
+**26 selected backend workflows pass through ordinary restricted database LOGIN**,
+with seven passing subtests; four static safeguards and five tampering subtests
+also pass. Each workflow checks five clients in a newly created pool. Wrong
+passwords and attempts to assume the database owner are rejected. The disposable
+local server's original authentication file is restored and the server stops.
+Older retained test databases/roles remain intact; this run leaves no extra ones.
+
+The saved owner connection cannot yet be replaced directly: account and push
+queries currently share the inventory pool, but their tables are deliberately
+excluded from its permission profile. The prepared recommendation is a separate,
+narrow backend connection to those tables in the same PostgreSQL database.
+See the [connection/workflow checkpoint](docs/RUNTIME_CONNECTION_WORKFLOW_CHECKPOINT.md)
+for the exact coverage, access map, tradeoffs and remaining checks. The inventory
+matrix, both catalog references and all 29 migration hashes remain unchanged.
+No permanent credential, hosted data/configuration change, push or merge occurs
+in this checkpoint. **Continue holding merges.**
+
+## Hosted catalog and ordinary database login - October 8, 2026
+
+The hosted catalog now matches an independent reconstruction from the retained
+pre-native schema-only export and exact 29-file migration chain. Its extra Toast
+groundwork and legacy price-history table are preserved. The original local
+94-function/123-relation reference remains unchanged; a separately pinned hosted
+variant contains 96 functions and 127 relations and requires explicit selection.
+
+Three static checks and both local catalog-reader/nonowner assessments pass.
+The hosted LOGIN/pool trial also passes: ten independently authenticated clients
+across two fresh pools, with a complete restricted-role permission assessment.
+The temporary roles and their grants are removed; an independent read-only check
+confirms cleanup and the unchanged hosted catalog. Trial and cleanup
+evidence are recorded in the
+[hosted runtime checkpoint](docs/HOSTED_RUNTIME_LOGIN_CHECKPOINT.md). This work
+does not deploy a permanent runtime account or change the app's connection,
+feature flags, invoice data or integration activity. **Continue holding merges**
+for the remaining workflow, browser/Data API, managed recovery, configuration
+and sequential PR checks. Older sections preserve earlier checkpoint results.
+
+## Forecast and AI history review - October 8, 2026
+
+**Seven selected backend checks and all 494 frontend tests pass** across 61
+frontend suites. Production compilation passes with existing warnings. Passing
+case selection, retained failures and the interrupted broad test attempt are
+recorded in the checkpoint notes.
+
+Manual forecast saves now require a reviewed store/date version, preserve exact
+amounts and reject stale replacements. Forecast dollars remain planning data;
+they do not post purchases, physical usage or Food Cost. The editor retains drafts
+on failed/unconfirmed saves and after navigation.
+
+The proposed runtime role can read retained AI history but cannot insert or clear
+it. The drawer shows that boundary, reports failed reads honestly, keeps history
+after failed clears, and ignores late responses from another location. Storage
+availability is checked before unavailable chat requests reach a provider.
+
+The local matrix adds forecast SELECT/INSERT/UPDATE and AI-history SELECT only.
+All 29 migration hashes, 94 function contracts, 123 relation contracts and the
+protected original continuation remain intact. See the
+[forecast/AI checkpoint](docs/FORECAST_AI_READINESS_CHECKPOINT.md) for the exact
+concurrency, storage, compatibility and validation boundaries.
+
+This checkpoint remains local. **Continue holding merges** until the approved
+hosted catalog, ordinary LOGIN/pool, browser/Data API, managed recovery, matched
+feature configuration and sequential PR stack checks are complete. No hosted
+grant, invoice import, AI provider request, push or merge occurs in this step.
+Older sections retain prior checkpoint evidence.
+
+## Shared-state cutover and retained periods - October 8, 2026
+
+**Five selected backend checks and all 481 frontend tests pass** across 60
+frontend suites. The production build passes with existing warnings.
+The proposed role can now load retained adjustments through
+SELECT-only access. Legacy adjustment and reporting-period replacement is held
+after native cutover, including owner connections with flags off, preserving
+historical periods referenced by purchase guards. No historical data is remapped.
+
+Server capabilities keep legacy adjustment editing, period closing, old accounting
+views and incomplete app backup/restore unavailable after installed inventory cutover.
+Explicitly retired prep balances load as unknown; malformed or unlabeled responses
+remain held. Analytical sales
+drafts and area settings remain editable with revision checks. Tested physical
+reports and all eight accounting fact fingerprints remain unchanged.
+
+Only the local permission matrix changes: add adjustment SELECT, without DML.
+All 29 migration hashes, 94 function contracts, 123 relation contracts and the
+protected original 40-path continuation remain intact. Read the
+[shared-state checkpoint](docs/SHARED_STATE_CUTOVER_CHECKPOINT.md) for exact
+boundaries, selected passing evidence, retained failures and remaining route gaps.
+
+No Supabase query/grant change, real invoice import, flag-file change, push, merge
+or publication occurred. Forecast/AI-history and minimum-grant review, hosted
+catalog/LOGIN/pool testing, browser/Data API, managed recovery and matched flags
+remain open. **Continue holding merges.** Older sections preserve earlier evidence.
+
+## Unclassified prep-list history - October 8, 2026
+
+**Four selected backend checks and all 469 frontend tests pass** across 57
+frontend suites. The production build passes with existing warnings. A separate
+read-only Prep History view preserves every stored
+header/line field and exact decimal strings. Missing track values remain
+Unclassified; other recorded count types remain distinct. No current recipe/price
+joins or historical-to-current assignments are introduced. Tested Track 1 reports
+and all eight accounting fact fingerprints remain unchanged.
+
+No permissions or schema constraints change: all 29 migration hashes, 94 function
+contracts, 123 relation contracts and the protected original 40-path continuation
+remain intact. See the [prep-list history checkpoint](docs/PREP_LIST_ARCHIVE_CHECKPOINT.md)
+for filtering, pagination, retained failed attempts, validation and limitations.
+This closes the unclassified archive-access item recorded below.
+
+No Supabase change, real invoice import, flag-file change, push, merge or
+publication occurred. Remaining route/minimum-grant review, approved hosted catalog
+reconciliation and runtime LOGIN/pool testing, browser/Data API, managed recovery
+and matched flags remain open. **Continue holding merges.** Older sections retain
+their checkpoint-specific evidence.
+
+## Employee task cutover and archive permissions - October 8, 2026
+
+**Thirteen selected backend checks and all 460 frontend tests pass** across
+55 frontend suites. The production build passes with two existing hook warnings
+and a Node deprecation warning. The old text-assigned count/prep queue now becomes
+read-only history after native staff cutover, even with feature flags off.
+Manager archive reads preserve entered names without inferring roster identities;
+staff use reviewed count sheets and prep task plans for current work.
+
+The local permission candidate adds SELECT only on `public.staff_tasks` and
+`public.prep_lists`, and removes prep-item INSERT. UPDATE remains for native
+SHARE locks; the retained-metadata trigger rejects DML. Failed task requests no
+longer appear as confirmed empty queues, and late responses cannot replace another
+location's tasks. Track 1 reports and accounting facts remain unchanged.
+
+All 29 migration hashes, 94 function contracts, 123 relation contracts and the
+protected original 40-path continuation are preserved. Read the
+[task cutover checkpoint](docs/RUNTIME_TASK_CUTOVER_CHECKPOINT.md) for exact grants,
+successful evidence, retained test-fixture failures and source helper references.
+At that checkpoint unclassified legacy prep lists still needed archive-access
+review. The subsequent prep-list history checkpoint above closes that item while
+preserving NULL track values.
+
+No Supabase query/grant change, real invoice import, flag-file change, push, merge
+or publication occurred. Remaining route/minimum-grant review, hosted catalog
+reconciliation and ordinary runtime LOGIN/pool validation, browser/Data API,
+managed recovery and matched flags remain open. **Continue holding merges.**
+Older sections below preserve earlier checkpoints.
+
+## Manager workflows and retained history - October 8, 2026
+
+**Twenty-two selected local checks pass**: eight manager workflow cases, seven
+profile/fixture/verifier cases and seven inventory regressions.
+Roster creation now honors `active=false`, and
+malformed roster IDs are held by UUID validation. Candidate permissions add four
+history-table reads and DELETE on unused recipe/roster definitions; native journal
+deletion remains denied.
+
+Manager tests cover all seven retained recipe-reference types, stale/concurrent
+edits, late-failure rollback, store-specific supplier prices and item retirement,
+roster history, and assignment/deletion races. Tested reports and accounting facts
+remain unchanged: Track 1 is independent of prep and sales. The 94 function and
+123 relation contracts, all 29 migration hashes and protected original 40-path
+continuation remain intact. Read the
+[manager checkpoint](docs/RUNTIME_MANAGER_WORKFLOW_CHECKPOINT.md) for the exact
+permission delta, evidence, retained failures and limits.
+
+This is a local candidate; unused privileges and remaining routes still need
+review. Hosted catalog reconciliation and actual runtime LOGIN/pool behavior,
+browser/Data API exposure, managed recovery and matched deployment flags remain
+open. No Supabase permissions changed; no push, merge or publication occurred.
+**Continue holding merges.** Older sections below are historical checkpoints.
+
+## Read-only runtime permissions and drift checks - October 8, 2026
+
+**Fourteen selected local checks pass**: six permission-verifier cases, seven
+inventory workflows and one fixture-safety check. Preserved legacy planning,
+count, container, day-list and supplier-contact captures now receive SELECT only;
+reviewed mappings still create separate resolution records. Track 1 accounting
+remains independent of prep and sales.
+
+The read-only verifier compares effective privileges, column ACLs, role
+memberships, grant options, ownership and backend RLS policies with the candidate.
+Its independently installed reference pins **94 exact function contracts** and
+**123 relation fingerprints**, including constraints, triggers, columns and RLS.
+Strict checks caught SQL line-ending normalization in older fixtures; the runtime
+tests now preserve the reviewed SQL bytes. Read the
+[verifier checkpoint](docs/RUNTIME_PERMISSION_VERIFIER_CHECKPOINT.md) for the
+matrix changes, evidence, retained diagnostics and limits.
+
+This remains a local candidate. Other manager routes, unused grants and the
+hosted catalog/runtime LOGIN need review before a hosted permissions trial.
+Browser/Data API, managed recovery and matched deployment flags remain separate
+gates. No Supabase permissions changed; no push, merge or publication occurred.
+**Continue holding merges.** Older sections below are historical checkpoints.
+
+## Nonowner runtime workflow candidate - October 8, 2026
+
+**Seven selected local workflow cases passed** using a role with no ownership,
+superuser, RLS bypass, database/role creation, private journal deletion or DDL
+authority. The checks cover physical invoice/count corrections and period replay,
+staff count/production review, order receiving/independence, supplier price/contact
+history, paired waste corrections and saved prep analytics/reopening.
+
+The candidate names individual objects across **78 native tables and seven views**.
+Tests identified specific row-lock UPDATE rights and read-only access to existing
+reporting periods; immutable invoice/count rewrites remain rejected. Read the
+[runtime workflow checkpoint](docs/RUNTIME_PERMISSION_WORKFLOW_CHECKPOINT.md)
+for the grant matrix, held diagnostics and evidence limits. This remains a local
+candidate: unused rights, other routes and a read-only grants verifier still need
+review before a hosted role trial. No Supabase permissions changed. No push,
+merge or publication occurred; **continue holding merges**. Older sections below
+are historical checkpoints.
+
+## Hosted staff assignment and production - October 8, 2026
+
+The retained synthetic hosted workflow now covers reviewed task assignment,
+pending staff production, independent partial acceptance and a separate explicit
+task finish. Original-key replay through a new pool retains one accepted batch
+and the current completed task. Exact output **2.000000000001** survives;
+all eight fixture Track 1 fact sets and the **$55 Food Cost** report remain intact.
+All original **40-table projections** and **54 migration records** still match.
+
+The hosted run reached its time budget after acceptance. Independent read-only
+reconciliation proved the committed partial state and preserved all **41 physical
+accounting/purchasing table fingerprints**. Completion resumed that same task;
+the held attempt remains separately recorded. Read the
+[production checkpoint](docs/HOSTED_STAFF_PRODUCTION_CHECKPOINT.md) for the evidence.
+
+**Three selected local regression cases pass**, including a nonowner role with no
+RLS bypass, ownership, DDL or journal-delete authority. The local prototype exposed
+a roster row-lock policy requirement; Supabase grants were not changed. The
+[runtime permission assessment](docs/RUNTIME_ROLE_PERMISSION_ASSESSMENT.md) explains
+its scope and remaining design work. Hosted runtime-role, browser/Data API and
+full managed recovery checks remain open. This continuation is local/unpublished;
+keep holding merges. Earlier sections below are historical checkpoints.
+
+## Hosted staff count and independent review - October 8, 2026
+
+The staff prep-count workflow passed against the designated hosted build database
+through the actual FastAPI routes and middleware, using synthetic signed identities.
+Concurrent submission/approval retries and replay through a completely new pool
+retained one measured revision and one accepted observation. Blank quantities,
+stale requests, changed same-key bodies, unauthorized locations and self-approval
+were held. Exact quantities survived; Track 1 Food Cost remained **$55**.
+
+The checks caught and fixed a staff-response gap: reviewer and definition-author
+audit identities now remain private in nested staff receipts. Stored manager audit
+facts and review hashes remain unchanged. **Seven selected local regression cases
+passed**, covering counts, task history, production history and response projection.
+All original **40-table projections** and **54 migration records** still match;
+20 synthetic activity-log rows and the invented count history remain as evidence.
+
+Read the [staff review checkpoint](docs/HOSTED_STAFF_REVIEW_CHECKPOINT.md) for
+evidence and the next work. This verifies locally executed app routes connected
+to hosted PostgreSQL; deployed browser, login and ordinary backend-role readiness
+remain open. Browser control failed before the Supabase dashboard could be read.
+The current connection is the privileged `postgres` owner role; no grants changed.
+This continuation remains local/unpublished. **PR14–16 remain draft/unmerged**;
+continue holding merges until the remaining checks and continuation PR review.
+Earlier sections below are historical checkpoints.
+
+## Durable native Supabase installation - October 8, 2026
+
+The owner-designated build database now has the **29 native migrations committed**,
+verified through a fresh connection. Original values in **40 existing tables**
+and all **25 historical migration records** were preserved. New delivery records
+contain hashes matching the SQL actually executed; no historical replay or repair
+was used. The pre-install private application backup restored locally with all
+40 table fingerprints matching.
+
+The committed hosted workflow also passed concurrent purchase/prep retries and
+replay after closing/reopening the pool. Track 1 Food Cost remained **$55** through
+prep, container waste and sales-context changes. Original records were preserved;
+clearly labelled invented test locations remain as audit evidence. A new private
+snapshot backup includes the installed schemas and all **54 migration records**.
+That backup restored locally with all **118 application tables** and all 54
+migration-record fingerprints matching. Full managed platform recovery remains open.
+
+Read the [durable hosted checkpoint](docs/HOSTED_NATIVE_INSTALL_CHECKPOINT.md) for
+the held first attempt, independent rollback reconciliation, committed retry,
+connection diagnostics and remaining validation. This continuation is local and
+unpublished. **PR14–16 remain draft/unmerged**, and GitHub currently reports no
+checks on those branches; retained local evidence is separate from hosted CI.
+Staff/runtime, browser/Data API and full managed recovery remain open. Application
+flags and app publication are unchanged. Earlier sections describe their own
+historical checkpoints, including the rollback-only state before installation.
+
+## Hosted rollback trial - October 8, 2026
+
+The existing connected Supabase project, explicitly designated by its owner as
+a build/test database, passed the **29-migration hosted rollback trial** and
+invented purchase/count/prep/container-waste API workflow. Explicit Track 1
+Food Cost remained **$55** through prep and sales-context activity. PFG/US Foods
+capture retained unknown fields and multiline bytes; posting used the received
+date and separated taxes/fees.
+
+After rollback, all **40 existing application/integration tables**, schema,
+permissions and migration identities matched their original fingerprints.
+No native schema or temporary location remains. A fresh application backup is
+preserved privately. **20 selected local checks pass.** Read the
+[hosted checkpoint](docs/HOSTED_ROLLBACK_TRIAL_CHECKPOINT.md) for evidence and
+limits: durable installation, separate-connection workflows, managed restore
+and browser/Data API validation remain pending. No app flags, push, merge or
+publication changed. Older checkpoints below remain historical evidence.
+
+## Local cutover/correction reconciliation - October 8, 2026
+
+The preserved legacy retirement and correction-review workflows now build on the
+latest integrity and deployment fixes. **19 distinct selected backend cases** pass,
+including the combined restaurant day and whole SQL restore. Both frontend modes
+pass **454 tests / 54 suites**. Track 1 stays unchanged while prep activity explains
+usage; old ledgers remain retired after installed cutover even with flags off.
+The production build passes with the same three existing hook warnings.
+
+Read [the current cutover checkpoint](docs/CUTOVER_RECONCILIATION_CHECKPOINT.md) for
+coverage, the corrected independent-counter fixture and remaining integration work.
+This is local work, not pushed or deployed. The original continuation is preserved;
+PR14-16 remain draft and unmerged. Earlier checkpoint text below is retained history.
+
+## Local deployment reconciliation - October 8, 2026
+
+The separate deployment branch reconciles the latest PR16 corrections with the
+preserved readiness tooling, for a complete 29-migration native bundle with final
+access hardening last. **14 selected local checks pass**, including whole SQL
+restore and purchased-inventory transaction/replay checks under an ordinary
+database-owning role without superuser or RLS-bypass privileges.
+
+Read the [deployment reconciliation checkpoint](docs/DEPLOYMENT_RECONCILIATION_CHECKPOINT.md)
+and [readiness process](docs/SUPABASE_DEPLOYMENT_READINESS.md) for the exact scope,
+role model and remaining hosted checks. Example files select PostgreSQL with all
+native features false. Actual environments and compiled frontend flags remain
+unchanged. This local slice is not pushed; PR14-16 remain draft and unmerged.
+The remaining 40-file continuation is preserved separately for reconciliation.
+Earlier checkpoint text below records the state at its publication.
+
 The October 7 correction pass is documented in
 [`docs/PR_REVIEW_CORRECTIONS.md`](docs/PR_REVIEW_CORRECTIONS.md). It records save/retry,
 session-expiry, catalog batching, supplier selection, targeted recipe saves,

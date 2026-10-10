@@ -7,6 +7,9 @@ from staff_response import staff_view
 class StaffResponseTests(unittest.TestCase):
     def test_history_review_nested_identity_projection_preserves_facts_and_hashes(self):
         source = {'sheet': {'issued_by': 'manager@example.invalid', 'id': 'sheet'},
+                  'decision': {'reviewed_by': 'reviewer@example.invalid',
+                               'review_snapshot': {'definition': {'confirmed_by': 'owner@example.invalid',
+                                                                 'created_by': 'creator@example.invalid'}}},
                   'history': [{'submitted_by': 'staff@example.invalid',
                                'review_snapshot': {'sources': {'assignment': {'recorded_by': 'other@example.invalid'}},
                                                    'submitted_by': 'staff@example.invalid',

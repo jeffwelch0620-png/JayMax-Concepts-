@@ -4,7 +4,16 @@ import { Plus, Trash2 } from "lucide-react";
 import { ADJUSTMENT_REASONS, adjustmentReason, adjustmentValue, todayISO, fmtDate, fmtMoney, num, uid } from "../lib/calc";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc } from "./common";
 
-export function AdjustmentsTab({ rid, drafts, items, adjustments, persist, showToast, showError = () => {} }) {
+export function AdjustmentsTab(props) {
+  if (props.readOnly) return <section role="status" data-testid="retained-adjustments">
+    <PageTitle>Historical Adjustments</PageTitle>
+    <p>{props.adjustments?.length || 0} historical adjustment records are retained. Use reviewed prep waste workflows for measured waste. Physical inventory counts and received purchases determine actual Food Cost independently.</p>
+    <p>Historical adjustments cannot be added, deleted or valued using today's recipe prices here.</p>
+  </section>;
+  return <EditableAdjustmentsTab {...props} />;
+}
+
+function EditableAdjustmentsTab({ rid, drafts, items, adjustments, persist, showToast, showError = () => {} }) {
   const orderItems = useMemo(() => [...items].sort((a, b) => (a.storageArea || "").localeCompare(b.storageArea || "") || (a.name || "").localeCompare(b.name || "")), [items]);
   const [form, setForm, clearForm] = useRetainedDraft(`adjustment:${rid}`, { date: todayISO(), controlNumber: orderItems[0]?.controlNumber || "", reason: "waste", qtyBasis: "purchase", qty: "", note: "" }, drafts);
   const [error, setError] = useState("");

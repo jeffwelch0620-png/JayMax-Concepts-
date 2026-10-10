@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import unittest
+from tempfile import TemporaryDirectory
 from uuid import UUID,uuid4
 from unittest.mock import patch
 
@@ -23,6 +24,18 @@ EVIDENCE=Path(os.getenv('NATIVE_BACKUP_EVIDENCE',str(counts.native.ROOT.parent/'
 
 
 class BackupSafetyTests(unittest.TestCase):
+    def test_validated_sql_preserves_literal_crlf_and_internal_psql_like_text(self):
+        sql = "SELECT 'first\r\n\\restrict InvoiceText\r\nlast';\r\n"
+        raw = ("-- dump\n\\restrict OuterGuard123\n" + sql + "\\unrestrict OuterGuard123\n").encode('utf-8')
+        with TemporaryDirectory() as directory:
+            dump = Path(directory) / 'database.sql'; dump.write_bytes(raw)
+            manifest = {'format': 'jaymax-native-sql-backup-v1', 'dump': {
+                'filename': 'database.sql', 'bytes': len(raw), 'sha256': backup.digest_file(dump)}}
+            restored = backup.validated_sql(directory, manifest)
+            self.assertIn(sql, restored)
+            self.assertNotIn('OuterGuard123', restored)
+            self.assertIn('\\restrict InvoiceText', restored)
+
     def test_remote_operational_control_and_ambiguous_connections_refused(self):
         for dsn in ('postgresql://test@example.com/native_purchase_test_demo',
                     'postgresql://test@127.0.0.1/operational',
@@ -57,6 +70,13 @@ class NativeBackupTests(unittest.IsolatedAsyncioTestCase):
         self.directory=EVIDENCE/('case-'+uuid4().hex[:12])
         self.base=os.environ['NATIVE_PURCHASE_TEST_DSN'].rsplit('/',1)[0]
         self.source=self.base+'/'+self.db
+        self.excluded_prep_seeded=False
+
+    async def seed_excluded_prep(self):
+        if self.excluded_prep_seeded:return
+        async with self.pool.acquire() as conn:
+            await conn.execute("INSERT INTO public.prep_logs(store_id,kind,name,produced,total_cost) VALUES('berts','batch','Synthetic excluded prep',999,123)")
+        self.excluded_prep_seeded=True
 
     async def asyncTearDown(self):
         for client in self.target_clients:await client.aclose()
@@ -87,7 +107,7 @@ class NativeBackupTests(unittest.IsolatedAsyncioTestCase):
     async def rich_history(self):
         old,a,b=await self.pair()
         pfg_file,source_pfg,*_=await self.capture(number='RECOVERY-PFG',extra=True,
-            overrides={'description_snapshot':'Synthetic multiline food\n\\restrict InvoiceText\nPreserve every character'})
+            overrides={'description_snapshot':'Synthetic multiline food\r\n\\restrict InvoiceText\r\nPreserve every character'})
         pfg=pfg_file['documents'][0]
         self.assertEqual((await self.post(pfg)).status_code,200)
         x=(await self.close((await self.report(a,b)).json())).json()['closure']
@@ -124,8 +144,8 @@ class NativeBackupTests(unittest.IsolatedAsyncioTestCase):
         zz=(await self.close((await self.report(opening,recount)).json())).json()['closure']
         self.assertEqual(xx['report_snapshot']['actualFoodCost'],'60.00')
         self.assertEqual(zz['report_snapshot']['actualFoodCost'],'21.00')
+        await self.seed_excluded_prep()
         async with self.pool.acquire() as conn:
-            await conn.execute("INSERT INTO public.prep_logs(store_id,kind,name,produced,total_cost) VALUES('berts','batch','Synthetic excluded prep',999,123)")
             await conn.execute("UPDATE public.store_state SET sales_period='{\"dishSales\":{\"synthetic\":999}}'::jsonb WHERE store_id='berts'")
         return {'pfg':pfg,'reissue':reissue,'us':us,'opening':opening,'closing':recount,'oldOpening':a,'oldClosing':b,
                 'sourceFiles':[(pfg_file['id'],source_pfg),(us_file['id'],source_us)],'originalClosures':[x,y],
@@ -149,6 +169,7 @@ class NativeBackupTests(unittest.IsolatedAsyncioTestCase):
         for file_id,source in fixture['sourceFiles']:
             self.assertEqual((await client.get(f'/api/pg/purchases/berts/files/{file_id}/source')).content,source)
         async with pool.acquire() as conn:
+            self.assertEqual(await conn.fetchval("SELECT count(*) FROM public.prep_logs WHERE name='Synthetic excluded prep' AND produced=999 AND total_cost=123"),1)
             for table in ('purchasing.corrections','purchasing.document_lines','actual_inventory.period_closures'):
                 with self.assertRaises(asyncpg.RaiseError):await conn.execute('DELETE FROM '+table)
             self.assertEqual(await conn.fetchval('SELECT count(*) FROM actual_inventory.active_period_closures'),2)

@@ -30,6 +30,7 @@ export function useDraftUnloadWarning(drafts) {
 
 // Drafts belong to the signed-in App instance, keyed by restaurant and form.
 // They survive tab/location navigation, but do not outlive logout or app reload.
+const acknowledgements = new WeakMap();
 export function useRetainedDraft(key, initial, drafts, sync = false) {
   const privateDrafts = useRef(new Map());
   const cache = drafts || privateDrafts.current;
@@ -37,6 +38,17 @@ export function useRetainedDraft(key, initial, drafts, sync = false) {
   const current = useRef(value);
   const mounted = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    let keys = acknowledgements.get(cache);
+    if (!keys) { keys = new Map(); acknowledgements.set(cache, keys); }
+    let listeners = keys.get(key);
+    if (!listeners) { listeners = new Set(); keys.set(key, listeners); }
+    const receive = (submitted, next) => {
+      if (current.current === submitted) { current.current = next; setValue(next); }
+    };
+    listeners.add(receive);
+    return () => { listeners.delete(receive); if (!listeners.size) keys.delete(key); };
+  }, [cache, key]);
   useEffect(() => {
     if (sync && !cache.has(key)) { current.current = initial; setValue(initial); }
   }, [cache, key, initial, sync]);
@@ -49,6 +61,9 @@ export function useRetainedDraft(key, initial, drafts, sync = false) {
     if (current.current !== submitted || (cache.has(key) && cache.get(key) !== submitted)) return false;
     cache.delete(key); current.current = next;
     if (mounted.current) setValue(next);
+    // A -> B -> A may remount the same retained form before its receipt arrives.
+    // Only instances still displaying the exact submitted draft accept it.
+    acknowledgements.get(cache)?.get(key)?.forEach(receive => receive(submitted, next));
     return true;
   }
   return [value, edit, acknowledge, cache.has(key)];

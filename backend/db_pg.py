@@ -1,15 +1,17 @@
-"""Postgres (Supabase) connection pool -- the migration target running alongside the
-existing Motor/MongoDB connection in server.py while the migration is in progress
-(see docs/SUPABASE_MIGRATION_PLAN.md). Connects with DATABASE_URL, which should be
-the Postgres *service role* connection (bypasses RLS) -- authorization stays decided
-in FastAPI, matching the existing collaboration_security middleware, since none of
-the new tables have RLS policies written yet.
+"""PostgreSQL connection pool selected by DATABASE_URL.
+
+The backend uses a PostgreSQL login, not a Supabase API service-role key. The
+reviewed build has separate restricted inventory and account logins. FastAPI enforces
+application authorization. USE_PG=true in server.py retires the Mongo client.
+The deployment preflight checks both mode flags and native database permissions.
 """
 import os
 import json
 import asyncio
+from contextlib import suppress
 import logging
 import asyncpg
+from db_tls import connection_tls
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -27,10 +29,8 @@ async def _init_connection(conn):
     await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog", format="text")
 
 async def init_pool():
-    # Fails open, deliberately: during the migration the app must keep serving the
-    # existing Mongo-backed /api/... routes even if Postgres isn't reachable yet (e.g.
-    # DATABASE_URL still has the [YOUR-PASSWORD] placeholder). Only /api/pg/... routes
-    # are affected -- they'll 503 via pool() below until this succeeds.
+    # Keep process health available while reconnecting; database routes return 503.
+    # In PostgreSQL mode this never starts Mongo or changes the authoritative source.
     global _pool, _retry_task
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url or "[YOUR-PASSWORD]" in database_url:
@@ -44,15 +44,27 @@ async def init_pool():
             _retry_task = asyncio.create_task(_retry_until_connected(database_url))
     return _pool
 
-async def _try_connect(database_url):
+async def _try_connect(database_url, *, transition=None):
     try:
+        init = _init_connection
+        extra_timeout = 0
+        if transition is not None:
+            import connection_transition
+            if not isinstance(transition, connection_transition.ClientRevision):
+                raise ValueError('Bound client revision required')
+            transition.validate(database_url, 'inventory')
+            async def init(conn):
+                await _init_connection(conn)
+                await connection_transition.inspect_connection(conn, database_url, 'inventory', transition)
+            extra_timeout = connection_transition.CHECK_TIMEOUT['inventory']
         return await asyncio.wait_for(
-            asyncpg.create_pool(database_url, min_size=1, max_size=5, statement_cache_size=0,
-                                init=_init_connection, timeout=CONNECT_TIMEOUT),
-            CONNECT_TIMEOUT + 5)
-    except Exception:
-        logger.exception("Could not connect to Postgres -- /api/pg/* routes will 503. Check DATABASE_URL "
-                         "(use Supabase's Shared pooler string; the direct db.<ref>.supabase.co host is IPv6-only)")
+            asyncpg.create_pool(database_url, min_size=1, max_size=2, statement_cache_size=0,
+                                init=init, ssl=connection_tls(database_url),
+                                timeout=CONNECT_TIMEOUT),
+            CONNECT_TIMEOUT + 5 + extra_timeout)
+    except Exception as exc:
+        # Driver errors can contain credentials; log only the exception class.
+        logger.warning('Postgres unavailable (%s); database routes will 503', type(exc).__name__)
         return None
 
 async def _retry_until_connected(database_url):
@@ -63,9 +75,12 @@ async def _retry_until_connected(database_url):
     logger.info("Connected to Postgres")
 
 async def close_pool():
-    global _pool
-    if _retry_task is not None and not _retry_task.done():
+    global _pool, _retry_task
+    if _retry_task is not None:
         _retry_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _retry_task
+        _retry_task = None
     if _pool is not None:
         await _pool.close()
         _pool = None

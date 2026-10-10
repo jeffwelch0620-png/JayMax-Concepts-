@@ -25,6 +25,8 @@ const VIEWS = [
 
 export function StaffSheet({ onClose, onElevate, drafts }) {
   const privatePrepCountDrafts = useRef(new Map());
+  const taskRequests = useRef(0);
+  useEffect(() => () => { taskRequests.current += 1; }, []);
   const prepCountDrafts = drafts || privatePrepCountDrafts.current;
   const [rid, setRid] = useState("");
   const [track, setTrack] = useState("daily");
@@ -113,6 +115,8 @@ export function StaffSheet({ onClose, onElevate, drafts }) {
   }
 
   function lock() {
+    taskRequests.current += 1;
+    setCompletingTask(null);
     for (const key of prepCountDrafts.keys()) if (key.startsWith("staff-prep-submit:")||key.startsWith("staff-production-submit:")) prepCountDrafts.delete(key);
     setUnlocked(false);
     setPin("");
@@ -136,7 +140,15 @@ export function StaffSheet({ onClose, onElevate, drafts }) {
 
   // ---------------- Task inbox ----------------
   async function refreshTasks() {
-    try { setTasks(await api.staffTaskInbox(rid, pin)); } catch { /* keep current */ }
+    const sequence = ++taskRequests.current;
+    setTasks(null); setCompletingTask(null);
+    try {
+      const result = await api.staffTaskInbox(rid, pin);
+      if (!Array.isArray(result?.tasks)) throw new Error("Task inbox was not confirmed.");
+      if (sequence === taskRequests.current) setTasks(result);
+    } catch (e) {
+      if (sequence === taskRequests.current) setTasks(e?.response?.status === 410 ? { retired: true } : { unavailable: true });
+    }
   }
 
   async function markTaskDone() {
@@ -330,13 +342,13 @@ export function StaffSheet({ onClose, onElevate, drafts }) {
 }
 
 function TasksView({ restaurant, tasks, onRefresh, onOpenPrep, onOpenCounts, onComplete }) {
-  if (!tasks) return null;
+  if (!tasks) return <p role="status">Loading tasks…</p>;
   return (
     <>
       <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <div>
           <div className="font-display font-bold text-slate-100">{restaurant?.name} — Today's Tasks</div>
-          <div className="text-xs text-slate-500">{fmtDate(tasks.date)}</div>
+          {tasks.date && <div className="text-xs text-slate-500">{fmtDate(tasks.date)}</div>}
         </div>
         <button className={btnGhost} onClick={onRefresh} data-testid="staff-refresh">Refresh</button>
       </div>
@@ -344,7 +356,11 @@ function TasksView({ restaurant, tasks, onRefresh, onOpenPrep, onOpenCounts, onC
         <button className={btnGhost} onClick={onOpenPrep} data-testid="staff-jump-prep"><ChefHat size={13} /> Open Prep Sheet</button>
         <button className={btnGhost} onClick={onOpenCounts} data-testid="staff-jump-counts"><ClipboardList size={13} /> Open Counts</button>
       </div>
-      {tasks.tasks.length === 0 ? (
+      {tasks.retired ? (
+        <div role="status" data-testid="staff-tasks-retired">Use the prep task plan and reviewed count sheets for current work. Historical employee tasks are available to managers as read-only history.</div>
+      ) : tasks.unavailable ? (
+        <div role="alert">Tasks could not be loaded. Refresh to try again.</div>
+      ) : tasks.tasks.length === 0 ? (
         <div className="text-center py-14 px-5 rounded-xl border border-dashed border-[#334155] bg-[#161F30] text-sm text-slate-500" data-testid="staff-tasks-empty">
           No tasks assigned for today. Check with your manager, or use Prep / Counts above.
         </div>

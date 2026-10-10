@@ -8,7 +8,7 @@ import { PrepTab } from "./PrepTab";
 import { InvoicesTab } from "./InvoicesTab";
 import * as api from "../lib/api";
 
-jest.mock("../lib/api", () => ({ __esModule: true, prepPlanningEnabled: false, listVendorContacts: jest.fn(() => Promise.resolve([])), putVendorContact: jest.fn(), listPrepItems: jest.fn(), getPrepList: jest.fn(), deletePrepItem: jest.fn() }));
+jest.mock("../lib/api", () => ({ __esModule: true, prepPlanningEnabled: false, listVendorContacts: jest.fn(() => Promise.resolve([])), putVendorContact: jest.fn(), listPrepItems: jest.fn(), getPrepList: jest.fn(), getCountSession: jest.fn(), deletePrepItem: jest.fn(), prepReport: jest.fn(), getProjections: jest.fn(), listOverrides: jest.fn(), getStaffPin: jest.fn(), getParRecs: jest.fn(), deleteOverride: jest.fn() }));
 const item = { controlNumber: "F01", name: "Invented food", storageArea: "Freezer", purchaseUnit: "case", packCount: 1, unitQty: 10, unitUOM: "lb", portionSize: 4, portionUOM: "oz", salesTracked: true, vendorSkus: [{ id: "sku", vendor: "PFG", price: 10, preferred: true }] };
 const period = { periodStart: "2026-10-01", periodEnd: "2026-10-07", dishSales: { dish: "2" }, itemCounts: {} };
 const recipe = { id: "dish", name: "Invented dish", recipeType: "menu", menuCategory: "Appetizers", menuCode: "A1", description: "", photoUrl: "", price: 0, targetPct: 30, procedure: "", equipment: "", shelfLife: "", portionNote: "", lines: [{ sourceType: "item", controlNumber: "F01", qty: 1 }] };
@@ -32,6 +32,7 @@ beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true; jest.useFakeTimers(); jest.clearAllMocks();
   api.listVendorContacts.mockResolvedValue([]); api.listPrepItems.mockResolvedValue([]); api.getPrepList.mockResolvedValue({ list: null });
   api.prepPlanningEnabled = false;
+  api.getProjections.mockResolvedValue([]); api.listOverrides.mockResolvedValue([]); api.getStaffPin.mockResolvedValue({ staffPin: "", custom: true }); api.getParRecs.mockResolvedValue([]);
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
   save = jest.fn().mockResolvedValue({ revision: 11 }); periods = jest.fn().mockResolvedValue({ revision: 12 }); success = jest.fn(); errors = jest.fn(); drafts = new Map();
   jest.spyOn(window, "confirm").mockReturnValue(true);
@@ -151,6 +152,26 @@ test("adjustment failure retains quantity and note; delete failure leaves saved 
   await click(find("adj-delete-old")); expect(find("adj-row-old")).not.toBeNull(); expect(success).not.toHaveBeenCalled();
   await render(<p>Other tab</p>); await render(adjustments()); expect(find("adj-note").value).toBe("Dropped pan");
 });
+
+test("a confirmed adjustment clears its retained draft after leaving the form", async () => {
+  const pending = deferred(); save.mockReturnValueOnce(pending.promise);
+  await render(adjustments()); await input("adj-qty", "3"); await click(find("log-adjustment-button"));
+  await render(<p>Another location</p>); await act(async () => pending.resolve({ revision: 11 }));
+  await render(adjustments()); expect(find("adj-qty").value).toBe("");
+  await click(find("log-adjustment-button")); expect(save).toHaveBeenCalledTimes(1); expect(drafts.has("adjustment:berts")).toBe(false);
+});
+
+test.each([false, true])("A to B to A acknowledgement preserves newer typing (%s)", async newer => {
+  const pending = deferred(); save.mockReturnValueOnce(pending.promise);
+  await render(adjustments()); await input("adj-qty", "3"); await click(find("log-adjustment-button"));
+  await render(<AdjustmentsTab rid="rudds" key="rudds" drafts={drafts} items={[item]} adjustments={[]} persist={save} showToast={success} showError={errors} />);
+  await input("adj-qty", "9");
+  await render(adjustments()); if (newer) await input("adj-qty", "4");
+  await act(async () => pending.resolve({ revision: 11 }));
+  expect(find("adj-qty").value).toBe(newer ? "4" : "");
+  expect(drafts.has("adjustment:berts")).toBe(newer);
+  expect(drafts.get("adjustment:rudds").qty).toBe("9"); expect(save).toHaveBeenCalledTimes(1);
+});
 test("recipe failure and polling preserve draft; deletion never claims unconfirmed success", async () => {
   save.mockResolvedValue(null); const focus = { id: "dish" };
   await render(costing({ focusDish: focus })); await input("recipe-name-input", "Edited recipe");
@@ -186,6 +207,39 @@ test("partial legacy invoice failure is disclosed and cannot be resubmitted", as
 });
 
 const prep = () => <PrepTab rid="berts" drafts={drafts} showError={errors} showToast={success} items={[item]} dishes={[{ ...recipe, recipeType: "prep", yieldQty: 4, yieldUOM: "lb", prepPar: 0 }]} persistDishes={save} prepStock={[]} prepLogs={[]} salesPeriod={period} />;
+test("installed schema holds legacy count, list, overrides and advice screens with frontend flags off", async () => {
+  await render(<PrepTab rid="berts" drafts={drafts} items={[item]} dishes={[]} prepCapabilities={{ countsAvailable: false, listsAvailable: false, reportingAvailable: false }} />);
+  expect(find("prep-list-unavailable")).not.toBeNull(); expect(api.getPrepList).not.toHaveBeenCalled();
+  await click(find("prep-subtab-count")); expect(find("prep-count-unavailable")).not.toBeNull(); expect(api.getCountSession).not.toHaveBeenCalled();
+  await click(find("prep-subtab-planning"));
+  expect(find("prep-overrides-unavailable")).not.toBeNull(); expect(find("prep-advisor-unavailable")).not.toBeNull();
+  expect(api.getParRecs).not.toHaveBeenCalled(); expect(api.listOverrides).not.toHaveBeenCalled();
+  expect(find("projection-save-button")).not.toBeNull(); expect(find("staff-pin-card")).not.toBeNull(); expect(save).not.toHaveBeenCalled();
+});
+test("failed list and count reads show the hold reason without generating or displaying a false empty list", async () => {
+  api.getPrepList.mockRejectedValue({response:{status:410,data:{detail:"Use reviewed dated prep tasks"}}});
+  api.getCountSession.mockRejectedValue({response:{status:409,data:{detail:"Use manager-issued prep sheets"}}});
+  await render(prep()); expect(find("prep-list-load-error").textContent).toContain("Use reviewed dated prep tasks"); expect(find("generate-prep-list-button")).toBeNull();
+  await click(find("prep-subtab-count")); expect(find("count-load-error").textContent).toContain("manager-issued prep sheets"); expect(find("count-loading")).toBeNull();
+});
+test("a late prep-list response for another location cannot replace the current load failure", async () => {
+  const old=deferred(); api.getPrepList.mockReturnValueOnce(old.promise).mockRejectedValueOnce(new Error("Offline"));
+  await render(prep()); await render(<PrepTab rid="rudds" drafts={drafts} items={[]} dishes={[]} prepStock={[]} prepLogs={[]} />);
+  await act(async () => old.resolve({list:{id:"old",tasks:[],status:"released"}}));
+  expect(find("prep-list-load-error")).not.toBeNull(); expect(find("list-status-pill")).toBeNull();
+});
+test("a held legacy override deletion retains its row and reports no success", async () => {
+  api.listOverrides.mockResolvedValue([{ id: "held", date: "2026-10-08", type: "add", customName: "Invented catering", batches: 1 }]);
+  api.deleteOverride.mockRejectedValue({ response: { status: 409, data: { detail: "Use reviewed day adjustments" } } });
+  await render(prep()); await click(find("prep-subtab-planning")); await click(find("override-delete-held"));
+  expect(find("override-row-held")).not.toBeNull(); expect(errors).toHaveBeenCalledWith("Use reviewed day adjustments"); expect(success).not.toHaveBeenCalledWith("Override removed");
+});
+test("a retired prep state cannot display an empty balance or legacy stock controls", async () => {
+  await render(<PrepTab rid="berts" drafts={drafts} items={[item]} dishes={[]} prepStock={null} prepLogs={null} prepReadStatus={{ available: false, message: "Historical prep figures are retained for review." }} />);
+  await click(find("prep-subtab-inventory"));
+  expect(find("prep-inventory-unavailable").textContent).toContain("Historical prep figures");
+  expect(find("prep-inventory-log")).toBeNull(); expect(api.prepReport).not.toHaveBeenCalled();
+});
 test("prep setting edits send no per-keystroke write and failure retains draft across navigation", async () => {
   await render(prep()); await click(find("prep-subtab-inventory")); await input("prep-par-dish", "17"); expect(save).not.toHaveBeenCalled();
   expect(container.textContent).toContain("Unsaved prep settings");

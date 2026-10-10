@@ -1,5 +1,11 @@
 # History reads and deployment review - October 8, 2026
 
+Subsequent local checkpoint: the separate deployment slice now reconciles and
+tests the 29-file chain, whole restore and owner-backed Track 1 transactions.
+See [deployment reconciliation](DEPLOYMENT_RECONCILIATION_CHECKPOINT.md). The
+source-only/pending statements below describe the earlier PR16 snapshot. Hosted
+validation, remaining continuation integration and safe history paging stay open.
+
 ## Implemented scope
 
 Staff prep-count setup reads current products and unit profiles directly. It no

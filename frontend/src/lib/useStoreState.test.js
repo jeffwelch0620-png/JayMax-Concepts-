@@ -8,8 +8,8 @@ const empty = { items: [], dishes: [], salesPeriod: {} };
 const session = { user: { role: "manager" } };
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 let root, container, controller, errors;
-function Screen({ rid = "berts" }) {
-  controller = useStoreState(rid, session, empty, errors);
+function Screen({ rid = "berts", auth = session }) {
+  controller = useStoreState(rid, auth, empty, errors);
   return <div>{controller.state ? JSON.stringify(controller.state) : "Loading"}</div>;
 }
 const render = rid => act(async () => root.render(<Screen rid={rid} />));
@@ -18,6 +18,26 @@ beforeEach(() => {
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
   api.fetchState.mockImplementation(rid => Promise.resolve({ revision: rid === "berts" ? 10 : 80, items: [rid] }));
   api.putCollection.mockResolvedValue({ ok: true, revision: 11 });
+});
+
+test("retired prep with explicit unavailability loads without manufacturing empty balances", async () => {
+  api.fetchState.mockResolvedValue({ revision: 10, items: [], dishes: [], prepStock: null, prepLogs: null,
+    prepReadStatus: { available: false, basis: "legacy_prep_retired" },
+    legacyStateCapabilities: { inventoryRetired: true, adjustmentsAvailable: false, reportingPeriodsAvailable: false } });
+  await render("berts");
+  expect(controller.state).not.toBeNull(); expect(controller.state.prepStock).toBeNull(); expect(controller.state.prepLogs).toBeNull();
+  expect(controller.state.legacyStateCapabilities.inventoryRetired).toBe(true); expect(errors).not.toHaveBeenCalled();
+});
+
+test.each([
+  {}, { prepReadStatus: { available: true, basis: "legacy_prep_retired" } },
+  { prepReadStatus: { available: false, basis: "other" } },
+  { prepReadStatus: { available: false, basis: "legacy_prep_retired" }, prepLogs: [] },
+  { prepReadStatus: { available: false, basis: "legacy_prep_retired" }, prepStock: [], prepLogs: [] },
+])("retired prep nulls require the complete confirmed unavailable contract %j", async change => {
+  api.fetchState.mockResolvedValue({ revision: 10, items: [], prepStock: null, prepLogs: null, ...change });
+  await render("berts"); expect(controller.state).toBeNull(); expect(errors).toHaveBeenCalled();
+  await act(async () => controller.save("items", ["forbidden"])); expect(api.putCollection).not.toHaveBeenCalled();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.useRealTimers(); });
 
@@ -73,7 +93,7 @@ test("A save cannot update B, and returning A reloads after that save finishes",
   await render("rudds"); expect(controller.state.revision).toBe(80);
   await render("berts"); expect(container.textContent).toBe("Loading");
   api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["fresh saved A"] });
-  await act(async () => { saving.resolve({ revision: 11 }); expect(await request).toBeNull(); });
+  await act(async () => { saving.resolve({ revision: 11 }); expect(await request).toEqual({ revision: 11 }); });
   expect(container.textContent).toContain("fresh saved A");
   await act(async () => expect(oldController.save("items", ["stale callback"])).resolves.toBeNull());
   expect(api.putCollection).toHaveBeenCalledTimes(1);
@@ -102,7 +122,17 @@ test("unmount discards late callbacks and clears the poll timer", async () => {
 test("malformed location collections remain unavailable instead of becoming saved data", async () => {
   api.fetchState.mockResolvedValueOnce({ revision: 10, items: "malformed" });
   await render("berts"); expect(container.textContent).toBe("Loading"); expect(errors).toHaveBeenCalled();
+  expect(controller.loadError).toBeTruthy();
   await act(async () => controller.refresh()); expect(controller.state.items).toEqual(["berts"]);
+  expect(controller.loadError).toBeNull();
+});
+
+test("a confirmed write cannot acknowledge drafts in a replacement login session", async () => {
+  await render("berts"); const saving = deferred(); api.putCollection.mockReturnValue(saving.promise);
+  let request; act(() => { request = controller.save("items", ["old session"]); });
+  await act(async () => root.render(<Screen rid="berts" auth={{ user: { role: "manager" } }} />));
+  await act(async () => { saving.resolve({ revision: 11 }); expect(await request).toBeNull(); });
+  expect(container.textContent).not.toContain("old session");
 });
 test("poll failures notify once until a successful refresh resets the failure streak", async () => {
   await render("berts"); api.fetchState.mockRejectedValue(new Error("Offline"));

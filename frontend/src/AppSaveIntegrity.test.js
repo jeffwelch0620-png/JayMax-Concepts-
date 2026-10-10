@@ -23,13 +23,22 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.useRealTimers(); });
 
+test("failed initial load exposes a location error and a working retry", async () => {
+  api.fetchState.mockRejectedValueOnce({ response: { status: 503, data: { detail: "Catalog feature settings need review" } } });
+  await act(async () => root.render(<App />));
+  expect(container.querySelector('[role="alert"]').textContent).toContain("Catalog feature settings need review");
+  expect(container.textContent).toContain("Retry loading location");
+  await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "Retry loading location").click());
+  expect(find("saved-items").textContent).toBe("berts"); expect(container.querySelector('[role="alert"]')).toBeNull();
+});
+
 test("App isolates delayed saves, messages and callbacks across restaurant navigation", async () => {
   await act(async () => root.render(<App />)); await click("nav-tab-setup");
   const old = mockSetupProps; let complete, request;
   api.putCollection.mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
   act(() => { request = old.persistItems([{ ...item, name: "old saved" }]); });
   await click("location-tab-rudds"); expect(find("saved-items").textContent).toBe("rudds");
-  await act(async () => { complete({ revision: 11 }); expect(await request).toBeNull(); old.showToast("old success"); });
+  await act(async () => { complete({ revision: 11 }); expect(await request).toEqual({ revision: 11 }); old.showToast("old success"); });
   expect(find("saved-items").textContent).toBe("rudds"); expect(toast.success).not.toHaveBeenCalled();
   await act(async () => expect(old.persistItems([])).resolves.toBeNull()); expect(api.putCollection).toHaveBeenCalledTimes(1);
   await click("nav-tab-setup"); api.putCollection.mockResolvedValueOnce({ revision: 81 });

@@ -118,7 +118,8 @@ async def ready(conn):
 
 
 async def hold_legacy(conn):
-    if os.getenv('PREP_CONTAINERS_ENABLED', 'false').lower() == 'true' or await conn.fetchval("SELECT to_regclass('prep_inventory.container_moves') IS NOT NULL"):
+    from legacy_prep_views import stock_retired
+    if await stock_retired(conn):
         raise HTTPException(409, 'Legacy container/stock writes are held; use reviewed native prep facts')
 
 
