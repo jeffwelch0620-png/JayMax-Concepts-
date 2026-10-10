@@ -12,10 +12,11 @@ import test_native_backup as backup_checks
 class OwnerRuntimeRecoveryTests(checks.DeploymentReadinessTests):
     async def asyncSetUp(self):
         self.runtime_role='native_purchase_test_runtime_'+uuid4().hex
+        self.runtime_password='synthetic-runtime-'+uuid4().hex
         self.control=os.environ['NATIVE_PURCHASE_TEST_DSN']
         admin=await asyncpg.connect(self.control)
         try:
-            await admin.execute('CREATE ROLE "'+self.runtime_role+'" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS')
+            await admin.execute('CREATE ROLE "'+self.runtime_role+'" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD \''+self.runtime_password+'\'')
         finally:await admin.close()
         self.addAsyncCleanup(self.drop_runtime_role)
         self.original_pool=asyncpg.create_pool
@@ -34,7 +35,7 @@ class OwnerRuntimeRecoveryTests(checks.DeploymentReadinessTests):
         admin=await asyncpg.connect(self.control)
         try:await admin.execute('ALTER DATABASE "'+name+'" OWNER TO "'+self.runtime_role+'"')
         finally:await admin.close()
-        return await self.original_pool(dsn,*args,user=self.runtime_role,**kwargs)
+        return await self.original_pool(dsn,*args,user=self.runtime_role,password=self.runtime_password,**kwargs)
 
     async def assert_ordinary(self,pool):
         async with pool.acquire() as conn:
