@@ -1,5 +1,11 @@
 # Hosted Supabase deployment readiness
 
+Latest local checkpoint: [persistent supervisor metadata and client handoff review](LOCAL_SUPERVISOR_HANDOFF_CHECKPOINT.md)
+survive process exits and reject checkpoint gaps, conflicting writers and
+incomplete client declarations. Candidate encrypted credential storage and
+verified live registration remain unimplemented; the passing review never
+authorizes configuration promotion. No hosted checks or changes occur here.
+
 Latest local follow-up: [independent process recovery and populated Food Cost](LOCAL_INSTALL_PROCESS_RECOVERY_CHECKPOINT.md)
 reopens a pinned baseline and journal in separate OS processes. A separate
 supervisor checkpoint prevents accepting a truncated valid journal prefix.

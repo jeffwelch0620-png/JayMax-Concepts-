@@ -1,5 +1,11 @@
 # Local process recovery and populated Food Cost checkpoint
 
+Follow-up: the [supervisor checkpoint and handoff contract](LOCAL_SUPERVISOR_HANDOFF_CHECKPOINT.md)
+adds independently persisted checkpoint history with genuine process-loss
+tests and exact metadata-only client declarations. This page retains the
+preceding populated PostgreSQL proof; full-machine durability and hosted
+credential/capacity/recovery gates remain unresolved.
+
 October 9, 2026 (America/New_York). Follow-up to the
 [local installer rehearsal](LOCAL_PARALLEL_INSTALL_CHECKPOINT.md).
 This adapter and its workers accept only a passwordless loopback connection to

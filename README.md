@@ -1,5 +1,19 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Persistent supervisor checkpoints and client handoff review - October 9, 2026
+
+Independent recovery checkpoints now survive supervising-process exits in a
+separate metadata store. Conflicting writers and journal/checkpoint gaps hold
+progress. The client handoff contract requires exact instance/source/revision
+declarations and both database/pooler capacity measurements; declarations alone
+never authorize promotion. **21 tests and 61 subtests pass.**
+
+The [supervisor and handoff checkpoint](docs/LOCAL_SUPERVISOR_HANDOFF_CHECKPOINT.md)
+records the process trials, credential-storage contract and remaining encrypted
+credential/live-client/combined recovery requirements. PostgreSQL remains the
+application data source; this store contains recovery metadata, no business data or
+credentials. **Local only; no push, hosted change, merge or deployment.**
+
 ## Independent process recovery and populated accounting trial - October 9, 2026
 
 The local recovery adapter now requires an independently pinned archive and
