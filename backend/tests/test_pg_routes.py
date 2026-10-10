@@ -119,8 +119,9 @@ def test_prep_item_update_rejects_cross_store_inventory_source(monkeypatch):
         asyncio.run(server.pg_update_prep_item("papa", "prep-1", body))
 
     assert exc.value.status_code == 404
-    assert len(conn.queries) == 1
-    assert "store_id=$1 AND item_code=$2" in conn.queries[0][0]
+    assert len(conn.queries) == 2
+    assert "to_regclass('prep_inventory.planning_versions')" in conn.queries[0][0]
+    assert "store_id=$1 AND item_code=$2" in conn.queries[1][0]
 
 
 def test_prep_list_generation_checks_and_creates_inside_transaction(monkeypatch):
@@ -135,8 +136,9 @@ def test_prep_list_generation_checks_and_creates_inside_transaction(monkeypatch)
 
     assert result["regenerated"] is False
     assert conn.tx.committed
-    assert "pg_advisory_xact_lock" in conn.queries[0][0]
-    assert "count_type=$3" in conn.queries[1][0]
+    assert "to_regclass('prep_inventory.day_list_versions')" in conn.queries[0][0]
+    assert "pg_advisory_xact_lock" in conn.queries[1][0]
+    assert "count_type=$3" in conn.queries[2][0]
 
 
 def test_prep_list_generation_handles_recurring_items_and_overrides():

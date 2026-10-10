@@ -19,6 +19,12 @@ import asyncpg
 import anthropic
 import db_pg
 import catalog_mapping
+import menu_contract
+import order_commands
+import supplier_contacts
+import prep_planning
+import prep_day_tasks
+from menu_contract import DishIn, DishLineIn
 try:
     from pywebpush import webpush, WebPushException
 except ImportError:  # pragma: no cover - optional dependency, push notifications no-op without it
@@ -2650,6 +2656,14 @@ def _pg_po_doc(row, lines):
         v = row[col]
         doc[key] = _ts_out(v) if key in _PO_TS else (f(v) if key == "total" else v)
     doc["createdBy"] = doc["createdBy"] or ""
+    if row.get('order_version') is not None:
+        doc['orderVersion']=row['order_version']
+        doc['archivedAt']=_ts_out(row['archived_at'])
+        doc['creatorActor']=row['creator_actor']
+        doc['total']=str(row['total']) if row['total'] is not None else None
+        for public,source in zip(doc['lines'],lines):
+            for key,col in (('qty','qty'),('unitCost','unit_price'),('lineTotal','extended'),('receivedQty','received_qty')):
+                public[key]=str(source[col]) if source[col] is not None else None
     for key in _PO_OPTIONAL:
         if doc[key] is None:
             doc.pop(key)
@@ -2686,11 +2700,13 @@ async def _pg_po_write_lines(conn, po_uuid, rid, lines):
 
 async def _pg_po_fetch(where, args, order="created_at DESC", limit=2000):
     pool = db_pg.pool()
-    rows = await pool.fetch(f"SELECT * FROM purchase_orders WHERE {where} ORDER BY {order} NULLS LAST LIMIT {int(limit)}", *args)
-    if not rows:
-        return []
-    lines = await pool.fetch("SELECT * FROM purchase_order_lines WHERE po_id = ANY($1::uuid[]) ORDER BY position",
-                             [r["id"] for r in rows])
+    async with pool.acquire() as conn,conn.transaction(isolation='repeatable_read',readonly=True):
+        if await conn.fetchval("SELECT to_regclass('purchasing.order_commands') IS NOT NULL"):
+            where='('+where+') AND archived_at IS NULL'
+        rows = await conn.fetch(f"SELECT * FROM purchase_orders WHERE {where} ORDER BY {order} NULLS LAST LIMIT {int(limit)}", *args)
+        if not rows:return []
+        lines = await conn.fetch("SELECT * FROM purchase_order_lines WHERE po_id = ANY($1::uuid[]) ORDER BY position",
+                                 [r["id"] for r in rows])
     by_po = {}
     for l in lines:
         by_po.setdefault(l["po_id"], []).append(l)
@@ -2728,6 +2744,7 @@ async def _po_insert(po):
         await db.purchase_orders.insert_one(dict(po))
         return
     rid = po["restaurantId"]
+    await order_commands.hold_legacy(db_pg.pool())
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
@@ -2765,6 +2782,7 @@ async def _po_update(rid, oid, set_fields=None, events=(), expect_status=None, u
         if expect_status:
             q["status"] = expect_status
         return (await db.purchase_orders.update_one(q, update)).matched_count > 0
+    await order_commands.hold_legacy(db_pg.pool())
     lines = set_fields.pop("lines", None)
     args = [RESTAURANT_TO_PG_STORE.get(rid, rid), oid]
     sets = []
@@ -2802,6 +2820,7 @@ async def _po_update(rid, oid, set_fields=None, events=(), expect_status=None, u
 
 async def _po_delete(rid, oid):
     if USE_PG:
+        await order_commands.hold_legacy(db_pg.pool())
         await db_pg.pool().execute("DELETE FROM purchase_orders WHERE store_id=$1 AND ref=$2",
                                    RESTAURANT_TO_PG_STORE.get(rid, rid), oid)
     else:
@@ -3201,6 +3220,7 @@ async def _match_invoice(rid, invoice_number, po_lines):
 # Supplier order emails, per store and vendor name (Postgres: store_vendor_contacts).
 async def _vc_list(rid):
     if USE_PG:
+        await supplier_contacts.hold_legacy(db_pg.pool())
         rows = await db_pg.pool().fetch(
             "SELECT vendor, order_email FROM store_vendor_contacts WHERE store_id=$1 ORDER BY vendor",
             RESTAURANT_TO_PG_STORE.get(rid, rid))
@@ -3209,6 +3229,7 @@ async def _vc_list(rid):
 
 async def _vc_email(rid, vendor):
     if USE_PG:
+        await supplier_contacts.hold_legacy(db_pg.pool())
         return await db_pg.pool().fetchval(
             "SELECT order_email FROM store_vendor_contacts WHERE store_id=$1 AND vendor=$2",
             RESTAURANT_TO_PG_STORE.get(rid, rid), vendor) or ""
@@ -3217,6 +3238,7 @@ async def _vc_email(rid, vendor):
 
 async def _vc_put(rid, vendor, email):
     if USE_PG:
+        await supplier_contacts.hold_legacy(db_pg.pool())
         await db_pg.pool().execute(
             """INSERT INTO store_vendor_contacts (store_id, vendor, order_email) VALUES ($1, $2, $3)
                ON CONFLICT (store_id, vendor) DO UPDATE SET order_email=$3, updated_at=now()""",
@@ -3261,6 +3283,7 @@ def _pdf_link(rid, oid):
 @api_router.post("/orders/{rid}/{oid}/email")
 async def email_order(rid: str, oid: str, body: OrderEmailIn):
     check_rid(rid)
+    if USE_PG:await order_commands.hold_legacy(db_pg.pool())
     po = await _get_po(rid, oid)
     if po["status"] not in ("approved", "sent"):
         raise HTTPException(400, "only approved or sent orders can be emailed to a supplier")
@@ -3507,7 +3530,9 @@ async def pg_list_vendors():
     return [dict(r) for r in rows]
 
 @pg_router.post("/vendors")
-async def pg_create_vendor(body: VendorIn):
+async def pg_create_vendor(body: VendorIn, request: Request):
+    if order_commands.enabled() or await db_pg.pool().fetchval("SELECT to_regclass('purchasing.order_commands') IS NOT NULL"):
+        return await _versioned_vendor(body,request)
     row = await db_pg.pool().fetchrow(
         """INSERT INTO vendors (id, name, order_email, rep_name, rep_phone, active)
            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *""",
@@ -3515,7 +3540,9 @@ async def pg_create_vendor(body: VendorIn):
     return dict(row)
 
 @pg_router.put("/vendors/{vendor_id}")
-async def pg_update_vendor(vendor_id: str, body: VendorIn):
+async def pg_update_vendor(vendor_id: str, body: VendorIn, request: Request):
+    if order_commands.enabled() or await db_pg.pool().fetchval("SELECT to_regclass('purchasing.order_commands') IS NOT NULL"):
+        return await _versioned_vendor(body,request,vendor_id)
     row = await db_pg.pool().fetchrow(
         """UPDATE vendors SET name=$2, order_email=$3, rep_name=$4, rep_phone=$5,
            active=$6, updated_at=now() WHERE id=$1 RETURNING *""",
@@ -3525,6 +3552,28 @@ async def pg_update_vendor(vendor_id: str, body: VendorIn):
     return dict(row)
 
 # ---------------- Items (global catalog + per-store tracking + per-vendor SKUs) ----------------
+async def _versioned_vendor(body,request,vendor_id=None):
+    token=(request.headers.get('authorization') or '').removeprefix('Bearer ').strip()
+    user=_decode_token(token) if token else None
+    if not user or user.get('role')!='owner':raise HTTPException(403,'Shared supplier metadata requires an owner')
+    if not body.id.strip() or not body.name.strip():raise HTTPException(422,'Supply nonblank supplier identity and name')
+    if vendor_id is not None and vendor_id!=body.id:raise HTTPException(422,'Supplier identity cannot be reassigned')
+    async with db_pg.pool().acquire() as conn,conn.transaction():
+        await order_commands.ready(conn);await catalog_mapping.lock_catalog(conn)
+        row=await conn.fetchrow('SELECT * FROM vendors WHERE id=$1 FOR UPDATE',body.id)
+        if vendor_id is not None:
+            if not row:raise HTTPException(404,'Supplier not found')
+            if row['catalog_version']!=order_commands.version(request):raise HTTPException(409,'Supplier metadata changed; refresh before editing')
+        elif row:raise HTTPException(409,'Supplier identity already exists')
+        if await conn.fetchval('SELECT EXISTS(SELECT 1 FROM vendors WHERE lower(name)=lower($1) AND id<>$2)',body.name.strip(),body.id):
+            raise HTTPException(409,'This supplier name already identifies another supplier')
+        metadata={key:getattr(body,key) if row is None or key in body.model_fields_set else row[key]
+                  for key in ('order_email','rep_name','rep_phone','active')}
+        saved=await conn.fetchrow('''INSERT INTO vendors(id,name,order_email,rep_name,rep_phone,active) VALUES($1,$2,$3,$4,$5,$6)
+            ON CONFLICT(id) DO UPDATE SET name=$2,order_email=$3,rep_name=$4,rep_phone=$5,active=$6,updated_at=now() RETURNING *''',
+            body.id,body.name.strip(),metadata['order_email'],metadata['rep_name'],metadata['rep_phone'],metadata['active'])
+        return purchase_api.serial(dict(saved))
+
 class VendorSkuIn(BaseModel):
     vendor_id: str
     vendor_sku: str
@@ -3623,6 +3672,7 @@ async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None, 
             "price": str(s["price"]) if s["price"] is not None else None,
             "priceUpdatedAt": s["price_updated_at"].isoformat() if s["price_updated_at"] else None,
             "priceSource": s["price_source"], "preferred": s["preferred"], "available": s["available"],
+            "priceIssues": s.get("price_issues", []),
         } for s in skus],
     }
 
@@ -3741,12 +3791,15 @@ async def _pg_save_item(conn, store_id, body):
         desired_skus.add((sk.vendor_id, sk.vendor_sku))
         await _pg_ensure_vendor(conn, sk.vendor_id)
         existing = await conn.fetchrow(
-                    "SELECT id, item_code FROM vendor_items WHERE vendor_id=$1 AND vendor_sku=$2 FOR UPDATE",
+                    "SELECT * FROM vendor_items WHERE vendor_id=$1 AND vendor_sku=$2 FOR UPDATE",
                     sk.vendor_id, sk.vendor_sku)
         if existing and existing["item_code"] != body.code:
             raise HTTPException(409, "Vendor SKU is already linked to another product and its history. Review the product mapping; removing a supplier option does not release its historical identity.")
         if existing:
             if shared:
+                if sk.price is not None and await conn.fetchval("SELECT to_regclass('purchasing.supplier_price_events') IS NOT NULL"):
+                    if any(not catalog_mapping.same(existing[k],getattr(sk,k)) for k in ('purchase_unit','base_per_purchase_unit','pack_count','unit_qty','unit_uom')):
+                        raise HTTPException(409,'Clear the planning price when changing a supplier pack, then review its new price and physical conversion')
                 await conn.execute('''UPDATE vendor_items SET vendor_description=$2,purchase_unit=$3,base_per_purchase_unit=$4,
                     pack_count=$5,unit_qty=$6,unit_uom=$7 WHERE id=$1''',existing['id'],sk.vendor_description,sk.purchase_unit,
                     sk.base_per_purchase_unit,sk.pack_count,sk.unit_qty,sk.unit_uom)
@@ -3790,10 +3843,12 @@ async def _pg_save_item(conn, store_id, body):
 @pg_router.post("/items/{store_id}")
 async def pg_create_item(store_id: str, body: ItemIn, request: Request):
     check_store_id(store_id)
+    price_actor = _purchase_actor(request, store_id, True) if catalog_mapping.enabled() else None
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
             await catalog_mapping.lock_catalog(conn)
+            if price_actor: await conn.execute("SELECT set_config('jmax.price_actor',$1,true)",price_actor)
             revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
             result = await _pg_save_item(conn, store_id, body)
             return {**result, "revision": revision}
@@ -3803,11 +3858,13 @@ async def pg_create_item(store_id: str, body: ItemIn, request: Request):
 @pg_router.put("/items/{store_id}")
 async def pg_replace_items(store_id: str, body: List[ItemIn], request: Request):
     check_store_id(store_id)
+    price_actor = _purchase_actor(request, store_id, True) if catalog_mapping.enabled() else None
     revision_rid = {"papa": "papa_leonis"}.get(store_id, store_id)
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
             await catalog_mapping.lock_catalog(conn)
+            if price_actor: await conn.execute("SELECT set_config('jmax.price_actor',$1,true)",price_actor)
             revision = await _check_and_bump_revision(revision_rid, request, conn)
             existing = await conn.fetch("SELECT item_code FROM store_items WHERE store_id=$1 FOR UPDATE", store_id)
             next_codes = {item.code for item in body}
@@ -3936,33 +3993,6 @@ async def pg_create_invoice(store_id: str, body: InvoiceIn):
 # reportingPeriods.dishSales (still Mongo-only, not migrated) is keyed by the OLD
 # Mongo dish id and is NOT remapped here -- see the Chunk 4 note in
 # docs/SUPABASE_MIGRATION_PLAN.md.
-class DishLineIn(BaseModel):
-    source_type: str  # "item" | "prep"
-    item_code: Optional[str] = None
-    prep_dish_id: Optional[str] = None
-    qty: float = 0
-
-class DishIn(BaseModel):
-    id: Optional[str] = None  # set -> update that dish; absent -> create
-    client_id: Optional[str] = None
-    name: str
-    menu_code: Optional[str] = None
-    recipe_type: str = "menu"
-    price: Optional[float] = None
-    target_pct: Optional[float] = None
-    yield_qty: Optional[float] = None
-    yield_uom: Optional[str] = None
-    prep_par: Optional[float] = None
-    procedure: Optional[str] = None
-    equipment: Optional[str] = None
-    shelf_life: Optional[str] = None
-    menu_category: Optional[str] = None
-    description: Optional[str] = None
-    photo_url: Optional[str] = None
-    portion_note: Optional[str] = None
-    frequency: Optional[str] = None
-    lines: List[DishLineIn] = []
-
 def _dish_row_to_api(row, lines):
     return {
         "id": str(row["id"]), "name": row["name"], "menuCode": row["menu_code"], "recipeType": row["recipe_type"],
@@ -3975,7 +4005,7 @@ def _dish_row_to_api(row, lines):
         "portionNote": row["portion_note"], "frequency": row["frequency"],
         "lines": [{
             "sourceType": l["source_type"], "itemCode": l["item_code"],
-            "prepDishId": str(l["prep_dish_id"]) if l["prep_dish_id"] else None, "qty": float(l["qty"] or 0),
+            "prepDishId": str(l["prep_dish_id"]) if l["prep_dish_id"] else None, "qty": float(l["qty"]), "uom": l["uom"],
         } for l in lines],
     }
 
@@ -3984,27 +4014,61 @@ async def pg_list_dishes(store_id: str):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
-        rows = await conn.fetch("SELECT * FROM dishes WHERE store_id=$1 ORDER BY name", store_id)
-        out = []
-        for r in rows:
-            lines = await conn.fetch("SELECT * FROM dish_lines WHERE dish_id=$1", r["id"])
-            out.append(_dish_row_to_api(r, lines))
-        return out
+        async with conn.transaction(isolation='repeatable_read', readonly=True):
+            return await _pg_dishes_in_conn(conn, store_id)
     finally:
         await db_pg.pool().release(conn)
 
+
+async def _pg_dishes_in_conn(conn, store_id):
+    rows = await conn.fetch('SELECT * FROM public.dishes WHERE store_id=$1 ORDER BY name,id', store_id)
+    lines = await conn.fetch('SELECT * FROM public.dish_lines WHERE dish_id=ANY($1::uuid[]) ORDER BY dish_id,id',
+                             [row['id'] for row in rows])
+    by_dish = {}
+    for line in lines:
+        by_dish.setdefault(line['dish_id'], []).append(line)
+    return [_dish_row_to_api(row, by_dish.get(row['id'], [])) for row in rows]
+
+
+@pg_router.post('/dishes/{store_id}/changes')
+async def pg_change_dishes(store_id: str, body: menu_contract.DishChanges, request: Request):
+    check_store_id(store_id)
+    if not request.headers.get('if-match'):
+        raise HTTPException(428, 'Load the current recipes before saving changes')
+    async with db_pg.pool().acquire() as conn, conn.transaction():
+        await menu_contract.lock(conn, store_id)
+        revision = await _check_and_bump_revision({'papa': 'papa_leonis'}.get(store_id, store_id), request, conn)
+        prepared, prior = await menu_contract.prepare(conn, store_id, body.upserts, remove=body.delete_ids)
+        await menu_contract.retain_operating_history(conn, store_id, body.delete_ids)
+        headers = [await _pg_save_dish(conn, store_id, dish, {}, creating=dish.id not in prior, write_lines=False)
+                   for dish in prepared]
+        for dish, row in zip(prepared, headers):
+            await _pg_save_dish_lines(conn, dish, row, {})
+        if body.delete_ids:
+            await conn.execute('DELETE FROM public.dish_lines WHERE dish_id=ANY($1::uuid[])', body.delete_ids)
+            try:
+                await conn.execute('DELETE FROM public.dishes WHERE store_id=$1 AND id=ANY($2::uuid[])', store_id, body.delete_ids)
+            except asyncpg.exceptions.ForeignKeyViolationError:
+                raise HTTPException(422, 'Recipe is referenced by retained operating history; changes were not saved')
+        return {'ok': True, 'revision': revision, 'dishes': await _pg_dishes_in_conn(conn, store_id),
+                'clientIds': {original.client_id: saved.id for original, saved in zip(body.upserts, prepared) if original.client_id}}
+
 @pg_router.post("/dishes/{store_id}")
-async def pg_create_dish(store_id: str, body: DishIn):
+async def pg_create_dish(store_id: str, body: DishIn, request: Request):
     check_store_id(store_id)
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
-            return await _pg_save_dish(conn, store_id, body, {})
+            await menu_contract.lock(conn, store_id)
+            prepared, existing = await menu_contract.prepare(conn, store_id, [body])
+            revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
+            saved = await _pg_save_dish(conn, store_id, prepared[0], {}, creating=prepared[0].id not in existing)
+            return {**saved, "revision": revision}
     finally:
         await db_pg.pool().release(conn)
 
-async def _pg_save_dish(conn, store_id, body, client_ids):
-    if body.id:
+async def _pg_save_dish(conn, store_id, body, client_ids, creating=False, write_lines=True):
+    if not creating:
         row = await conn.fetchrow(
             """UPDATE dishes SET name=$1, menu_code=$2, recipe_type=$3, price=$4, target_pct=$5,
                    yield_qty=$6, yield_uom=$7, prep_par=$8, procedure=$9, equipment=$10, shelf_life=$11,
@@ -4021,18 +4085,23 @@ async def _pg_save_dish(conn, store_id, body, client_ids):
         row = await conn.fetchrow(
             """INSERT INTO dishes (store_id, name, menu_code, recipe_type, price, target_pct, yield_qty,
                    yield_uom, prep_par, procedure, equipment, shelf_life, menu_category, description,
-                   photo_url, portion_note, frequency)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *""",
+                   photo_url, portion_note, frequency, id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *""",
             store_id, body.name, body.menu_code, body.recipe_type, body.price, body.target_pct,
             body.yield_qty, body.yield_uom, body.prep_par, body.procedure, body.equipment, body.shelf_life,
-            body.menu_category, body.description, body.photo_url, body.portion_note, body.frequency)
+            body.menu_category, body.description, body.photo_url, body.portion_note, body.frequency, body.id)
+    if not write_lines:
+        return row
+    return await _pg_save_dish_lines(conn, body, row, client_ids)
+
+async def _pg_save_dish_lines(conn, body, row, client_ids):
     await conn.execute("DELETE FROM dish_lines WHERE dish_id=$1", row["id"])
     for ln in body.lines:
         prep_id = client_ids.get(ln.prep_dish_id, ln.prep_dish_id)
         await conn.execute(
-            """INSERT INTO dish_lines (dish_id, source_type, item_code, prep_dish_id, qty)
-               VALUES ($1,$2,$3,$4,$5)""",
-            row["id"], ln.source_type, ln.item_code, prep_id, ln.qty)
+            """INSERT INTO dish_lines (dish_id, source_type, item_code, prep_dish_id, qty, uom)
+               VALUES ($1,$2,$3,$4,$5,$6)""",
+            row["id"], ln.source_type, ln.item_code, prep_id, ln.qty, ln.uom)
     lines = await conn.fetch("SELECT * FROM dish_lines WHERE dish_id=$1", row["id"])
     return _dish_row_to_api(row, lines)
 
@@ -4043,38 +4112,44 @@ async def pg_replace_dishes(store_id: str, body: List[DishIn], request: Request)
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await menu_contract.lock(conn, store_id)
+            prepared, prior = await menu_contract.prepare(conn, store_id, body, replace=True)
+            await menu_contract.retain_operating_history(conn, store_id, set(prior) - {dish.id for dish in prepared})
             revision = await _check_and_bump_revision(revision_rid, request, conn)
-            existing = await conn.fetch("SELECT id FROM dishes WHERE store_id=$1 FOR UPDATE", store_id)
-            next_ids = {dish.id for dish in body if dish.id}
-            client_ids, saved = {}, {}
-            for index, dish in sorted(enumerate(body), key=lambda pair: pair[1].recipe_type != "prep"):
-                lines = [line.model_copy(update={
-                    "prep_dish_id": client_ids.get(line.prep_dish_id, line.prep_dish_id)
-                }) for line in dish.lines]
-                canonical_dish = dish.model_copy(update={"lines": lines})
-                saved_dish = await _pg_save_dish(conn, store_id, canonical_dish, client_ids)
-                if dish.client_id:
-                    client_ids[dish.client_id] = saved_dish["id"]
-                saved[index] = saved_dish
-            for row in existing:
-                if str(row["id"]) not in next_ids:
-                    await conn.execute("DELETE FROM dishes WHERE id=$1 AND store_id=$2", row["id"], store_id)
-        return {"ok": True, "revision": revision, "dishes": [saved[i] for i in range(len(body))]}
+            headers = [await _pg_save_dish(conn, store_id, dish, {}, creating=dish.id not in prior, write_lines=False) for dish in prepared]
+            saved = [await _pg_save_dish_lines(conn, dish, row, {}) for dish, row in zip(prepared, headers)]
+            removed = set(prior) - {dish.id for dish in prepared}
+            if removed:
+                # Clear references between omitted recipes before deleting their headers.
+                await conn.execute("DELETE FROM dish_lines WHERE dish_id=ANY($1::uuid[])", list(removed))
+                try:
+                    await conn.execute("DELETE FROM dishes WHERE store_id=$1 AND id=ANY($2::uuid[])", store_id, list(removed))
+                except asyncpg.exceptions.ForeignKeyViolationError:
+                    raise HTTPException(422, "Recipe is referenced by retained operating history; replacement was not saved")
+        return {"ok": True, "revision": revision, "dishes": saved}
     finally:
         await db_pg.pool().release(conn)
 
 @pg_router.delete("/dishes/{store_id}/{dish_id}")
-async def pg_delete_dish(store_id: str, dish_id: str):
+async def pg_delete_dish(store_id: str, dish_id: str, request: Request):
     check_store_id(store_id)
+    if not request.headers.get('if-match'):
+        raise HTTPException(428, 'Load the current recipes before deleting a recipe')
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await menu_contract.lock(conn, store_id)
+            try:
+                dish_id = str(uuid.UUID(dish_id))
+            except ValueError:
+                raise HTTPException(422, "Invalid recipe ID")
+            revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
+            await menu_contract.retain_operating_history(conn, store_id, [dish_id])
             try:
                 deleted = await conn.execute("DELETE FROM dishes WHERE id=$1 AND store_id=$2", dish_id, store_id)
             except asyncpg.exceptions.ForeignKeyViolationError:
-                raise HTTPException(400, "This recipe is referenced elsewhere (another recipe's ingredients, prep history, "
-                                          "or a count) -- remove those references first")
-            return {"ok": True, "deleted": deleted != "DELETE 0"}
+                raise HTTPException(422, 'Recipe has retained references; keep its identity and history instead of deleting it')
+            return {"ok": True, "deleted": deleted != "DELETE 0", "revision": revision}
     finally:
         await db_pg.pool().release(conn)
 
@@ -4531,6 +4606,7 @@ async def pg_generate_prep_list(store_id: str, body: dict):
     conn = await db_pg.pool().acquire()
     try:
         async with conn.transaction():
+            await prep_day_tasks.hold_legacy(conn)
             await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
                                store_id, f"{date}:{count_type}")
             return await _pg_generate_prep_list_in_transaction(conn, store_id, date, track, count_type)
@@ -4676,6 +4752,7 @@ class PgPrepListUpdateIn(BaseModel):
 @pg_router.put("/preplists/{store_id}/{list_id}")
 async def pg_update_prep_list(store_id: str, list_id: str, body: PgPrepListUpdateIn):
     check_store_id(store_id)
+    await prep_day_tasks.hold_legacy(db_pg.pool())
     conn = await db_pg.pool().acquire()
     try:
         plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE id=$1 AND store_id=$2", list_id, store_id)
@@ -4705,6 +4782,7 @@ async def pg_update_prep_list(store_id: str, list_id: str, body: PgPrepListUpdat
 @pg_router.post("/preplists/{store_id}/{list_id}/release")
 async def pg_release_prep_list(store_id: str, list_id: str, body: dict):
     check_store_id(store_id)
+    await prep_day_tasks.hold_legacy(db_pg.pool())
     row = await db_pg.pool().fetchrow(
         "UPDATE prep_lists SET status='released', released_at=now(), released_by=$3 WHERE id=$1 AND store_id=$2 RETURNING id",
         list_id, store_id, body.get("releasedBy", ""))
@@ -4715,6 +4793,7 @@ async def pg_release_prep_list(store_id: str, list_id: str, body: dict):
 async def _pg_complete_task_core(conn, store_id, list_id, task_id, batches, done_by, containers):
     from prep_batches import reject_legacy_write
     reject_legacy_write()
+    await prep_day_tasks.hold_legacy(conn)
     plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE id=$1 AND store_id=$2 FOR UPDATE", list_id, store_id)
     if not plist:
         raise HTTPException(404, "prep list not found")
@@ -4759,6 +4838,7 @@ async def pg_complete_task(store_id: str, list_id: str, task_id: str, body: PgTa
 @pg_router.post("/preplists/{store_id}/{list_id}/add-item")
 async def pg_add_item_to_list(store_id: str, list_id: str, body: dict):
     check_store_id(store_id)
+    await prep_day_tasks.hold_legacy(db_pg.pool())
     conn = await db_pg.pool().acquire()
     try:
         plist = await conn.fetchrow("SELECT * FROM prep_lists WHERE id=$1 AND store_id=$2", list_id, store_id)
@@ -4836,6 +4916,7 @@ async def pg_list_prep_items(store_id: str, track: Optional[str] = Query(None)):
         await db_pg.pool().release(conn)
 
 async def _pg_validate_prep_item(conn, store_id, body):
+    await prep_planning.hold_legacy(conn)
     if body.sourceType not in ("item", "prep"):
         raise HTTPException(400, "sourceType must be item or prep")
     if body.schedule not in ("daily", "oneoff", "recurring"):
@@ -4900,6 +4981,7 @@ async def pg_update_prep_item(store_id: str, pid: str, body: PgPrepItemIn):
 @pg_router.delete("/prep-items/{store_id}/{pid}")
 async def pg_delete_prep_item(store_id: str, pid: str):
     check_store_id(store_id)
+    await prep_planning.hold_legacy(db_pg.pool())
     await db_pg.pool().execute("DELETE FROM prep_items WHERE id=$1 AND store_id=$2", pid, store_id)
     return {"ok": True}
 
@@ -4939,6 +5021,7 @@ async def pg_list_overrides(store_id: str, date: str = Query("")):
 @pg_router.post("/prep-overrides/{store_id}")
 async def pg_add_override(store_id: str, body: PgOverrideIn):
     check_store_id(store_id)
+    await prep_day_tasks.hold_legacy(db_pg.pool())
     if body.type not in ("add", "par", "remove"):
         raise HTTPException(400, "type must be add, par, or remove")
     row = await db_pg.pool().fetchrow(
@@ -4951,6 +5034,7 @@ async def pg_add_override(store_id: str, body: PgOverrideIn):
 @pg_router.delete("/prep-overrides/{store_id}/{oid}")
 async def pg_delete_override(store_id: str, oid: str):
     check_store_id(store_id)
+    await prep_day_tasks.hold_legacy(db_pg.pool())
     await db_pg.pool().execute("DELETE FROM prep_overrides WHERE id=$1 AND store_id=$2", oid, store_id)
     return {"ok": True}
 

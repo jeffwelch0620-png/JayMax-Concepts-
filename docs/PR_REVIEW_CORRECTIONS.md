@@ -1,6 +1,6 @@
-# October 7 review corrections — first batch
+# October 7–8 review corrections
 
-This records the first correction batch following independent review of the external
+This records correction batches following independent review of the external
 PR14–16 fix package. All three pull requests remain draft and unmerged. This document
 supplements the original inventory review; it does not close its remaining findings.
 The newer local deployment/recovery continuation is preserved separately.
@@ -47,11 +47,14 @@ Earlier checkpoint counts and hash manifests describe their original snapshots.
 
 ## Remaining correction sequence
 
-1. Catalog query batching and deterministic supplier selection, preserving SKU history.
+1. Catalog query batching and deterministic supplier selection are implemented for the
+   documented catalog/profile paths, preserving SKU history. Remaining setup/history
+   paths still require review.
    Retirement must preserve physically present purchased stock and its count/value;
    a removed supplier option must not silently reassign historical purchases.
-2. Recipe validation scoped to changed recipes and dependents; actionable identity in
-   errors; unknown-cost sorting and display. Do not price an unknown recipe as zero.
+2. PR15 adds recipe validation scoped to changed recipes, dependents and their inputs,
+   named errors, canonical save acknowledgement and unknown-cost sorting/display.
+   Partial-cost display and wider legacy history deletion paths remain under review.
 3. Review separation covering authors and subsequent editors, safe conflict responses,
    staff production identity collisions, and container-waste correction dependencies.
 4. Cross-module idempotency, history/access boundaries, and migration/runtime-role checks.
@@ -101,3 +104,66 @@ accounting, receiving, and whole synthetic restore. No hosted database was chang
 PR14's full frontend suite passes 251 tests across 32 suites with both default flags and
 the four foundation native flags enabled. The native-configured production
 build passes with the same three existing hook warnings.
+
+## Recipe correction batch in PR15
+
+Targeted recipe changes now require the caller's current `If-Match` revision and send only
+changed definitions plus explicit deleted IDs. A comparison read never silently adopts a
+new revision. Changed recipes, all retained dependents, and their dependencies are checked
+before committing; unrelated incomplete legacy definitions remain untouched. Whole-graph
+replacement remains strict. Retained errors include the recipe name and canonical ID.
+Headers, ingredients, deletes and revision commit together, and retained prep-log references
+hold deletion. This does not close every legacy cascading-history deletion finding.
+
+The acknowledgement returns the full saved collection and temporary-to-canonical ID map.
+The editor uses the confirmed canonical ID on its next edit, preventing duplicate creation.
+Missing yields/units stay unknown, and unknown profitability sorts after verified values,
+including real zero cost. Available alternate suppliers can be selected for planning while
+unavailable historical rows remain present. These changes never value counts or deduct
+purchases; Track 1 remains the independent accounting baseline.
+
+PR15 validation: all 359 frontend tests across 44 suites passed with default configuration
+and with the four foundation native flags enabled. No controlled-input warnings remained.
+The selected local PostgreSQL run passed 28 checks plus 21 parameter subtests: affected
+graphs, canonical IDs, stale/missing revisions, incompatible yield rollback, retained history,
+supplier-source staleness, query budgets, original recipe contracts, and synthetic restore.
+A final read-only recipe snapshot was added after that run; all four affected-recipe
+checks passed again against the final backend source. The native-configured production
+build passed with the same three existing hook warnings.
+No new migration, hosted SQL, real invoice import, or live-browser acceptance occurred.
+
+## Recipe history retention and direct deletion corrections in PR15
+
+Direct recipe deletion now requires the current `If-Match` revision and a recipe
+belonging to that restaurant. Before direct deletion, targeted removal or collection
+replacement, the transaction locks the parent against concurrent FK references and
+checks retained counts, prep definitions/list lines, logs, recipe stock, overrides
+and par recommendations. Even zero stock or a zero recommendation does not establish
+that its evidence may be erased. Referenced identities return 422 before cascades or
+history-preservation triggers run; revisions and any coupled edits roll back.
+Unused definitions can still be explicitly deleted. No history migration is required.
+
+All 15 menu backend checks and 23 parameter subtests passed on disposable PostgreSQL,
+including unchanged recipe validation, location/revision enforcement, retained stock
+and planning references, and original physical-accounting independence. Frontend
+application code is unchanged from the prior 359-test/44-suite checkpoint. These
+API guards are not a database-wide deletion policy for every legacy SQL writer;
+rollback to older code still requires the documented history-preserving cutover.
+
+## Order review separation and mapping corrections in PR15
+
+Approval now checks the authenticated actor against the retained creator and every
+create/edit/reorder journal author. An earlier editor remains ineligible after another
+editor replaces the content. Valid independent approval still follows the current
+version and canonical-line checks. No actor identity is fabricated for legacy orders.
+Incomplete retained line mappings return 422 on submit, approve, send and reorder;
+no partial command, new order or version change remains. Unique workflow identity or
+request-key conflicts return 409 only after the transaction has rolled back.
+
+Eleven selected disposable PostgreSQL order checks passed, including both new cases
+and the existing retry/race, receiving and whole-restore contracts. PR15 frontend code
+is unchanged from the prior 359-test/44-suite default/native and production-build
+checkpoint. This does not prove the externally alleged cross-store key race; that
+specific race was not reproduced and the existing global serialization remains.
+Known session-ID separation is an API guard. Shared-PIN identity and the login redesign
+remain deferred; this does not establish individual identity or SQL-role approval policy.

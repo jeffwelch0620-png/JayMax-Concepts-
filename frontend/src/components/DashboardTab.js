@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Search, CalendarRange, X } from "lucide-react";
-import { buildPeriodReport, isCountActive, isOrderEnabled, statusOf, preferredSku, fmtMoney, fmtDate, num } from "../lib/calc";
+import { buildPeriodReport, isCountActive, isOrderEnabled, statusOf, preferredSku, fmtMoney, fmtPlanningCost, fmtDate, num } from "../lib/calc";
 import { MetricCard, PageTitle, EmptyState, Field, SectionLabel, cardCls, inpCls, btnGhost } from "./common";
 import { DashboardPrepWindow } from "./DashboardPrepWindow";
 
@@ -149,8 +149,8 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
               <tbody>{report.menuProfitability.slice(0, 8).map((m) => (
                 <tr key={m.recipe.id}>
                   <td>{m.recipe.menuCode || "—"} — {m.recipe.name}</td>
-                  <td className="num">{fmtMoney(m.cost)}</td>
-                  <td className="num">{fmtMoney(m.price)}</td>
+                  <td className="num" title={m.costIssues.join("; ")}>{fmtPlanningCost(m.cost)}</td>
+                  <td className="num">{fmtPlanningCost(m.price)}</td>
                   <td className="num font-bold" style={{ color: m.foodCostPct !== null && m.foodCostPct > (Number(m.recipe.targetPct) || 30) ? "#EF4444" : "#10B981" }}>{m.foodCostPct === null ? "—" : `${num(m.foodCostPct, 1)}%`}</td>
                 </tr>))}
               </tbody></table>

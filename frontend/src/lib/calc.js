@@ -330,8 +330,8 @@ export function normalizeRecipeSchema(r) {
   return {
     ...r,
     recipeType: r.recipeType || "menu",
-    yieldQty: r.yieldQty ?? 1,
-    yieldUOM: r.yieldUOM || "each",
+    yieldQty: r.yieldQty ?? (r.recipeType === "prep" ? null : 1),
+    yieldUOM: r.yieldUOM ?? (r.recipeType === "prep" ? null : "each"),
     procedure: r.procedure || "",
     equipment: r.equipment || "",
     shelfLife: r.shelfLife || "",
@@ -341,26 +341,79 @@ export function normalizeRecipeSchema(r) {
     lines: (r.lines || []).map((l) => l.sourceType ? l : ({ ...l, sourceType: "item", qty: l.qty ?? l.qtyPortions ?? 0 })),
   };
 }
+const recipeNumber = value => value == null || typeof value === "boolean" || String(value).trim() === "" || !Number.isFinite(Number(value)) ? null : Number(value);
+export function fmtPlanningCost(value) { const amount = recipeNumber(value); return amount == null ? "Unknown" : fmtMoney(amount); }
+
+// Planning only: never use these catalog/portion estimates to value actual counts.
+export function itemPlanningCost(item) {
+  if (!item) return { cost: null, issues: ["Missing inventory ingredient"] };
+  const sku = preferredSku(item);
+  const price = recipeNumber(sku?.price);
+  if (!sku || sku.available === false || price == null || price < 0) return { cost: null, issues: [`${item.name}: supplier price is unknown or unavailable`] };
+  const packCount = recipeNumber(sku.packCount ?? item.packCount), unitQty = recipeNumber(sku.unitQty ?? item.unitQty), portionSize = recipeNumber(item.portionSize);
+  const unit = sku.unitUOM || item.unitUOM, portion = item.portionUOM;
+  if (!(packCount > 0) || !(unitQty > 0) || !(portionSize > 0) || !UOM_FAMILY[unit] || UOM_FAMILY[unit] !== UOM_FAMILY[portion]) {
+    return { cost: null, issues: [`${item.name}: confirm compatible pack and portion quantities/units`] };
+  }
+  const portions = packCount * unitQty * CONV_TO_BASE[unit] / (portionSize * CONV_TO_BASE[portion]);
+  const cost = price / portions;
+  return Number.isFinite(portions) && portions > 0 && Number.isFinite(cost) ? { cost, issues: [] } : { cost: null, issues: [`${item.name}: invalid portion conversion`] };
+}
+
 export function recipeCostSummary(recipe, items, recipes, stack = new Set()) {
-  if (!recipe) return { totalCost: 0, costPerYieldUnit: 0, cycle: false };
-  const key = recipe.id || recipe.name || "draft";
-  if (stack.has(key)) return { totalCost: 0, costPerYieldUnit: 0, cycle: true };
+  const unknown = (issue, cycle = false) => ({ totalCost: null, costPerYieldUnit: null, complete: false, valid: false, cycle, issues: [issue], validationIssues: [issue], lines: [] });
+  if (!recipe) return unknown("Missing prep recipe");
+  if (stack.size >= 100) return unknown("Recipe nesting exceeds the supported depth of 100");
+  const key = recipe.id || "draft";
+  if (stack.has(key)) return unknown("Circular prep recipe reference", true);
   const nextStack = new Set(stack); nextStack.add(key);
-  let cycle = false;
-  const totalCost = (recipe.lines || []).reduce((sum, rawLine) => {
-    const l = rawLine.sourceType ? rawLine : { ...rawLine, sourceType: "item", qty: rawLine.qty ?? rawLine.qtyPortions ?? 0 };
-    const qty = Number(l.qty ?? l.qtyPortions) || 0;
-    if (l.sourceType === "prep") {
-      const sub = recipes.find((r) => r.id === l.recipeId);
-      const subSummary = recipeCostSummary(sub, items, recipes, nextStack);
-      if (subSummary.cycle) cycle = true;
-      return sum + subSummary.costPerYieldUnit * qty;
+  const validationIssues = [], issues = [];
+  const type = recipe.recipeType || "menu";
+  if (!["menu", "prep"].includes(type)) validationIssues.push("Invalid recipe type");
+  if (!Array.isArray(recipe.lines) || !recipe.lines.length) validationIssues.push("Add at least one ingredient");
+  const yieldQty = type === "prep" ? recipeNumber(recipe.yieldQty) : 1;
+  if (type === "prep" && (!(yieldQty > 0) || !UOM_FAMILY[recipe.yieldUOM])) validationIssues.push("Confirm a positive prep yield and supported yield unit");
+  if (type === "menu" && ((recipe.yieldQty != null && recipeNumber(recipe.yieldQty) !== 1) || (recipe.yieldUOM != null && recipe.yieldUOM !== "each"))) validationIssues.push("Menu definitions are one serving (yield 1 each)");
+  for (const [field, label, minimum, maximum] of [["price", "Price", 0, Infinity], ["prepPar", "Prep par", 0, Infinity], ["targetPct", "Target food cost percentage", Number.MIN_VALUE, 100]]) {
+    if (recipe[field] != null && String(recipe[field]).trim() !== "") {
+      const value = recipeNumber(recipe[field]);
+      if (value == null || value < minimum || value > maximum) validationIssues.push(`${label} is invalid`);
     }
-    const item = items.find((i) => i.controlNumber === l.controlNumber);
-    return sum + (item ? itemDerived(item).costPerPortion * qty : 0);
-  }, 0);
-  const yieldQty = Number(recipe.yieldQty) || 1;
-  return { totalCost, costPerYieldUnit: yieldQty > 0 ? totalCost / yieldQty : 0, cycle };
+  }
+  let cycle = false;
+  const lines = (Array.isArray(recipe.lines) ? recipe.lines : []).map(raw => {
+    const line = raw.sourceType ? raw : { ...raw, sourceType: "item", qty: raw.qty ?? raw.qtyPortions };
+    const qty = recipeNumber(line.qty ?? line.qtyPortions);
+    const problems = [], invalid = [];
+    if (!(qty > 0)) invalid.push("Ingredient quantities must be finite and greater than zero");
+    let unitCost = null, name = "Missing ingredient", usageUOM = "units";
+    if (line.sourceType === "prep") {
+      const sub = recipes.find(r => r.id === line.recipeId);
+      name = sub ? `PREP — ${sub.name}` : "Missing prep recipe"; usageUOM = sub?.yieldUOM || "units";
+      if (line.controlNumber || line.itemCode || !sub || sub.recipeType !== "prep") invalid.push("Select one retained prep recipe for this ingredient");
+      else {
+        if (line.uom != null && line.uom !== sub.yieldUOM) invalid.push("Sub-recipe quantity unit must match its defined yield unit");
+        const summary = recipeCostSummary(sub, items, recipes, nextStack);
+        unitCost = summary.costPerYieldUnit; cycle = cycle || summary.cycle;
+        problems.push(...summary.issues); invalid.push(...summary.validationIssues);
+      }
+    } else if (line.sourceType === "item") {
+      const item = items.find(i => line.itemCode ? i.itemCode === line.itemCode : i.controlNumber === line.controlNumber);
+      name = item ? `${item.controlNumber} — ${item.name}` : "Missing inventory ingredient"; usageUOM = item?.portionUOM ? `${item.portionUOM} portions` : "portions";
+      if (line.recipeId || !item) invalid.push("Select one inventory ingredient linked to this restaurant");
+      else { const result = itemPlanningCost(item); unitCost = result.cost; problems.push(...result.issues); }
+      if (line.uom != null && line.uom !== "portion") invalid.push("Inventory recipe quantities are portions; review the explicit ingredient unit");
+    } else invalid.push("Invalid ingredient source type");
+    validationIssues.push(...invalid); problems.push(...invalid); issues.push(...problems);
+    const cost = unitCost != null && qty > 0 && !invalid.length ? unitCost * qty : null;
+    if (cost != null && !Number.isFinite(cost)) { issues.push("Ingredient cost exceeds supported numeric range"); return { ...line, qty, name, usageUOM, unitCost: null, cost: null }; }
+    return { ...line, qty, name, usageUOM, unitCost, cost };
+  });
+  issues.push(...validationIssues);
+  const sum = lines.reduce((total, line) => total + (line.cost ?? 0), 0);
+  if (!Number.isFinite(sum) || (yieldQty > 0 && !Number.isFinite(sum / yieldQty))) issues.push("Recipe cost exceeds supported numeric range");
+  const complete = !issues.length && lines.every(line => line.cost != null);
+  return { totalCost: complete ? sum : null, costPerYieldUnit: complete ? sum / yieldQty : null, complete, valid: !validationIssues.length, cycle, issues: [...new Set(issues)], validationIssues: [...new Set(validationIssues)], lines };
 }
 export function rawPortionsForRecipe(recipe, targetCN, items, recipes, stack = new Set()) {
   if (!recipe) return 0;
@@ -465,9 +518,9 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
 
   const menuProfitability = normalizedRecipes.filter((r) => r.recipeType !== "prep").map((r) => {
     const c = recipeCostSummary(r, items, normalizedRecipes);
-    const price = Number(r.price) || 0;
-    return { recipe: r, cost: c.totalCost, price, foodCostPct: price > 0 ? (c.totalCost / price) * 100 : null, contribution: price - c.totalCost };
-  }).sort((a, b) => (b.foodCostPct || 0) - (a.foodCostPct || 0));
+    const price = recipeNumber(r.price);
+    return { recipe: r, cost: c.totalCost, costComplete: c.complete, costIssues: c.issues, price, foodCostPct: c.complete && price > 0 ? (c.totalCost / price) * 100 : null, contribution: c.complete && price != null ? price - c.totalCost : null };
+  }).sort((a, b) => a.foodCostPct == null ? (b.foodCostPct == null ? 0 : 1) : b.foodCostPct == null ? -1 : b.foodCostPct - a.foodCostPct);
 
   const liveInventoryValue = items.reduce((sum, it) => sum + (Number(it.currentStock) || 0) * (Number(itemDerived(it).price) || 0), 0);
   const orderExposure = items.filter((it) => isOrderEnabled(it) && (Number(it.currentStock) || 0) < (Number(it.par) || 0)).reduce((sum, it) => {

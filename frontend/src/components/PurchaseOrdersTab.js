@@ -3,6 +3,7 @@ import { Check, X, Send, PackageCheck, Trash2, RotateCcw, ClipboardList, ShieldC
 import { fmtMoney, fmtDate, num } from "../lib/calc";
 import * as api from "../lib/api";
 import { NativeOrderReceiving } from "./NativeOrderReceiving";
+import { NativeOrderWorkflow } from "./NativeOrderWorkflow";
 import { PageTitle, EmptyState, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
 
 const STATUS_META = {
@@ -122,6 +123,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
   function openReceive(po) { const lines = {}; po.lines.forEach((l) => (lines[l.controlNumber] = l.qty)); setReceiving({ oid: po.id, po, lines, invoiceNumber: "" }); }
   function openEmail(po) { setEmailing({ oid: po.id, email: contacts[po.vendor] || "" }); }
 
+  if (api.orderWorkflowEnabled) return <NativeOrderWorkflow key={rid} rid={rid} showToast={showToast} onInventoryChange={onInventoryChange} />;
   return (
     <div className="fade-slide-in" data-testid="purchase-orders-tab">
       <PageTitle right={

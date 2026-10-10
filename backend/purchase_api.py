@@ -510,4 +510,16 @@ def create_router(pool_factory, store_check, authorize):
     install_prep_journal_routes(router,context)
     from prep_openings import install_routes as install_prep_opening_routes
     install_prep_opening_routes(router,context)
+    from supplier_prices import install_routes as install_price_routes
+    install_price_routes(router,context)
+    from order_commands import install_routes as install_order_routes
+    install_order_routes(router,context)
+    from supplier_contacts import install_routes as install_contact_routes
+    install_contact_routes(router,context)
+    from prep_planning import install_routes as install_planning_routes
+    install_planning_routes(router,context)
+    from prep_day_tasks import install_routes as install_day_task_routes
+    install_day_task_routes(router,context)
+    from prep_execution import install_routes as install_execution_routes
+    install_execution_routes(router,context)
     return router
