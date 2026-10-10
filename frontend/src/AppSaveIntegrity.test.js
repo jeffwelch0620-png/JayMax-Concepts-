@@ -34,6 +34,20 @@ test("supplier review navigation scopes focus to its restaurant and refreshes th
   await click("location-tab-rudds"); await click("nav-tab-invoices"); expect(mockInvoiceProps.unitReviewFocus).toBeNull();
 });
 
+test("App passes the catalog editor version through to the store after polling", async () => {
+  await act(async () => root.render(<App />)); await click("nav-tab-setup");
+  expect(mockSetupProps.revision).toBe(10);
+  const openedRevision = mockSetupProps.revision;
+  api.fetchState.mockResolvedValueOnce(state("berts",11));
+  await act(async () => jest.advanceTimersByTime(15000));
+  expect(mockSetupProps.revision).toBe(11);
+  await act(async () => expect(mockSetupProps.persistItems([{...item,par:2}],openedRevision)).resolves.toBeNull());
+  expect(api.putCollection).not.toHaveBeenCalled();
+  api.putCollection.mockResolvedValueOnce({revision:12});
+  await act(async () => mockSetupProps.persistItems([{...item,par:1}],11));
+  expect(api.putCollection).toHaveBeenCalledWith("berts","items",[{...item,par:1}],11);
+});
+
 test("failed initial load exposes a location error and a working retry", async () => {
   api.fetchState.mockRejectedValueOnce({ response: { status: 503, data: { detail: "Catalog feature settings need review" } } });
   await act(async () => root.render(<App />));

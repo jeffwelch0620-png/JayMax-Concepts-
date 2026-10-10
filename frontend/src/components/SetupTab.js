@@ -19,15 +19,15 @@ import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnA
 
 function emptyForm(areas) {
   return {
-    name: "", storageArea: (areas[0] || DEFAULT_STORAGE_AREAS[0]).name, active: true, countActive: true, orderEnabled: true, salesTracked: false, itemType: "portion",
+    draftRevision: null, name: "", storageArea: (areas[0] || DEFAULT_STORAGE_AREAS[0]).name, active: true, countActive: true, orderEnabled: true, salesTracked: false, itemType: "portion",
     purchaseUnit: "case", packCount: "", unitQty: "", unitUOM: "lb",
     portionSize: "", portionUOM: "oz", par: "", currentStock: "",
     vendorSkus: [{ id: uid("vs"), vendor: VENDORS[0], vendorSku: "", packDescription: "", purchaseUnit: "case", packCount: "", unitQty: "", unitUOM: "lb", price: "", priceUpdatedAt: "", priceSource: "manual", available: true, preferred: true }],
   };
 }
 
-export function SetupTab({ items, persistItems, areas, persistAreas, showToast, showError = () => {}, drafts, rid, onCatalogLinked, onVerifySupplier }) {
-  const [form, setForm, clearForm] = useRetainedDraft(`item:${rid}`, emptyForm(areas), drafts);
+export function SetupTab({ items, revision = 0, persistItems, areas, persistAreas, showToast, showError = () => {}, drafts, rid, onCatalogLinked, onVerifySupplier }) {
+  const [form, editForm, clearForm] = useRetainedDraft(`item:${rid}`, emptyForm(areas), drafts);
   const [editingCN, setEditingCN, clearEditing] = useRetainedDraft(`item-edit:${rid}`, null, drafts);
   const [newArea, setNewArea, clearArea] = useRetainedDraft(`area:${rid}`, { name: "", prefix: "" }, drafts);
   const [error, setError] = useState("");
@@ -59,11 +59,17 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
     catch (e) { fail(e?.response?.data?.detail || "Couldn't save that email"); }
   }
 
+  // Keep the version with the retained form, rather than adopting the latest
+  // background refresh. New items capture their version on the first edit.
+  function setForm(change) {
+    editForm(current => ({ ...change(current), draftRevision: current.draftRevision ?? (editingCN ? null : revision) }));
+  }
   function update(field, val) { setForm((f) => ({ ...f, [field]: val })); }
 
   function startEdit(it) {
     setEditingCN(it.controlNumber);
-    setForm({
+    editForm({
+      draftRevision: revision,
       name: it.name, storageArea: it.storageArea, active: it.active !== false, countActive: isCountActive(it), orderEnabled: isOrderEnabled(it), salesTracked: it.salesTracked, itemType: it.itemType,
       purchaseUnit: it.purchaseUnit, packCount: it.packCount ?? "", unitQty: it.unitQty ?? "", unitUOM: it.unitUOM,
       portionSize: it.portionSize ?? "", portionUOM: it.portionUOM, par: it.par, currentStock: it.currentStock,
@@ -95,6 +101,10 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
   async function submit(e) {
     e.preventDefault();
     if (!form.name.trim() || form.vendorSkus.length === 0) return;
+    if (!Number.isSafeInteger(form.draftRevision) || form.draftRevision !== revision) {
+      fail("Saved catalog data changed while this form was open. Your draft is retained. Cancel this form and review the latest item, or start a new item, before saving.");
+      return;
+    }
     const cleanSkus = form.vendorSkus.map((v) => ({
       ...v, price: v.price === "" || v.price == null ? null : v.price, vendorSku: String(v.vendorSku || "").trim(), packDescription: String(v.packDescription ?? ""),
       purchaseUnit: v.purchaseUnit || form.purchaseUnit || "case", packCount: optionalNumber(v.packCount),
@@ -115,7 +125,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
     const exists = items.some((it) => it.controlNumber === record.controlNumber);
     const next = exists ? items.map((it) => it.controlNumber === record.controlNumber ? record : it) : [...items, record];
     setError("");
-    if (!(await confirmSave(() => persistItems(next), fail))) return;
+    if (!(await confirmSave(() => persistItems(next, form.draftRevision), fail))) return;
     showToast(exists ? "Item updated" : `Item ${record.controlNumber} added`);
     if (clearForm(form, emptyForm(areas))) clearEditing(editingCN, null);
   }
@@ -239,7 +249,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
 
         <div className="flex gap-2.5">
           <button type="submit" className={btnAcc} data-testid="item-submit-button"><Plus size={15} /> {editingCN ? "Save Changes" : "Add Item"}</button>
-          {editingCN && <button type="button" className={btnGhost} onClick={cancelEdit}><X size={15} /> Cancel</button>}
+          {(editingCN || form.draftRevision != null) && <button type="button" className={btnGhost} onClick={cancelEdit}><X size={15} /> Cancel</button>}
         </div>
       </form>
 

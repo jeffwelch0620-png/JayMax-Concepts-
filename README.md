@@ -2,21 +2,25 @@
 
 ## Deployed walkthrough and item setup corrections - October 10, 2026
 
-PR14–17 are merged into the existing Render test deployment. The owner-session
-walkthrough confirmed labelled fictional source retention, missing-value holds,
-nonfood posting/correction and location separation. The next live test uses
-**Bert's with clearly labelled fictional items and count history**. The full
-food/count workflow and staff permissions remain unaccepted; the separate hosted
-rollback control matched **$212 Actual Food Cost**.
+PR14–18 are merged into the existing Render test deployment. The approved
+**Bert's fictional walkthrough** confirms **$212 Actual Food Cost**, preserved
+close/reopen/reclose history, separate prep/waste explanation and the staff
+quantity/manager acceptance workflow, including refusal of a stale review.
+Independent employee authorization and posting retries remain outstanding.
+The [live acceptance follow-up](docs/LIVE_ACCEPTANCE_CATALOG_EDITOR_FOLLOWUP.md)
+records the results and a reproduced two-tab catalog overwrite. Its narrow
+revision-retention fix is local and unpushed; hosted validation of that fix is
+pending a separately approved deployment. All **527 frontend tests across 63
+suites** and the strict production build pass locally for this follow-up.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
 locally corrected blockers: duplicate count panels while typing, and unrelated
 item saves blocked by a stored unknown supplier conversion. Unknown conversions
 remain unknown; new UI supplier packs still require physical validation. These
-fixes are published in [draft PR18](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18)
-and await review and test deployment. Broad UI rework is a separate later
+fixes are merged in [PR18](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/18)
+and deployed at `85cf2b7`. Broad UI rework is a separate later
 workflow. Existing hosting, Supabase connections and credentials are unchanged.
-All **522 frontend tests across 63 suites pass** with the native feature profile.
+PR18 validation passed **522 frontend tests across 63 suites** with the native feature profile.
 The [PR18 follow-up](docs/PR18_CONVERSION_CI_FOLLOWUP.md) adds a supplier-row link
 to the existing verified conversion review, a non-blocking pack mismatch notice,
 and complete shared component API mocks. Confirmations keep actor/time/evidence

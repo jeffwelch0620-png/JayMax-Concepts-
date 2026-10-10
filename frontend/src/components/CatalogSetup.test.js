@@ -22,6 +22,67 @@ beforeEach(async () => {
   await act(async () => root.render(<SetupTab rid="berts" items={[item]} areas={[{ name:"Freezer",prefix:"F" }]} persistItems={persist} persistAreas={persist} showToast={success} />));
 });
 afterEach(async () => { await act(async () => root.unmount());container.remove();jest.restoreAllMocks(); });
+
+const revisionProps = (revision, items = [item], drafts) => ({ rid: "berts", revision, items, drafts,
+  areas: [{name:"Freezer",prefix:"F"}], persistItems: persist, persistAreas: persist, showToast: success });
+const changeInput = async (field, value) => act(async () => {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(field,value);
+  field.dispatchEvent(new Event("input",{bubbles:true}));
+});
+const parInput = () => [...container.querySelectorAll("label")].find(label => label.textContent.includes("Par Level (purchase units)")).querySelector("input");
+
+test("background refresh cannot rebase an open catalog editor; cancel and reopen uses latest data", async () => {
+  await act(async () => root.render(<SetupTab {...revisionProps(10)} />));
+  await click("edit-item-F01");
+  await changeInput(parInput(),"2");
+  await act(async () => root.render(<SetupTab {...revisionProps(11,[{...item,par:1}])} />));
+  await click("item-submit-button");
+  expect(persist).not.toHaveBeenCalled(); expect(success).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="alert"]').textContent).toContain("draft is retained");
+  expect(parInput().value).toBe("2");
+  await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent.includes("Cancel")).click());
+  await click("edit-item-F01");
+  expect(parInput().value).toBe("1");
+  await click("item-submit-button");
+  expect(persist).toHaveBeenCalledWith([expect.objectContaining({par:1})],11);
+});
+
+test("retained editor keeps its original version across navigation and later typing", async () => {
+  const drafts = new Map();
+  await act(async () => root.render(<SetupTab key="retained" {...revisionProps(10,[item],drafts)} />));
+  await click("edit-item-F01");
+  await act(async () => root.render(<p>Other panel</p>));
+  await act(async () => root.render(<SetupTab {...revisionProps(11,[{...item,par:1}],drafts)} />));
+  await changeInput(find("item-name-input"),"Retained fictional edit");
+  await click("item-submit-button");
+  expect(persist).not.toHaveBeenCalled();
+  expect(drafts.get("item:berts").draftRevision).toBe(10);
+  expect(find("item-name-input").value).toBe("Retained fictional edit");
+});
+
+test("new item starts at its first edit version and can be explicitly discarded after refresh", async () => {
+  await act(async () => root.render(<SetupTab {...revisionProps(10)} />));
+  await act(async () => root.render(<SetupTab {...revisionProps(11)} />));
+  await changeInput(find("item-name-input"),"Fictional new item");
+  await click("item-submit-button");
+  expect(persist).toHaveBeenCalledWith(expect.any(Array),11);
+  persist.mockClear(); success.mockClear();
+  await changeInput(find("item-name-input"),"Second fictional draft");
+  await act(async () => root.render(<SetupTab {...revisionProps(12)} />));
+  await click("item-submit-button"); expect(persist).not.toHaveBeenCalled();
+  await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent.includes("Cancel")).click());
+  expect(find("item-name-input").value).toBe("");
+});
+
+test("server conflict preserves the original editor revision for retry", async () => {
+  const drafts = new Map();
+  await act(async () => root.render(<SetupTab key="conflict" {...revisionProps(10,[item],drafts)} />));
+  await click("edit-item-F01");
+  persist.mockRejectedValueOnce({response:{status:409,data:{detail:"Catalog changed elsewhere"}}});
+  await click("item-submit-button");
+  expect(success).not.toHaveBeenCalled(); expect(drafts.get("item:berts").draftRevision).toBe(10);
+  expect(find("item-name-input").value).toBe(item.name);
+});
 test("an ordinary item edit preserves activation, actor, canonical units and exact supplier fields", async () => {
   await click("edit-item-F01"); await click("item-submit-button");
   const saved=persist.mock.calls[0][0][0];
