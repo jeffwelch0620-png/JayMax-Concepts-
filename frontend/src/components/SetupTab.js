@@ -139,9 +139,9 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
   return (
     <div className="fade-slide-in" data-testid="setup-tab">
       <PageTitle>Item Setup</PageTitle>
-      {api.catalogMappingEnabled && <SharedCatalogLink key={rid} restaurantId={rid} drafts={drafts} onLinked={onCatalogLinked} showToast={showToast} />}
+      {api.catalogMappingEnabled && <SharedCatalogLink key={`catalog-${rid}`} restaurantId={rid} drafts={drafts} onLinked={onCatalogLinked} showToast={showToast} />}
       {error && <p role="alert">{error}</p>}
-      {api.actualInventoryEnabled && <NativeInventoryPosition key={rid} restaurantId={rid} />}
+      {api.actualInventoryEnabled && <NativeInventoryPosition key={`inventory-position-${rid}`} restaurantId={rid} />}
       {api.prepSetupEnabled && <PreparedItemSetup key={`prep-${rid}`} restaurantId={rid} />}
       {api.prepPlanningEnabled && <PrepPlanning rid={rid} drafts={drafts} showToast={showToast}/>}
       {api.prepBatchesEnabled && <PreparedBatchLedger key={`prep-batches-${rid}`} restaurantId={rid} />}
@@ -244,7 +244,7 @@ export function SetupTab({ items, persistItems, areas, persistAreas, showToast, 
         </div>
       </div>
 
-      {api.supplierContactsEnabled ? <SupplierContacts key={rid} rid={rid} drafts={drafts} onSaved={onCatalogLinked} showToast={showToast}/> : <div className={`${cardCls} p-4 mb-6`} data-testid="vendor-emails-card">
+      {api.supplierContactsEnabled ? <SupplierContacts key={`supplier-contacts-${rid}`} rid={rid} drafts={drafts} onSaved={onCatalogLinked} showToast={showToast}/> : <div className={`${cardCls} p-4 mb-6`} data-testid="vendor-emails-card">
         <SectionLabel>Supplier Order Emails</SectionLabel>
         <div className="text-[11px] text-slate-500 mb-3">Saved addresses are used as the default recipient when emailing a Purchase Order to a supplier (editable at send time).</div>
         <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))" }}>
