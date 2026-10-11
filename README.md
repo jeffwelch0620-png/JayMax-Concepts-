@@ -21,7 +21,16 @@ credentials stored in receipts or Git. The
 [read-only preflight](docs/DEPLOYED_POSTING_RETRY_PREFLIGHT.md) record the setup;
 five offline runner controls remain separate from deployed evidence.
 Browser lost-first-response acceptance needs a separately reviewed unposted
-fictional fixture. Independent employee authorization remains outstanding.
+fictional fixture. The [prepared browser trial](docs/BROWSER_POSTING_RESPONSE_LOSS_PLAN.md)
+defines one invented October 11 appetizer receipt (+1 each / $1), independent
+commit proof before interruption, same-mounted-form retry and phase-specific
+preservation checks. Its read-only preparation validates the source, mapping
+and original $212 control; no fixture has been captured or posted. Three
+read-only slow-download/Offline trials completed with HTTP 200, so that method
+has not demonstrated response loss and first posting is held. Normal networking
+was restored; a fresh read-only check preserved all 79 protected tables and
+the complete $212 report. A deterministic alternative needs review before
+fixture creation. Independent employee authorization remains outstanding.
 Current hosting, Supabase connections, database roles and schema are unchanged.
 This documentation checkpoint remains local and has not been pushed.
 
