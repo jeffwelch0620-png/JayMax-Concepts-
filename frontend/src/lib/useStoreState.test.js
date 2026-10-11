@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { useStoreState } from "./useStoreState";
 import * as api from "./api";
+import { readStateWithDeadline, STATE_READ_TIMEOUT_MS, STATE_READ_TIMEOUT_MESSAGE } from "./stateRead";
 
 jest.mock("./api", () => ({ fetchState: jest.fn(), putCollection: jest.fn(), putSalesPeriod: jest.fn() }));
 const empty = { items: [], dishes: [], salesPeriod: {} };
@@ -217,6 +218,39 @@ test("polling resumes after an explicit recovery read fails", async () => {
   api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["reconnected"] });
   await act(async () => jest.advanceTimersByTime(15000));
   expect(controller.state.items).toEqual(["reconnected"]); expect(controller.loadError).toBeNull();
+});
+
+test("a stalled initial read reports failure and the next poll loads the location", async () => {
+  api.fetchState.mockImplementationOnce(() => readStateWithDeadline(() => new Promise(() => {})));
+  await render("berts"); await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+  expect(controller.state).toBeNull(); expect(controller.loadError).toBe(STATE_READ_TIMEOUT_MESSAGE);
+  expect(errors).toHaveBeenCalledTimes(1); expect(api.fetchState).toHaveBeenCalledTimes(1);
+  await act(async () => jest.advanceTimersByTime(15000));
+  expect(controller.state.items).toEqual(["berts"]); expect(controller.loadError).toBeNull();
+});
+
+test("a timed-out background read resumes polling and its late response cannot replace newer state", async () => {
+  await render("berts"); const old = deferred();
+  api.fetchState.mockImplementationOnce(() => readStateWithDeadline(() => old.promise));
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+  expect(controller.state.revision).toBe(10); expect(controller.loadError).toBe(STATE_READ_TIMEOUT_MESSAGE);
+  api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["reconnected"] });
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => old.resolve({ revision: 999, items: ["late obsolete data"] }));
+  expect(controller.state.revision).toBe(11); expect(controller.state.items).toEqual(["reconnected"]);
+  expect(controller.loadError).toBeNull(); expect(errors).toHaveBeenCalledTimes(1);
+});
+
+test("a recovery timeout returns no baseline and repeated read failures report only once", async () => {
+  await render("berts");
+  api.fetchState.mockImplementation(() => readStateWithDeadline(() => new Promise(() => {})));
+  let recovery; act(() => { recovery = controller.refresh(); });
+  await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+  expect(await recovery).toBeUndefined(); expect(controller.state.revision).toBe(10);
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+  expect(errors).toHaveBeenCalledTimes(1); expect(controller.loadError).toBe(STATE_READ_TIMEOUT_MESSAGE);
 });
 
 test("recovery cannot return data from a replaced login session", async () => {

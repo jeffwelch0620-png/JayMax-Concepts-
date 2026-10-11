@@ -32,10 +32,18 @@ unchanged rows across all 79 purchasing/count/prep/state tables checked. No new
 purchase was imported or posted. A controlled local regression now confirms that
 background polling can invalidate an explicit editor recovery read. The
 [recovery-read follow-up](docs/EDITOR_RECOVERY_READ_INTEGRITY.md) prevents that
-overlap while preserving stale-response and revision safeguards. This follow-up
-passes **144 focused tests**, all **572 frontend tests across 65 suites**, and
-the strict production build. It is local and has not been deployed; broader UI
-and authentication work remain deferred.
+overlap while preserving stale-response and revision safeguards. The PR20 review
+amendment also bounds the complete state load to **60 seconds**, cancelling
+unfinished shared-state and PostgreSQL child reads so a stalled request cannot
+pause polling indefinitely. Initial timeouts expose Retry; later timeouts retain
+confirmed state and drafts. The deadline is scoped to reads and leaves mutation
+and posting retry contracts unchanged. The amended follow-up passes **181 focused
+tests across 11 suites**, all **588 frontend tests across 66 suites**, and the
+strict production build. It is published for review in
+[draft PR20](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/20) and has
+not been deployed. After separate merge approval, test both recovery actions
+across a poll interval and stalled-network recovery on the Render test app;
+broader UI and authentication work remain deferred.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
 locally corrected blockers: duplicate count panels while typing, and unrelated

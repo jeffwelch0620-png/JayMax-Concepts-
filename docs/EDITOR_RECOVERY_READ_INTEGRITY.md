@@ -32,7 +32,44 @@ discarded response. This does not automatically retry the editor action.
 - The change introduces no cached-data fallback, field auto-merge, altered
   authentication, backend route, migration or connection configuration.
 - Polling pauses while the latest request remains pending. A further explicit
-  refresh can supersede that request; request timeout policy is unchanged.
+  refresh can supersede that request. The bounded state-read policy below now
+  ensures a stalled latest request releases that hold.
+
+## PR20 review amendment: bound stalled state reads
+
+The external review identified a remaining reliability gap: a transport that
+never settles could hold polling indefinitely, or leave initial loading without
+an error or Retry button. The earlier release tests covered requests that
+eventually succeeded or failed, not a never-settling request.
+
+`fetchState` now has one **60-second deadline for the complete operation**:
+the shared-state request and subsequent PostgreSQL item, recipe, prep and
+compatibility invoice reads. Every dependent request shares that operation's
+AbortSignal. The timer does not restart when the PostgreSQL reads begin. This
+is a conservative build-time allowance for the existing Render test service,
+not a measured hosting latency guarantee; assess it during hosted acceptance.
+
+At the deadline, the operation rejects with a connection/retry diagnosis and
+cancels unfinished transports. The store's existing `finally` releases the
+polling hold, so the next scheduled interval can retry. Initial loading exposes
+the existing error and Retry button. Mid-session failures retain the last
+confirmed snapshot and drafts; recovery receives no unconfirmed baseline.
+Repeated failures use the existing single-notification guard. A late completion
+cannot replace the settled timeout, start later child reads after an expired
+initial request, or overwrite a newer confirmed snapshot.
+
+Ordinary failure also cancels sibling reads and clears the timer while keeping
+the original error. Successful completion clears the timer. The cancellation
+and deadline are private to this state read: no global Axios timeout, mutation
+timeout, automatic save retry, invoice posting change, backend change or
+database migration is introduced.
+
+Regression coverage exercises the real state adapter with mocked transport,
+including a stalled initial request and each PostgreSQL child, the single
+operation budget, cancellation, late completion and unchanged purchase-post
+request identity. Hook and App checks use the real deadline helper with
+fictional never-settling reads to verify resumed polling, preserved confirmed
+state, failure notification suppression and the initial Retry button.
 
 ## Validation and evidence
 
@@ -48,7 +85,7 @@ obsolete request. Tracking only the latest read resolves that edge while
 preserving the opposite case, where obsolete completion must not release a
 newer recovery.
 
-Final local validation passes **144 focused tests across 7 suites**, all
+The original polling correction's local validation passed **144 focused tests across 7 suites**, all
 **572 frontend tests across 65 suites**, and the production build with the
 reviewed native feature profile, `CI=true` and ESLint enabled. No tests failed
 or were skipped. The build reports `Compiled successfully`; Node's `fs.F_OK`
@@ -71,18 +108,31 @@ App tests exercise the actual store hook and editor callback wiring while
 mocking panels; existing component suites cover draft/conflict recovery.
 Backend/database behavior is unchanged and is not revalidated by this run.
 
+The timeout amendment adds **16 regression cases**: 12 state-adapter checks,
+three hook checks and one App initial-loading/retry check. Amended local
+validation passes **181 focused tests across 11 suites**, all **588 frontend
+tests across 66 suites**, and the strict native-profile production build with
+`CI=true` and ESLint enabled. No tests failed or were skipped. Its safe evidence
+is retained outside Git as `state-read-focused-timeout-first-tests.json`,
+`state-read-full-timeout-final-tests.json` and the matching logs/validation
+receipts. These are mocked local tests, not deployed network acceptance.
+
 ## Review and remaining acceptance
 
 This follow-up is prepared on `codex/editor-recovery-read-integrity` after the
 hosted-acceptance documentation commits. Local validation was recorded at
-`9f0aa7d`; the subsequent publication note changes documentation only. The user
-authorized publication as a draft PR for review. Merge and deployment require
+`9f0aa7d`; the original published head `97340fe` changed its publication note
+only. The user subsequently approved the review recommendations, including this
+bounded-read amendment to draft PR20. Merge and deployment require
 separate approval. Existing Render hosting, Supabase schema/connections and the
 previously verified $212 fictional accounting control remain untouched.
 
 Next, review the draft PR and its GitHub checks. After an approved merge
 refreshes the test deployment, exercise both editor recovery actions across a
 polling interval with labelled fictional drafts and confirm persisted records.
+Also stall a read using browser network controls and verify that timeout,
+retry and subsequent polling recover. Confirm the timeout fits the service's
+observed startup time before treating it as an operational setting.
 Record hosted acceptance separately from these local tests. Deployed HTTP
 posting replay, lost-response recovery, independent employee authorization,
 broad UI rework and fixture cleanup retain their separate review boundaries.

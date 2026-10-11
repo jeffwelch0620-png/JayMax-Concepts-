@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import * as api from "./lib/api";
 import { toast } from "sonner";
+import { readStateWithDeadline, STATE_READ_TIMEOUT_MS, STATE_READ_TIMEOUT_MESSAGE } from "./lib/stateRead";
 
 jest.mock("./lib/api", () => ({ currentSession: jest.fn(), authLogout: jest.fn(), fetchState: jest.fn(), putCollection: jest.fn(), putSalesPeriod: jest.fn(), SESSION_EXPIRED_EVENT: "test-expired" }));
 jest.mock("sonner", () => ({ Toaster: () => null, toast: { success: jest.fn(), error: jest.fn() } }));
@@ -83,6 +84,18 @@ test("failed initial load exposes a location error and a working retry", async (
   expect(container.textContent).toContain("Retry loading location");
   await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "Retry loading location").click());
   expect(find("saved-items").textContent).toBe("berts"); expect(container.querySelector('[role="alert"]')).toBeNull();
+});
+
+test("a never-finishing initial load exposes timeout diagnosis and a working retry", async () => {
+  api.fetchState.mockImplementationOnce(() => readStateWithDeadline(() => new Promise(() => {})));
+  await act(async () => root.render(<App />));
+  expect(container.textContent).toContain("Loading Bert"); expect(container.querySelector('[role="alert"]')).toBeNull();
+  await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+  expect(container.querySelector('[role="alert"]').textContent).toBe(STATE_READ_TIMEOUT_MESSAGE);
+  const retry = [...container.querySelectorAll("button")].find(button => button.textContent === "Retry loading location");
+  expect(retry).toBeDefined(); await act(async () => retry.click());
+  expect(find("saved-items").textContent).toBe("berts"); expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(toast.error).toHaveBeenCalledTimes(1);
 });
 
 test("App isolates delayed saves, messages and callbacks across restaurant navigation", async () => {
