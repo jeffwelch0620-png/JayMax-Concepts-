@@ -1,5 +1,22 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Hosted recovery acceptance and HTTP retry preparation - October 11, 2026
+
+PR20 is merged at `4855ba6`, and its Render frontend passed the
+[hosted read-recovery walkthrough](docs/PR20_HOSTED_ACCEPTANCE_RESULTS.md).
+Item and recipe drafts survived polling and stalled reads; timeouts released
+recovery, initial Retry worked, and polling resumed. Both fictional drafts were
+discarded without Save. Read-only comparisons preserved all 79 protected tables
+and the complete **$212 Actual Food Cost** report. These controlled client-latency
+checks do not establish a cold-start service-level guarantee.
+
+The [deployed invoice/credit retry procedure](docs/DEPLOYED_POSTING_RETRY_PLAN.md)
+is prepared on a local follow-up branch. All four original request fingerprints
+and their serialized bodies are verified, with one original batch per document.
+Preparation sent **zero HTTP posting requests**. Deployed transport and browser
+lost-response acceptance remain separate from prior API/database replay results.
+Current hosting, Supabase connections, credentials and schema are unchanged.
+
 ## Deployed walkthrough and item setup corrections - October 10, 2026
 
 PR14–19 are merged into the existing Render test deployment. Both services are
@@ -39,11 +56,11 @@ pause polling indefinitely. Initial timeouts expose Retry; later timeouts retain
 confirmed state and drafts. The deadline is scoped to reads and leaves mutation
 and posting retry contracts unchanged. The amended follow-up passes **181 focused
 tests across 11 suites**, all **588 frontend tests across 66 suites**, and the
-strict production build. It is published for review in
-[draft PR20](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/20) and has
-not been deployed. After separate merge approval, test both recovery actions
-across a poll interval and stalled-network recovery on the Render test app;
-broader UI and authentication work remain deferred.
+strict production build. That review checkpoint was published in
+[PR20](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/20), subsequently
+merged under user approval and deployed. The October 11 results above record
+its completed hosted read acceptance; broader UI and authentication work remain
+deferred.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
 locally corrected blockers: duplicate count panels while typing, and unrelated
