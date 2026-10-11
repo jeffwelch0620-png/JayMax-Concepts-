@@ -1,5 +1,6 @@
 import axios from "axios";
 import { calcPortionsPerUnit, preferredSku } from "./calc";
+import { readStateWithDeadline } from "./stateRead";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Supabase migration target -- see docs/SUPABASE_MIGRATION_PLAN.md. Store ids here
@@ -200,10 +201,15 @@ export const authLogout = () => localStorage.removeItem(TOKEN_KEY);
 export const currentSession = () => session();
 export const storeSession = (data) => { localStorage.setItem(TOKEN_KEY, JSON.stringify(data)); return data; };
 
-export const fetchState = (rid) => axios.get(`${API}/state/${rid}`).then((r) => USE_PG
-  ? Promise.all([pgFetchItemsAndPurchases(rid), pgFetchDishes(rid), pgFetchPrepState(rid)])
-    .then(([pg, dishes, prep]) => ({ ...r.data, ...pg, ...prep, dishes: dishes.map(d => pgDishToMongoDish(d, rid, pg.items)) }))
-  : r.data);
+export const fetchState = (rid) => readStateWithDeadline(async options => {
+  const response = await axios.get(`${API}/state/${rid}`, options);
+  if (options.signal.aborted) throw new Error("Location data read was cancelled.");
+  if (!USE_PG) return response.data;
+  const [pg, dishes, prep] = await Promise.all([
+    pgFetchItemsAndPurchases(rid, options), pgFetchDishes(rid, options), pgFetchPrepState(rid, options),
+  ]);
+  return { ...response.data, ...pg, ...prep, dishes: dishes.map(d => pgDishToMongoDish(d, rid, pg.items)) };
+});
 const revisionHeaders = (revision) => revision == null ? {} : { "If-Match": `"${revision}"` };
 export const putCollection = (rid, name, arr, revision) => {
   if (nativePurchasesEnabled && name === "purchases") return retiredWorkflow("Retain this invoice in Invoice Master, then review its received date, quantities and costs before posting.");
@@ -321,17 +327,17 @@ export const pgCreateVendor = (body) => axios.post(`${PG_API}/vendors`, body).th
 export const pgUpdateVendor = (vendorId, body, version) => axios.put(`${PG_API}/vendors/${vendorId}`, body, { headers: revisionHeaders(version) }).then((r) => r.data);
 
 // ---- Items (global catalog + per-store tracking + per-vendor SKUs, flattened) ----
-export const pgListItems = (storeId) => axios.get(`${PG_API}/items/${storeId}`).then((r) => r.data);
+export const pgListItems = (storeId, ...options) => axios.get(`${PG_API}/items/${storeId}`, ...options).then((r) => r.data);
 export const pgCreateItem = (storeId, body) => axios.post(`${PG_API}/items/${storeId}`, body).then((r) => r.data);
 export const pgDeleteItem = (storeId, code) => axios.delete(`${PG_API}/items/${storeId}/${code}`).then((r) => r.data);
 
 // ---- Invoices ----
-export const pgListInvoices = (storeId, from, to) => axios.get(`${PG_API}/invoices/${storeId}`, { params: { from, to } }).then((r) => r.data);
+export const pgListInvoices = (storeId, from, to, options = {}) => axios.get(`${PG_API}/invoices/${storeId}`, { ...options, params: { from, to } }).then((r) => r.data);
 export const pgCreateInvoice = (storeId, body) => nativePurchasesEnabled ? retiredWorkflow("Use Invoice Master to retain and review this purchase before posting.") : axios.post(`${PG_API}/invoices/${storeId}`, body).then((r) => r.data);
 
 // ---- Dishes (menu items + prep recipes) -- ids are real Postgres uuids, not the
 // Mongo-side "dish_xxx"/"prep_xxx" strings. ----
-export const pgListDishes = (storeId) => axios.get(`${PG_API}/dishes/${storeId}`).then((r) => r.data);
+export const pgListDishes = (storeId, ...options) => axios.get(`${PG_API}/dishes/${storeId}`, ...options).then((r) => r.data);
 export const pgSaveDish = (storeId, body) => axios.post(`${PG_API}/dishes/${storeId}`, body).then((r) => r.data);
 export const pgReplaceDishes = (storeId, body, revision) => axios.put(`${PG_API}/dishes/${storeId}`, body, { headers: revisionHeaders(revision) }).then((r) => r.data);
 export const pgDeleteDish = (storeId, dishId) => axios.delete(`${PG_API}/dishes/${storeId}/${dishId}`).then((r) => r.data);
@@ -340,7 +346,7 @@ export const pgDeleteDish = (storeId, dishId) => axios.delete(`${PG_API}/dishes/
 export const pgCompletePrep = (storeId, body) => axios.post(`${PG_API}/prep/${storeId}/complete`, body).then((r) => r.data);
 export const pgApplyPrepSales = (storeId, dishSales) => axios.post(`${PG_API}/prep/${storeId}/apply-sales`, { dishSales }).then((r) => r.data);
 export const pgUseContainer = (storeId, body) => axios.post(`${PG_API}/prep/${storeId}/use-container`, body).then((r) => r.data);
-export const pgFetchPrepState = (rid) => axios.get(`${PG_API}/prep/${pgStoreId(rid)}/state`).then((r) => r.data);
+export const pgFetchPrepState = (rid, ...options) => axios.get(`${PG_API}/prep/${pgStoreId(rid)}/state`, ...options).then((r) => r.data);
 
 // ---- Prep: evening count sessions ----
 export const pgGetCountSession = (storeId, date, track = "daily") => axios.get(`${PG_API}/prepcount/${storeId}/session`, { params: { date, track } }).then((r) => r.data);
@@ -516,9 +522,9 @@ export function mongoItemToPgBody(item, rid) {
   };
 }
 
-async function pgFetchItemsAndPurchases(rid) {
+async function pgFetchItemsAndPurchases(rid, options) {
   const storeId = pgStoreId(rid);
-  const [pgItems, pgInvoices] = await Promise.all([pgListItems(storeId), nativePurchasesEnabled ? Promise.resolve([]) : pgListInvoices(storeId)]);
+  const [pgItems, pgInvoices] = await Promise.all([pgListItems(storeId, options), nativePurchasesEnabled ? Promise.resolve([]) : pgListInvoices(storeId, undefined, undefined, options)]);
   const items = pgItems.map((it) => pgItemToMongoItem(it, rid));
   const purchases = [];
   for (const inv of pgInvoices) {
@@ -641,9 +647,9 @@ function mongoDishToPgBody(dish, rid, items, comparison = false) {
   };
 }
 
-async function pgFetchDishes(rid) {
+async function pgFetchDishes(rid, options) {
   const storeId = pgStoreId(rid);
-  return pgListDishes(storeId);
+  return pgListDishes(storeId, options);
 }
 
 async function pgPutDishes(rid, arr, revision) {

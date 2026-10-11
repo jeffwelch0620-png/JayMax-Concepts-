@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { useStoreState } from "./useStoreState";
 import * as api from "./api";
+import { readStateWithDeadline, STATE_READ_TIMEOUT_MS, STATE_READ_TIMEOUT_MESSAGE } from "./stateRead";
 
 jest.mock("./api", () => ({ fetchState: jest.fn(), putCollection: jest.fn(), putSalesPeriod: jest.fn() }));
 const empty = { items: [], dishes: [], salesPeriod: {} };
@@ -70,7 +71,7 @@ test("a read started before a write cannot undo its acknowledgement", async () =
   await render("berts"); const oldRead = deferred(); api.fetchState.mockReturnValueOnce(oldRead.promise);
   let refreshing; act(() => { refreshing = controller.refresh(); });
   await act(async () => controller.save("items", ["new saved"]));
-  await act(async () => { oldRead.resolve({ revision: 10, items: ["old"] }); await refreshing; });
+  await act(async () => { oldRead.resolve({ revision: 10, items: ["old"] }); expect(await refreshing).toBeUndefined(); });
   expect(container.textContent).toContain("new saved"); expect(container.textContent).not.toContain('"old"');
 });
 test("overlapping whole-store saves are refused until the first finishes", async () => {
@@ -154,4 +155,117 @@ test("a superseded failed poll cannot announce failure after a newer successful 
   api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["fresh"] }); await act(async () => controller.refresh());
   await act(async () => { old.reject(new Error("old failed poll")); await pending; });
   expect(errors).not.toHaveBeenCalled(); expect(controller.state.items).toEqual(["fresh"]);
+});
+
+test("polling cannot invalidate the data returned by an explicit recovery read", async () => {
+  await render("berts"); const reading = deferred(); api.fetchState.mockReturnValueOnce(reading.promise);
+  let recovery; act(() => { recovery = controller.refresh(); });
+  await act(async () => jest.advanceTimersByTime(30000));
+  const latest = { revision: 11, items: ["reviewed latest"] };
+  let result; await act(async () => { reading.resolve(latest); result = await recovery; });
+  expect(result).toEqual(latest); expect(controller.state.items).toEqual(latest.items);
+  expect(api.fetchState).toHaveBeenCalledTimes(2); expect(errors).not.toHaveBeenCalled();
+  api.fetchState.mockResolvedValueOnce({ revision: 12, items: ["next poll"] });
+  await act(async () => jest.advanceTimersByTime(15000));
+  expect(controller.state.items).toEqual(["next poll"]);
+});
+
+test("a slow background poll does not start more overlapping polls", async () => {
+  await render("berts"); const reading = deferred(); api.fetchState.mockReturnValueOnce(reading.promise);
+  await act(async () => jest.advanceTimersByTime(45000));
+  await act(async () => reading.resolve({ revision: 11, items: ["slow poll"] }));
+  expect(api.fetchState).toHaveBeenCalledTimes(2);
+  expect(controller.state.items).toEqual(["slow poll"]);
+});
+
+test("an explicit read can supersede an older pending poll without waiting for it", async () => {
+  await render("berts"); const old = deferred(); api.fetchState.mockReturnValueOnce(old.promise);
+  await act(async () => jest.advanceTimersByTime(15000));
+  const latest = { revision: 12, items: ["explicit latest"] }; api.fetchState.mockResolvedValueOnce(latest);
+  await act(async () => expect(controller.refresh()).resolves.toEqual(latest));
+  await act(async () => old.resolve({ revision: 11, items: ["obsolete poll"] }));
+  expect(controller.state.items).toEqual(latest.items); expect(errors).not.toHaveBeenCalled();
+});
+
+test("a superseded slow poll cannot keep polling paused after a newer explicit read completes", async () => {
+  await render("berts"); const old = deferred(); api.fetchState.mockReturnValueOnce(old.promise);
+  await act(async () => jest.advanceTimersByTime(15000));
+  api.fetchState.mockResolvedValueOnce({ revision: 12, items: ["explicit latest"] });
+  await act(async () => expect(controller.refresh()).resolves.toMatchObject({ revision: 12 }));
+  api.fetchState.mockResolvedValueOnce({ revision: 13, items: ["following poll"] });
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => old.resolve({ revision: 11, items: ["obsolete poll"] }));
+  expect(controller.state.items).toEqual(["following poll"]); expect(controller.state.revision).toBe(13);
+  expect(api.fetchState).toHaveBeenCalledTimes(4);
+});
+
+test("an obsolete read completing cannot unblock polling during a newer recovery read", async () => {
+  await render("berts"); const old = deferred(), latest = deferred();
+  api.fetchState.mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise);
+  let first, recovery; act(() => { first = controller.refresh(); recovery = controller.refresh(); });
+  await act(async () => { old.resolve({ revision: 11, items: ["obsolete read"] }); expect(await first).toBeUndefined(); });
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => { latest.resolve({ revision: 12, items: ["recovery latest"] }); expect(await recovery).toMatchObject({ revision: 12 }); });
+  expect(api.fetchState).toHaveBeenCalledTimes(3); expect(controller.state.items).toEqual(["recovery latest"]);
+});
+
+test("polling resumes after an explicit recovery read fails", async () => {
+  await render("berts"); const reading = deferred(); api.fetchState.mockReturnValueOnce(reading.promise);
+  let recovery; act(() => { recovery = controller.refresh(); });
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => { reading.reject(new Error("Recovery unavailable")); expect(await recovery).toBeUndefined(); });
+  expect(controller.loadError).toBe("Recovery unavailable");
+  api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["reconnected"] });
+  await act(async () => jest.advanceTimersByTime(15000));
+  expect(controller.state.items).toEqual(["reconnected"]); expect(controller.loadError).toBeNull();
+});
+
+test("a stalled initial read reports failure and the next poll loads the location", async () => {
+  api.fetchState.mockImplementationOnce(() => readStateWithDeadline(() => new Promise(() => {})));
+  await render("berts"); await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+  expect(controller.state).toBeNull(); expect(controller.loadError).toBe(STATE_READ_TIMEOUT_MESSAGE);
+  expect(errors).toHaveBeenCalledTimes(1); expect(api.fetchState).toHaveBeenCalledTimes(1);
+  await act(async () => jest.advanceTimersByTime(15000));
+  expect(controller.state.items).toEqual(["berts"]); expect(controller.loadError).toBeNull();
+});
+
+test("a timed-out background read resumes polling and its late response cannot replace newer state", async () => {
+  await render("berts"); const old = deferred();
+  api.fetchState.mockImplementationOnce(() => readStateWithDeadline(() => old.promise));
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+  expect(controller.state.revision).toBe(10); expect(controller.loadError).toBe(STATE_READ_TIMEOUT_MESSAGE);
+  api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["reconnected"] });
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => old.resolve({ revision: 999, items: ["late obsolete data"] }));
+  expect(controller.state.revision).toBe(11); expect(controller.state.items).toEqual(["reconnected"]);
+  expect(controller.loadError).toBeNull(); expect(errors).toHaveBeenCalledTimes(1);
+});
+
+test("a recovery timeout returns no baseline and repeated read failures report only once", async () => {
+  await render("berts");
+  api.fetchState.mockImplementation(() => readStateWithDeadline(() => new Promise(() => {})));
+  let recovery; act(() => { recovery = controller.refresh(); });
+  await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+  expect(await recovery).toBeUndefined(); expect(controller.state.revision).toBe(10);
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+  expect(errors).toHaveBeenCalledTimes(1); expect(controller.loadError).toBe(STATE_READ_TIMEOUT_MESSAGE);
+});
+
+test("recovery cannot return data from a replaced login session", async () => {
+  await render("berts"); const reading = deferred(); api.fetchState.mockReturnValueOnce(reading.promise);
+  let recovery; act(() => { recovery = controller.refresh(); });
+  await act(async () => root.render(<Screen rid="berts" auth={{ user: { role: "manager" } }} />));
+  await act(async () => { reading.resolve({ revision: 99, items: ["old login"] }); expect(await recovery).toBeUndefined(); });
+  expect(controller.state.revision).toBe(10); expect(controller.state.items).toEqual(["berts"]);
+});
+
+test("a regressing recovery response returns no baseline and does not stop later polling", async () => {
+  await render("berts"); api.fetchState.mockResolvedValueOnce({ revision: 9, items: ["old revision"] });
+  await act(async () => expect(controller.refresh()).resolves.toBeUndefined());
+  expect(controller.state.revision).toBe(10); expect(controller.state.items).toEqual(["berts"]);
+  api.fetchState.mockResolvedValueOnce({ revision: 11, items: ["fresh poll"] });
+  await act(async () => jest.advanceTimersByTime(15000));
+  expect(controller.state.items).toEqual(["fresh poll"]);
 });
