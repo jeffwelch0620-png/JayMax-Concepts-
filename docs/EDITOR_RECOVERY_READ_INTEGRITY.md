@@ -73,12 +73,14 @@ Backend/database behavior is unchanged and is not revalidated by this run.
 
 ## Review and remaining acceptance
 
-This follow-up is committed locally on `codex/editor-recovery-read-integrity`
-after the local hosted-acceptance documentation commits. It is not pushed,
-merged or deployed. Existing Render hosting, Supabase schema/connections and
-the previously verified $212 fictional accounting control remain untouched.
+This follow-up is prepared on `codex/editor-recovery-read-integrity` after the
+hosted-acceptance documentation commits. Local validation was recorded at
+`9f0aa7d`; the subsequent publication note changes documentation only. The user
+authorized publication as a draft PR for review. Merge and deployment require
+separate approval. Existing Render hosting, Supabase schema/connections and the
+previously verified $212 fictional accounting control remain untouched.
 
-Next, publish a draft PR for review when authorized. After an approved merge
+Next, review the draft PR and its GitHub checks. After an approved merge
 refreshes the test deployment, exercise both editor recovery actions across a
 polling interval with labelled fictional drafts and confirm persisted records.
 Record hosted acceptance separately from these local tests. Deployed HTTP
