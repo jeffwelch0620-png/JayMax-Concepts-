@@ -64,6 +64,26 @@ replacement source import or a new invoice review.
 
 ## Exact retries
 
+The local execution helper is `run_deployed_posting_retry.py`, retained outside
+Git. Its default mode performs read-only preflight and sends no posting request.
+The explicit execution mode requires the operator to sign in through a masked
+local prompt using the existing Inventory owner account. It calls only the
+normal `https://jaymax-api.onrender.com/api/auth/login` endpoint and keeps the
+password and token in memory. Closing the prompt stops execution before posting.
+Each HTTP command is followed by a fresh read-only database transaction, checking
+all 79 protected tables, migration identities, the full report and all four
+original batch/line/fact graphs, plus a deployed document read.
+
+Current preflight confirms the API is Live at `b2f529f` in Render and the frontend
+serves the accepted `main.7e3cd424.js` asset pointing to that API. The prepared
+Windows source hashes differ from the deployed commit blobs because of CRLF;
+the source is byte-for-byte identical after CRLF-to-LF normalization only. Both
+raw hashes and the comparison method are retained in the preflight receipt.
+Five offline transport tests pass: original command identity/results, stopping
+after a lost response, stopping after changed rows, cancelled sign-in, and the
+default mode's zero-posting behavior. These controls validate the test runner,
+not deployed replay results.
+
 Use the actual API origin with the prepared path:
 
 ```text

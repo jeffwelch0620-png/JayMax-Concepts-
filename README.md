@@ -16,6 +16,10 @@ and their serialized bodies are verified, with one original batch per document.
 Preparation sent **zero HTTP posting requests**. Deployed transport and browser
 lost-response acceptance remain separate from prior API/database replay results.
 Current hosting, Supabase connections, credentials and schema are unchanged.
+The subsequent [deployed HTTP preflight](docs/DEPLOYED_POSTING_RETRY_PREFLIGHT.md)
+passes deployment/source, original-fingerprint and accounting preservation checks.
+The runner's five offline controls pass; live replay is waiting for private
+operator sign-in and has sent zero posting requests.
 
 ## Deployed walkthrough and item setup corrections - October 10, 2026
 
