@@ -33,10 +33,17 @@ the complete $212 report. A separate loopback relay subsequently received a
 real public health response, truncated its delivery and produced Axios
 `ERR_NETWORK` in Chrome; manual retry returned 200 with the local draft intact.
 That read-only calibration made two upstream GETs and zero purchase requests.
-The helper is stopped, and another fresh read-only check preserved all 79
-protected tables and the complete $212 report. This establishes the fault
-method, not actual purchase-review recovery. Preparing and reviewing the
-isolated purchase test setup remains next, before fixture creation.
+The helper is stopped. A subsequent
+[local actual-component test](docs/LOCAL_PURCHASE_REVIEW_RESPONSE_DROP_RESULTS.md)
+also passed: the real review component retained and froze its reviewed values
+after `ERR_NETWORK`, and manual retry sent the identical 432-byte body and key
+before acknowledging the complete local response. Seven route guards passed.
+Its acknowledgement was explicitly simulated locally; no hosted request or
+database write occurred. The local helper is stopped, and a fresh hosted
+read-only preflight preserved all 79 protected tables and the complete $212
+report. The remaining step is a guarded hosted first-commit trial in the separate
+test client, with independent commit proof before truncation. Its command relay
+and phase-aware observer need implementation and review before fixture creation.
 Independent employee authorization remains outstanding.
 Current hosting, Supabase connections, database roles and schema are unchanged.
 This documentation checkpoint remains local and has not been pushed.

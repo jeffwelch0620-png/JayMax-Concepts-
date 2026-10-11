@@ -5,8 +5,9 @@ purchase. It must demonstrate that the server saved the purchase while the
 browser did not receive a complete acknowledgement, then that the existing
 **Retry same purchase posting** action returns that single saved outcome.
 Preparation is read-only: **no source was captured and no purchase was posted**.
-**Purchase execution is held. A separate read-only local relay now demonstrates
-response truncation and browser retry; the actual purchase-review trial is open.**
+**Hosted purchase execution is held. Response truncation and same-mounted-form
+retry now pass in a separate local client using the actual review component.
+The hosted first-commit trial remains open.**
 
 The [completed deployed retry test](DEPLOYED_POSTING_RETRY_RESULTS.md) established
 eight exact responses and eight conflict refusals for existing outcomes. Its
@@ -54,22 +55,20 @@ Cost result. A later physical closing count would be needed for another actual
 usage period. Do not create a count, prep batch, waste entry, sales record or
 period close during this trial.
 
-## Response-loss method and calibration
+## Earlier unsuccessful DevTools calibration
 
-Use the unmodified hosted frontend and API. Chrome DevTools supports custom
+The earlier candidate used the unmodified hosted frontend and API. Chrome DevTools supports custom
 download/upload throttling and Offline through its normal Network panel
 ([Chrome Network reference](https://developer.chrome.com/docs/devtools/network/reference)).
-The proposed method is a very slow download, fast upload and zero added latency,
+That candidate used a very slow download, fast upload and zero added latency,
 followed by Offline **only after an independent database read confirms commit**.
 The saved profile was verified at **1 kbit/s download, 100 Mbit/s upload and
 0 ms added latency**. Chrome accepted 0.1 in the editor but did not retain it;
 the integer profile was saved and selected instead. A selected profile is not
 evidence that a response was lost.
 
-Before creating the fixture, calibrate using a read of an existing fictional
-document. Confirm the profile holds the response pending long enough for a
-read-only commit observer and native browser controls to act. Return to
-**No throttling** and confirm successful reads. Native Chrome controls completed
+The candidate was calibrated using reads of an existing fictional document
+before any new fixture creation. Native Chrome controls completed
 three read-only trials of the existing fictional price-credit source. The first
 read returned 200 in 49.36 seconds before Offline was selected at 61.85 seconds.
 The second returned 200 in 29.19 seconds before Offline was selected at 29.36
@@ -99,8 +98,9 @@ the fixture before capture and review a deterministic alternative. An alternativ
 must first demonstrate a failed acknowledgement on a read-only request, then
 support independent commit observation and the same mounted review's retry.
 Changing the actual server or replacing its response with invented data would
-not establish that deployed recovery works. No backend delay hook, browser extension,
-proxy, TLS interception, hosting change or connection change is included here.
+not establish that deployed recovery works. The replacement uses a separate
+loopback test client and narrowly scoped delivery relay, without a backend delay
+hook, browser extension, TLS interception or deployed connection change.
 
 ## Successful isolated response-drop calibration
 
@@ -138,8 +138,17 @@ preflight failed with ConnectError before posting; the subsequent fresh
 all **79 protected tables**, migration identities and the complete **$212**
 report. Neither preflight executed a posting request.
 
-**Next: prepare the actual purchase-review trial using this calibrated transport
-in an isolated local test setup.** The existing hosted frontend is not routed
+The actual purchase-review component has since passed the
+[local transport trial](LOCAL_PURCHASE_REVIEW_RESPONSE_DROP_RESULTS.md):
+`ERR_NETWORK` left its reviewed values frozen; manual retry sent the identical
+432-byte body and key and acknowledged the complete local response. Seven
+local route guards passed and the helper was stopped. The local acknowledgement
+was simulated and no hosted request was made. A fresh hosted read-only preflight
+`deployed-http-replay-20261011T214955230989Z.json` preserved all 79 protected
+tables and the complete $212 report, with zero posting requests.
+
+**Next: implement and review the guarded hosted command relay and phase-aware
+observer for the separate test client.** The existing hosted frontend is not routed
 through the helper, and the helper cannot currently forward a purchase command.
 A later command-capable relay needs exact document/method guards, memory-only
 authentication handling, no automatic POST retry, independent commit proof
@@ -151,8 +160,9 @@ make the test work. The original failed Offline method stays unaccepted.
 
 ## Execution and evidence
 
-The following is an execution contract for a later accepted method, not
-instructions to post with the failed calibration method.
+The following is the revised execution contract for deterministic downstream
+truncation. It is not an executable hosted runner or permission to create the
+fixture before the command relay and observer are prepared and reviewed.
 
 1. Confirm a quiet test window, the same approved deployment and database target,
    a normal owner session, the original four outcome identities and unchanged
@@ -161,31 +171,62 @@ instructions to post with the failed calibration method.
    Read it back, require one version and one source line with no posting batch,
    and verify no food purchase fact or accounting change. Capture a separate
    post-capture baseline; it now includes the intended source records.
-3. Complete the received-date, USD and line reviews using the values above. Hold
-   the same mounted review form throughout submission and retry. Record the
-   intended body and its model-normalized fingerprint without credentials.
+3. Initialize the separate local client with the real captured version/line IDs
+   and read-back source data. Use the literal existing review component and the
+   production parent's batch-ID/posted-status acknowledgement check. Obtain a
+   normal owner session through a private human sign-in prompt; retain its token
+   only in server memory. Complete the received-date, USD and line reviews using
+   the values above. Hold the same mounted form throughout submission and retry.
+   Record the intended body and model-normalized fingerprint without credentials.
 4. Start an independent read-only observer restricted to this exact store,
    document number and fictional supplier identity. It must use fresh
-   transactions, not an older held snapshot. Select the calibrated slow-download
-   profile and submit **Confirm and post purchase** once.
+   transactions, not an older held snapshot. Arm only the exact captured version's
+   normal POST route at the existing Render API. Submit **Confirm and post
+   purchase** once. The relay must perform one upstream request, with normal TLS
+   verification, no automatic retry and no redirects, and retain the complete
+   real upstream response before sending any downstream acknowledgement.
 5. Require commit proof from that observer: exactly one batch and line/fact for
    the captured version, +1 each / +$1, October 11 received date, and a stored
    fingerprint matching the submitted review. Record the original command key
    and batch privately in the local test receipt. The UI must still be awaiting
    its acknowledgement when the observer confirms commit.
-6. Select Offline in the same Inventory tab. Require the original request to
-   fail and the retained review to show its error and **Retry same purchase
-   posting**. Confirm its inputs remain frozen and no success has been announced.
-   An Offline setting alone does not prove the response was lost.
+6. Only after independent commit proof and response identity validation, declare
+   the full real response length and deliver one byte before closing the local
+   browser connection. Require Axios `ERR_NETWORK`, no acknowledged result and
+   the existing **Retry same purchase posting** action. Confirm that the reviewed
+   values remain frozen and no success has been announced. Record the actual
+   real response size and delivered size; do not substitute fictional JSON.
 7. Independently confirm the one saved outcome and the expected first-post
-   changes. Restore **No throttling**, then click the existing retry once. Require
+   changes. Capture a fresh post-commit baseline, then click the existing retry once. Require
    HTTP 200 with the same batch/version, posted UI confirmation and the same
    original body/key. Compare protected-table rows/hashes immediately before
    and after retry: **zero additional changes are expected from retry**.
 8. Read back all original and new outcome graphs, original full report, count,
    prep and period history. Only after confirmation, reload normally and verify
-   the new document appears once in history. Restore **No throttling**, close
-   DevTools and retain the labelled fixture for reviewed cleanup.
+   the new document appears once in the hosted history. Stop the relay, discard
+   the memory-only session token, verify its loopback port is closed and retain
+   the labelled fixture for reviewed cleanup. No DevTools throttling is required.
+
+## Hosted relay guards to implement before capture
+
+| Boundary | Required guard |
+| --- | --- |
+| Network target | Fixed `https://jaymax-api.onrender.com`; normal HTTPS verification; no caller-provided target or redirect |
+| Browser interface | Loopback-only unique trial path; exact Host and Origin; no incoming cookie or bearer token; own assets only |
+| Command scope | One store (`berts`), one real captured version, one line, the prepared item/SKU/date/amount; only its normal posting route |
+| Review admission | Exact expected field set and values; valid browser-generated key; backend-model normalized fingerprint matches intended review |
+| Retry admission | One manual retry only; original raw body bytes and key retained; a changed body/key or a third request is refused locally |
+| Authentication | Human owner login through the normal API; token only in helper memory; no token from browser storage, logs or files |
+| Ordering | Complete real upstream acknowledgement, then fresh independent commit proof, then truncated browser delivery |
+| Source preservation | Pre-capture baseline; post-capture baseline; verify permitted additions belong only to this fixture and preserve every prior row |
+| First-post preservation | Verify exactly one batch/line/food fact and the intended state revision; verify all unrelated rows and original full report |
+| Retry preservation | Compare all 79 protected tables, migration identities and original full report against the fresh post-commit baseline; zero further changes |
+| Held outcomes | Any uncertain response, commit, identity, baseline or concurrent edit holds further commands; no compensation or automatic fixture replacement |
+| Lifetime | Bounded test window; stop helper and clear its token after acceptance or hold |
+
+The local component helper intentionally implements no hosted forwarding or
+authentication. These guards define the remaining command-capable setup; passing
+the local trial does not prove they already exist in a hosted runner.
 
 Record request/commit/error/retry ordering, response statuses, canonical
 fingerprints, batch/line cardinality, independent comparisons and relevant
@@ -209,9 +250,9 @@ change the protected baseline; compare each phase with its own fresh baseline
 and preserve the prior rows, rather than claiming all 79 tables are unchanged
 across the first posting.
 
-If the request completed normally before interruption, record a normal first
+If the browser received a complete acknowledgement before truncation, record a normal first
 posting and hold the response-loss case; do not delete, reverse or re-post that
-outcome to manufacture a test. If the observer cannot confirm commit, an offline
+outcome to manufacture a test. If the observer cannot confirm commit, a truncated-response
 failure is inconclusive. Read back first and hold further commands. If the
 review remounts, loses its key/body, returns an unexpected status or changes any
 unrelated rows, preserve the evidence and stop. No automatic compensation or
@@ -243,8 +284,9 @@ outside Git. Post-calibration preservation receipt:
 `passed_read_only_http_preflight`; it is a new read-only check, not another
 execution of the sixteen completed posting probes.
 
-Next: prepare and review the purchase-review setup for the calibrated local
-response-drop method before any hosted fixture creation.
+The actual review component's local response-drop acceptance is now recorded
+separately. Next: implement and review the guarded hosted command relay and
+phase-aware observer before any hosted fixture creation.
 The existing sixteen deployed HTTP outcomes remain accepted; browser
 lost-first-post-response acceptance remains open. The proposed fictional receipt
 would create a new persistent +1 each / $1 purchase and needs its own reviewed
