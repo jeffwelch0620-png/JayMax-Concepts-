@@ -1,6 +1,6 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Hosted recovery acceptance and HTTP retry preparation - October 11, 2026
+## Hosted recovery and deployed HTTP retry acceptance - October 11, 2026
 
 PR20 is merged at `4855ba6`, and its Render frontend passed the
 [hosted read-recovery walkthrough](docs/PR20_HOSTED_ACCEPTANCE_RESULTS.md).
@@ -10,16 +10,20 @@ discarded without Save. Read-only comparisons preserved all 79 protected tables
 and the complete **$212 Actual Food Cost** report. These controlled client-latency
 checks do not establish a cold-start service-level guarantee.
 
-The [deployed invoice/credit retry procedure](docs/DEPLOYED_POSTING_RETRY_PLAN.md)
-is prepared on a local follow-up branch. All four original request fingerprints
-and their serialized bodies are verified, with one original batch per document.
-Preparation sent **zero HTTP posting requests**. Deployed transport and browser
-lost-response acceptance remain separate from prior API/database replay results.
-Current hosting, Supabase connections, credentials and schema are unchanged.
-The subsequent [deployed HTTP preflight](docs/DEPLOYED_POSTING_RETRY_PREFLIGHT.md)
-passes deployment/source, original-fingerprint and accounting preservation checks.
-The runner's five offline controls pass; live replay is waiting for private
-operator sign-in and has sent zero posting requests.
+The [deployed HTTP retry results](docs/DEPLOYED_POSTING_RETRY_RESULTS.md) now
+confirm **eight exact retries returning the original batches** and **eight
+changed-body/key retries refused with HTTP 409** through the existing Render
+API. Fresh readback after every request and at completion preserved all
+**79 protected tables**, migration identities and the complete **$212** report;
+no new purchase outcome was created. Normal owner sign-in was used, with no
+credentials stored in receipts or Git. The
+[procedure](docs/DEPLOYED_POSTING_RETRY_PLAN.md) and
+[read-only preflight](docs/DEPLOYED_POSTING_RETRY_PREFLIGHT.md) record the setup;
+five offline runner controls remain separate from deployed evidence.
+Browser lost-first-response acceptance needs a separately reviewed unposted
+fictional fixture. Independent employee authorization remains outstanding.
+Current hosting, Supabase connections, database roles and schema are unchanged.
+This documentation checkpoint remains local and has not been pushed.
 
 ## Deployed walkthrough and item setup corrections - October 10, 2026
 

@@ -1,8 +1,11 @@
 # Deployed posting retry preflight
 
-Read-only preflight passed on October 11, 2026. The approved deployed HTTP test
-is waiting for the operator to sign in through the private local prompt.
-**Zero invoice or credit HTTP posting requests have been sent.**
+Read-only preflight passed on October 11, 2026, with **zero HTTP posting
+requests during preflight**. The operator subsequently signed in through the
+private prompt, and the [deployed test passed](DEPLOYED_POSTING_RETRY_RESULTS.md):
+eight exact responses and eight conflicting retry refusals, with unchanged
+protected tables and the complete $212 report. The sections below record the
+preflight and runner controls that preceded execution.
 
 ## Deployment and source
 
@@ -34,7 +37,7 @@ The prepared JSON request bodies reproduce their stored fingerprints after
 serialization and model validation. Original request material remains local,
 outside Git; no real supplier file was imported.
 
-## Runner checks and remaining step
+## Runner checks and subsequent execution
 
 Five offline transport checks pass: retaining original identities and expected
 responses, stopping after transport uncertainty, stopping after changed database
@@ -43,14 +46,15 @@ All test HTTP traffic uses an in-memory mock transport. These are runner checks,
 not evidence of a deployed posting response.
 
 The private prompt uses the normal Inventory login endpoint. Password and token
-stay in process memory and are excluded from receipts, Git and logs. Once the
-operator signs in, the runner rechecks the baseline immediately before posting,
-then follows the [deployed retry procedure](DEPLOYED_POSTING_RETRY_PLAN.md): eight
+stay in process memory and are excluded from receipts, Git and logs. After
+operator sign-in, the runner rechecked the baseline immediately before posting,
+then followed the [deployed retry procedure](DEPLOYED_POSTING_RETRY_PLAN.md): eight
 exact original-key retries and eight conflicting retry refusals. Each request
-requires independent database preservation checks and a deployed document read.
+passed independent database preservation checks and a deployed document read.
 
 The read-only preflight receipt is
 `deployed-http-replay-20261011T164225956709Z.json`. The source and screenshot
 hashes plus offline checks are recorded in `deployed-http-runner-validation.json`,
-retained outside Git. Live replay remains pending; browser lost-response and
+retained outside Git. The final live receipt is
+`deployed-http-replay-20261011T164444405480Z.json`; browser lost-response and
 independent employee authorization remain separate acceptance workflows.

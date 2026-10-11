@@ -1,10 +1,16 @@
 # Deployed invoice and credit retry procedure
 
-Preparation on October 11, 2026 verified the four original fictional Bert's
-postings, their request fingerprints, and the unchanged **$212 Actual Food Cost**
-control. **No deployed HTTP replay has run in this preparation.** The next test
-will use the existing Render API and normal owner/manager authentication to
-return the same saved outcomes over HTTP.
+The core deployed test [passed on October 11, 2026](DEPLOYED_POSTING_RETRY_RESULTS.md):
+eight exact retries returned the original outcomes and eight conflicting retries
+were refused, with all 79 protected tables and the complete **$212 Actual Food
+Cost** report unchanged. The procedure below records its preparation and
+execution controls; the optional concurrent extension and separate browser
+lost-response trial have not run.
+
+Read-only preparation verified the four original fictional Bert's postings,
+their request fingerprints and the accounting control, sending zero posting
+requests. Execution then used the existing Render API and normal owner
+authentication to return the same saved outcomes over HTTP.
 
 The [earlier replay results](POSTING_RETRY_ACCEPTANCE_RESULTS.md) established
 16 exact retries and eight 409 refusals through an in-process FastAPI harness
