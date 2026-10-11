@@ -80,11 +80,10 @@ and response-loss/browser recovery are not separately exercised in this run.
 No hosted request was interrupted to manufacture uncertainty. Those scenarios
 remain distinct from the completed replay checks and existing local tests.
 
-Next, characterize the intermittent editor fresh-read refusals with a controlled
-local regression before selecting a fix. Source review identifies overlapping
-poll/explicit reads as a possible cause: a superseded `refresh()` can return no
-data even when another read succeeds. This is a hypothesis, not a confirmed
-cause of the hosted symptom. Preserve revision, scope and pending-write guards.
+The subsequent [editor recovery review](EDITOR_RECOVERY_READ_INTEGRITY.md)
+reproduces a local polling/explicit-read race and corrects it without weakening
+revision, scope or pending-write guards. Hosted acceptance of that follow-up is
+separate; the local reproduction does not establish every hosted symptom's cause.
 The missing-price display belongs to deferred UI work. Independent employee
 authorization, UI rework, connection architecture and reviewed fictional
 fixture cleanup remain separate workflows.

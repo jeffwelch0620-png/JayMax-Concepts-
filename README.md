@@ -29,8 +29,13 @@ and unexercised hosted cases are recorded separately. The
 [posting retry results](docs/POSTING_RETRY_ACCEPTANCE_RESULTS.md) record 16 exact
 replays returning the original batches, eight conflicting retries refused, and
 unchanged rows across all 79 purchasing/count/prep/state tables checked. No new
-purchase was imported or posted. Fresh-read recovery reliability is the next
-focused investigation; broader UI and authentication work remain deferred.
+purchase was imported or posted. A controlled local regression now confirms that
+background polling can invalidate an explicit editor recovery read. The
+[recovery-read follow-up](docs/EDITOR_RECOVERY_READ_INTEGRITY.md) prevents that
+overlap while preserving stale-response and revision safeguards. This follow-up
+passes **144 focused tests**, all **572 frontend tests across 65 suites**, and
+the strict production build. It is local and has not been deployed; broader UI
+and authentication work remain deferred.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
 locally corrected blockers: duplicate count panels while typing, and unrelated

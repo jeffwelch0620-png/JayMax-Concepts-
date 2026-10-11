@@ -3,7 +3,7 @@ import * as api from "./api";
 import { confirmed } from "./saveIntegrity";
 
 export function useStoreState(rid, session, empty, onError) {
-  const scope = useMemo(() => ({ rid, session, revision: null, loaded: false, reads: 0, readFailed: false }), [rid, session]);
+  const scope = useMemo(() => ({ rid, session, revision: null, loaded: false, reads: 0, pendingRead: null, readFailed: false }), [rid, session]);
   const active = useRef(scope); active.current = scope;
   const pending = useRef(new Map());
   const writes = useRef(new Map());
@@ -14,9 +14,14 @@ export function useStoreState(rid, session, empty, onError) {
   const isCurrent = useCallback(() => alive.current && active.current === scope, [scope]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options) => {
     if (!session || rid === "owner" || !isCurrent() || pending.current.has(rid)) return;
+    // A scheduled poll must not invalidate an explicit recovery's return value.
+    // Explicit reads can still supersede an older poll; stale-read guards below
+    // continue to reject responses overtaken by navigation, writes or newer reads.
+    if (options?.background === true && scope.pendingRead !== null) return;
     const read = ++scope.reads, generation = writes.current.get(rid) || 0;
+    scope.pendingRead = read;
     try {
       const data = await api.fetchState(rid);
       if (!isCurrent() || read !== scope.reads || generation !== (writes.current.get(rid) || 0) || pending.current.has(rid)) return;
@@ -40,12 +45,16 @@ export function useStoreState(rid, session, empty, onError) {
         if (!scope.readFailed) errors.current(message);
         scope.readFailed = true;
       }
+    } finally {
+      // Only the latest read controls polling. An obsolete request may still
+      // be unresolved, or finish while a newer recovery is pending.
+      if (scope.pendingRead === read) scope.pendingRead = null;
     }
   }, [rid, session, scope, isCurrent, empty]);
   const refreshRef = useRef(refresh); refreshRef.current = refresh;
   useEffect(() => {
     refresh();
-    const timer = setInterval(refresh, 15000);
+    const timer = setInterval(() => refresh({ background: true }), 15000);
     return () => clearInterval(timer);
   }, [refresh]);
 

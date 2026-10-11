@@ -63,6 +63,19 @@ test("App passes recipe revision and refresh through to the guarded store", asyn
   expect(api.putCollection).toHaveBeenCalledWith("berts","dishes",[{id:"dish",name:"Reviewed draft"}],11);
 });
 
+test.each(["setup", "costing"])("App %s recovery returns confirmed data when a poll timer fires during its read", async panel => {
+  await act(async () => root.render(<App />)); await click(`nav-tab-${panel}`);
+  let complete; api.fetchState.mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+  const readLatest = panel === "setup" ? mockSetupProps.onCatalogLinked : mockCostingProps.loadLatest;
+  let recovery; act(() => { recovery = readLatest(); });
+  await act(async () => jest.advanceTimersByTime(15000));
+  const latest = state("berts", 11); let result;
+  await act(async () => { complete(latest); result = await recovery; });
+  expect(result).toEqual(latest); expect(api.fetchState).toHaveBeenCalledTimes(2);
+  expect(panel === "setup" ? mockSetupProps.revision : mockCostingProps.revision).toBe(11);
+  expect(api.putCollection).not.toHaveBeenCalled(); expect(toast.error).not.toHaveBeenCalled();
+});
+
 test("failed initial load exposes a location error and a working retry", async () => {
   api.fetchState.mockRejectedValueOnce({ response: { status: 503, data: { detail: "Catalog feature settings need review" } } });
   await act(async () => root.render(<App />));
