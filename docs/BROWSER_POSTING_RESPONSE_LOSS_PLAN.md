@@ -5,7 +5,8 @@ purchase. It must demonstrate that the server saved the purchase while the
 browser did not receive a complete acknowledgement, then that the existing
 **Retry same purchase posting** action returns that single saved outcome.
 Preparation is read-only: **no source was captured and no purchase was posted**.
-**Execution is held: read-only calibration did not demonstrate response loss.**
+**Purchase execution is held. A separate read-only local relay now demonstrates
+response truncation and browser retry; the actual purchase-review trial is open.**
 
 The [completed deployed retry test](DEPLOYED_POSTING_RETRY_RESULTS.md) established
 eight exact responses and eight conflict refusals for existing outcomes. Its
@@ -101,6 +102,53 @@ Changing the actual server or replacing its response with invented data would
 not establish that deployed recovery works. No backend delay hook, browser extension,
 proxy, TLS interception, hosting change or connection change is included here.
 
+## Successful isolated response-drop calibration
+
+On October 11, a separate loopback-only helper forwarded exactly two public
+**GET https://jaymax-api.onrender.com/api/health** requests. It received and
+validated each real upstream HTTP 200 response, then deliberately closed the
+first downstream response after delivering **1 of its declared 38 bytes**.
+Native Chrome observed Axios's XHR adapter report **ERR_NETWORK**, status 0,
+with no acknowledged result. Clicking **Retry same health read** made the
+second GET; all 38 bytes were delivered and the browser acknowledged HTTP 200.
+The calibration page's local text draft stayed intact after both requests.
+
+This proves a transport failure in a separate local calibration page, not
+`PurchaseDocumentReview`, first posting, persistence of an idempotency key or
+database commit. Both upstream body hashes match
+`e37598d8934bd69807a0db0358bd093ac20ef7aedbbd46caeca49c9c3b894b67`.
+The relay received real responses; it did not substitute invented health JSON.
+The existing installed Axios browser bundle was used with its XHR adapter.
+
+The helper bound only **127.0.0.1**. It supported no purchase route or upstream
+POST and rejected credentials. Five route/credential checks passed with zero
+upstream requests before the browser trial. Browser observations were submitted
+only to the local helper and were never forwarded. No login, operational source,
+invoice, credential, TLS certificate, browser proxy setting, deployed build,
+hosting configuration or Supabase connection was changed. The helper was stopped
+after acceptance. A JavaScript string-escaping defect in the initial local page
+was corrected and syntax-checked before the successful trial; that initial page
+made no upstream request.
+
+Receipt `read-only-response-drop-relay-20261011T201041555127Z.json` has SHA-256
+`d682289293f830b4641402341627676ce9f70f5547ebc8089cdac3caf8bd66eb`.
+Error/retry screenshots and the helper remain outside Git. An earlier public
+preflight failed with ConnectError before posting; the subsequent fresh
+`deployed-http-replay-20261011T210536200632Z.json` passed read-only validation of
+all **79 protected tables**, migration identities and the complete **$212**
+report. Neither preflight executed a posting request.
+
+**Next: prepare the actual purchase-review trial using this calibrated transport
+in an isolated local test setup.** The existing hosted frontend is not routed
+through the helper, and the helper cannot currently forward a purchase command.
+A later command-capable relay needs exact document/method guards, memory-only
+authentication handling, no automatic POST retry, independent commit proof
+before truncation, and recorded body/key equality on manual retry. A separate
+test client must be clearly distinguished from the hosted frontend. Review that
+concrete setup and its +1 each / $1 fictional first-post effect before creating
+the hosted fixture. Do not change the deployed frontend's API connection to
+make the test work. The original failed Offline method stays unaccepted.
+
 ## Execution and evidence
 
 The following is an execution contract for a later accepted method, not
@@ -195,7 +243,8 @@ outside Git. Post-calibration preservation receipt:
 `passed_read_only_http_preflight`; it is a new read-only check, not another
 execution of the sixteen completed posting probes.
 
-Next: select and review another fault method before any hosted fixture creation.
+Next: prepare and review the purchase-review setup for the calibrated local
+response-drop method before any hosted fixture creation.
 The existing sixteen deployed HTTP outcomes remain accepted; browser
 lost-first-post-response acceptance remains open. The proposed fictional receipt
 would create a new persistent +1 each / $1 purchase and needs its own reviewed

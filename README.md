@@ -29,8 +29,15 @@ and original $212 control; no fixture has been captured or posted. Three
 read-only slow-download/Offline trials completed with HTTP 200, so that method
 has not demonstrated response loss and first posting is held. Normal networking
 was restored; a fresh read-only check preserved all 79 protected tables and
-the complete $212 report. A deterministic alternative needs review before
-fixture creation. Independent employee authorization remains outstanding.
+the complete $212 report. A separate loopback relay subsequently received a
+real public health response, truncated its delivery and produced Axios
+`ERR_NETWORK` in Chrome; manual retry returned 200 with the local draft intact.
+That read-only calibration made two upstream GETs and zero purchase requests.
+The helper is stopped, and another fresh read-only check preserved all 79
+protected tables and the complete $212 report. This establishes the fault
+method, not actual purchase-review recovery. Preparing and reviewing the
+isolated purchase test setup remains next, before fixture creation.
+Independent employee authorization remains outstanding.
 Current hosting, Supabase connections, database roles and schema are unchanged.
 This documentation checkpoint remains local and has not been pushed.
 
