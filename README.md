@@ -7,7 +7,9 @@ verified Live at `b2f529f`; merge-commit Inventory CI passes. The approved
 **Bert's fictional walkthrough** confirms **$212 Actual Food Cost**, preserved
 close/reopen/reclose history, separate prep/waste explanation and the staff
 quantity/manager acceptance workflow, including refusal of a stale review.
-Independent employee authorization and posting retries remain outstanding.
+Independent employee authorization remains outstanding. Exact posting replay
+against hosted PostgreSQL now passes through the reviewed API router; deployed
+HTTP and lost-browser-response recovery remain separate acceptance checks.
 The [live acceptance follow-up](docs/LIVE_ACCEPTANCE_CATALOG_EDITOR_FOLLOWUP.md)
 records the results and a reproduced two-tab catalog overwrite. The amended
 [PR19](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/19) protects
@@ -23,8 +25,12 @@ at `1ece856` passed its strict build and CI. The
 and recipe conflict/recovery, unrelated saves, and single-record creation when
 typing continues during confirmed saves. Original test fields are restored and
 the final fresh Food Cost preview remains $212. Fresh-read reliability symptoms
-and unexercised hosted cases are recorded separately; posting retry acceptance
-is next.
+and unexercised hosted cases are recorded separately. The
+[posting retry results](docs/POSTING_RETRY_ACCEPTANCE_RESULTS.md) record 16 exact
+replays returning the original batches, eight conflicting retries refused, and
+unchanged rows across all 79 purchasing/count/prep/state tables checked. No new
+purchase was imported or posted. Fresh-read recovery reliability is the next
+focused investigation; broader UI and authentication work remain deferred.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
 locally corrected blockers: duplicate count panels while typing, and unrelated
