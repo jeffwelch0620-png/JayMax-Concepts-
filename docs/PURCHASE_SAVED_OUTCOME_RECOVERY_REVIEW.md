@@ -1,7 +1,7 @@
 # Purchase saved outcome recovery review and local follow-up
 
-Draft [PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
-adds **Check saved status** to a frozen purchase review. The October 11 review
+[PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21), merged and
+deployed at `54975a0` under user approval, adds **Check saved status** to a frozen purchase review. The October 11 review
 amendment addresses F1, F2 and F3 together: recovery distinguishes this original
 request from a competing posting, recognizes later corrections, and explains
 held outcomes without suggesting a retry that cannot resolve the hold.
@@ -41,7 +41,7 @@ disable posting and checking; failed reads release the check without releasing
 the original review. Late timed-out or unmounted-location results cannot supply
 a new saved outcome. Existing receiving reads retain their original behavior.
 
-## Local validation and hosted evidence
+## Reviewed PR21 validation and hosted evidence
 
 All **617 frontend tests across 66 suites** pass with the native feature profile.
 The focused purchase suite passes **39 tests**, including both correction paths
@@ -66,12 +66,52 @@ The generated review guides match source; migrations and the schema snapshot
 are byte-identical to the pre-amendment head. The dedicated test server stopped
 after completion. Local test receipts remain outside Git.
 
-The amendment is local review evidence until separately approved and deployed.
-It requires the amended backend preview alongside the frontend; an older server
-without the request identity fails closed rather than claiming this request was
-saved. Current Render deployment, hosted data, connections, roles and migration
-identities are unchanged. The earlier hosted observations below apply to their
-pinned deployed source and do not validate this amendment's new status action.
+## Deployment and comparison follow-up
+
+Both Render services were independently read as **Live** at merge commit
+`54975a0bd1787595a73195e3964c94562cb02bfc` on October 11. Both deployments were
+automatic; no manual deploy, setting, role or connection change was made.
+All four [merge-commit CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38196259722)
+pass. The public bundle contains the amended recovery controls. After a cache
+refresh, the signed-in owner reopened the existing fictional Bert's receipt
+and used **Show saved purchase and correction history**. The read-only table
+showed `berts_SH-003`, 1 each, conversion 1 and inventory date October 11, with
+no corrections recorded. The initial posting/retry actions were absent. No
+capture, purchase-posting or correction command was submitted in this check.
+
+The saved review note displayed as a dash. `document_preview` returns mapping
+rows with their canonical **decision_note** field; the client read **note**.
+An independent read-only query confirms the persisted decision note exactly
+matches the original review, so the source data did not need correction.
+The local follow-up changes only the comparison's rendering and shape check to
+`decision_note`. Its fixtures now use the real response field. Two regressions
+reproduced the missing note and missed malformed-note rejection before the fix;
+afterward all **619 frontend tests across 66 suites** pass, including **41
+purchase component cases**. The strict `CI=true` production build also passes
+with the native profile and fictional backend URL. This follow-up is local on
+**codex/purchase-comparison-note-integrity**, not pushed or deployed.
+
+A fresh independent read-only comparison at **1:08 PM EDT on October 12**
+confirmed unchanged rows/hashes across all **86 observed relations**, migration
+identities, one original receipt batch/line/food fact and the complete original
+**$212** report. An earlier comparison lost its connection; the fresh retry
+passed without a configuration change. The verifier's source-capture/posting
+counts describe the earlier execution receipt, not commands submitted by this
+read-only follow-up. The new comparison and this verifier made no such command.
+
+Private evidence remains outside Git:
+
+- Render readback: `pr21-render-deployment-verification-20261012T025357934480Z.json`, SHA-256 `7980ea2ebf57b221389f5417b9d6aa1271a28abf5e3b502f3d38e82f17c7a15d`.
+- Stored-note proof: `pr21-comparison-note-readback-20261012T030650921600Z.json`, SHA-256 `8a711f70db35ec445fb2fe45ef848c7b917d006210f682edc6b56e8fbc6185fe`.
+- Latest full comparison: `hosted-purchase-browser-final-verification-20261012T170802141851Z.json`, SHA-256 `a3a8aa7798f357e32c2e442bd643647e07e573d780366da4b6da62417854c636`.
+
+This validates deployed read-only comparison of an already posted receipt and
+finds a small display defect. It does not establish the new **Check saved
+status** path from an unresolved request, corrected/competing request recovery
+or held-read recovery in the deployed parent. The pending key/body cannot be
+reconstructed after reload. Those runtime cases remain distinct from local and
+CI regression proof. The historical hosted observations below retain their
+original pinned scope.
 
 A fresh independent read-only observation at **8:21 PM EDT on October 11**
 preserved all **86 observed relations** against the prior post-commit baseline,
@@ -113,10 +153,11 @@ deferred UI workflow.
 
 1. Saved-outcome reopening in the deployed parent is now complete within the
    scope above. Preserve the same labelled receipt and original control.
-2. Draft PR21 is published for review. Verify its current-head CI and obtain
-   separate approval before a merge/deployment. Rehearse the new status
-   action against saved and unavailable outcomes without another first-post
-   fixture for the already accepted same-form case.
+2. The local note-display correction is ready for a separate draft PR after
+   push approval. After review, merge approval and deployment, repeat the
+   read-only comparison and verify the saved note. Then rehearse the new
+   status action's unresolved-request paths with a scoped test plan that
+   preserves the original accounting control and existing receipts.
 3. Separately decide whether exact pending-command continuity is required across
    browser reload or sign-in. If so, design a scoped pending-command receipt
    with immutable body/key, authenticated owner/location boundaries, expiry and

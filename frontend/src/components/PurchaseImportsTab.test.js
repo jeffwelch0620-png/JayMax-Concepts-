@@ -27,7 +27,7 @@ beforeEach(() => {
 
 const postedDoc = { ...doc, status: "posted", correctionAvailable: true, sourceErrors: [],
   currentMappings: [{ line_id: "line-1", classification: "food", movement_kind: "receipt", item_code: "food", base_unit: "lb",
-    received_quantity: "2", received_unit: "case", base_units_per_received_unit: "20", inventory_record_date: "2026-10-04" }] };
+    received_quantity: "2", received_unit: "case", base_units_per_received_unit: "20", inventory_record_date: "2026-10-04", decision_note: "Synthetic confirmed mapping" }] };
 const correctionPlan = { planHash: "reviewed-plan", status: "ready", initialBatchId: "batch-1", previousCorrectionId: null,
   review: { reason: "Verified delivered quantities", confirmed_currency: "USD", received_date: "2026-10-04", lines: [] },
   before: [{ line_id: "line-1", item_code: "food", base_quantity: "40", inventory_cost_amount: "40", inventory_record_date: "2026-10-04" }],
@@ -314,7 +314,7 @@ test("read-only comparison follows the corrected version and shows correction ev
   const recovery = correctedPurchase();
   api.postPurchase.mockRejectedValue(new Error("Response lost")); api.checkPurchaseSavedStatus.mockResolvedValue(recovery);
   api.purchaseFileDocument.mockResolvedValue({ ...recovery, id: "replacement-1", status: "posted", errors: [],
-    currentMappings: [{ ...postedDoc.currentMappings[0], received_quantity: "3", note: "Verified supplier reissue" }] });
+    currentMappings: [{ ...postedDoc.currentMappings[0], received_quantity: "3", decision_note: "Verified supplier reissue" }] });
   api.purchaseCorrections.mockResolvedValue([{ id: "correction-1", corrected_at: "2026-10-11", reason: "Verified supplier reissue", previous_correction_id: null }]);
   await openRecoveryReview(); await click(button("Confirm and post purchase")); await click(button("Check saved status"));
   await click(button("Show saved purchase and correction history"));
@@ -336,6 +336,35 @@ test("a changed comparison read retains the competing frozen review without show
   expect(container.querySelector('[aria-label="Saved purchase comparison"]')).toBeNull();
   expect(container.querySelector('[aria-label="Received date"]').value).toBe("2026-10-11");
   expect(button("Retry same purchase posting").disabled).toBe(true);
+});
+
+test("comparison displays the persisted decision note while retaining the competing user's frozen note", async () => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  const other = { ...savedPurchase, header: { ...savedPurchase.header, posted_request_key: "other-key" },
+    currentMappings: [{ ...postedDoc.currentMappings[0], decision_note: "TEST ONLY original delivered-unit verification" }] };
+  api.checkPurchaseSavedStatus.mockResolvedValue(other);
+  api.purchaseFileDocument.mockResolvedValue(other); api.purchaseCorrections.mockResolvedValue([]);
+  await openRecoveryReview(); await click(button("Confirm and post purchase")); await click(button("Check saved status"));
+  await click(button("Show saved purchase and correction history"));
+  const saved = container.querySelector('[aria-label="Saved purchase comparison"]');
+  expect(saved.querySelector('tbody tr td:last-child').textContent).toBe("TEST ONLY original delivered-unit verification");
+  expect(container.querySelector('[aria-label="Note 1"]').value).toBe("TEST ONLY retained reviewed quantity");
+  expect(button("Retry same purchase posting").disabled).toBe(true);
+  expect(api.postPurchase).toHaveBeenCalledTimes(1); expect(api.correctPurchase).not.toHaveBeenCalled();
+});
+
+test("a malformed persisted decision note cannot replace the comparison or frozen review", async () => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  const other = { ...savedPurchase, header: { ...savedPurchase.header, posted_request_key: "other-key" },
+    currentMappings: [{ ...postedDoc.currentMappings[0], decision_note: { unexpected: "Malformed note" } }] };
+  api.checkPurchaseSavedStatus.mockResolvedValue(other);
+  api.purchaseFileDocument.mockResolvedValue(other); api.purchaseCorrections.mockResolvedValue([]);
+  await openRecoveryReview(); await click(button("Confirm and post purchase")); await click(button("Check saved status"));
+  await click(button("Show saved purchase and correction history"));
+  expect(container.querySelector('[aria-label="Saved purchase comparison"]')).toBeNull();
+  expect(container.textContent).toContain("details changed or could not be confirmed");
+  expect(container.querySelector('[aria-label="Note 1"]').value).toBe("TEST ONLY retained reviewed quantity");
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
 });
 
 test("an unauthorized saved-status read keeps the original request and review", async () => {

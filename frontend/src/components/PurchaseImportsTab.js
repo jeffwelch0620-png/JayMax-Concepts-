@@ -112,7 +112,7 @@ export function PurchaseDocumentReview({ document, items, history, onPost, onChe
     {detailsError && <p role="alert">{detailsError}</p>}
     {savedDetails && <div aria-label="Saved purchase comparison" className="space-y-3">
       <p>Current saved purchase: {savedDetails.document.header.document_number}. These values are read-only.</p>
-      <div className="overflow-auto"><table className="text-sm w-full"><thead><tr>{["Item / classification", "Received quantity", "Received unit", "Inventory unit", "Conversion", "Inventory date", "Review note"].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{savedDetails.document.currentMappings.map(m => <tr key={m.id || m.line_id}><td>{m.item_code || m.classification}</td><td>{m.received_quantity ?? "—"}</td><td>{m.received_unit || "—"}</td><td>{m.base_unit || "—"}</td><td>{m.base_units_per_received_unit ?? "—"}</td><td>{m.inventory_record_date || "—"}</td><td>{m.note || "—"}</td></tr>)}</tbody></table></div>
+      <div className="overflow-auto"><table className="text-sm w-full"><thead><tr>{["Item / classification", "Received quantity", "Received unit", "Inventory unit", "Conversion", "Inventory date", "Review note"].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{savedDetails.document.currentMappings.map(m => <tr key={m.id || m.line_id}><td>{m.item_code || m.classification}</td><td>{m.received_quantity ?? "—"}</td><td>{m.received_unit || "—"}</td><td>{m.base_unit || "—"}</td><td>{m.base_units_per_received_unit ?? "—"}</td><td>{m.inventory_record_date || "—"}</td><td>{m.decision_note || "—"}</td></tr>)}</tbody></table></div>
       {!savedDetails.document.currentMappings.length && <p>Posted line review details are unavailable. Check the purchase history below.</p>}
       {!savedDetails.corrections.length ? <p>No corrections recorded.</p> : savedDetails.corrections.map(c => <p key={c.id}>{c.corrected_at} · {c.reason} · Previous correction: {c.previous_correction_id || "Initial invoice"}</p>)}
     </div>}
@@ -276,7 +276,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
       const current = validatePurchaseDocument(await api.purchaseFileDocument(restaurantId, currentId), currentId);
       const corrections = await api.purchaseCorrections(restaurantId, id);
       const scalar = value => value == null || ["string", "number"].includes(typeof value);
-      const fields = ["id", "line_id", "item_code", "classification", "received_quantity", "received_unit", "base_unit", "base_units_per_received_unit", "inventory_record_date", "note"];
+      const fields = ["id", "line_id", "item_code", "classification", "received_quantity", "received_unit", "base_unit", "base_units_per_received_unit", "inventory_record_date", "decision_note"];
       if (current.status !== "posted" || current.header.posted_version_id !== currentId
         || current.header.posted_batch_id !== known.header.posted_batch_id
         || !known.header.document_id || current.header.document_id !== known.header.document_id
