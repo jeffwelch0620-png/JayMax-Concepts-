@@ -9,7 +9,8 @@ scoped document route with a 60-second deadline. Failed, unposted or held reads
 keep the original review and retry key frozen; a matching posted read resolves
 the displayed outcome without another posting request. All **606 frontend tests
 across 66 suites** and the strict production build pass. These changes
-are local on **codex/purchase-saved-outcome-recovery**, not pushed or deployed.
+are proposed in [draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
+on **codex/purchase-saved-outcome-recovery** and are not merged or deployed.
 The existing hosted parent now passes read-only reopening after normal owner
 sign-in, navigation and a full reload: the retained receipt reads posted, has
 one history row and offers no initial-post action. A fresh database check
@@ -57,7 +58,9 @@ record the method's progression. This accepts the same mounted review form;
 the full hosted parent, reload/navigation/session-expiry recovery, concurrent
 first posting and independent employee authorization remain separate.
 Current hosting, Supabase connections, database roles and schema are unchanged.
-This documentation checkpoint remains local and has not been pushed.
+This acceptance documentation is included in
+[draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21);
+the follow-up remains unmerged and undeployed.
 
 ## Deployed walkthrough and item setup corrections - October 10, 2026
 

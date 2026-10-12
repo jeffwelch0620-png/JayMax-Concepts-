@@ -117,7 +117,9 @@ Execution completed about 8:03 PM EDT on October 11. The final read-only check
 completed at 8:04 PM EDT (October 12, 00:04 UTC, hence its filename). Native
 review, network-error/frozen-form and acknowledged-posted readbacks, plus
 screenshots and the Render revision readback, are retained in the private build
-directory. This documentation checkpoint is local and has not been pushed.
+directory. This documentation checkpoint is now included in
+[draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21),
+with no merge or deployment included.
 
 Next, inventory the remaining acceptance gaps and review recovery across remount
 and session boundaries before extending this evidence to those cases. Preserve

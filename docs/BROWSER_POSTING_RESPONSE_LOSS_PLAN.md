@@ -295,4 +295,6 @@ memory-only token discarded. This plan's preceding preparation and calibration
 descriptions are historical checkpoints, not the fixture's current state.
 Acceptance covers the same mounted component in the separate local client;
 full hosted-parent, remount/session-expiry and independent employee acceptance
-remain open. No current push or new deployment is included.
+remain open. This plan and its execution results are now included in
+[draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21);
+no merge or new deployment is included.

@@ -101,4 +101,6 @@ produce zero further database changes.
 
 The proposed hosted receipt remains uncaptured and unposted. The hosted
 frontend API origin, Render configuration, Supabase connections, schema and
-roles remain unchanged. This documentation checkpoint is local and not pushed.
+roles remain unchanged. This documentation checkpoint is now included in
+[draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21),
+with no merge or deployment included.

@@ -12,8 +12,9 @@ review. It preserves the existing body and key when status is unavailable,
 unposted or held, and resolves the displayed outcome only after the requested
 version is positively read as posted with its batch identity. It also requires
 a posting acknowledgement to identify the requested document and the batch
-recorded on that document before announcing success. The changes are local and
-not deployed; the accepted hosted test remains evidence for its pinned source.
+recorded on that document before announcing success. The changes are proposed
+in [draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
+and are not deployed; the accepted hosted test remains evidence for its pinned source.
 
 ## Source findings and selected approach
 
@@ -89,8 +90,8 @@ deferred UI workflow.
 
 1. Saved-outcome reopening in the deployed parent is now complete within the
    scope above. Preserve the same labelled receipt and original control.
-2. Review the local candidate, push a draft PR when authorized, verify CI, and
-   obtain separate approval before a merge/deployment. Rehearse the new status
+2. Draft PR21 is published for review. Verify its current-head CI and obtain
+   separate approval before a merge/deployment. Rehearse the new status
    action against saved and unavailable outcomes without another first-post
    fixture for the already accepted same-form case.
 3. Separately decide whether exact pending-command continuity is required across
