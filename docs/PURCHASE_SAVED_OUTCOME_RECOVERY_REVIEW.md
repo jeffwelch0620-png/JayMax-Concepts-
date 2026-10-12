@@ -1,54 +1,77 @@
 # Purchase saved outcome recovery review and local follow-up
 
-The existing database prevents a second initial posting for the same invoice.
-The remaining recovery gap is in the client: its exact submitted review and
-idempotency key live in a component ref and disappear after remount, reload or
-session exit. Reopening the retained file queries its saved status and can show
-an already posted invoice without another command. An unsuccessful or negative
-read cannot establish that an earlier command failed to commit.
+Draft [PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
+adds **Check saved status** to a frozen purchase review. The October 11 review
+amendment addresses F1, F2 and F3 together: recovery distinguishes this original
+request from a competing posting, recognizes later corrections, and explains
+held outcomes without suggesting a retry that cannot resolve the hold.
 
-This follow-up adds a read-only **Check saved status** action to a frozen purchase
-review. It preserves the existing body and key when status is unavailable,
-unposted or held, and resolves the displayed outcome only after the requested
-version is positively read as posted with its batch identity. It also requires
-a posting acknowledgement to identify the requested document and the batch
-recorded on that document before announcing success. The changes are proposed
-in [draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
-and are not deployed; the accepted hosted test remains evidence for its pinned source.
+## Recovery decisions
 
-## Source findings and selected approach
-
-| Finding | Consequence and response |
+| Read or exact retry result | Display and behavior |
 | --- | --- |
-| `PurchaseDocumentReview` stores its pending command in `useRef` | Exact retry survives in the mounted form; its key and reviewed values are not durable across reload or session exit. Keep that limit explicit. |
-| Invoice Master and its review are remounted on navigation/location changes and file reopening | Read saved state before considering any further write. Do not automatically reconstruct and resubmit a command. |
-| `post_review` locks the document identity/version and checks its existing batch first | Matching original version, key and fingerprint return the original batch; a different review or key for a posted identity is refused. This protects the ledger independently of the screen. |
-| `file_preview` reads each document's current posted version and batch | Reopening is an existing read-only recovery path. Verify it in the deployed parent using the retained fictional receipt. |
-| The old client accepted a truthy batch and `status: posted` without matching document/batch identities | The local follow-up now checks the requested version ID and equality between the response batch and the document's posted batch. |
-| A saved-status read may stall or race an earlier commit | The new GET has a 60-second deadline with cancellation. A negative/failed read preserves the frozen original request; it never enables an edited replacement command. |
+| Requested original version and posting key match; no correction | Your purchase was saved and confirmed. Close the initial review and refresh purchase history independently. |
+| Requested original version and posting key match; a correction exists | Your original purchase was saved and has since been corrected. Resolve the initial outcome, retain the server's real status, and expose read-only current purchase details and correction history. |
+| Another original version or posting key owns the saved batch | Identify a different request/version. Preserve this user's received date, quantity, units, conversion, note, body and key; disable another initial-post attempt and provide read-only comparison. |
+| Unposted document is held | Show the returned reasons. Keep the review frozen and disable posting; a later fresh read may clear the hold. |
+| Awaiting review with no saved batch | A read can race an in-flight commit. Keep the original review/body/key frozen; permit only an exact retry or another status check. |
+| Failed, timed-out, unauthorized or malformed read | Do not resolve the outcome or reconstruct a command. Retain the existing frozen review and any previously established hold. |
 
-The status action uses the existing scoped document GET. It does not submit a
-posting, correction, capture or migration. A positive read displays **Saved
-purchase found** rather than attributing that posting to the unresolved local
-review; the user should inspect history before a correction. History refresh
-failure does not undo a confirmed saved outcome. While checking, retry and the
-check button are disabled. Late responses to an unmounted location cannot
-populate a new location's panel.
+A correction on the same source version is recognized as well as a correction
+using a supplier reissue. The client never relabels a held server document as
+posted: saved-and-corrected is a separate recovery result. A posting response
+must also match its returned batch ID to the document's original batch.
 
-The shared read-deadline helper accepts an optional diagnosis; its existing
-state-read budget, default message and mutation semantics remain intact. The
-purchase-status adapter uses a purchase-specific diagnosis. Existing document
-reads used by receiving retain their original behavior.
+The authenticated, location-scoped preview now includes **posted_request_key**,
+read from the existing original posting batch's idempotency key. Corrections do
+not replace that identity. There is no migration, new table or changed write
+rule. Existing authorization and location checks remain in force. The server
+still checks the complete original version, key and canonical reviewed-body
+fingerprint on every exact retry; the client comparison is not a substitute.
+
+The comparison reads the current posted version and correction history through
+existing scoped GET routes. It verifies the document identity, original batch,
+current version and correction generation before rendering the saved mappings.
+It does not copy those mappings into the frozen request or submit a correction.
+A failed comparison leaves the frozen review visible. Purchase history refresh
+failure does not undo a confirmed saved outcome. No status check submits a POST.
+
+The status GET retains its 60-second deadline and cancellation. Pending checks
+disable posting and checking; failed reads release the check without releasing
+the original review. Late timed-out or unmounted-location results cannot supply
+a new saved outcome. Existing receiving reads retain their original behavior.
 
 ## Local validation and hosted evidence
 
-All **606 frontend tests across 66 suites** pass with the reviewed native feature
-profile. This includes 18 new cases for positive and negative saved reads,
-authorization/read failure, malformed or mismatched results, pending/timeout
-release, unchanged retry identity, remount, location isolation, and matching
-posting receipts with independent history refresh. These controlled local cases
-are separate from hosted runtime proof. The strict production build also passes
-with `CI=true`, ESLint enabled and the same native feature profile.
+All **617 frontend tests across 66 suites** pass with the native feature profile.
+The focused purchase suite passes **39 tests**, including both correction paths
+through status reads and exact retries, independent clients with competing dates
+and quantities, read-only comparison, held reasons and later hold release,
+missing/malformed request identity, and the existing deadline/location guards.
+The strict production build passes with **CI=true**, ESLint enabled and the same
+profile. Its backend URL is the fictional `https://backend.invalid`; the build
+was not deployed.
+
+Three new real PostgreSQL regression cases cover original posting identity
+through same-version and reissued-version corrections, unchanged ledger facts
+on exact replay, competing reviews refused with 409, and unauthorized/wrong-store
+reads. All **41 tests** in the native purchase and posted-invoice correction
+modules pass against the dedicated disposable loopback PostgreSQL 17 server,
+with no skips. These three new cases are included in the database CI selection.
+The local Windows offline profile passes **211 tests and 323 subchecks** with
+no failures or skips. Its first collection attempt lacked the pinned cryptography
+dependency; installing the repository-pinned dependency in an isolated local test
+folder resolved that environment issue without changing source or lockfiles.
+The generated review guides match source; migrations and the schema snapshot
+are byte-identical to the pre-amendment head. The dedicated test server stopped
+after completion. Local test receipts remain outside Git.
+
+The amendment is local review evidence until separately approved and deployed.
+It requires the amended backend preview alongside the frontend; an older server
+without the request identity fails closed rather than claiming this request was
+saved. Current Render deployment, hosted data, connections, roles and migration
+identities are unchanged. The earlier hosted observations below apply to their
+pinned deployed source and do not validate this amendment's new status action.
 
 A fresh independent read-only observation at **8:21 PM EDT on October 11**
 preserved all **86 observed relations** against the prior post-commit baseline,

@@ -3,14 +3,22 @@
 ## Local purchase saved-status follow-up - October 11, 2026
 
 The [saved-outcome recovery review](docs/PURCHASE_SAVED_OUTCOME_RECOVERY_REVIEW.md)
-records a local **Check saved status** action for frozen purchase reviews and
-stricter document/batch acknowledgement checks. The action reads the existing
-scoped document route with a 60-second deadline. Failed, unposted or held reads
-keep the original review and retry key frozen; a matching posted read resolves
-the displayed outcome without another posting request. All **606 frontend tests
-across 66 suites** and the strict production build pass. These changes
-are proposed in [draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
+records **Check saved status** and the PR21 review amendment. The existing scoped
+GET now returns the original posting key. Recovery resolves only a matching
+original version/key, including purchases corrected on the same version or a
+supplier reissue. Another request's posting preserves the user's frozen values
+for read-only comparison with the current purchase and correction history.
+Held reads show their reasons and disable posting until a fresh read clears the
+hold. Failed reads retain the original immutable request; status checks never
+submit a POST. All **617 frontend tests across 66 suites**, including **39 purchase
+component tests**, and the strict production build pass. All **41 local purchase
+and PostgreSQL correction tests** and **211 Windows offline tests plus 323
+subchecks** pass. Three new recovery cases are included in database CI.
+No migration or write rule changes.
+These changes are proposed in [draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
 on **codex/purchase-saved-outcome-recovery** and are not merged or deployed.
+The frontend requires the amended backend preview; absent request identity is
+held as unconfirmed. Current hosting and Supabase connections remain unchanged.
 The existing hosted parent now passes read-only reopening after normal owner
 sign-in, navigation and a full reload: the retained receipt reads posted, has
 one history row and offers no initial-post action. A fresh database check

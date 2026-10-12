@@ -3,6 +3,7 @@ import * as api from "../lib/api";
 import { PageTitle, Field, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 import { ManualPurchaseEntry } from "./ManualPurchaseEntry";
 import { InventoryUnitSetup } from "./InventoryUnitSetup";
+import { purchaseRecoveryOutcome, validatePurchaseDocument } from "../lib/purchaseRecovery";
 
 const units = ["lb", "oz", "g", "kg", "fl_oz", "ml", "l", "gal", "each"];
 const errorText = e => {
@@ -11,7 +12,7 @@ const errorText = e => {
 };
 const empty = value => value === "" || value == null ? null : value;
 
-export function PurchaseDocumentReview({ document, items, history, onPost, onCheckSaved, busy, correctionMode = false }) {
+export function PurchaseDocumentReview({ document, items, history, onPost, onCheckSaved, onInspectSaved, busy, correctionMode = false }) {
   const mappings = correctionMode ? document.currentMappings || [] : [];
   const [receivedDate, setReceivedDate] = useState(mappings.find(m => m.movement_kind === "receipt")?.inventory_record_date || "");
   const [currencyConfirmed, setCurrencyConfirmed] = useState(false);
@@ -27,6 +28,7 @@ export function PurchaseDocumentReview({ document, items, history, onPost, onChe
   const [error, setError] = useState("");
   const [savedStatus, setSavedStatus] = useState("");
   const [checkingSaved, setCheckingSaved] = useState(false);
+  const [savedDetails, setSavedDetails] = useState(null), [detailsError, setDetailsError] = useState("");
   const request = useRef(null);
   function change(id, patch) {
     // Freeze a submitted review until its outcome is known. Retry the same key.
@@ -51,21 +53,27 @@ export function PurchaseDocumentReview({ document, items, history, onPost, onChe
     catch (e) { if (correctionMode) request.current = null; setError(errorText(e)); }
   }
   async function checkSaved() {
-    setCheckingSaved(true); setSavedStatus("");
+    setCheckingSaved(true); setSavedStatus(""); setError(""); setSavedDetails(null);
     try {
-      const status = await onCheckSaved(document.id);
-      if (status !== "posted") setSavedStatus("No posted outcome was visible in this read. Keep this review frozen and retry the same request, or check again.");
+      const outcome = await onCheckSaved(document.id, request.current.key);
+      if (outcome?.kind === "awaiting_review") setSavedStatus("No posted outcome was visible in this read. Keep this review frozen and retry the same request, or check again.");
     } catch (e) { setSavedStatus(`Saved status could not be confirmed: ${errorText(e)}`); }
     finally { setCheckingSaved(false); }
   }
-  const posted = document.status === "posted";
+  const recovery = document.recovery;
+  const corrected = recovery?.kind === "saved_corrected";
+  const posted = document.status === "posted" || corrected;
+  const blockedRetry = ["held", "other_request"].includes(recovery?.kind);
   const frozen = posted || busy || !!request.current;
   const header = document.header;
   return <section className={`${cardCls} p-4 space-y-4`} aria-label={`Invoice ${header.document_number}`}>
-    <h3 className="text-lg font-semibold">{header.vendor_id} · {header.document_number} · {document.status.replaceAll("_", " ")}</h3>
+    <h3 className="text-lg font-semibold">{header.vendor_id} · {header.document_number} · {corrected ? "original purchase saved; since corrected" : document.status.replaceAll("_", " ")}</h3>
     <p className="text-sm text-slate-400">Supplier date: {header.invoice_date || "Missing"} · Line total: {document.totals.lineTotal ?? "Missing"} · Supplier total: {document.totals.statedTotal ?? "Missing"} {header.confirmed_currency}</p>
     <p className="text-sm">Fees: {header.fees_source ?? "Not separately stated"} · Tax: {header.tax_source ?? "Not separately stated"} · Unexplained difference: {document.totals.difference ?? "Unknown"}</p>
-    {!!document.errors.length && <div role="alert" className="text-amber-300">Held for review: {document.errors.join("; ")}</div>}
+    {!corrected && !!document.errors.length && <div role="alert" className="text-amber-300">Held for review: {document.errors.join("; ")}</div>}
+    {corrected && <p role="status">Your original purchase was saved and has since been corrected. Review the current saved purchase and correction history.</p>}
+    {recovery?.kind === "other_request" && <p role="alert">This invoice was posted by a different request or version. Your frozen review is retained. Compare it with the saved purchase and correction history before making changes.</p>}
+    {recovery?.kind === "held" && <p role="alert">Held for review: {recovery.document.errors.join("; ") || "The source needs manager review."} Check its status again after the source or correction history has been reviewed. Your original request is retained.</p>}
     {!posted && <Field label="Date goods were received (inventory date of record)"><input type="date" aria-label="Received date" className={inpCls} value={receivedDate} disabled={frozen} onChange={e => setReceivedDate(e.target.value)} /></Field>}
     {!posted && <label className="text-sm flex gap-2"><input aria-label="Confirm USD currency" type="checkbox" checked={currencyConfirmed} disabled={frozen} onChange={e => setCurrencyConfirmed(e.target.checked)} />I verified that the supplier amounts are in USD.</label>}
     {document.lines.map((line, index) => {
@@ -97,8 +105,19 @@ export function PurchaseDocumentReview({ document, items, history, onPost, onChe
     })}
     {error && <p role="alert" className="text-red-300">{error}</p>}
     {savedStatus && <p role="status">{savedStatus}</p>}
+    {(recovery?.document?.header?.posted_batch_id || header.posted_batch_id) && onInspectSaved && <button className={btnGhost} disabled={busy || checkingSaved} onClick={async () => {
+      setDetailsError(""); setSavedDetails(null);
+      try { setSavedDetails(await onInspectSaved(document.id)); } catch (e) { setDetailsError(errorText(e)); }
+    }}>Show saved purchase and correction history</button>}
+    {detailsError && <p role="alert">{detailsError}</p>}
+    {savedDetails && <div aria-label="Saved purchase comparison" className="space-y-3">
+      <p>Current saved purchase: {savedDetails.document.header.document_number}. These values are read-only.</p>
+      <div className="overflow-auto"><table className="text-sm w-full"><thead><tr>{["Item / classification", "Received quantity", "Received unit", "Inventory unit", "Conversion", "Inventory date", "Review note"].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{savedDetails.document.currentMappings.map(m => <tr key={m.id || m.line_id}><td>{m.item_code || m.classification}</td><td>{m.received_quantity ?? "—"}</td><td>{m.received_unit || "—"}</td><td>{m.base_unit || "—"}</td><td>{m.base_units_per_received_unit ?? "—"}</td><td>{m.inventory_record_date || "—"}</td><td>{m.note || "—"}</td></tr>)}</tbody></table></div>
+      {!savedDetails.document.currentMappings.length && <p>Posted line review details are unavailable. Check the purchase history below.</p>}
+      {!savedDetails.corrections.length ? <p>No corrections recorded.</p> : savedDetails.corrections.map(c => <p key={c.id}>{c.corrected_at} · {c.reason} · Previous correction: {c.previous_correction_id || "Initial invoice"}</p>)}
+    </div>}
     {!posted && <div className="flex gap-3 flex-wrap">
-      <button className={btnAcc} disabled={busy || checkingSaved || !currencyConfirmed || document.status === "held" || document.lines.some(l => !reviews[l.id].verified || !reviews[l.id].note.trim())} onClick={() => post().catch(e => setError(errorText(e)))}>{correctionMode ? "Preview invoice correction" : request.current ? "Retry same purchase posting" : "Confirm and post purchase"}</button>
+      <button className={btnAcc} disabled={busy || checkingSaved || blockedRetry || !currencyConfirmed || document.status === "held" || document.lines.some(l => !reviews[l.id].verified || !reviews[l.id].note.trim())} onClick={() => post().catch(e => setError(errorText(e)))}>{correctionMode ? "Preview invoice correction" : request.current ? "Retry same purchase posting" : "Confirm and post purchase"}</button>
       {request.current && !correctionMode && onCheckSaved && <button className={btnGhost} disabled={busy || checkingSaved} onClick={checkSaved}>{checkingSaved ? "Checking saved status…" : "Check saved status"}</button>}
       {request.current && !busy && <p className="text-xs text-slate-400">This review is frozen until the saved outcome is confirmed. Retry safely or reopen the captured file to check its status.</p>}
     </div>}
@@ -211,32 +230,62 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
       return result;
     } finally { if (mounted.current) setBusy(false); }
   }
+  function applyRecovery(id, outcome) {
+    const own = ["saved", "saved_corrected"].includes(outcome.kind);
+    // Only our original request may close this review. Keep the submitted
+    // fields and component key intact for a hold or another request's posting.
+    setSelected(s => ({ ...s, documents: s.documents.map(d => d.id === id ? { ...(own ? outcome.document : d), recovery: outcome } : d) }));
+    if (own) setMessage(outcome.kind === "saved_corrected"
+      ? "Your original purchase was saved and has since been corrected. Review the correction history."
+      : "Your purchase was saved and confirmed. Taxes and fees remain separate.");
+    if (outcome.document.header.posted_batch_id) api.purchaseHistory(restaurantId)
+      .then(h => mounted.current && setHistory(h))
+      .catch(e => mounted.current && setError(`Saved purchase history refresh failed: ${errorText(e)}`));
+  }
   async function post(id, body, key) {
     setBusy(true);
+    setMessage("");
     try {
       const result = await api.postPurchase(restaurantId, id, body, key);
-      if (!result?.batchId || result.document?.id !== id || result.document?.status !== "posted" || result.document?.header?.posted_batch_id !== result.batchId) throw new Error("Saved outcome was not confirmed. Retry this request.");
+      if (!result?.batchId || result.document?.header?.posted_batch_id !== result.batchId) throw new Error("Saved outcome was not confirmed. Retry this request.");
+      let outcome;
+      try { outcome = purchaseRecoveryOutcome(result.document, id, key); }
+      catch { throw new Error("Saved outcome was not confirmed. Retry this request."); }
+      if (!["saved", "saved_corrected"].includes(outcome.kind)) throw new Error("Saved outcome was not confirmed. Retry this request.");
       if (!mounted.current) return;
-      setSelected(s => ({ ...s, documents: s.documents.map(d => d.id === id ? result.document : d) }));
-      setMessage("Purchase posted and confirmed. Taxes and fees remain separate.");
-      // History refresh is independent of the confirmed posting outcome.
-      api.purchaseHistory(restaurantId).then(h => mounted.current && setHistory(h)).catch(e => mounted.current && setError(`Purchase saved; history refresh failed: ${errorText(e)}`));
+      applyRecovery(id, outcome);
     } finally { if (mounted.current) setBusy(false); }
   }
-  async function checkSaved(id) {
+  async function checkSaved(id, key) {
     setBusy(true);
+    setMessage("");
     try {
       const result = await api.checkPurchaseSavedStatus(restaurantId, id);
-      if (result?.id !== id || !["posted", "held", "awaiting_review"].includes(result.status) || !result.header || !Array.isArray(result.lines) || !Array.isArray(result.errors) || !result.totals || (result.status === "posted" && (!result.header.posted_batch_id || result.header.posted_version_id !== id))) throw new Error("Saved document status was not confirmed. Check again.");
+      const outcome = purchaseRecoveryOutcome(result, id, key);
       if (!mounted.current) return;
-      // A negative read can race an in-flight commit. Preserve the original key,
-      // body and frozen form until a positive saved outcome is read back.
-      if (result.status === "posted") {
-        setSelected(s => ({ ...s, documents: s.documents.map(d => d.id === id ? result : d) }));
-        setMessage("Saved purchase found. Review posted history before making a correction. No posting request was sent.");
-        api.purchaseHistory(restaurantId).then(h => mounted.current && setHistory(h)).catch(e => mounted.current && setError(`Purchase found; history refresh failed: ${errorText(e)}`));
+      applyRecovery(id, outcome);
+      return outcome;
+    } finally { if (mounted.current) setBusy(false); }
+  }
+  async function inspectSaved(id) {
+    setBusy(true);
+    try {
+      const original = selected.documents.find(d => d.id === id);
+      const known = original.recovery?.document || original;
+      const currentId = known.header.posted_version_id;
+      const current = validatePurchaseDocument(await api.purchaseFileDocument(restaurantId, currentId), currentId);
+      const corrections = await api.purchaseCorrections(restaurantId, id);
+      const scalar = value => value == null || ["string", "number"].includes(typeof value);
+      const fields = ["id", "line_id", "item_code", "classification", "received_quantity", "received_unit", "base_unit", "base_units_per_received_unit", "inventory_record_date", "note"];
+      if (current.status !== "posted" || current.header.posted_version_id !== currentId
+        || current.header.posted_batch_id !== known.header.posted_batch_id
+        || !known.header.document_id || current.header.document_id !== known.header.document_id
+        || current.header.current_correction_id !== known.header.current_correction_id
+        || !Array.isArray(current.currentMappings) || !current.currentMappings.every(m => m && fields.every(f => scalar(m[f])) && typeof m.line_id === "string")
+        || !Array.isArray(corrections) || !corrections.every(c => c && typeof c.id === "string" && typeof c.reason === "string" && typeof c.corrected_at === "string" && scalar(c.previous_correction_id))) {
+        throw new Error("Saved purchase details changed or could not be confirmed. Check saved status again.");
       }
-      return result.status;
+      return { document: current, corrections };
     } finally { if (mounted.current) setBusy(false); }
   }
   async function previewCorrection(id, body) {
@@ -295,7 +344,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
           {selected.parse_run_id && !selected.manualRecord && <button className={btnGhost} disabled={busy} onClick={() => action(async () => setSourceRows(await api.purchaseRawRows(restaurantId, selected.id)))}>Show all source fields</button>}
           {sourceRows && <div className="overflow-auto max-h-96"><table className="text-xs"><thead><tr><th>Record</th>{sourceRows.headers.map((h, i) => <th className="px-2" key={i}>{h} [{i + 1}]</th>)}</tr></thead><tbody>{sourceRows.rows.map(row => <tr key={row.row_ordinal}><td>{row.row_ordinal}</td>{row.raw_values.map((v, i) => <td className="border border-slate-700 p-2 whitespace-nowrap" key={i}>{v}</td>)}</tr>)}</tbody></table>{sourceRows.nextOffset != null && <button className={btnGhost} disabled={busy} onClick={() => action(async () => setSourceRows(await api.purchaseRawRows(restaurantId, selected.id, sourceRows.nextOffset)))}>Next source records</button>}</div>}
         </div>
-        {selected.documents.map(d => <PurchaseDocumentReview key={`${previewEpoch}:${selected.id}:${d.id}:${d.status}`} document={d} items={items} history={history} onPost={post} onCheckSaved={checkSaved} busy={busy} />)}
+        {selected.documents.map(d => <PurchaseDocumentReview key={`${previewEpoch}:${selected.id}:${d.id}:${d.status}`} document={d} items={items} history={history} onPost={post} onCheckSaved={checkSaved} onInspectSaved={inspectSaved} busy={busy} />)}
         {selected.documents.filter(d => d.correctionAvailable).map(d => <PurchaseCorrectionReview key={`correction:${previewEpoch}:${d.id}`} document={d} items={items} history={history} onPreview={previewCorrection} onCorrect={correct} onHistory={id => api.purchaseCorrections(restaurantId, id)} busy={busy} />)}
       </>}
       <div className={`${cardCls} p-4 overflow-auto`}><h3 className="font-semibold mb-2">Food purchase history</h3><table className="text-sm w-full"><thead><tr>{["Received / movement date", "Invoice", "Entry", "Item", "Quantity", "Inventory unit", "Food amount"].map(h => <th className="text-left p-2" key={h}>{h}</th>)}</tr></thead><tbody>{history.map(h => <tr key={h.fact_id || h.line_id}><td className="p-2">{h.inventory_record_date}</td><td>{h.document_number}</td><td>{h.fact_kind || "initial"}</td><td>{h.description_snapshot}</td><td>{h.base_quantity}</td><td>{h.base_unit}</td><td>{h.inventory_cost_amount}</td></tr>)}</tbody></table></div>

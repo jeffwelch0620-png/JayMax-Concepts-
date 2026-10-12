@@ -18,6 +18,9 @@ OFFLINE_CLASSES = ('deployment_readiness::ReadinessConfigurationTests runtime_pe
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests').split()
 DATABASE_CASES = (
+ ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_same_version_correction_and_exact_retry'),
+ ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_reissued_version_correction_and_exact_retry'),
+ ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_competing_review_reads_winning_request_identity_without_another_posting'),
  ('native_order_receiving','NativeOrderReceivingTests','test_unknown_catalog_factor_has_separate_confirmed_physical_profile'),
  ('native_order_receiving','NativeOrderReceivingTests','test_profile_retry_staleness_and_fixed_base_unit_guards'),
  ('combined_prep_cutover','CombinedPrepCutoverTests','test_combined_trial_counts_purchases_staff_containers_period_correction_and_restore'),
