@@ -1,5 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Saved purchase comparison follow-up - October 12, 2026
+
+PR21 is merged at `54975a0`. Both Render services were verified **Live** on that
+commit through the dashboard, and all four [merge-commit CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38196259722)
+pass. The deployed comparison reads the existing fictional receipt's quantity,
+conversion, received date and correction history without posting a command.
+
+The walkthrough found one display mismatch: saved mapping decisions expose
+`decision_note`, while the comparison read `note`. This local follow-up renders
+and validates `decision_note`, preserving the competing user's frozen note and
+request. Two regression cases failed before the correction and pass afterward;
+all **619 frontend tests across 66 suites** and the strict production build pass.
+The fix is published in [draft PR22](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/22)
+on **codex/purchase-comparison-note-integrity** and is **unmerged and undeployed**. No backend, schema, accounting or connection change is included.
+
+A fresh read-only comparison at **1:08 PM EDT on October 12** preserved all
+**86 observed relations**, the one fictional receipt and the original **$212**
+report. An earlier read-only attempt lost its connection; the fresh retry passed
+without changing connection settings. See the [recovery review](docs/PURCHASE_SAVED_OUTCOME_RECOVERY_REVIEW.md)
+for the evidence and next steps. The new unresolved-request recovery scenarios
+still require separate live acceptance; opening an already posted receipt does
+not establish those paths.
+
 ## Local purchase saved-status follow-up - October 11, 2026
 
 The [saved-outcome recovery review](docs/PURCHASE_SAVED_OUTCOME_RECOVERY_REVIEW.md)
@@ -15,8 +38,8 @@ component tests**, and the strict production build pass. All **41 local purchase
 and PostgreSQL correction tests** and **211 Windows offline tests plus 323
 subchecks** pass. Three new recovery cases are included in database CI.
 No migration or write rule changes.
-These changes are proposed in [draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
-on **codex/purchase-saved-outcome-recovery** and are not merged or deployed.
+These changes were reviewed in [PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
+at **cc8072f**, then merged and deployed at **54975a0** under user approval.
 The frontend requires the amended backend preview; absent request identity is
 held as unconfirmed. Current hosting and Supabase connections remain unchanged.
 The existing hosted parent now passes read-only reopening after normal owner
@@ -24,8 +47,8 @@ sign-in, navigation and a full reload: the retained receipt reads posted, has
 one history row and offers no initial-post action. A fresh database check
 preserves all 86 observed relations and the complete $212 original report.
 These reads used the already acknowledged receipt; exact unresolved-command
-continuity across reload or session expiry remains separate. The new local
-status action itself has not been deployed or tested live.
+continuity across reload or session expiry remains separate. The new status action is deployed; its unresolved-request scenarios remain
+separate from the existing-receipt readback.
 
 ## Hosted recovery and deployed HTTP retry acceptance - October 11, 2026
 
@@ -67,8 +90,8 @@ the full hosted parent, reload/navigation/session-expiry recovery, concurrent
 first posting and independent employee authorization remain separate.
 Current hosting, Supabase connections, database roles and schema are unchanged.
 This acceptance documentation is included in
-[draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21);
-the follow-up remains unmerged and undeployed.
+[PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21),
+now merged and deployed; the note-display correction above remains local.
 
 ## Deployed walkthrough and item setup corrections - October 10, 2026
 
