@@ -107,6 +107,7 @@ async def load_version(conn, store_id, version_id, lock=False):
     record = await conn.fetchrow('''SELECT d.*,i.store_id,i.vendor_id,i.document_type,
         i.vendor_branch_key,i.customer_account_key,
         (SELECT b.id FROM purchasing.posting_batches b WHERE b.document_id=i.id) AS posted_batch_id,
+        (SELECT b.idempotency_key FROM purchasing.posting_batches b WHERE b.document_id=i.id) AS posted_request_key,
         (SELECT b.document_version_id FROM purchasing.posting_batches b WHERE b.document_id=i.id) AS posted_version_id
         FROM purchasing.document_versions d JOIN purchasing.document_identities i ON i.id=d.document_id
         WHERE d.id=$1 AND i.store_id=$2''' + (' FOR UPDATE OF d' if lock else ''), version_id, store_id)

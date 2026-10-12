@@ -3,14 +3,14 @@
 export const STATE_READ_TIMEOUT_MS = 60000;
 export const STATE_READ_TIMEOUT_MESSAGE = "Location data loading timed out. Check your connection and retry; your draft is retained.";
 
-export async function readStateWithDeadline(load) {
+export async function readStateWithDeadline(load, timeoutMessage = STATE_READ_TIMEOUT_MESSAGE) {
   const controller = new AbortController();
   let timer;
   const deadline = new Promise((resolve, reject) => {
     timer = setTimeout(() => {
       // Reject first so an abort-aware transport cannot replace the useful
       // timeout diagnosis with its generic cancellation error.
-      reject(new Error(STATE_READ_TIMEOUT_MESSAGE));
+      reject(new Error(timeoutMessage));
       controller.abort();
     }, STATE_READ_TIMEOUT_MS);
   });

@@ -1,5 +1,75 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local purchase saved-status follow-up - October 11, 2026
+
+The [saved-outcome recovery review](docs/PURCHASE_SAVED_OUTCOME_RECOVERY_REVIEW.md)
+records **Check saved status** and the PR21 review amendment. The existing scoped
+GET now returns the original posting key. Recovery resolves only a matching
+original version/key, including purchases corrected on the same version or a
+supplier reissue. Another request's posting preserves the user's frozen values
+for read-only comparison with the current purchase and correction history.
+Held reads show their reasons and disable posting until a fresh read clears the
+hold. Failed reads retain the original immutable request; status checks never
+submit a POST. All **617 frontend tests across 66 suites**, including **39 purchase
+component tests**, and the strict production build pass. All **41 local purchase
+and PostgreSQL correction tests** and **211 Windows offline tests plus 323
+subchecks** pass. Three new recovery cases are included in database CI.
+No migration or write rule changes.
+These changes are proposed in [draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21)
+on **codex/purchase-saved-outcome-recovery** and are not merged or deployed.
+The frontend requires the amended backend preview; absent request identity is
+held as unconfirmed. Current hosting and Supabase connections remain unchanged.
+The existing hosted parent now passes read-only reopening after normal owner
+sign-in, navigation and a full reload: the retained receipt reads posted, has
+one history row and offers no initial-post action. A fresh database check
+preserves all 86 observed relations and the complete $212 original report.
+These reads used the already acknowledged receipt; exact unresolved-command
+continuity across reload or session expiry remains separate. The new local
+status action itself has not been deployed or tested live.
+
+## Hosted recovery and deployed HTTP retry acceptance - October 11, 2026
+
+PR20 is merged at `4855ba6`, and its Render frontend passed the
+[hosted read-recovery walkthrough](docs/PR20_HOSTED_ACCEPTANCE_RESULTS.md).
+Item and recipe drafts survived polling and stalled reads; timeouts released
+recovery, initial Retry worked, and polling resumed. Both fictional drafts were
+discarded without Save. Read-only comparisons preserved all 79 protected tables
+and the complete **$212 Actual Food Cost** report. These controlled client-latency
+checks do not establish a cold-start service-level guarantee.
+
+The [deployed HTTP retry results](docs/DEPLOYED_POSTING_RETRY_RESULTS.md) now
+confirm **eight exact retries returning the original batches** and **eight
+changed-body/key retries refused with HTTP 409** through the existing Render
+API. Fresh readback after every request and at completion preserved all
+**79 protected tables**, migration identities and the complete **$212** report;
+no new purchase outcome was created. Normal owner sign-in was used, with no
+credentials stored in receipts or Git. The
+[procedure](docs/DEPLOYED_POSTING_RETRY_PLAN.md) and
+[read-only preflight](docs/DEPLOYED_POSTING_RETRY_PREFLIGHT.md) record the setup;
+five offline runner controls remain separate from deployed evidence.
+The [guarded hosted browser response-loss trial](docs/HOSTED_PURCHASE_BROWSER_RESPONSE_LOSS_RESULTS.md)
+now also passes using the unchanged purchase-review component in a separate
+local client. One labelled fictional October 11 receipt committed **+1 each /
+$1** through the existing Render API. Independent database proof preceded the
+deliberately truncated response; Chrome showed `ERR_NETWORK`, retained the
+locked review and did not acknowledge success. One manual retry sent the
+identical 438-byte body and key, acknowledged the original batch, and caused
+**zero added or updated rows**. Exactly one batch, line and derived food fact
+remain. All **86 observed relations** matched the post-commit baseline on final
+readback; prior rows, migration identities and the complete **$212** original
+report were preserved. The helper is stopped and its memory-only token discarded.
+The new $1 purchase is outside the original closed interval and does not
+establish $1 of actual usage. **28 offline guard tests** passed before execution.
+The [trial plan](docs/BROWSER_POSTING_RESPONSE_LOSS_PLAN.md) and preceding
+[local simulated test](docs/LOCAL_PURCHASE_REVIEW_RESPONSE_DROP_RESULTS.md)
+record the method's progression. This accepts the same mounted review form;
+the full hosted parent, reload/navigation/session-expiry recovery, concurrent
+first posting and independent employee authorization remain separate.
+Current hosting, Supabase connections, database roles and schema are unchanged.
+This acceptance documentation is included in
+[draft PR21](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/21);
+the follow-up remains unmerged and undeployed.
+
 ## Deployed walkthrough and item setup corrections - October 10, 2026
 
 PR14–19 are merged into the existing Render test deployment. Both services are
@@ -39,11 +109,11 @@ pause polling indefinitely. Initial timeouts expose Retry; later timeouts retain
 confirmed state and drafts. The deadline is scoped to reads and leaves mutation
 and posting retry contracts unchanged. The amended follow-up passes **181 focused
 tests across 11 suites**, all **588 frontend tests across 66 suites**, and the
-strict production build. It is published for review in
-[draft PR20](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/20) and has
-not been deployed. After separate merge approval, test both recovery actions
-across a poll interval and stalled-network recovery on the Render test app;
-broader UI and authentication work remain deferred.
+strict production build. That review checkpoint was published in
+[PR20](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/20), subsequently
+merged under user approval and deployed. The October 11 results above record
+its completed hosted read acceptance; broader UI and authentication work remain
+deferred.
 
 The [item setup checkpoint](docs/DEPLOYED_ITEM_SETUP_CHECKPOINT.md) documents two
 locally corrected blockers: duplicate count panels while typing, and unrelated

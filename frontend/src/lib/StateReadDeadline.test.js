@@ -90,3 +90,25 @@ test("posting a purchase retains its request identity without the state-read dea
     { headers: { "Idempotency-Key": "fictional-stable-key" } });
   expect(jest.getTimerCount()).toBe(0);
 });
+
+test("a stalled saved-purchase check is cancelled with its own diagnosis and no post", async () => {
+  axios.get.mockReturnValue(new Promise(() => {}));
+  const result = api.checkPurchaseSavedStatus("berts", "fictional-document").catch(error => error);
+  jest.advanceTimersByTime(timeout); await flush();
+  expect(await result).toEqual(new Error(api.PURCHASE_STATUS_TIMEOUT_MESSAGE));
+  expect(axios.get).toHaveBeenCalledWith(expect.stringContaining("/purchases/berts/documents/fictional-document"), { signal: expect.any(AbortSignal) });
+  expect(axios.get.mock.calls[0][1].signal.aborted).toBe(true);
+  expect(axios.post).not.toHaveBeenCalled(); expect(jest.getTimerCount()).toBe(0);
+});
+
+test("late saved-purchase completion after timeout cannot replace the failed result", async () => {
+  const pending = deferred(); axios.get.mockReturnValue(pending.promise);
+  const completed = jest.fn(); const failed = jest.fn();
+  const result = api.checkPurchaseSavedStatus("berts", "fictional-document").then(completed, failed);
+  jest.advanceTimersByTime(timeout); await flush(); await result;
+  pending.resolve({ data: { id: "fictional-document", status: "posted" } }); await flush();
+  expect(completed).not.toHaveBeenCalled();
+  expect(failed).toHaveBeenCalledTimes(1);
+  expect(failed).toHaveBeenCalledWith(new Error(api.PURCHASE_STATUS_TIMEOUT_MESSAGE));
+  expect(jest.getTimerCount()).toBe(0);
+});

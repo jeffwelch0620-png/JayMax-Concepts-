@@ -48,6 +48,73 @@ class PostedInvoiceCorrectionTests(unittest.IsolatedAsyncioTestCase):
         async with self.pool.acquire() as conn:
             return [dict(r) for r in await conn.fetch('SELECT * FROM purchasing.actual_purchase_facts')]
 
+    async def assert_original_request_survives_correction(self, reissued):
+        file,*_=await self.capture(number='TEST-RECOVERY-CORRECTION')
+        original=file['documents'][0];body=self.body(original);key=str(uuid4())
+        first=await self.post(original,body,key);self.assertEqual(first.status_code,200,first.text)
+        batch=first.json()['batchId']
+        replacement=original
+        if reissued:
+            file,*_=await self.capture(number='TEST-RECOVERY-CORRECTION',amounts=('50.00',))
+            replacement=file['documents'][0]
+        plan=(await self.plan(replacement,received_quantity='3')).json()
+        correction=await self.correct(replacement,plan)
+        self.assertEqual(correction.status_code,200,correction.text)
+        before=await self.rows()
+        read=await self.client.get(f"/api/pg/purchases/berts/documents/{original['id']}")
+        self.assertEqual(read.status_code,200,read.text)
+        saved=read.json()
+        self.assertEqual(saved['status'],'held' if reissued else 'posted')
+        self.assertEqual(saved['header']['posted_request_key'],key)
+        self.assertEqual(saved['header']['initial_posted_version_id'],original['id'])
+        self.assertEqual(saved['header']['posted_version_id'],replacement['id'])
+        self.assertEqual(saved['header']['current_correction_id'],correction.json()['correctionId'])
+        current=(await self.client.get(f"/api/pg/purchases/berts/documents/{replacement['id']}")).json()
+        self.assertEqual(current['status'],'posted');self.assertEqual(current['header']['posted_request_key'],key)
+        retry=await self.post(original,body,key)
+        self.assertEqual(retry.status_code,200,retry.text)
+        self.assertEqual(retry.json()['batchId'],batch)
+        self.assertEqual(retry.json()['document']['header']['posted_request_key'],key)
+        self.assertEqual(retry.json()['document']['status'],saved['status'])
+        self.assertEqual(await self.rows(),before)
+        async with self.pool.acquire() as conn:
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.posting_batches'),1)
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.corrections'),1)
+        history=await self.client.get(f"/api/pg/purchases/berts/documents/{original['id']}/corrections")
+        self.assertEqual(len(history.json()),1)
+        denied=await self.client.get(f"/api/pg/purchases/rudds/documents/{original['id']}")
+        self.assertEqual(denied.status_code,404)
+        denied=await self.client.get(f"/api/pg/purchases/berts/documents/{original['id']}",headers={'Authorization':'Bearer invalid'})
+        self.assertEqual(denied.status_code,401)
+
+    async def test_recovery_identity_survives_same_version_correction_and_exact_retry(self):
+        await self.assert_original_request_survives_correction(False)
+
+    async def test_recovery_identity_survives_reissued_version_correction_and_exact_retry(self):
+        await self.assert_original_request_survives_correction(True)
+
+    async def test_competing_review_reads_winning_request_identity_without_another_posting(self):
+        import httpx
+        file,*_=await self.capture();doc=file['documents'][0]
+        self.assertIsNone(doc['header']['posted_request_key'])
+        winner=self.body(doc);loser=self.body(doc,received_quantity='3')
+        loser['received_date']='2026-10-05';winner_key=str(uuid4());loser_key=str(uuid4())
+        first=await self.post(doc,winner,winner_key);self.assertEqual(first.status_code,200,first.text)
+        before=await self.rows()
+        async with httpx.AsyncClient(transport=self.client._transport,base_url='http://test',headers={'Authorization':'Bearer synthetic-manager'}) as other:
+            path=f"/api/pg/purchases/berts/documents/{doc['id']}"
+            rejected=await other.post(path+'/post',json=loser,headers={'Idempotency-Key':loser_key})
+            self.assertEqual(rejected.status_code,409,rejected.text)
+            read=await other.get(path);self.assertEqual(read.status_code,200,read.text)
+            self.assertEqual(read.json()['header']['posted_request_key'],winner_key)
+            self.assertNotEqual(read.json()['header']['posted_request_key'],loser_key)
+            self.assertEqual(read.json()['currentMappings'][0]['inventory_record_date'],winner['received_date'])
+            retry=await other.post(path+'/post',json=loser,headers={'Idempotency-Key':loser_key})
+            self.assertEqual(retry.status_code,409,retry.text)
+        self.assertEqual(await self.rows(),before)
+        async with self.pool.acquire() as conn:
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.posting_batches'),1)
+
     async def test_quantity_correction_and_successive_generations_cancel_exactly(self):
         _,a,b=await self.pair();doc,batch=await self.initial()
         old=(await self.report(a,b)).json();self.assertEqual(Decimal(old['rows'][0]['actualUsage']),50)
