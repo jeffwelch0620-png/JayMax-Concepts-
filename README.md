@@ -20,31 +20,24 @@ credentials stored in receipts or Git. The
 [procedure](docs/DEPLOYED_POSTING_RETRY_PLAN.md) and
 [read-only preflight](docs/DEPLOYED_POSTING_RETRY_PREFLIGHT.md) record the setup;
 five offline runner controls remain separate from deployed evidence.
-Browser lost-first-response acceptance needs a separately reviewed unposted
-fictional fixture. The [prepared browser trial](docs/BROWSER_POSTING_RESPONSE_LOSS_PLAN.md)
-defines one invented October 11 appetizer receipt (+1 each / $1), independent
-commit proof before interruption, same-mounted-form retry and phase-specific
-preservation checks. Its read-only preparation validates the source, mapping
-and original $212 control; no fixture has been captured or posted. Three
-read-only slow-download/Offline trials completed with HTTP 200, so that method
-has not demonstrated response loss and first posting is held. Normal networking
-was restored; a fresh read-only check preserved all 79 protected tables and
-the complete $212 report. A separate loopback relay subsequently received a
-real public health response, truncated its delivery and produced Axios
-`ERR_NETWORK` in Chrome; manual retry returned 200 with the local draft intact.
-That read-only calibration made two upstream GETs and zero purchase requests.
-The helper is stopped. A subsequent
-[local actual-component test](docs/LOCAL_PURCHASE_REVIEW_RESPONSE_DROP_RESULTS.md)
-also passed: the real review component retained and froze its reviewed values
-after `ERR_NETWORK`, and manual retry sent the identical 432-byte body and key
-before acknowledging the complete local response. Seven route guards passed.
-Its acknowledgement was explicitly simulated locally; no hosted request or
-database write occurred. The local helper is stopped, and a fresh hosted
-read-only preflight preserved all 79 protected tables and the complete $212
-report. The remaining step is a guarded hosted first-commit trial in the separate
-test client, with independent commit proof before truncation. Its command relay
-and phase-aware observer need implementation and review before fixture creation.
-Independent employee authorization remains outstanding.
+The [guarded hosted browser response-loss trial](docs/HOSTED_PURCHASE_BROWSER_RESPONSE_LOSS_RESULTS.md)
+now also passes using the unchanged purchase-review component in a separate
+local client. One labelled fictional October 11 receipt committed **+1 each /
+$1** through the existing Render API. Independent database proof preceded the
+deliberately truncated response; Chrome showed `ERR_NETWORK`, retained the
+locked review and did not acknowledge success. One manual retry sent the
+identical 438-byte body and key, acknowledged the original batch, and caused
+**zero added or updated rows**. Exactly one batch, line and derived food fact
+remain. All **86 observed relations** matched the post-commit baseline on final
+readback; prior rows, migration identities and the complete **$212** original
+report were preserved. The helper is stopped and its memory-only token discarded.
+The new $1 purchase is outside the original closed interval and does not
+establish $1 of actual usage. **28 offline guard tests** passed before execution.
+The [trial plan](docs/BROWSER_POSTING_RESPONSE_LOSS_PLAN.md) and preceding
+[local simulated test](docs/LOCAL_PURCHASE_REVIEW_RESPONSE_DROP_RESULTS.md)
+record the method's progression. This accepts the same mounted review form;
+the full hosted parent, reload/navigation/session-expiry recovery, concurrent
+first posting and independent employee authorization remain separate.
 Current hosting, Supabase connections, database roles and schema are unchanged.
 This documentation checkpoint remains local and has not been pushed.
 

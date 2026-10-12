@@ -284,10 +284,15 @@ outside Git. Post-calibration preservation receipt:
 `passed_read_only_http_preflight`; it is a new read-only check, not another
 execution of the sixteen completed posting probes.
 
-The actual review component's local response-drop acceptance is now recorded
-separately. Next: implement and review the guarded hosted command relay and
-phase-aware observer before any hosted fixture creation.
-The existing sixteen deployed HTTP outcomes remain accepted; browser
-lost-first-post-response acceptance remains open. The proposed fictional receipt
-would create a new persistent +1 each / $1 purchase and needs its own reviewed
-execution checkpoint once the method is usable.
+The guarded relay and phase-aware observer were implemented and reviewed with
+28 passing offline tests. The [hosted execution results](HOSTED_PURCHASE_BROWSER_RESPONSE_LOSS_RESULTS.md)
+now record a successful first commit followed by response truncation and an exact
+manual browser retry. The fictional receipt is persisted as **+1 each / $1**
+dated October 11; the original complete **$212** report remains unchanged.
+Source capture added no movement, first posting created exactly one outcome,
+and retry added or changed no observed rows. The helper is stopped and its
+memory-only token discarded. This plan's preceding preparation and calibration
+descriptions are historical checkpoints, not the fixture's current state.
+Acceptance covers the same mounted component in the separate local client;
+full hosted-parent, remount/session-expiry and independent employee acceptance
+remain open. No current push or new deployment is included.
