@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { PurchaseDocumentReview, PurchaseCorrectionReview, PurchaseImportsTab } from "./PurchaseImportsTab";
 import * as api from "../lib/api";
 import { readStateWithDeadline, STATE_READ_TIMEOUT_MS } from "../lib/stateRead";
+import { pendingPurchaseJournal } from "../lib/pendingPurchases";
 
 jest.mock("../lib/api", () => ({
   purchaseCapabilities: jest.fn(), purchaseItems: jest.fn(), purchaseFiles: jest.fn(), purchaseFile: jest.fn(), purchaseFileDocument: jest.fn(), checkPurchaseSavedStatus: jest.fn(),
@@ -20,8 +21,9 @@ const doc = {
 let container, root;
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  Object.defineProperty(global, "crypto", { configurable: true, value: { randomUUID: jest.fn(() => "same-request-key") } });
+  Object.defineProperty(global, "crypto", { configurable: true, value: { randomUUID: jest.fn(() => "00000000-0000-4000-8000-000000000001") } });
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+  sessionStorage.clear();
   jest.clearAllMocks();
 });
 
@@ -100,7 +102,7 @@ test("an incomplete correction acknowledgement cannot announce success", async (
   api.capturePurchase.mockResolvedValue({ id: "file-1", original_filename: "synthetic.csv", captureStatus: "captured", documents: [postedDoc], parse_errors: [], source_sha256: "abc", source_record_count: 1 });
   api.previewPurchaseCorrection.mockResolvedValue(correctionPlan);
   api.correctPurchase.mockResolvedValue({ correctionId: "correction-1", correction: { reviewed_plan: correctionPlan } });
-  await act(async () => root.render(<PurchaseImportsTab restaurantId="berts" restaurantName="Test" />));
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" restaurantId="berts" restaurantName="Test" />));
   const picker = container.querySelector('[aria-label="Invoice file"]'); Object.defineProperty(picker, "files", { value: [new File(["Synthetic"], "synthetic.csv")], configurable: true });
   await act(async () => picker.dispatchEvent(new Event("change", { bubbles: true })));
   await click(button("Capture / retry file")); await correctionForm(); await click(button("Confirm reversal and replacement"));
@@ -154,7 +156,7 @@ test("capture failure never displays success and retry uses the original upload 
   api.purchaseCapabilities.mockResolvedValue({ enabled: true }); api.purchaseItems.mockResolvedValue([]);
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]);
   api.capturePurchase.mockRejectedValueOnce(new Error("Capture interrupted")).mockResolvedValueOnce({ id: "file-1", original_filename: "synthetic.csv", captureStatus: "captured", documents: [], parse_errors: [], source_sha256: "abc", source_record_count: 0 });
-  await act(async () => root.render(<PurchaseImportsTab restaurantId="berts" restaurantName="Test" />));
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" restaurantId="berts" restaurantName="Test" />));
   const picker = container.querySelector('[aria-label="Invoice file"]');
   Object.defineProperty(picker, "files", { value: [new File(["Synthetic"], "synthetic.csv")], configurable: true });
   await act(async () => picker.dispatchEvent(new Event("change", { bubbles: true })));
@@ -172,7 +174,7 @@ test("an incomplete posting acknowledgement cannot announce success", async () =
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]);
   api.capturePurchase.mockResolvedValue({ id: "file-1", original_filename: "synthetic.csv", captureStatus: "captured", documents: [doc], parse_errors: [], source_sha256: "abc", source_record_count: 1 });
   api.postPurchase.mockResolvedValue({ batchId: "batch-1", document: { ...doc, status: "awaiting_review" } });
-  await act(async () => root.render(<PurchaseImportsTab restaurantId="berts" restaurantName="Test" />));
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" restaurantId="berts" restaurantName="Test" />));
   const picker = container.querySelector('[aria-label="Invoice file"]');
   Object.defineProperty(picker, "files", { value: [new File(["Synthetic"], "synthetic.csv")], configurable: true });
   await act(async () => picker.dispatchEvent(new Event("change", { bubbles: true })));
@@ -187,7 +189,7 @@ test("an incomplete posting acknowledgement cannot announce success", async () =
 
 const savedPurchase = { ...doc, status: "posted", header: { ...doc.header,
   posted_batch_id: "batch-1", posted_version_id: doc.id, initial_posted_version_id: doc.id,
-  posted_request_key: "same-request-key", current_correction_id: null }, currentMappings: postedDoc.currentMappings };
+  posted_request_key: "00000000-0000-4000-8000-000000000001", current_correction_id: null }, currentMappings: postedDoc.currentMappings };
 const retainedFile = { id: "file-1", original_filename: "TEST-ONLY-recovery.csv", captured_at: "2026-10-11", documents: [doc], parse_errors: [], source_record_count: 1 };
 const correctedPurchase = (reissued = true) => ({ ...savedPurchase,
   status: reissued ? "held" : "posted", errors: reissued ? ["A different version was already posted; correction review is required"] : [],
@@ -196,7 +198,7 @@ async function openRecoveryReview() {
   api.purchaseCapabilities.mockResolvedValue({ enabled: true }); api.purchaseItems.mockResolvedValue([]);
   api.purchaseFiles.mockResolvedValue([retainedFile]); api.purchaseHistory.mockResolvedValue([]);
   api.purchaseFile.mockResolvedValue(retainedFile);
-  await act(async () => root.render(<PurchaseImportsTab key="berts" restaurantId="berts" restaurantName="Test" />));
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" key="berts" restaurantId="berts" restaurantName="Test" />));
   await click(button("TEST-ONLY-recovery.csv · 2026-10-11"));
   await input(container.querySelector('[aria-label="Received date"]'), "2026-10-11");
   await input(container.querySelector('[aria-label="Note 1"]'), "TEST ONLY retained reviewed quantity");
@@ -268,7 +270,7 @@ test("a held status shows its reasons and blocks posting until a fresh read clea
 test("two independent clients retain the losing client's reviewed date, quantity and note", async () => {
   const winnerRoot = root, winnerContainer = container;
   let receipt;
-  crypto.randomUUID.mockReturnValueOnce("winner-key").mockReturnValueOnce("loser-key");
+  crypto.randomUUID.mockReturnValueOnce("00000000-0000-4000-8000-000000000002").mockReturnValueOnce("00000000-0000-4000-8000-000000000003");
   api.postPurchase.mockImplementationOnce(async (_store, _id, body, key) => {
     receipt = { ...savedPurchase, header: { ...savedPurchase.header, posted_request_key: key },
       currentMappings: [{ ...postedDoc.currentMappings[0], inventory_record_date: body.received_date }] };
@@ -296,7 +298,7 @@ test("two independent clients retain the losing client's reviewed date, quantity
     expect(container.querySelector('[aria-label="Saved purchase comparison"]').textContent).toContain("2026-10-10");
     expect(container.querySelector('[aria-label="Received date"]').value).toBe("2026-10-11");
     expect(api.postPurchase).toHaveBeenCalledTimes(2);
-    expect(api.postPurchase.mock.calls[1][3]).toBe("loser-key");
+    expect(api.postPurchase.mock.calls[1][3]).toBe("00000000-0000-4000-8000-000000000003");
   } finally { await act(async () => winnerRoot.unmount()); winnerContainer.remove(); }
 });
 
@@ -453,7 +455,7 @@ test("reopening after remount reads a saved purchase without offering another po
   await openRecoveryReview(); await click(button("Confirm and post purchase"));
   await act(async () => root.render(<div>Another screen</div>));
   api.purchaseFile.mockResolvedValue({ ...retainedFile, documents: [savedPurchase] });
-  await act(async () => root.render(<PurchaseImportsTab key="berts" restaurantId="berts" restaurantName="Test" />));
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" key="berts" restaurantId="berts" restaurantName="Test" />));
   await click(button("TEST-ONLY-recovery.csv · 2026-10-11"));
   expect(container.textContent).toContain("pfg · TEST-1 · posted");
   expect(button("Confirm and post purchase")).toBeUndefined();
@@ -467,7 +469,7 @@ test("a late saved-status read cannot populate a different location", async () =
   api.checkPurchaseSavedStatus.mockImplementation(() => new Promise(resolve => { resolveRead = resolve; }));
   await openRecoveryReview(); await click(button("Confirm and post purchase")); await click(button("Check saved status"));
   api.purchaseFiles.mockResolvedValue([]);
-  await act(async () => root.render(<PurchaseImportsTab key="rudds" restaurantId="rudds" restaurantName="Other test location" />));
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" key="rudds" restaurantId="rudds" restaurantName="Other test location" />));
   await act(async () => resolveRead(savedPurchase));
   expect(container.textContent).toContain("Invoice Master · Other test location");
   expect(container.textContent).not.toContain("Your purchase was saved and confirmed.");
@@ -485,7 +487,7 @@ test("manual source capture opens retained details without posting inventory", a
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]);
   api.purchaseVendors.mockResolvedValue([{ id: "other", name: "Invented supplier" }]);
   api.captureManualPurchase.mockImplementation(async (store, body) => ({ id: "manual-file", original_filename: "manual-source.json", captureStatus: "captured", documents: [], manualRecord: body }));
-  await act(async () => root.render(<PurchaseImportsTab restaurantId="berts" restaurantName="Test" />));
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" restaurantId="berts" restaurantName="Test" />));
   await selectValue("Manual supplier", "other");
   await input(container.querySelector('[aria-label="Invoice / receipt number"]'), "MANUAL-1");
   const note = container.querySelector('[aria-label="Manual source evidence"]');
@@ -502,12 +504,133 @@ test("other receipt upload retains source bytes without the vendor CSV parser ro
   api.purchaseCapabilities.mockResolvedValue({ enabled: true, manualReady: true }); api.purchaseItems.mockResolvedValue([]);
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]); api.purchaseVendors.mockResolvedValue([]);
   api.capturePurchaseSource.mockResolvedValue({ id: "attachment", original_filename: "synthetic.pdf", captureStatus: "captured", documents: [] });
-  await act(async () => root.render(<PurchaseImportsTab restaurantId="berts" restaurantName="Test" />));
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" restaurantId="berts" restaurantName="Test" />));
   await selectValue("Source upload type", "source");
   const picker = container.querySelector('[aria-label="Invoice file"]'), source = new File(["Invented source"], "synthetic.pdf");
   Object.defineProperty(picker, "files", { value: [source], configurable: true });
   await act(async () => picker.dispatchEvent(new Event("change", { bubbles: true })));
   await click(button("Capture / retry file"));
-  expect(api.capturePurchaseSource).toHaveBeenCalledWith("berts", source, "same-request-key");
+  expect(api.capturePurchaseSource).toHaveBeenCalledWith("berts", source, "00000000-0000-4000-8000-000000000001");
   expect(api.capturePurchase).not.toHaveBeenCalled(); expect(api.postPurchase).not.toHaveBeenCalled();
+});
+
+async function remountSubmittedReview(actorId = "test-owner", restaurantId = "berts") {
+  await act(async () => root.render(<div>Signed out</div>));
+  await act(async () => root.render(<PurchaseImportsTab key={`${actorId}:${restaurantId}`} actorId={actorId} restaurantId={restaurantId} restaurantName="TEST ONLY resumed" />));
+}
+
+test("a submitted review is retained before the first network request and restores its exact retry after reload", async () => {
+  api.postPurchase.mockImplementation(async (_store, id, body, key) => {
+    const retained = pendingPurchaseJournal("test-owner", "berts").list()[0];
+    expect(retained.versionId).toBe(id); expect(retained.key).toBe(key); expect(JSON.stringify(retained.body)).toBe(JSON.stringify(body));
+    throw new Error("Response lost");
+  });
+  api.checkPurchaseSavedStatus.mockResolvedValue(doc);
+  await openRecoveryReview(); await click(button("Confirm and post purchase")); const original = api.postPurchase.mock.calls[0];
+  await remountSubmittedReview(); expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  expect(button("Restore submitted review: TEST-1")).toBeDefined();
+  await click(button("Restore submitted review: TEST-1"));
+  expect(container.querySelector('[aria-label="Received date"]').value).toBe("2026-10-11");
+  expect(container.querySelector('[aria-label="Note 1"]').value).toBe("TEST ONLY retained reviewed quantity");
+  expect(container.querySelector("fieldset").disabled).toBe(true);
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  await click(button("Retry same purchase posting")); expect(api.postPurchase.mock.calls[1]).toEqual(original);
+});
+
+test.each(["saved", "corrected"])("reauthentication and remount recognize an own %s receipt without another post", async kind => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockResolvedValue(kind === "saved" ? savedPurchase : correctedPurchase(true));
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  await remountSubmittedReview(); await click(button("Restore submitted review: TEST-1"));
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  expect(button("Retry same purchase posting")).toBeUndefined();
+  expect(button("Confirm and post purchase")).toBeUndefined();
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual([]);
+  expect(container.textContent).toContain(kind === "saved" ? "Your purchase was saved and confirmed" : "Your original purchase was saved and has since been corrected");
+});
+
+test.each(["held", "other request"])("a restored %s retains the exact original review and prevents another initial post", async kind => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockResolvedValue(kind === "held" ? { ...doc, status: "held", errors: ["Newer source needs review"] }
+    : { ...savedPurchase, header: { ...savedPurchase.header, posted_request_key: "different-request" } });
+  await openRecoveryReview(); await click(button("Confirm and post purchase")); const original = pendingPurchaseJournal("test-owner", "berts").list();
+  await remountSubmittedReview(); await click(button("Restore submitted review: TEST-1"));
+  expect(button("Retry same purchase posting").disabled).toBe(true);
+  expect(container.querySelector('[aria-label="Note 1"]').value).toBe("TEST ONLY retained reviewed quantity");
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original); expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test("a failed fresh read after restoration keeps retry blocked until a successful check", async () => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockRejectedValueOnce({ response: { status: 401, data: { detail: "Authentication required" } } }).mockResolvedValueOnce(doc);
+  await openRecoveryReview(); await click(button("Confirm and post purchase")); const original = api.postPurchase.mock.calls[0];
+  await remountSubmittedReview(); await click(button("Restore submitted review: TEST-1"));
+  expect(button("Retry same purchase posting").disabled).toBe(true); expect(container.querySelector("fieldset").disabled).toBe(true);
+  expect(container.textContent).toContain("Authentication required"); expect(pendingPurchaseJournal("test-owner", "berts").list()).toHaveLength(1);
+  await click(button("Check saved status")); expect(button("Retry same purchase posting").disabled).toBe(false);
+  await click(button("Retry same purchase posting")); expect(api.postPurchase.mock.calls[1]).toEqual(original);
+});
+
+test("another signed-in user cannot restore or see the prior user's submitted notes", async () => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  await openRecoveryReview(); await click(button("Confirm and post purchase")); await remountSubmittedReview("other-user");
+  expect(button("Restore submitted review: TEST-1")).toBeUndefined(); expect(container.textContent).not.toContain("retained reviewed quantity");
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toHaveLength(1); expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test("a late restored-status read cannot resolve or expose a different user's workspace", async () => {
+  let resolveRead; api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockImplementation(() => new Promise(resolve => { resolveRead = resolve; }));
+  await openRecoveryReview(); await click(button("Confirm and post purchase")); await remountSubmittedReview();
+  await click(button("Restore submitted review: TEST-1"));
+  await act(async () => root.render(<PurchaseImportsTab actorId="other-user" restaurantId="berts" restaurantName="Other user" />));
+  await act(async () => resolveRead({ ...doc, status: "held", errors: ["Prior user's hold"] }));
+  expect(container.textContent).not.toContain("Prior user's hold"); expect(container.textContent).not.toContain("retained reviewed quantity");
+  expect(button("Restore submitted review: TEST-1")).toBeUndefined(); expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test("a storage write failure blocks the first posting while retaining the in-memory retry key", async () => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost")); await openRecoveryReview();
+  const fail = jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+  try { await click(button("Confirm and post purchase")); expect(api.postPurchase).not.toHaveBeenCalled(); expect(container.textContent).toContain("No new posting will be sent"); }
+  finally { fail.mockRestore(); }
+  await click(button("Retry same purchase posting")); expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  expect(crypto.randomUUID).toHaveBeenCalledTimes(1);
+});
+
+test("a corrupted recovery record blocks new posting and is never silently removed", async () => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost")); await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  const key = [...Array(sessionStorage.length)].map((_, i) => sessionStorage.key(i)).find(k => k.startsWith("jaymax:pending-purchases:"));
+  sessionStorage.setItem(key, "broken JSON"); await remountSubmittedReview();
+  expect(container.textContent).toContain("No new posting will be sent"); expect(sessionStorage.getItem(key)).toBe("broken JSON");
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+
+test("a late captured-file read cannot populate a replacement user's workspace", async () => {
+  let resolveFile;
+  api.purchaseCapabilities.mockResolvedValue({ enabled: true }); api.purchaseItems.mockResolvedValue([]);
+  api.purchaseFiles.mockResolvedValue([retainedFile]); api.purchaseHistory.mockResolvedValue([]);
+  api.purchaseFile.mockImplementation(() => new Promise(resolve => { resolveFile = resolve; }));
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" restaurantId="berts" restaurantName="Original user" />));
+  await click(button("TEST-ONLY-recovery.csv · 2026-10-11"));
+  await act(async () => root.render(<PurchaseImportsTab actorId="other-user" restaurantId="berts" restaurantName="Replacement user" />));
+  await act(async () => resolveFile(retainedFile));
+  expect(container.querySelector('[aria-label="Invoice TEST-1"]')).toBeNull();
+  expect(container.textContent).toContain("Replacement user"); expect(button("TEST-ONLY-recovery.csv · 2026-10-11").disabled).toBe(false);
+  expect(api.postPurchase).not.toHaveBeenCalled();
+});
+
+test("a confirmed purchase stays confirmed if its local recovery cleanup cannot be saved", async () => {
+  let failure;
+  api.postPurchase.mockImplementation(async () => {
+    failure = jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage denied"); });
+    return { batchId: "batch-1", document: savedPurchase };
+  });
+  try {
+    await openRecoveryReview(); await click(button("Confirm and post purchase"));
+    expect(container.textContent).toContain("Your purchase was saved and confirmed");
+    expect(container.textContent).toContain("retained-review cleanup failed"); expect(button("Retry same purchase posting")).toBeUndefined();
+    expect(pendingPurchaseJournal("test-owner", "berts").list()).toHaveLength(1); expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  } finally { failure?.mockRestore(); }
 });

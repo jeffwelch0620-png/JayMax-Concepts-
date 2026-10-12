@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { PageTitle, Field, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 import { ManualPurchaseEntry } from "./ManualPurchaseEntry";
 import { InventoryUnitSetup } from "./InventoryUnitSetup";
 import { purchaseRecoveryOutcome, validatePurchaseDocument } from "../lib/purchaseRecovery";
+import { pendingPurchaseJournal, pendingPurchaseRecord } from "../lib/pendingPurchases";
 
 const units = ["lb", "oz", "g", "kg", "fl_oz", "ml", "l", "gal", "each"];
 const errorText = e => {
@@ -14,9 +15,15 @@ const empty = value => value === "" || value == null ? null : value;
 
 export function PurchaseDocumentReview({ document, items, history, onPost, onCheckSaved, onInspectSaved, busy, correctionMode = false }) {
   const mappings = correctionMode ? document.currentMappings || [] : [];
-  const [receivedDate, setReceivedDate] = useState(mappings.find(m => m.movement_kind === "receipt")?.inventory_record_date || "");
-  const [currencyConfirmed, setCurrencyConfirmed] = useState(false);
+  const retained = !correctionMode ? document.pendingRequest : null;
+  const [receivedDate, setReceivedDate] = useState(retained?.body.received_date ?? mappings.find(m => m.movement_kind === "receipt")?.inventory_record_date ?? "");
+  const [currencyConfirmed, setCurrencyConfirmed] = useState(retained?.body.confirmed_currency === "USD");
   const [reviews, setReviews] = useState(() => Object.fromEntries(document.lines.map(line => {
+    const retainedLine = retained?.body.lines.find(r => r.line_id === line.id);
+    if (retainedLine) return [line.id, { ...retainedLine,
+      item_code: retainedLine.item_code ?? "", base_unit: retainedLine.base_unit ?? "", received_quantity: retainedLine.received_quantity ?? "",
+      received_unit: retainedLine.received_unit ?? "", base_units_per_received_unit: retainedLine.base_units_per_received_unit ?? "",
+      movement_date: retainedLine.movement_date ?? "", original_line_id: retainedLine.original_line_id ?? "" }];
     const m = mappings.find(r => r.line_id === line.id);
     const u = line.unitProfileSuggestion;
     return [line.id, {
@@ -29,7 +36,7 @@ export function PurchaseDocumentReview({ document, items, history, onPost, onChe
   const [savedStatus, setSavedStatus] = useState("");
   const [checkingSaved, setCheckingSaved] = useState(false);
   const [savedDetails, setSavedDetails] = useState(null), [detailsError, setDetailsError] = useState("");
-  const request = useRef(null);
+  const request = useRef(retained ? { key: retained.key, body: retained.body } : null);
   function change(id, patch) {
     // Freeze a submitted review until its outcome is known. Retry the same key.
     setReviews(r => ({ ...r, [id]: { ...r[id], ...patch, verified: patch.verified ?? false } }));
@@ -105,6 +112,7 @@ export function PurchaseDocumentReview({ document, items, history, onPost, onChe
     })}
     {error && <p role="alert" className="text-red-300">{error}</p>}
     {savedStatus && <p role="status">{savedStatus}</p>}
+    {retained?.needsCheck && <p role="status">Restored submitted review. Check saved status before retrying; no purchase is sent automatically.</p>}
     {(recovery?.document?.header?.posted_batch_id || header.posted_batch_id) && onInspectSaved && <button className={btnGhost} disabled={busy || checkingSaved} onClick={async () => {
       setDetailsError(""); setSavedDetails(null);
       try { setSavedDetails(await onInspectSaved(document.id)); } catch (e) { setDetailsError(errorText(e)); }
@@ -117,7 +125,7 @@ export function PurchaseDocumentReview({ document, items, history, onPost, onChe
       {!savedDetails.corrections.length ? <p>No corrections recorded.</p> : savedDetails.corrections.map(c => <p key={c.id}>{c.corrected_at} · {c.reason} · Previous correction: {c.previous_correction_id || "Initial invoice"}</p>)}
     </div>}
     {!posted && <div className="flex gap-3 flex-wrap">
-      <button className={btnAcc} disabled={busy || checkingSaved || blockedRetry || !currencyConfirmed || document.status === "held" || document.lines.some(l => !reviews[l.id].verified || !reviews[l.id].note.trim())} onClick={() => post().catch(e => setError(errorText(e)))}>{correctionMode ? "Preview invoice correction" : request.current ? "Retry same purchase posting" : "Confirm and post purchase"}</button>
+      <button className={btnAcc} disabled={busy || checkingSaved || blockedRetry || retained?.needsCheck || !currencyConfirmed || document.status === "held" || document.lines.some(l => !reviews[l.id].verified || !reviews[l.id].note.trim())} onClick={() => post().catch(e => setError(errorText(e)))}>{correctionMode ? "Preview invoice correction" : request.current ? "Retry same purchase posting" : "Confirm and post purchase"}</button>
       {request.current && !correctionMode && onCheckSaved && <button className={btnGhost} disabled={busy || checkingSaved} onClick={checkSaved}>{checkingSaved ? "Checking saved status…" : "Check saved status"}</button>}
       {request.current && !busy && <p className="text-xs text-slate-400">This review is frozen until the saved outcome is confirmed. Retry safely or reopen the captured file to check its status.</p>}
     </div>}
@@ -173,7 +181,7 @@ export function PurchaseCorrectionReview({ document, items, history, onPreview, 
   </section>;
 }
 
-export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFocus, onUnitReviewSaved }) {
+export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unitReviewFocus, onUnitReviewSaved }) {
   const [files, setFiles] = useState([]), [items, setItems] = useState([]), [history, setHistory] = useState([]);
   const [selected, setSelected] = useState(null), [sourceRows, setSourceRows] = useState(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
@@ -183,28 +191,59 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
   const [manualReady, setManualReady] = useState(false), [vendors, setVendors] = useState([]);
   const [uploadKind, setUploadKind] = useState("csv"), [manualEpoch, setManualEpoch] = useState(0);
   const [unitsReady, setUnitsReady] = useState(false);
-  const upload = useRef(null), mounted = useRef(true);
+  const upload = useRef(null);
+  const scope = useMemo(() => ({ active: true, restaurantId, actorId }), [restaurantId, actorId]);
+  const journal = useMemo(() => pendingPurchaseJournal(actorId, restaurantId), [actorId, restaurantId]);
+  const [pendingPurchases, setPendingPurchases] = useState([]), [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
+  function refreshPending() {
+    try { const records = journal.list(); if (scope.active) { setPendingPurchases(records); setRecoveryUnavailable(false); } return records; }
+    catch (e) { if (scope.active) { setRecoveryUnavailable(true); setError(errorText(e)); } throw e; }
+  }
+  function resolvePending(id, key) {
+    try { journal.clear(id, key); refreshPending(); }
+    catch (e) { if (scope.active) { setRecoveryUnavailable(true); setError(`Purchase saved; retained-review cleanup failed: ${errorText(e)}`); } }
+  }
+  function retainFile(result) {
+    const records = refreshPending();
+    return { ...result, documents: result.documents.map(d => {
+      const record = records.find(r => r.versionId === d.id);
+      if (!record) return d;
+      let outcome;
+      try { outcome = purchaseRecoveryOutcome(d, record.versionId, record.key); }
+      catch { return { ...record.document, pendingRequest: { key: record.key, body: record.body, needsCheck: true } }; }
+      if (["saved", "saved_corrected"].includes(outcome.kind)) {
+        resolvePending(record.versionId, record.key);
+        return { ...d, recovery: outcome };
+      }
+      return { ...record.document, recovery: outcome, pendingRequest: { key: record.key, body: record.body, needsCheck: false } };
+    }) };
+  }
   useEffect(() => {
-    mounted.current = true;
+    scope.active = true;
+    setSelected(null); setPendingPurchases([]); setReady(false); setError(""); setMessage("");
+    setBusy(false); setFiles([]); setItems([]); setHistory([]); setSourceRows(null); upload.current = null;
+    try { setPendingPurchases(journal.list()); setRecoveryUnavailable(false); }
+    catch (e) { setRecoveryUnavailable(true); setError(errorText(e)); }
     Promise.all([api.purchaseCapabilities(restaurantId), api.purchaseItems(restaurantId)]).then(async ([capabilities, list]) => {
-      if (!mounted.current) return;
+      if (!scope.active) return;
       setReady(capabilities.enabled); setReportingReady(!!capabilities.reportingReady); setItems(list);
       setManualReady(!!capabilities.manualReady);
       setUnitsReady(!!capabilities.unitsReady);
       if (capabilities.manualReady) {
         const suppliers = await api.purchaseVendors(restaurantId);
-        if (mounted.current) setVendors(suppliers);
+        if (scope.active) setVendors(suppliers);
       }
       if (capabilities.enabled) {
         const [f, h] = await Promise.all([api.purchaseFiles(restaurantId), api.purchaseHistory(restaurantId)]);
-        if (mounted.current) { setFiles(f); setMore(f.length === 200); setHistory(h); }
+        if (scope.active) { setFiles(f); setMore(f.length === 200); setHistory(h); }
       }
-    }).catch(e => mounted.current && setError(errorText(e)));
-    return () => { mounted.current = false; };
-  }, [restaurantId]);
+    }).catch(e => scope.active && setError(errorText(e)));
+    return () => { scope.active = false; };
+  }, [restaurantId, scope, journal]);
   async function action(fn) {
+    if (!scope.active) return;
     setBusy(true); setError(""); setMessage("");
-    try { await fn(); } catch (e) { setError(errorText(e)); } finally { if (mounted.current) setBusy(false); }
+    try { await fn(); } catch (e) { if (scope.active) setError(errorText(e)); } finally { if (scope.active) setBusy(false); }
   }
   async function capture() {
     if (!upload.current) return;
@@ -212,10 +251,10 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
       const captureFn = upload.current.kind === "source" ? api.capturePurchaseSource : api.capturePurchase;
       const result = await captureFn(restaurantId, upload.current.file, upload.current.key);
       if (!result.id || result.captureStatus !== "captured" || !Array.isArray(result.documents)) throw new Error("Source capture was not confirmed. Retry the same file.");
-      if (!mounted.current) return;
+      if (!scope.active) return;
       setSelected(result); setPreviewEpoch(n => n + 1); setSourceRows(null); setMessage("Original file retained. Review each invoice before posting.");
       upload.current = null;
-      const f = await api.purchaseFiles(restaurantId); setFiles(f); setMore(f.length === 200);
+      const f = await api.purchaseFiles(restaurantId); if (scope.active) { setFiles(f); setMore(f.length === 200); }
     });
   }
   async function captureManual(body, key) {
@@ -223,38 +262,43 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
     try {
       const result = await api.captureManualPurchase(restaurantId, body, key);
       if (!result?.id || result.captureStatus !== "captured" || !result.manualRecord || !Array.isArray(result.documents)) throw new Error("Source capture was not confirmed. Retry the same entry.");
-      if (!mounted.current) return result;
+      if (!scope.active) return result;
       setSelected(result); setPreviewEpoch(n => n + 1); setManualEpoch(n => n + 1); setSourceRows(null);
       setMessage("Manual source retained. Review every purchase line before posting to inventory.");
-      api.purchaseFiles(restaurantId).then(f => { if (mounted.current) { setFiles(f); setMore(f.length === 200); } }).catch(e => mounted.current && setError(`Source retained; file-list refresh failed: ${errorText(e)}`));
+      api.purchaseFiles(restaurantId).then(f => { if (scope.active) { setFiles(f); setMore(f.length === 200); } }).catch(e => scope.active && setError(`Source retained; file-list refresh failed: ${errorText(e)}`));
       return result;
-    } finally { if (mounted.current) setBusy(false); }
+    } finally { if (scope.active) setBusy(false); }
   }
   function applyRecovery(id, outcome) {
     const own = ["saved", "saved_corrected"].includes(outcome.kind);
     // Only our original request may close this review. Keep the submitted
     // fields and component key intact for a hold or another request's posting.
-    setSelected(s => ({ ...s, documents: s.documents.map(d => d.id === id ? { ...(own ? outcome.document : d), recovery: outcome } : d) }));
+    setSelected(s => ({ ...s, documents: s.documents.map(d => d.id === id ? { ...(own ? outcome.document : d), recovery: outcome,
+      ...(!own && d.pendingRequest ? { pendingRequest: { ...d.pendingRequest, needsCheck: false } } : {}) } : d) }));
     if (own) setMessage(outcome.kind === "saved_corrected"
       ? "Your original purchase was saved and has since been corrected. Review the correction history."
       : "Your purchase was saved and confirmed. Taxes and fees remain separate.");
     if (outcome.document.header.posted_batch_id) api.purchaseHistory(restaurantId)
-      .then(h => mounted.current && setHistory(h))
-      .catch(e => mounted.current && setError(`Saved purchase history refresh failed: ${errorText(e)}`));
+      .then(h => scope.active && setHistory(h))
+      .catch(e => scope.active && setError(`Saved purchase history refresh failed: ${errorText(e)}`));
   }
   async function post(id, body, key) {
+    if (!scope.active) throw new Error("The signed-in user or restaurant changed. Reopen this review before posting.");
     setBusy(true);
     setMessage("");
     try {
-      const result = await api.postPurchase(restaurantId, id, body, key);
+      const record = pendingPurchaseRecord(selected, selected.documents.find(d => d.id === id), body, key);
+      const submitted = journal.save(record); refreshPending();
+      const result = await api.postPurchase(restaurantId, id, submitted.body, submitted.key);
       if (!result?.batchId || result.document?.header?.posted_batch_id !== result.batchId) throw new Error("Saved outcome was not confirmed. Retry this request.");
       let outcome;
       try { outcome = purchaseRecoveryOutcome(result.document, id, key); }
       catch { throw new Error("Saved outcome was not confirmed. Retry this request."); }
       if (!["saved", "saved_corrected"].includes(outcome.kind)) throw new Error("Saved outcome was not confirmed. Retry this request.");
-      if (!mounted.current) return;
+      resolvePending(id, key);
+      if (!scope.active) return;
       applyRecovery(id, outcome);
-    } finally { if (mounted.current) setBusy(false); }
+    } finally { if (scope.active) setBusy(false); }
   }
   async function checkSaved(id, key) {
     setBusy(true);
@@ -262,10 +306,21 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
     try {
       const result = await api.checkPurchaseSavedStatus(restaurantId, id);
       const outcome = purchaseRecoveryOutcome(result, id, key);
-      if (!mounted.current) return;
+      if (["saved", "saved_corrected"].includes(outcome.kind)) resolvePending(id, key);
+      if (!scope.active) return;
       applyRecovery(id, outcome);
       return outcome;
-    } finally { if (mounted.current) setBusy(false); }
+    } finally { if (scope.active) setBusy(false); }
+  }
+  async function restorePending(record) {
+    await action(async () => {
+      const current = refreshPending().find(r => r.versionId === record.versionId && r.key === record.key);
+      if (!current) throw new Error("This retained review is no longer available. Reopen its saved source.");
+      setSelected({ ...current.source, documents: [{ ...current.document,
+        pendingRequest: { key: current.key, body: current.body, needsCheck: true } }] });
+      setPreviewEpoch(n => n + 1); setSourceRows(null);
+      await checkSaved(current.versionId, current.key);
+    });
   }
   async function inspectSaved(id) {
     setBusy(true);
@@ -286,23 +341,27 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
         throw new Error("Saved purchase details changed or could not be confirmed. Check saved status again.");
       }
       return { document: current, corrections };
-    } finally { if (mounted.current) setBusy(false); }
+    } finally { if (scope.active) setBusy(false); }
+  }
+  async function loadSourceRows(offset = 0) {
+    const rows = await api.purchaseRawRows(restaurantId, selected.id, offset);
+    if (scope.active) setSourceRows(rows);
   }
   async function previewCorrection(id, body) {
     setBusy(true);
     try { return await api.previewPurchaseCorrection(restaurantId, id, body); }
-    finally { if (mounted.current) setBusy(false); }
+    finally { if (scope.active) setBusy(false); }
   }
   async function correct(id, body, key) {
     setBusy(true);
     try {
       const result = await api.correctPurchase(restaurantId, id, body, key);
       if (!result.correctionId || result.correction?.id !== result.correctionId || result.correction?.initial_batch_id !== body.expected_initial_batch_id || result.correction?.previous_correction_id !== body.expected_correction_id || result.correction?.reviewed_plan?.planHash !== body.expected_plan_hash || result.document?.id !== id || typeof result.isCurrent !== "boolean" || (result.isCurrent && result.document.status !== "posted")) throw new Error("Saved correction was not confirmed. Retry this request.");
-      if (!mounted.current) return;
+      if (!scope.active) return;
       setSelected(s => ({ ...s, documents: s.documents.map(d => d.id === id ? result.document : d) })); setPreviewEpoch(n => n + 1);
       setMessage(result.isCurrent ? "Invoice correction saved and confirmed. Original entries and source files are retained." : "This correction was already saved and has a later replacement. Review the current invoice history.");
-      api.purchaseHistory(restaurantId).then(h => mounted.current && setHistory(h)).catch(e => mounted.current && setError(`Correction saved; history refresh failed: ${errorText(e)}`));
-    } finally { if (mounted.current) setBusy(false); }
+      api.purchaseHistory(restaurantId).then(h => scope.active && setHistory(h)).catch(e => scope.active && setError(`Correction saved; history refresh failed: ${errorText(e)}`));
+    } finally { if (scope.active) setBusy(false); }
   }
   return <div className="space-y-5">
     <PageTitle>Invoice Master · {restaurantName}</PageTitle>
@@ -311,6 +370,11 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
       : "Purchase review is in build testing. These received-date purchase records are not yet included in Food Cost reports; count scope and historical valuation still need to be connected."}</p>
     {error && <p role="alert" className="text-red-300">{error}</p>}{message && <p role="status" className="text-emerald-300">{message}</p>}
     {!ready ? <p className="text-slate-400">Purchase review setup is awaiting enablement.</p> : <>
+      {!!pendingPurchases.length && <section aria-label="Retained submitted purchases" className={`${cardCls} p-4 space-y-2`}>
+        <h3>Submitted reviews retained in this tab</h3>
+        <p>These reviews survive a reload and sign-in by the same user in this tab. Restore a review to check its saved outcome before retrying. Keep this tab open until the outcome is confirmed; recovery in a new tab or after a browser restart is not guaranteed.</p>
+        {pendingPurchases.map(r => <button key={r.versionId} className={btnGhost} disabled={busy} onClick={() => restorePending(r)}>Restore submitted review: {r.document.header.document_number || r.versionId}</button>)}
+      </section>}
       <div className={`${cardCls} p-4 flex gap-3 flex-wrap items-center`}>
         {manualReady && <select aria-label="Source upload type" className={inpCls} disabled={busy} value={uploadKind} onChange={e => { setUploadKind(e.target.value); upload.current = null; }}><option value="csv">PFG / US Foods CSV</option><option value="source">Other invoice / receipt source</option></select>}
         <label className="text-sm">{uploadKind === "csv" ? "PFG or US Foods original CSV" : "Retain original receipt, PDF, photo or other supplier file"} <input key={uploadKind} aria-label="Invoice file" type="file" accept={uploadKind === "csv" ? ".csv,text/csv" : undefined} disabled={busy} onChange={e => { const f = e.target.files?.[0]; upload.current = f ? { file: f, key: crypto.randomUUID(), kind: uploadKind } : null; setMessage(f ? `Ready to capture ${f.name}` : ""); }} /></label>
@@ -320,8 +384,8 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
       {unitsReady && <InventoryUnitSetup key={restaurantId} restaurantId={restaurantId} focus={unitReviewFocus} onSaved={onUnitReviewSaved} />}
       <div className={`${cardCls} p-4 space-y-2`}>
         <h3 className="font-semibold">Captured files</h3>
-        {files.map(f => <button key={f.id} className={`${btnGhost} mr-2`} disabled={busy} onClick={() => action(async () => { setSelected(await api.purchaseFile(restaurantId, f.id)); setPreviewEpoch(n => n + 1); setSourceRows(null); })}>{f.original_filename} · {f.captured_at.slice(0, 10)}</button>)}
-        {more && <button className={btnGhost} disabled={busy} onClick={() => action(async () => { const f = await api.purchaseFiles(restaurantId, files.length); setFiles([...files, ...f]); setMore(f.length === 200); })}>Older files</button>}
+        {files.map(f => <button key={f.id} className={`${btnGhost} mr-2`} disabled={busy} onClick={() => action(async () => { const result = await api.purchaseFile(restaurantId, f.id); if (!scope.active) return; setSelected(retainFile(result)); setPreviewEpoch(n => n + 1); setSourceRows(null); })}>{f.original_filename} · {f.captured_at.slice(0, 10)}</button>)}
+        {more && <button className={btnGhost} disabled={busy} onClick={() => action(async () => { const f = await api.purchaseFiles(restaurantId, files.length); if (scope.active) { setFiles([...files, ...f]); setMore(f.length === 200); } })}>Older files</button>}
       </div>
       {selected && <>
         <div className={`${cardCls} p-4 space-y-2`}>
@@ -334,17 +398,17 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, unitReviewFoc
             {Object.entries(selected.manualRecord.parties).map(([role, fields]) => <div key={role}><p>{role.replace(/_/g, " ")}</p>{Object.entries(fields).map(([k, v]) => <p key={k}>{k.replace(/_/g, " ")}: {v}</p>)}</div>)}
             {selected.manualRecord.lines.map((line, i) => <details key={i}><summary>Entered source line {i + 1}</summary>{Object.entries(line.fields).map(([k, v]) => <p key={k} className="whitespace-pre-wrap">{k.replace(/_(source|snapshot|raw|text)$/g, "").replace(/_/g, " ")}: {v === "" ? "Blank in source record" : v}</p>)}{line.extra_fields.map((f, n) => <p key={n} className="whitespace-pre-wrap">{f.label}: {f.value === "" ? "Blank in source record" : f.value}</p>)}</details>)}
             {selected.attachments?.map(f => <button className={btnGhost} key={f.id} disabled={busy} onClick={() => action(async () => {
-              const blob = await api.purchaseSource(restaurantId, f.id); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = f.original_filename; link.click(); URL.revokeObjectURL(url);
+              const blob = await api.purchaseSource(restaurantId, f.id); if (!scope.active) return; const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = f.original_filename; link.click(); URL.revokeObjectURL(url);
             })}>Download attached source: {f.original_filename}</button>)}
           </div>}
           <button className={`${btnGhost} mr-2`} disabled={busy} onClick={() => action(async () => {
-            const blob = await api.purchaseSource(restaurantId, selected.id); const url = URL.createObjectURL(blob);
+            const blob = await api.purchaseSource(restaurantId, selected.id); if (!scope.active) return; const url = URL.createObjectURL(blob);
             const link = document.createElement("a"); link.href = url; link.download = selected.original_filename; link.click(); URL.revokeObjectURL(url);
           })}>Download original file</button>
-          {selected.parse_run_id && !selected.manualRecord && <button className={btnGhost} disabled={busy} onClick={() => action(async () => setSourceRows(await api.purchaseRawRows(restaurantId, selected.id)))}>Show all source fields</button>}
-          {sourceRows && <div className="overflow-auto max-h-96"><table className="text-xs"><thead><tr><th>Record</th>{sourceRows.headers.map((h, i) => <th className="px-2" key={i}>{h} [{i + 1}]</th>)}</tr></thead><tbody>{sourceRows.rows.map(row => <tr key={row.row_ordinal}><td>{row.row_ordinal}</td>{row.raw_values.map((v, i) => <td className="border border-slate-700 p-2 whitespace-nowrap" key={i}>{v}</td>)}</tr>)}</tbody></table>{sourceRows.nextOffset != null && <button className={btnGhost} disabled={busy} onClick={() => action(async () => setSourceRows(await api.purchaseRawRows(restaurantId, selected.id, sourceRows.nextOffset)))}>Next source records</button>}</div>}
+          {selected.parse_run_id && !selected.manualRecord && <button className={btnGhost} disabled={busy} onClick={() => action(() => loadSourceRows())}>Show all source fields</button>}
+          {sourceRows && <div className="overflow-auto max-h-96"><table className="text-xs"><thead><tr><th>Record</th>{sourceRows.headers.map((h, i) => <th className="px-2" key={i}>{h} [{i + 1}]</th>)}</tr></thead><tbody>{sourceRows.rows.map(row => <tr key={row.row_ordinal}><td>{row.row_ordinal}</td>{row.raw_values.map((v, i) => <td className="border border-slate-700 p-2 whitespace-nowrap" key={i}>{v}</td>)}</tr>)}</tbody></table>{sourceRows.nextOffset != null && <button className={btnGhost} disabled={busy} onClick={() => action(() => loadSourceRows(sourceRows.nextOffset))}>Next source records</button>}</div>}
         </div>
-        {selected.documents.map(d => <PurchaseDocumentReview key={`${previewEpoch}:${selected.id}:${d.id}:${d.status}`} document={d} items={items} history={history} onPost={post} onCheckSaved={checkSaved} onInspectSaved={inspectSaved} busy={busy} />)}
+        {selected.documents.map(d => <PurchaseDocumentReview key={`${previewEpoch}:${selected.id}:${d.id}:${d.status}`} document={d} items={items} history={history} onPost={post} onCheckSaved={checkSaved} onInspectSaved={inspectSaved} busy={busy || recoveryUnavailable} />)}
         {selected.documents.filter(d => d.correctionAvailable).map(d => <PurchaseCorrectionReview key={`correction:${previewEpoch}:${d.id}`} document={d} items={items} history={history} onPreview={previewCorrection} onCorrect={correct} onHistory={id => api.purchaseCorrections(restaurantId, id)} busy={busy} />)}
       </>}
       <div className={`${cardCls} p-4 overflow-auto`}><h3 className="font-semibold mb-2">Food purchase history</h3><table className="text-sm w-full"><thead><tr>{["Received / movement date", "Invoice", "Entry", "Item", "Quantity", "Inventory unit", "Food amount"].map(h => <th className="text-left p-2" key={h}>{h}</th>)}</tr></thead><tbody>{history.map(h => <tr key={h.fact_id || h.line_id}><td className="p-2">{h.inventory_record_date}</td><td>{h.document_number}</td><td>{h.fact_kind || "initial"}</td><td>{h.description_snapshot}</td><td>{h.base_quantity}</td><td>{h.base_unit}</td><td>{h.inventory_cost_amount}</td></tr>)}</tbody></table></div>
