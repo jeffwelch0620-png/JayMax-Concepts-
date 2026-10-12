@@ -75,6 +75,9 @@ export const purchaseCapabilities = (rid) => axios.get(`${purchaseUrl(rid)}/capa
 export const purchaseFiles = (rid, offset = 0) => axios.get(`${purchaseUrl(rid)}/files`, { params: { offset } }).then(r => r.data);
 export const purchaseFile = (rid, id) => axios.get(`${purchaseUrl(rid)}/files/${id}`).then(r => r.data);
 export const purchaseFileDocument = (rid, id) => axios.get(`${purchaseUrl(rid)}/documents/${id}`).then(r => r.data);
+export const PURCHASE_STATUS_TIMEOUT_MESSAGE = "Saved purchase status loading timed out. Check again; the original review and retry request are retained.";
+export const checkPurchaseSavedStatus = (rid, id) => readStateWithDeadline(async options =>
+  (await axios.get(`${purchaseUrl(rid)}/documents/${id}`, options)).data, PURCHASE_STATUS_TIMEOUT_MESSAGE);
 export const capturePurchase = (rid, file, key) => {
   const form = new FormData(); form.append("file", file);
   return axios.post(`${purchaseUrl(rid)}/files`, form, { headers: { "Idempotency-Key": key } }).then(r => r.data);

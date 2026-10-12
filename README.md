@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local purchase saved-status follow-up - October 11, 2026
+
+The [saved-outcome recovery review](docs/PURCHASE_SAVED_OUTCOME_RECOVERY_REVIEW.md)
+records a local **Check saved status** action for frozen purchase reviews and
+stricter document/batch acknowledgement checks. The action reads the existing
+scoped document route with a 60-second deadline. Failed, unposted or held reads
+keep the original review and retry key frozen; a matching posted read resolves
+the displayed outcome without another posting request. All **606 frontend tests
+across 66 suites** and the strict production build pass. These changes
+are local on **codex/purchase-saved-outcome-recovery**, not pushed or deployed.
+The existing hosted parent now passes read-only reopening after normal owner
+sign-in, navigation and a full reload: the retained receipt reads posted, has
+one history row and offers no initial-post action. A fresh database check
+preserves all 86 observed relations and the complete $212 original report.
+These reads used the already acknowledged receipt; exact unresolved-command
+continuity across reload or session expiry remains separate. The new local
+status action itself has not been deployed or tested live.
+
 ## Hosted recovery and deployed HTTP retry acceptance - October 11, 2026
 
 PR20 is merged at `4855ba6`, and its Render frontend passed the

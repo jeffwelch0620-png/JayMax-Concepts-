@@ -2,9 +2,10 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { PurchaseDocumentReview, PurchaseCorrectionReview, PurchaseImportsTab } from "./PurchaseImportsTab";
 import * as api from "../lib/api";
+import { readStateWithDeadline, STATE_READ_TIMEOUT_MS } from "../lib/stateRead";
 
 jest.mock("../lib/api", () => ({
-  purchaseCapabilities: jest.fn(), purchaseItems: jest.fn(), purchaseFiles: jest.fn(),
+  purchaseCapabilities: jest.fn(), purchaseItems: jest.fn(), purchaseFiles: jest.fn(), purchaseFile: jest.fn(), checkPurchaseSavedStatus: jest.fn(),
   purchaseHistory: jest.fn(), capturePurchase: jest.fn(), postPurchase: jest.fn(),
   previewPurchaseCorrection: jest.fn(), correctPurchase: jest.fn(), purchaseCorrections: jest.fn(),
   purchaseVendors: jest.fn(), captureManualPurchase: jest.fn(), capturePurchaseSource: jest.fn(),
@@ -182,6 +183,155 @@ test("an incomplete posting acknowledgement cannot announce success", async () =
   await click([...container.querySelectorAll("button")].find(b => b.textContent === "Confirm and post purchase"));
   expect(container.textContent).toContain("Saved outcome was not confirmed");
   expect(container.textContent).not.toContain("Purchase posted and confirmed.");
+});
+
+const savedPurchase = { ...doc, status: "posted", header: { ...doc.header,
+  posted_batch_id: "batch-1", posted_version_id: doc.id } };
+const retainedFile = { id: "file-1", original_filename: "TEST-ONLY-recovery.csv", captured_at: "2026-10-11", documents: [doc], parse_errors: [], source_record_count: 1 };
+async function openRecoveryReview() {
+  api.purchaseCapabilities.mockResolvedValue({ enabled: true }); api.purchaseItems.mockResolvedValue([]);
+  api.purchaseFiles.mockResolvedValue([retainedFile]); api.purchaseHistory.mockResolvedValue([]);
+  api.purchaseFile.mockResolvedValue(retainedFile);
+  await act(async () => root.render(<PurchaseImportsTab key="berts" restaurantId="berts" restaurantName="Test" />));
+  await click(button("TEST-ONLY-recovery.csv · 2026-10-11"));
+  await input(container.querySelector('[aria-label="Received date"]'), "2026-10-11");
+  await input(container.querySelector('[aria-label="Note 1"]'), "TEST ONLY retained reviewed quantity");
+  await click(container.querySelector('[aria-label="Confirm USD currency"]'));
+  await click(container.querySelector('fieldset input[type="checkbox"]'));
+}
+
+test("checking a committed purchase resolves an unknown outcome without another post", async () => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockResolvedValue(savedPurchase);
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  await click(button("Check saved status"));
+  expect(api.checkPurchaseSavedStatus).toHaveBeenCalledWith("berts", doc.id);
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  expect(container.textContent).toContain("Saved purchase found.");
+  expect(container.textContent).toContain("No posting request was sent.");
+  expect(button("Retry same purchase posting")).toBeUndefined();
+  expect(button("Confirm and post purchase")).toBeUndefined();
+});
+
+test.each(["awaiting_review", "held"])("a %s saved-status read preserves the original frozen retry", async status => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockResolvedValue({ ...doc, status });
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  const original = api.postPurchase.mock.calls[0];
+  await click(button("Check saved status"));
+  expect(container.textContent).toContain("No posted outcome was visible in this read");
+  expect(container.querySelector("fieldset").disabled).toBe(true);
+  expect(container.querySelector('[aria-label="Received date"]').value).toBe("2026-10-11");
+  expect(container.querySelector('[aria-label="Note 1"]').value).toBe("TEST ONLY retained reviewed quantity");
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  await click(button("Retry same purchase posting"));
+  expect(api.postPurchase.mock.calls[1]).toEqual(original);
+  expect(crypto.randomUUID).toHaveBeenCalledTimes(1);
+});
+
+test("an unauthorized saved-status read keeps the original request and review", async () => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockRejectedValue({ response: { status: 401, data: { detail: "Authentication required" } } });
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  await click(button("Check saved status"));
+  expect(container.textContent).toContain("Saved status could not be confirmed: Authentication required");
+  expect(container.textContent).not.toContain("Saved purchase found.");
+  expect(container.querySelector("fieldset").disabled).toBe(true);
+  await click(button("Retry same purchase posting"));
+  expect(api.postPurchase.mock.calls[1]).toEqual(api.postPurchase.mock.calls[0]);
+});
+
+test.each([
+  ["different document", { ...savedPurchase, id: "other-document" }],
+  ["missing batch", { ...savedPurchase, header: { ...savedPurchase.header, posted_batch_id: null } }],
+  ["different posted version", { ...savedPurchase, header: { ...savedPurchase.header, posted_version_id: "other-version" } }],
+  ["unknown status", { ...doc, status: "unexpected" }],
+])("a saved-status read with %s cannot resolve the frozen outcome", async (_label, readback) => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost")); api.checkPurchaseSavedStatus.mockResolvedValue(readback);
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  await click(button("Check saved status"));
+  expect(container.textContent).toContain("Saved document status was not confirmed");
+  expect(container.textContent).not.toContain("Saved purchase found.");
+  expect(button("Retry same purchase posting")).toBeDefined();
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test("a pending saved-status read blocks retry and a failed read releases only the check", async () => {
+  let rejectRead;
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockImplementation(() => new Promise((_resolve, reject) => { rejectRead = reject; }));
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  await click(button("Check saved status"));
+  expect(button("Retry same purchase posting").disabled).toBe(true);
+  expect(button("Checking saved status…").disabled).toBe(true);
+  await click(button("Retry same purchase posting")); expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  await act(async () => rejectRead(new Error("Read interrupted")));
+  expect(button("Check saved status").disabled).toBe(false);
+  expect(button("Retry same purchase posting").disabled).toBe(false);
+  expect(container.querySelector("fieldset").disabled).toBe(true);
+});
+
+test("a saved-status timeout releases the check while retaining the exact original retry", async () => {
+  jest.useFakeTimers();
+  try {
+    api.postPurchase.mockRejectedValue(new Error("Response lost"));
+    api.checkPurchaseSavedStatus.mockImplementation(() => readStateWithDeadline(() => new Promise(() => {}), "Saved status timed out"));
+    await openRecoveryReview(); await click(button("Confirm and post purchase")); await click(button("Check saved status"));
+    await act(async () => jest.advanceTimersByTime(STATE_READ_TIMEOUT_MS));
+    expect(container.textContent).toContain("Saved status could not be confirmed: Saved status timed out");
+    expect(button("Check saved status").disabled).toBe(false);
+    expect(container.querySelector("fieldset").disabled).toBe(true);
+    await click(button("Retry same purchase posting"));
+    expect(api.postPurchase.mock.calls[1]).toEqual(api.postPurchase.mock.calls[0]);
+  } finally { jest.useRealTimers(); }
+});
+
+test.each([
+  ["wrong document", { batchId: "batch-1", document: { ...savedPurchase, id: "other-document" } }],
+  ["wrong batch", { batchId: "other-batch", document: savedPurchase }],
+  ["missing batch identity", { batchId: "batch-1", document: { ...savedPurchase, header: doc.header } }],
+])("a posting acknowledgement with %s cannot announce success", async (_label, result) => {
+  api.postPurchase.mockResolvedValue(result);
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  expect(container.textContent).toContain("Saved outcome was not confirmed");
+  expect(container.textContent).not.toContain("Purchase posted and confirmed.");
+  expect(container.querySelector("fieldset").disabled).toBe(true);
+});
+
+test("a matching posting receipt confirms success even if history refresh fails", async () => {
+  api.postPurchase.mockResolvedValue({ batchId: "batch-1", document: savedPurchase });
+  await openRecoveryReview(); api.purchaseHistory.mockRejectedValue(new Error("Read interrupted"));
+  await click(button("Confirm and post purchase"));
+  expect(container.textContent).toContain("Purchase posted and confirmed.");
+  expect(container.textContent).toContain("Purchase saved; history refresh failed");
+  expect(button("Retry same purchase posting")).toBeUndefined();
+});
+
+test("reopening after remount reads a saved purchase without offering another post", async () => {
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  await act(async () => root.render(<div>Another screen</div>));
+  api.purchaseFile.mockResolvedValue({ ...retainedFile, documents: [savedPurchase] });
+  await act(async () => root.render(<PurchaseImportsTab key="berts" restaurantId="berts" restaurantName="Test" />));
+  await click(button("TEST-ONLY-recovery.csv · 2026-10-11"));
+  expect(container.textContent).toContain("pfg · TEST-1 · posted");
+  expect(button("Confirm and post purchase")).toBeUndefined();
+  expect(button("Retry same purchase posting")).toBeUndefined();
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test("a late saved-status read cannot populate a different location", async () => {
+  let resolveRead;
+  api.postPurchase.mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockImplementation(() => new Promise(resolve => { resolveRead = resolve; }));
+  await openRecoveryReview(); await click(button("Confirm and post purchase")); await click(button("Check saved status"));
+  api.purchaseFiles.mockResolvedValue([]);
+  await act(async () => root.render(<PurchaseImportsTab key="rudds" restaurantId="rudds" restaurantName="Other test location" />));
+  await act(async () => resolveRead(savedPurchase));
+  expect(container.textContent).toContain("Invoice Master · Other test location");
+  expect(container.textContent).not.toContain("Saved purchase found.");
+  expect(container.textContent).not.toContain("TEST-1");
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
 });
 
 async function selectValue(label, value) {
