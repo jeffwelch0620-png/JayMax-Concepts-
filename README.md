@@ -12,8 +12,8 @@ The walkthrough found one display mismatch: saved mapping decisions expose
 and validates `decision_note`, preserving the competing user's frozen note and
 request. Two regression cases failed before the correction and pass afterward;
 all **619 frontend tests across 66 suites** and the strict production build pass.
-The fix is on **codex/purchase-comparison-note-integrity** and is **not pushed or
-deployed**. No backend, schema, accounting or connection change is included.
+The fix is published in [draft PR22](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/22)
+on **codex/purchase-comparison-note-integrity** and is **unmerged and undeployed**. No backend, schema, accounting or connection change is included.
 
 A fresh read-only comparison at **1:08 PM EDT on October 12** preserved all
 **86 observed relations**, the one fictional receipt and the original **$212**

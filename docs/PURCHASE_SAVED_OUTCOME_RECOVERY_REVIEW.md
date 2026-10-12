@@ -88,8 +88,9 @@ The local follow-up changes only the comparison's rendering and shape check to
 reproduced the missing note and missed malformed-note rejection before the fix;
 afterward all **619 frontend tests across 66 suites** pass, including **41
 purchase component cases**. The strict `CI=true` production build also passes
-with the native profile and fictional backend URL. This follow-up is local on
-**codex/purchase-comparison-note-integrity**, not pushed or deployed.
+with the native profile and fictional backend URL. This follow-up is published in [draft PR22](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/22)
+on **codex/purchase-comparison-note-integrity**; it remains draft, unmerged and
+undeployed.
 
 A fresh independent read-only comparison at **1:08 PM EDT on October 12**
 confirmed unchanged rows/hashes across all **86 observed relations**, migration
@@ -153,8 +154,8 @@ deferred UI workflow.
 
 1. Saved-outcome reopening in the deployed parent is now complete within the
    scope above. Preserve the same labelled receipt and original control.
-2. The local note-display correction is ready for a separate draft PR after
-   push approval. After review, merge approval and deployment, repeat the
+2. Draft PR22 is published under user approval. Review its current-head CI and
+   obtain separate merge approval. After deployment, repeat the
    read-only comparison and verify the saved note. Then rehearse the new
    status action's unresolved-request paths with a scoped test plan that
    preserves the original accounting control and existing receipts.
