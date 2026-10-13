@@ -40,6 +40,7 @@ DATABASE_CASES = (
  ('container_waste','ContainerWasteTests','test_direct_waste_single_withdrawal_storage_service_and_food_cost_independent'),
  ('native_purchases','PurchaseIntegrationTests','test_received_date_cost_fee_tax_and_track_isolation'),
  ('native_purchases','PurchaseIntegrationTests','test_capture_roundtrip_all_raw_and_typed_fields'),
+ ('native_purchases','PurchaseIntegrationTests','test_current_source_follows_reissued_invoice_across_files_without_writes'),
  ('actual_inventory','ActualInventoryTests','test_explicit_value_usage_math_ignores_sales_flag_and_prep'),
  ('actual_inventory','ActualInventoryTests','test_prepared_items_excluded_and_fixed_unit_conflict_rolls_back'))
 
