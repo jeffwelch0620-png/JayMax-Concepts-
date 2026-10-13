@@ -88,9 +88,9 @@ The local follow-up changes only the comparison's rendering and shape check to
 reproduced the missing note and missed malformed-note rejection before the fix;
 afterward all **619 frontend tests across 66 suites** pass, including **41
 purchase component cases**. The strict `CI=true` production build also passes
-with the native profile and fictional backend URL. This follow-up is published in [draft PR22](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/22)
-on **codex/purchase-comparison-note-integrity**; it remains draft, unmerged and
-undeployed.
+with the native profile and fictional backend URL. This follow-up was merged under explicit approval in [PR22](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/22)
+at **cd29f22** on October 12 and deployed on the frontend; its live saved-note
+readback passed. The API remains at **54975a0**.
 
 A fresh independent read-only comparison at **1:08 PM EDT on October 12**
 confirmed unchanged rows/hashes across all **86 observed relations**, migration
@@ -150,23 +150,27 @@ Initial capability reads briefly displayed the existing awaiting-enablement
 message before normal loading completed; that presentation remains part of the
 deferred UI workflow.
 
-## Remaining sequence
+## Current sequence after the October 12 acceptance
 
-1. Saved-outcome reopening in the deployed parent is now complete within the
-   scope above. Preserve the same labelled receipt and original control.
-2. Draft PR22 is published under user approval. Review its current-head CI and
-   obtain separate merge approval. After deployment, repeat the
-   read-only comparison and verify the saved note. Then rehearse the new
-   status action's unresolved-request paths with a scoped test plan that
-   preserves the original accounting control and existing receipts.
-3. Separately decide whether exact pending-command continuity is required across
-   browser reload or sign-in. If so, design a scoped pending-command receipt
-   with immutable body/key, authenticated owner/location boundaries, expiry and
-   explicit read-before-retry reconciliation. Do not treat browser persistence
-   alone as a transaction guarantee or automatically resend after login.
-4. Retain independent employee authority and concurrent first-posting acceptance
-   as separate checks. Broad UI work, hosted connection architecture, Toast and
-   reviewed fixture cleanup remain later workflows.
+PR22 is merged and its saved-note display is accepted live. Deployed unposted,
+failed-read, held, competing, own-saved and own-saved/corrected cases are recorded
+in the JMax reference pages and private acceptance receipts. A real response drop
+in the full Render parent, using fixture-specific browser routing to a loopback
+relay, verified commit before delivering 1 of 3,831 acknowledgement bytes. The
+exact manual retry returned the original batch without adding or updating rows;
+the final comparison preserved all 86 relations and the original $212 report.
+The earlier observations above retain their historical scope.
+
+Draft PR23 retains initial submitted purchase body/key across
+reload and same-user reauthentication in the same tab. See the
+[pending initial purchase recovery review](PENDING_PURCHASE_RELOAD_RECOVERY.md)
+for its local validation, boundaries and separate deployment acceptance plan.
+Its review amendment adds confirmed local discard after fresh status checks,
+reopens the current source and handles late original commits without a new
+automatic POST. Held sources stay held; saved invoices require correction review.
+Manual source-capture and correction persistence, independent employee authority,
+concurrent first posting and reviewed fictional-data cleanup remain separate.
+Broad UI work, hosted connection architecture and Toast remain later workflows.
 
 No new hosted record, role, schema or connection change is included. Track 1
 continues to use purchased physical inventory, received-date purchases and
