@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { PurchaseDocumentReview, PurchaseCorrectionReview, PurchaseImportsTab } from "./PurchaseImportsTab";
 import * as api from "../lib/api";
 import { readStateWithDeadline, STATE_READ_TIMEOUT_MS } from "../lib/stateRead";
-import { pendingPurchaseJournal } from "../lib/pendingPurchases";
+import { pendingPurchaseJournal, pendingPurchaseRecord } from "../lib/pendingPurchases";
 
 jest.mock("../lib/api", () => ({
   purchaseCapabilities: jest.fn(), purchaseItems: jest.fn(), purchaseFiles: jest.fn(), purchaseFile: jest.fn(), purchaseFileDocument: jest.fn(), checkPurchaseSavedStatus: jest.fn(),
@@ -633,4 +633,237 @@ test("a confirmed purchase stays confirmed if its local recovery cleanup cannot 
     expect(container.textContent).toContain("retained-review cleanup failed"); expect(button("Retry same purchase posting")).toBeUndefined();
     expect(pendingPurchaseJournal("test-owner", "berts").list()).toHaveLength(1); expect(api.postPurchase).toHaveBeenCalledTimes(1);
   } finally { failure?.mockRestore(); }
+});
+
+async function submittedForDiscard() {
+  api.postPurchase.mockReset().mockRejectedValue(new Error("Response lost"));
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  return pendingPurchaseJournal("test-owner", "berts").list();
+}
+const discardButton = () => button("Discard retained review: TEST-1");
+const confirmDiscardButton = () => button("Confirm discard retained review");
+async function verifyFreshReview(date = "2026-10-12") {
+  await input(container.querySelector('[aria-label="Received date"]'), date);
+  await input(container.querySelector('[aria-label="Note 1"]'), "TEST ONLY revised receipt");
+  await click(container.querySelector('[aria-label="Confirm USD currency"]'));
+  await click(container.querySelector('fieldset input[type="checkbox"]'));
+}
+
+test("a held review is discarded only on confirmation and a second read, then a corrected review uses a new key", async () => {
+  crypto.randomUUID.mockReturnValueOnce("00000000-0000-4000-8000-000000000001").mockReturnValue("00000000-0000-4000-8000-000000000002");
+  const original = await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValueOnce({ ...doc, status: "held", errors: ["Review source"] }).mockResolvedValue(doc);
+  await click(discardButton());
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+  expect(container.textContent).toContain("does not cancel the earlier request");
+  await click(confirmDiscardButton());
+  expect(api.checkPurchaseSavedStatus).toHaveBeenCalledTimes(2);
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual([]);
+  expect(container.querySelector("fieldset").disabled).toBe(false);
+  await verifyFreshReview();
+  api.postPurchase.mockRejectedValue(new Error("Synthetic response lost"));
+  await click(button("Confirm and post purchase"));
+  expect(api.postPurchase).toHaveBeenCalledTimes(2);
+  expect(api.postPurchase.mock.calls[1][2].received_date).toBe("2026-10-12");
+  expect(api.postPurchase.mock.calls[1][3]).not.toBe(original[0].key);
+  expect(api.checkPurchaseSavedStatus).toHaveBeenCalledTimes(3);
+});
+
+test("discarding another request's review opens the posted purchase and correction path without a post", async () => {
+  await submittedForDiscard();
+  const other = { ...savedPurchase, correctionAvailable: true, sourceErrors: [], header: { ...savedPurchase.header, posted_request_key: "other-request" } };
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue(other);
+  await click(discardButton()); await click(confirmDiscardButton());
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual([]);
+  expect(button("Confirm and post purchase")).toBeUndefined();
+  expect(button("Review correction")).toBeDefined();
+  expect(button("Show saved purchase and correction history")).toBeDefined();
+  expect(discardButton()).toBeUndefined(); expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test("discard does not make a still-held invoice postable", async () => {
+  await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue({ ...doc, status: "held", errors: ["Review latest source"] });
+  await click(discardButton()); await click(confirmDiscardButton());
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual([]);
+  expect(button("Confirm and post purchase").disabled).toBe(true);
+  expect(container.textContent).toContain("Review latest source");
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test("discarding a superseded held version opens the newer source version for an explicit review", async () => {
+  crypto.randomUUID.mockReturnValueOnce("00000000-0000-4000-8000-000000000001").mockReturnValue("00000000-0000-4000-8000-000000000002");
+  await submittedForDiscard();
+  const latest = { ...doc, id: "latest-version", lines: [{ ...doc.lines[0], id: "latest-line" }] };
+  api.purchaseFile.mockResolvedValue({ ...retainedFile, documents: [latest] });
+  api.checkPurchaseSavedStatus.mockReset()
+    .mockResolvedValueOnce({ ...doc, status: "held", errors: ["A newer source version exists"] })
+    .mockResolvedValueOnce({ ...doc, status: "held", errors: ["A newer source version exists"] })
+    .mockResolvedValue(latest);
+  await click(discardButton()); await click(confirmDiscardButton());
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual([]);
+  expect(container.querySelector("fieldset").disabled).toBe(false);
+  await verifyFreshReview(); await click(button("Confirm and post purchase"));
+  expect(api.postPurchase).toHaveBeenCalledTimes(2);
+  expect(api.postPurchase.mock.calls[1][1]).toBe("latest-version");
+  expect(api.postPurchase.mock.calls[1][2].lines[0].line_id).toBe("latest-line");
+  expect(api.postPurchase.mock.calls[1][3]).toBe("00000000-0000-4000-8000-000000000002");
+});
+
+test("discard leaves another submitted invoice in the same source frozen with its exact command", async () => {
+  const original = await submittedForDiscard();
+  const other = { ...doc, id: "other-version", header: { ...doc.header, document_id: "other-identity", document_number: "TEST-2" } };
+  const record = pendingPurchaseRecord(retainedFile, other, original[0].body, original[0].key);
+  pendingPurchaseJournal("test-owner", "berts").save(record);
+  api.purchaseFile.mockResolvedValue({ ...retainedFile, documents: [doc, other] });
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue(doc);
+  await click(discardButton()); await click(confirmDiscardButton());
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual([record]);
+  expect(container.querySelector('[aria-label="Invoice TEST-2"] fieldset').disabled).toBe(true);
+  expect(container.querySelector('[aria-label="Invoice TEST-2"] [aria-label="Note 1"]').value).toBe(original[0].body.lines[0].note);
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test.each(["saved", "corrected"])("discard refuses an own %s outcome in the initial fresh read", async kind => {
+  const original = await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue(kind === "saved" ? savedPurchase : correctedPurchase());
+  await click(discardButton());
+  expect(confirmDiscardButton()).toBeUndefined();
+  expect(container.textContent).toContain("review was not discarded");
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test.each(["saved", "corrected"])("an own %s outcome arriving during confirmation refuses discard", async kind => {
+  const original = await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValueOnce(doc).mockResolvedValue(kind === "saved" ? savedPurchase : correctedPurchase());
+  await click(discardButton()); await click(confirmDiscardButton());
+  expect(container.textContent).toContain("review was not discarded");
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test("cancelling discard keeps the exact retained body and key and performs no second read", async () => {
+  const original = await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue(doc);
+  await click(discardButton()); await click(button("Keep retained review"));
+  expect(confirmDiscardButton()).toBeUndefined();
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+  expect(api.checkPurchaseSavedStatus).toHaveBeenCalledTimes(1);
+});
+
+test.each(["initial", "confirmation"])("failed %s discard read preserves recovery without any post", async phase => {
+  const original = await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset();
+  if (phase === "confirmation") api.checkPurchaseSavedStatus.mockResolvedValueOnce(doc);
+  api.checkPurchaseSavedStatus.mockRejectedValue(new Error("Synthetic timeout or expired session"));
+  await click(discardButton());
+  if (phase === "confirmation") await click(confirmDiscardButton());
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+  expect(container.textContent).toContain("Synthetic timeout or expired session");
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  { ...doc, status: "unknown" },
+  { ...doc, header: { ...doc.header, document_id: "foreign-invoice" } },
+  { ...doc, errors: ["Contradictory status"] },
+])("malformed or foreign discard status is refused", async result => {
+  const original = await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue(result);
+  await click(discardButton());
+  expect(confirmDiscardButton()).toBeUndefined();
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+});
+
+test("a failed source reopening does not discard its retained review", async () => {
+  const original = await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue(doc);
+  await click(discardButton()); api.purchaseFile.mockRejectedValue(new Error("Source reopening failed"));
+  await click(confirmDiscardButton());
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+  expect(api.checkPurchaseSavedStatus).toHaveBeenCalledTimes(1);
+  expect(container.textContent).toContain("Source reopening failed");
+});
+
+test("failed discard storage write preserves the review and confirmation", async () => {
+  const original = await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue(doc);
+  await click(discardButton());
+  const fail = jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+  try {
+    await click(confirmDiscardButton());
+    expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+    expect(confirmDiscardButton()).toBeDefined(); expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  } finally { fail.mockRestore(); }
+});
+
+test("a late confirmation read cannot discard or populate another user's workspace", async () => {
+  const original = await submittedForDiscard(); let finish;
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValueOnce(doc).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  await click(discardButton()); await click(confirmDiscardButton());
+  await act(async () => root.render(<PurchaseImportsTab actorId="other-user" restaurantId="berts" restaurantName="Other user" />));
+  await act(async () => finish(doc));
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+  expect(confirmDiscardButton()).toBeUndefined(); expect(container.querySelector('[aria-label="Invoice TEST-1"]')).toBeNull();
+});
+
+test("an original commit after discard but before revised posting is recognized without a new post", async () => {
+  await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValueOnce(doc).mockResolvedValueOnce(doc).mockResolvedValue(savedPurchase);
+  await click(discardButton()); await click(confirmDiscardButton()); await verifyFreshReview();
+  await click(button("Confirm and post purchase"));
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  expect(button("Confirm and post purchase")).toBeUndefined();
+  expect(container.textContent).toContain("no new posting was sent");
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual([]);
+});
+
+test("an original commit racing the revised post produces a competing outcome, never revised success or another resend", async () => {
+  crypto.randomUUID.mockReturnValueOnce("00000000-0000-4000-8000-000000000001").mockReturnValue("00000000-0000-4000-8000-000000000002");
+  await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValueOnce(doc).mockResolvedValueOnce(doc).mockResolvedValueOnce(doc).mockResolvedValue(savedPurchase);
+  await click(discardButton()); await click(confirmDiscardButton()); await verifyFreshReview();
+  api.postPurchase.mockRejectedValue({ response: { status: 409, data: { detail: "This invoice is already posted" } } });
+  await click(button("Confirm and post purchase"));
+  expect(api.postPurchase).toHaveBeenCalledTimes(2);
+  expect(api.checkPurchaseSavedStatus).toHaveBeenCalledTimes(4);
+  expect(button("Retry same purchase posting").disabled).toBe(true);
+  expect(container.textContent).toContain("posted by a different request");
+  expect(container.textContent).not.toContain("Your purchase was saved and confirmed");
+  expect(pendingPurchaseJournal("test-owner", "berts").list()[0].key).toBe("00000000-0000-4000-8000-000000000002");
+});
+
+test("a full journal shows its 32-review limit and keeps all earlier reviews without sending", async () => {
+  const body = { confirmed_currency: "USD", received_date: "2026-10-12", lines: [{ line_id: "line-1", classification: "food", movement_kind: "receipt", item_code: null, base_unit: null, received_quantity: "2", received_unit: null, base_units_per_received_unit: null, movement_date: null, original_line_id: null, verified: true, note: "TEST ONLY capacity fixture" }] };
+  const journal = pendingPurchaseJournal("test-owner", "berts");
+  for (let n = 0; n < 32; n++) journal.save(pendingPurchaseRecord(retainedFile, { ...doc, id: `version-${n}` }, body, crypto.randomUUID()));
+  api.postPurchase.mockReset();
+  await openRecoveryReview(); await click(button("Confirm and post purchase"));
+  expect(container.textContent).toContain("32 unresolved retained reviews");
+  expect(journal.list()).toHaveLength(32); expect(api.postPurchase).not.toHaveBeenCalled();
+});
+
+test("a manual-captured document posts through the journal and restores its exact reviewed command", async () => {
+  api.purchaseCapabilities.mockResolvedValue({ enabled: true, manualReady: true }); api.purchaseItems.mockResolvedValue([]);
+  api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]);
+  api.purchaseVendors.mockResolvedValue([{ id: "pfg", name: "Invented supplier" }]);
+  api.captureManualPurchase.mockImplementation(async (_store, body) => ({
+    id: "manual-file", original_filename: "manual-source-fictional.json", captureStatus: "captured",
+    byte_count: 900, source_record_count: 1, source_sha256: "fictional", documents: [doc], manualRecord: body,
+  }));
+  api.postPurchase.mockReset().mockRejectedValue(new Error("Response lost"));
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue(doc);
+  await act(async () => root.render(<PurchaseImportsTab actorId="test-owner" restaurantId="berts" restaurantName="Test" />));
+  await selectValue("Manual supplier", "pfg");
+  await input(container.querySelector('[aria-label="Invoice / receipt number"]'), "TEST-1");
+  const note = container.querySelector('[aria-label="Manual source evidence"]');
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(note, "TEST ONLY original source evidence"); note.dispatchEvent(new Event("input", { bubbles: true })); });
+  await click(container.querySelector('[aria-label="Confirm manual source details"]')); await click(button("Retain manual source for review"));
+  await verifyFreshReview(); await click(button("Confirm and post purchase"));
+  const original = api.postPurchase.mock.calls[0];
+  expect(pendingPurchaseJournal("test-owner", "berts").list()[0].source.original_filename).toBe("manual-source-fictional.json");
+  await remountSubmittedReview(); await click(button("Restore submitted review: TEST-1")); await click(button("Retry same purchase posting"));
+  expect(api.postPurchase.mock.calls[1]).toEqual(original);
+  expect(api.captureManualPurchase).toHaveBeenCalledTimes(1);
 });

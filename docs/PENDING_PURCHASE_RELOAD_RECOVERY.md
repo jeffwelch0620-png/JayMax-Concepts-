@@ -30,14 +30,49 @@ version/key against the original command. Neither action submits a purchase.
 
 All write commands continue through the existing server validation, authority
 and idempotency checks. Browser persistence is recovery evidence, not authority
-or a transaction guarantee. Records are cleared only after a matching saved
-outcome, never by sign-out, an unsuccessful read or an automatic age cutoff.
+or a transaction guarantee. Records are cleared after a matching saved outcome
+or an explicitly confirmed discard, never by sign-out, an unsuccessful read or
+an automatic age cutoff.
+
+**Discard retained review** first reads the original version's status. Only a
+validated held, awaiting-review or competing-request result opens confirmation.
+Own saved/corrected outcomes refuse discard and direct the user to restore.
+Confirmation explains that removing this tab's review **does not cancel the
+earlier request** or delete source, purchase or history. Keeping the review makes
+no change. Confirmation fetches the source and reads status again before
+clearing the exact original version/key; failed or contradictory reads, foreign
+identities, storage failure or a user/location change preserve the record.
+
+Reopening uses current server fields and requires a new explicit review, rather
+than unfreezing the old submitted body. An already posted document exposes its
+saved purchase/correction path. A still-held document remains blocked until its
+source issue is resolved, sometimes by reviewing a newer source version.
+No discard action creates a posting or correction.
+
+An awaiting-review read only establishes that no batch was visible then. An
+earlier command may commit later. Before posting a revised review in this
+workspace, the client checks again; a newly visible batch or hold blocks that
+POST and opens the current document. A conflict after that check triggers a
+status read, retains the revised command and blocks retry for a competing batch.
+The server still locks the document identity, rechecks the command and permits
+one initial batch per document. These checks prevent a duplicate but do not
+guarantee which request wins. Correcting an already saved purchase remains a
+separate explicit workflow.
 
 Unavailable, corrupt, oversized or full recovery storage blocks initial posting
 rather than silently dropping a record or creating a replacement key. Storage
 has a 32-record and 2 MiB envelope limit per user/restaurant. A confirmed purchase
 whose local-record cleanup fails remains confirmed; further initial posting is
-held until recovery storage can be read and retained safely.
+held until recovery storage can be read and retained safely. The 32-record,
+2 MiB, invalid-record and unavailable-browser-storage errors have distinct
+messages. Discard targets the exact original version/key. Reopening independently
+reconciles any other retained reviews in that source; unresolved reviews retain
+their original frozen commands.
+
+The journal and API share restaurant canonicalization (including
+`papa_leonis` to `papa`); syntactically valid new location IDs no longer depend
+on a second client allowlist. Server access checks are unchanged. The review
+form and journal use the same client base-unit constant.
 
 The App passes the stable user ID into Invoice Master and remounts its workspace
 when that user or restaurant changes. Late status/file reads cannot populate the
@@ -46,18 +81,25 @@ original user's record without exposing that review in the new workspace.
 
 ## Local validation and limits
 
-The complete native-feature profile passes **650 frontend tests in 67 suites**.
+The complete native-feature profile passes **674 frontend tests in 67 suites**,
+including 24 additional cases in the PR23 review amendment.
 Coverage includes persist-before-send, exact retries after remount, own saved and
 corrected receipts, held and competing outcomes, failed restored reads, user and
 restaurant isolation, late responses, corrupt/full/unavailable storage, retained
 decimal types, source/token exclusion and the actual client expiry/sign-out
-functions. The strict `CI=true` production build passes with ESLint enabled, the same
+functions. Amendment coverage also includes both discard reads, cancellation,
+own saved/corrected refusal, held and competing reopening, foreign/malformed or
+failed status reads, source/storage failure, preservation of another invoice
+in the same file, superseded source versions, late user changes, original-commit
+races, explicit capacity messages, new location IDs and manual-captured
+initial-post restoration.
+The strict `CI=true` production build passes with ESLint enabled, the same
 native profile and a fictional backend URL. The initial strict build caught a
 lifecycle memo dependency warning; the identity-bearing scope was corrected
 without disabling lint, and the affected tests and final full suite passed.
-The output is `main.704b31e2.js` and remains local.
+The amended output is `main.2a2c6bf8.js` and remains local.
 
-This implementation is prepared locally from main `cd29f22`. It is not a deployed
+This implementation is proposed in draft PR23 from main `cd29f22`. It is not a deployed
 reload or session-expiry acceptance result. The prior real acknowledgement-drop
 test passed in the full Render parent under controlled fixture-specific browser
 routing: **1 of 3,831 response bytes** after independently verified commit; exact
@@ -67,14 +109,20 @@ Those transport results apply to the deployed baseline, not this new local code.
 
 This recovery copy is scoped to the current tab and logical user/restaurant
 identity; it is not encrypted browser storage or a separate authorization
-boundary. Keep the tab open until saved status is confirmed. Recovery in a new
-tab, after closing the tab or after browser restart is not guaranteed. Automatic
+boundary. Signing out deliberately leaves this tab's notes and quantities in
+plain text for the same user's later recovery. Another user cannot see them
+through Invoice Master, but someone with browser developer-tool access on a
+shared device can read browser storage. Keep the tab open until saved status is
+confirmed. Recovery in a new tab, after closing the tab or after browser restart
+is not guaranteed. Automatic
 expiry/deletion would lose unresolved command identity and is deliberately absent.
 
-Manual source entry, binary source capture and correction submissions still
-retain their pending commands in memory; their durable recovery is a separate
-step. No login policy, credential, server command, schema, migration, hosting or
-Supabase connection change is included. Track 1 accounting remains independent
+Manual source-capture commands, binary source capture and correction submissions
+still retain their pending commands in memory; their durable recovery is a separate
+step. An initial inventory posting from an already captured manual document uses
+this journal and has a capture → posting → remount → exact retry test. No login
+policy, credential, server command, schema, migration, hosting or Supabase
+connection change is included. Track 1 accounting remains independent
 of prep and sales.
 
 ## Next acceptance
@@ -84,6 +132,8 @@ of prep and sales.
 3. Rehearse a labelled fictional unresolved **initial purchase** across reload
    and normal same-user reauthentication. Confirm the original key/body, fresh
    reads, no automatic POST, exact manual retry and one committed purchase.
+   Exercise held and competing-request discard, cancellation of that local
+   confirmation, and an original commit arriving before revised posting.
 4. Preserve all existing fixtures and the closed **$212** control; finish with an
    independent complete database comparison. Concurrent first posting,
    independent employee authority and reviewed fictional-data cleanup remain

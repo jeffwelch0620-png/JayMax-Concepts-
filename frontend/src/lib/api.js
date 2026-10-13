@@ -1,6 +1,7 @@
 import axios from "axios";
 import { calcPortionsPerUnit, preferredSku } from "./calc";
 import { readStateWithDeadline } from "./stateRead";
+import { canonicalStoreId as pgStoreId } from "./purchaseContract";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Supabase migration target -- see docs/SUPABASE_MIGRATION_PLAN.md. Store ids here
@@ -67,8 +68,6 @@ export const decideStaffPrepCountSheet = (rid, id, body, key) => axios.post(`${p
 export const staffPrepCountDrafts = (rid, pin) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/prep-count-drafts`, { pin }).then(r => r.data);
 export const submitStaffPrepCountDraft = (rid, id, body, key) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/prep-count-drafts/${id}/submit`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 const retiredWorkflow = message => Promise.reject(Object.assign(new Error(message), { response: { status: 410, data: { detail: message } } }));
-const MONGO_TO_PG_STORE = { berts: "berts", rudds: "rudds", papa_leonis: "papa" };
-const pgStoreId = (rid) => MONGO_TO_PG_STORE[rid] || rid;
 export const purchaseItems = (rid) => pgListItems(pgStoreId(rid));
 const purchaseUrl = (rid) => `${PG_API}/purchases/${pgStoreId(rid)}`;
 export const purchaseCapabilities = (rid) => axios.get(`${purchaseUrl(rid)}/capabilities`).then(r => r.data);

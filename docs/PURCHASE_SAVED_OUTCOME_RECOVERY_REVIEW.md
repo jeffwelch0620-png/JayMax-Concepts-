@@ -161,10 +161,13 @@ exact manual retry returned the original batch without adding or updating rows;
 the final comparison preserved all 86 relations and the original $212 report.
 The earlier observations above retain their historical scope.
 
-The next local implementation retains initial submitted purchase body/key across
+Draft PR23 retains initial submitted purchase body/key across
 reload and same-user reauthentication in the same tab. See the
 [pending initial purchase recovery review](PENDING_PURCHASE_RELOAD_RECOVERY.md)
 for its local validation, boundaries and separate deployment acceptance plan.
+Its review amendment adds confirmed local discard after fresh status checks,
+reopens the current source and handles late original commits without a new
+automatic POST. Held sources stay held; saved invoices require correction review.
 Manual source-capture and correction persistence, independent employee authority,
 concurrent first posting and reviewed fictional-data cleanup remain separate.
 Broad UI work, hosted connection architecture and Toast remain later workflows.

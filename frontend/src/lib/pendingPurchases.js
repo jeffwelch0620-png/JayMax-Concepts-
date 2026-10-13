@@ -1,13 +1,14 @@
 // This tab's submitted initial reviews are recovery evidence, never authority
 // to post. Commands still use the normal API and require an explicit retry.
+import { canonicalStoreId, PURCHASE_BASE_UNITS as units } from "./purchaseContract";
 const PREFIX = "jaymax:pending-purchases:v1:";
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_RECORDS = 32;
 const id = v => typeof v === "string" && /^[A-Za-z0-9_.-]{1,160}$/.test(v);
 const uuid = v => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const scalar = v => v == null || typeof v === "string" || (typeof v === "number" && Number.isFinite(v));
-const units = ["lb", "oz", "g", "kg", "fl_oz", "ml", "l", "gal", "each"];
-const failure = () => new Error("Submitted purchase recovery could not be retained or read in this tab. No new posting will be sent. Keep this tab open and contact a manager.");
+const failure = (code = "invalid_record", message = "Submitted purchase recovery is corrupt or invalid. Keep this tab open and contact a manager.") =>
+  Object.assign(new Error(`${message} No new posting will be sent.`), { code: `purchase_recovery_${code}` });
 const object = v => v && typeof v === "object" && !Array.isArray(v);
 const exactKeys = (v, keys) => object(v) && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
 const lineKeys = ["line_id", "classification", "movement_kind", "item_code", "base_unit", "received_quantity", "received_unit", "base_units_per_received_unit", "movement_date", "original_line_id", "verified", "note"];
@@ -47,11 +48,11 @@ export function pendingPurchaseRecord(source, document, body, key) {
 }
 
 export function pendingPurchaseJournal(actorId, restaurantId, storage = () => window.sessionStorage) {
-  restaurantId = restaurantId === "papa_leonis" ? "papa" : restaurantId;
+  restaurantId = canonicalStoreId(restaurantId);
   const key = `${PREFIX}${actorId}:${restaurantId}`;
   function read() {
     try {
-      if (!id(actorId) || !["berts", "rudds", "papa", "comm"].includes(restaurantId)) throw failure();
+      if (!id(actorId) || !id(restaurantId)) throw failure("identity", "A valid signed-in user and restaurant are required.");
       const raw = storage().getItem(key);
       if (raw === null) return [];
       if (new Blob([raw]).size > MAX_BYTES) throw failure();
@@ -60,15 +61,20 @@ export function pendingPurchaseJournal(actorId, restaurantId, storage = () => wi
         || value.actorId !== actorId || value.restaurantId !== restaurantId || !Array.isArray(value.records)
         || value.records.length > MAX_RECORDS || new Set(value.records.map(r => r?.versionId)).size !== value.records.length) throw failure();
       return value.records.map(validRecord);
-    } catch { throw failure(); }
+    } catch (e) {
+      if (typeof e?.code === "string" && e.code.startsWith("purchase_recovery_")) throw e;
+      if (e instanceof SyntaxError) throw failure();
+      throw failure("unavailable", "Browser recovery storage is unavailable. Keep this tab open and contact a manager.");
+    }
   }
   function write(records) {
+    if (records.length > MAX_RECORDS) throw failure("capacity", "32 unresolved retained reviews — resolve or discard one before posting another purchase.");
+    const raw = JSON.stringify({ schema: 1, actorId, restaurantId, records });
+    if (new Blob([raw]).size > MAX_BYTES) throw failure("size", "Retained reviews exceed this tab's 2 MiB recovery limit. Resolve or discard a review, or reduce this review's size.");
     try {
-      const raw = JSON.stringify({ schema: 1, actorId, restaurantId, records });
-      if (records.length > MAX_RECORDS || new Blob([raw]).size > MAX_BYTES) throw failure();
       storage().setItem(key, raw);
-      if (storage().getItem(key) !== raw) throw failure();
-    } catch { throw failure(); }
+      if (storage().getItem(key) !== raw) throw new Error("Recovery readback failed");
+    } catch { throw failure("unavailable", "Browser recovery storage is unavailable or its quota is full. Keep this tab open and contact a manager."); }
   }
   return {
     list: read,

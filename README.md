@@ -2,14 +2,23 @@
 
 ## Pending initial purchase recovery follow-up - October 12, 2026
 
-The local follow-up on **codex/purchase-request-reload-recovery** retains a
+The [draft PR23 follow-up](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/23)
+on **codex/purchase-request-reload-recovery** retains a
 submitted initial purchase's exact body and key across reload and same-user
 sign-in in the same tab. It saves the scoped recovery record before the first
 POST, restores frozen review values, and checks saved status before permitting
 an explicit retry. No purchase is sent automatically. Storage failures stop
 initial posting; another user or restaurant cannot inherit the review through
-Invoice Master. All **650 frontend tests across 67 suites** and the strict production build pass
-with the native feature profile and a fictional backend URL. See the [scope, validation and acceptance plan](docs/PENDING_PURCHASE_RELOAD_RECOVERY.md).
+Invoice Master. Confirmed local discard checks status before and after
+confirmation, refuses own saved outcomes and reopens the current source.
+It does not cancel an earlier request. An already posted invoice follows the
+saved-purchase/correction path, while late-commit conflicts retain the revised
+command without an automatic resend. Capacity, size and storage errors have
+specific messages; the API and journal share restaurant canonicalization, and
+the review and journal share their unit vocabulary. All **674 frontend tests
+across 67 suites** and the strict production build pass with the native feature
+profile, ESLint enabled and a fictional backend URL.
+See the [scope, validation and acceptance plan](docs/PENDING_PURCHASE_RELOAD_RECOVERY.md).
 
 PR22 is merged at **cd29f22** and deployed on the Render frontend; the API remains
 at **54975a0**. The real dropped-acknowledgement trial passed in the full Render
@@ -17,7 +26,7 @@ parent using temporary two-call browser routing to a loopback relay. Its exact
 manual retry returned the original purchase with zero duplicate/updated rows,
 and all 86 observed relations preserved the original **$212** Food Cost control.
 The relay is stopped, the routing override is disabled and its temporary browser
-permission is reset. This new reload-recovery implementation remains local and
+permission is reset. This draft reload-recovery implementation is unmerged and
 needs separate deployed acceptance after review. Manual source capture and
 correction command persistence remain separate follow-ups.
 

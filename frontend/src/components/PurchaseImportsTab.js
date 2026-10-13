@@ -5,8 +5,8 @@ import { ManualPurchaseEntry } from "./ManualPurchaseEntry";
 import { InventoryUnitSetup } from "./InventoryUnitSetup";
 import { purchaseRecoveryOutcome, validatePurchaseDocument } from "../lib/purchaseRecovery";
 import { pendingPurchaseJournal, pendingPurchaseRecord } from "../lib/pendingPurchases";
+import { PURCHASE_BASE_UNITS as units } from "../lib/purchaseContract";
 
-const units = ["lb", "oz", "g", "kg", "fl_oz", "ml", "l", "gal", "each"];
 const errorText = e => {
   const detail = e?.response?.data?.detail;
   return typeof detail === "string" ? detail : detail?.reasons?.join("; ") || detail?.message || e.message || "Request failed. Please retry.";
@@ -195,6 +195,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
   const scope = useMemo(() => ({ active: true, restaurantId, actorId }), [restaurantId, actorId]);
   const journal = useMemo(() => pendingPurchaseJournal(actorId, restaurantId), [actorId, restaurantId]);
   const [pendingPurchases, setPendingPurchases] = useState([]), [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
+  const [discardReview, setDiscardReview] = useState(null);
   function refreshPending() {
     try { const records = journal.list(); if (scope.active) { setPendingPurchases(records); setRecoveryUnavailable(false); } return records; }
     catch (e) { if (scope.active) { setRecoveryUnavailable(true); setError(errorText(e)); } throw e; }
@@ -220,7 +221,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
   }
   useEffect(() => {
     scope.active = true;
-    setSelected(null); setPendingPurchases([]); setReady(false); setError(""); setMessage("");
+    setSelected(null); setPendingPurchases([]); setDiscardReview(null); setReady(false); setError(""); setMessage("");
     setBusy(false); setFiles([]); setItems([]); setHistory([]); setSourceRows(null); upload.current = null;
     try { setPendingPurchases(journal.list()); setRecoveryUnavailable(false); }
     catch (e) { setRecoveryUnavailable(true); setError(errorText(e)); }
@@ -287,7 +288,21 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
     setBusy(true);
     setMessage("");
     try {
-      const record = pendingPurchaseRecord(selected, selected.documents.find(d => d.id === id), body, key);
+      const document = selected.documents.find(d => d.id === id);
+      if (document.discardedRequestKey && !journal.list().some(r => r.versionId === id)) {
+        const result = await api.checkPurchaseSavedStatus(restaurantId, id);
+        if (!scope.active) return;
+        const outcome = purchaseRecoveryOutcome(result, id, document.discardedRequestKey);
+        if (result.header.document_id !== document.header.document_id) throw new Error("Saved document identity was not confirmed.");
+        if (outcome.kind !== "awaiting_review") {
+          setSelected(s => ({ ...s, documents: s.documents.map(d => d.id === id ? result : d) }));
+          setPreviewEpoch(n => n + 1);
+          const notice = "The invoice changed after discard. Review its current saved status or hold; no new posting was sent.";
+          setMessage(notice);
+          throw new Error(notice);
+        }
+      }
+      const record = pendingPurchaseRecord(selected, document, body, key);
       const submitted = journal.save(record); refreshPending();
       const result = await api.postPurchase(restaurantId, id, submitted.body, submitted.key);
       if (!result?.batchId || result.document?.header?.posted_batch_id !== result.batchId) throw new Error("Saved outcome was not confirmed. Retry this request.");
@@ -298,6 +313,13 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
       resolvePending(id, key);
       if (!scope.active) return;
       applyRecovery(id, outcome);
+    } catch (e) {
+      // An earlier request can commit after a negative read. Reconcile a conflict
+      // without resending or interpreting another request's batch as our save.
+      if (e?.response?.status === 409 && scope.active) {
+        try { await checkSaved(id, key); } catch { /* Keep the original command on a failed read. */ }
+      }
+      throw e;
     } finally { if (scope.active) setBusy(false); }
   }
   async function checkSaved(id, key) {
@@ -320,6 +342,64 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
         pendingRequest: { key: current.key, body: current.body, needsCheck: true } }] });
       setPreviewEpoch(n => n + 1); setSourceRows(null);
       await checkSaved(current.versionId, current.key);
+    });
+  }
+  function currentRetained(record) {
+    const current = refreshPending().find(r => r.versionId === record.versionId && r.key === record.key);
+    if (!current) throw new Error("This retained review is no longer available. Reopen its saved source.");
+    if (JSON.stringify(current.body) !== JSON.stringify(record.body)) throw new Error("The retained review changed. Restore it before trying again.");
+    return current;
+  }
+  function discardOutcome(result, record) {
+    const outcome = purchaseRecoveryOutcome(result, record.versionId, record.key);
+    if (result.header.document_id !== record.document.header.document_id) throw new Error("Saved document identity was not confirmed. The retained review was not discarded.");
+    if (result.status === "awaiting_review" && (result.errors.length || result.header.posted_batch_id)) throw new Error("Saved document status was not confirmed. The retained review was not discarded.");
+    if (["saved", "saved_corrected"].includes(outcome.kind)) throw new Error("Your original request was saved. The review was not discarded; restore it to inspect the saved purchase.");
+    return outcome;
+  }
+  async function prepareDiscard(record) {
+    await action(async () => {
+      const current = currentRetained(record);
+      const result = await api.checkPurchaseSavedStatus(restaurantId, current.versionId);
+      if (!scope.active) return;
+      const outcome = discardOutcome(result, current);
+      setDiscardReview({ record: current, outcome });
+    });
+  }
+  async function confirmDiscard() {
+    const choice = discardReview;
+    if (!choice || !scope.active) return;
+    await action(async () => {
+      const current = currentRetained(choice.record);
+      // Fetch the source before the second status read so a failed reopening
+      // cannot consume the recovery copy. Confirmation never trusts cached status.
+      const file = await api.purchaseFile(restaurantId, current.source.id);
+      if (!scope.active) return;
+      if (file?.id !== current.source.id || !Array.isArray(file.documents)) throw new Error("Saved source was not confirmed. The retained review was not discarded.");
+      for (const document of file.documents) {
+        if (typeof document?.id !== "string" || !document.id || typeof document.header?.document_id !== "string" || !document.header.document_id) throw new Error("Saved source identity was not confirmed. The retained review was not discarded.");
+        validatePurchaseDocument(document, document.id);
+      }
+      const sourceDocument = file.documents.find(d => d.header?.document_id === current.document.header.document_id);
+      if (!sourceDocument) throw new Error("Saved source identity was not confirmed. The retained review was not discarded.");
+      const result = await api.checkPurchaseSavedStatus(restaurantId, current.versionId);
+      if (!scope.active) return;
+      const outcome = discardOutcome(result, current);
+      currentRetained(current);
+      journal.clear(current.versionId, current.key);
+      refreshPending();
+      const reopened = retainFile(file);
+      setSelected({ ...reopened, documents: reopened.documents.map(d => d.id === current.versionId
+        ? { ...outcome.document, discardedRequestKey: current.key }
+        : d.header.document_id === current.document.header.document_id
+          ? { ...d, discardedRequestKey: current.key, ...(outcome.kind === "other_request" ? { recovery: outcome } : {}) } : d) });
+      setPreviewEpoch(n => n + 1); setSourceRows(null); setDiscardReview(null);
+      setMessage(outcome.kind === "other_request"
+        ? "Retained review discarded. This invoice already has a saved purchase; inspect it and use correction review if needed."
+        : "Retained review discarded. Review the current source again before posting. Discard did not cancel the earlier request; it may still complete.");
+      if (outcome.document.header.posted_batch_id) api.purchaseHistory(restaurantId)
+        .then(h => scope.active && setHistory(h))
+        .catch(e => scope.active && setError(`Saved purchase history refresh failed: ${errorText(e)}`));
     });
   }
   async function inspectSaved(id) {
@@ -373,7 +453,17 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
       {!!pendingPurchases.length && <section aria-label="Retained submitted purchases" className={`${cardCls} p-4 space-y-2`}>
         <h3>Submitted reviews retained in this tab</h3>
         <p>These reviews survive a reload and sign-in by the same user in this tab. Restore a review to check its saved outcome before retrying. Keep this tab open until the outcome is confirmed; recovery in a new tab or after a browser restart is not guaranteed.</p>
-        {pendingPurchases.map(r => <button key={r.versionId} className={btnGhost} disabled={busy} onClick={() => restorePending(r)}>Restore submitted review: {r.document.header.document_number || r.versionId}</button>)}
+        {pendingPurchases.map(r => <div key={r.versionId} className="flex gap-3 flex-wrap">
+          <button className={btnGhost} disabled={busy || !!discardReview} onClick={() => restorePending(r)}>Restore submitted review: {r.document.header.document_number || r.versionId}</button>
+          <button className={btnGhost} disabled={busy || !!discardReview} onClick={() => prepareDiscard(r)}>Discard retained review: {r.document.header.document_number || r.versionId}</button>
+        </div>)}
+      </section>}
+      {discardReview && <section aria-label="Confirm retained review discard" className={`${cardCls} p-4 space-y-3`}>
+        <h3>Discard retained review for {discardReview.record.document.header.document_number}</h3>
+        <p>The latest read showed {discardReview.outcome.kind.replaceAll("_", " ")}. This removes only this tab's frozen review. It does not delete a source, purchase or history, and does not cancel the earlier request. That request may still complete.</p>
+        <p>Confirm to check status again and reopen the current source. If already posted, inspect the saved purchase and use correction review. Nothing will be posted automatically.</p>
+        <button className={btnGhost} disabled={busy} onClick={() => setDiscardReview(null)}>Keep retained review</button>
+        <button className={btnAcc} disabled={busy} onClick={confirmDiscard}>Confirm discard retained review</button>
       </section>}
       <div className={`${cardCls} p-4 flex gap-3 flex-wrap items-center`}>
         {manualReady && <select aria-label="Source upload type" className={inpCls} disabled={busy} value={uploadKind} onChange={e => { setUploadKind(e.target.value); upload.current = null; }}><option value="csv">PFG / US Foods CSV</option><option value="source">Other invoice / receipt source</option></select>}
@@ -408,7 +498,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
           {selected.parse_run_id && !selected.manualRecord && <button className={btnGhost} disabled={busy} onClick={() => action(() => loadSourceRows())}>Show all source fields</button>}
           {sourceRows && <div className="overflow-auto max-h-96"><table className="text-xs"><thead><tr><th>Record</th>{sourceRows.headers.map((h, i) => <th className="px-2" key={i}>{h} [{i + 1}]</th>)}</tr></thead><tbody>{sourceRows.rows.map(row => <tr key={row.row_ordinal}><td>{row.row_ordinal}</td>{row.raw_values.map((v, i) => <td className="border border-slate-700 p-2 whitespace-nowrap" key={i}>{v}</td>)}</tr>)}</tbody></table>{sourceRows.nextOffset != null && <button className={btnGhost} disabled={busy} onClick={() => action(() => loadSourceRows(sourceRows.nextOffset))}>Next source records</button>}</div>}
         </div>
-        {selected.documents.map(d => <PurchaseDocumentReview key={`${previewEpoch}:${selected.id}:${d.id}:${d.status}`} document={d} items={items} history={history} onPost={post} onCheckSaved={checkSaved} onInspectSaved={inspectSaved} busy={busy || recoveryUnavailable} />)}
+        {selected.documents.map(d => <PurchaseDocumentReview key={`${previewEpoch}:${selected.id}:${d.id}:${d.status}`} document={d} items={items} history={history} onPost={post} onCheckSaved={checkSaved} onInspectSaved={inspectSaved} busy={busy || recoveryUnavailable || !!discardReview} />)}
         {selected.documents.filter(d => d.correctionAvailable).map(d => <PurchaseCorrectionReview key={`correction:${previewEpoch}:${d.id}`} document={d} items={items} history={history} onPreview={previewCorrection} onCorrect={correct} onHistory={id => api.purchaseCorrections(restaurantId, id)} busy={busy} />)}
       </>}
       <div className={`${cardCls} p-4 overflow-auto`}><h3 className="font-semibold mb-2">Food purchase history</h3><table className="text-sm w-full"><thead><tr>{["Received / movement date", "Invoice", "Entry", "Item", "Quantity", "Inventory unit", "Food amount"].map(h => <th className="text-left p-2" key={h}>{h}</th>)}</tr></thead><tbody>{history.map(h => <tr key={h.fact_id || h.line_id}><td className="p-2">{h.inventory_record_date}</td><td>{h.document_number}</td><td>{h.fact_kind || "initial"}</td><td>{h.description_snapshot}</td><td>{h.base_quantity}</td><td>{h.base_unit}</td><td>{h.inventory_cost_amount}</td></tr>)}</tbody></table></div>

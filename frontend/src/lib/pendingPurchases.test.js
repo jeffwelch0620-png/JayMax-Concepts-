@@ -70,13 +70,29 @@ test("clearing one confirmed request preserves the other and rejects the wrong k
 test("unavailable storage and missing identity fail closed", () => {
   expect(() => pendingPurchaseJournal("owner-1", "berts", () => { throw new Error("denied"); }).list()).toThrow();
   expect(() => pendingPurchaseJournal(undefined, "berts", () => storage).list()).toThrow();
-  expect(() => journal("owner-1", "owner").list()).toThrow();
+  expect(() => journal("owner-1", "invalid/store").list()).toThrow();
 });
 
 test("malformed JSON and excessive records or bytes cannot become an empty journal", () => {
   journal().save(record()); const [key] = [...values.keys()]; values.set(key, "broken JSON"); expect(() => journal().list()).toThrow();
   values.clear(); for (let n = 0; n < 32; n++) journal().save(record(`version-${n}`));
-  expect(() => journal().save(record("version-33"))).toThrow(); expect(journal().list()).toHaveLength(32);
+  expect(() => journal().save(record("version-33"))).toThrow("32 unresolved retained reviews"); expect(journal().list()).toHaveLength(32);
   values.clear(); const huge = record(); huge.body.lines[0].note = "X".repeat(2 * 1024 * 1024);
-  expect(() => journal().save(huge)).toThrow(); expect(journal().list()).toEqual([]);
+  expect(() => journal().save(huge)).toThrow("2 MiB recovery limit"); expect(journal().list()).toEqual([]);
+});
+
+test("a valid new location can retain and clear a review without joining a client store allowlist", () => {
+  for (const store of ["new-location_5", "comm"]) {
+    journal("owner-1", store).save(record());
+    expect(journal("owner-1", store).list()).toEqual([record()]);
+    expect(journal("owner-2", store).list()).toEqual([]);
+    journal("owner-1", store).clear("version-1", KEY);
+    expect(journal("owner-1", store).list()).toEqual([]);
+  }
+});
+
+test("storage errors identify unavailable storage separately from invalid recovery records", () => {
+  expect(() => pendingPurchaseJournal("owner-1", "berts", () => { throw new Error("denied"); }).list()).toThrow("storage is unavailable");
+  journal().save(record()); const [key] = [...values.keys()]; values.set(key, "invalid JSON");
+  expect(() => journal().list()).toThrow("corrupt or invalid");
 });
