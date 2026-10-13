@@ -1,8 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Pending initial purchase recovery follow-up - October 12, 2026
+## Current source reopening follow-up - October 13, 2026
 
-The [draft PR23 follow-up](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/23)
+PR23 is merged at **4f93748** and deployed on the Render frontend. Its live
+same-tab reload/sign-in recovery and competing-request discard trials passed.
+The newer-source trial found a safe dead end: discard reopened revision 1's
+original file even though revision 2 was captured in another file. Posting stayed
+blocked, revision 2 remains unposted, and the closed **$212** Food Cost control
+was preserved. The transport relay is stopped and normal app bundles are restored.
+
+The local **codex/latest-source-discard-reopen** follow-up adds a read-only
+`currentSource` descriptor to purchase previews. Confirmed discard follows the
+server's current invoice identity, version and captured file, validates that
+source and checks status again before clearing the exact retained request.
+Missing or changed pointers and failed or foreign reads preserve recovery.
+There is no automatic posting, schema/migration change or hosted configuration
+change. This follow-up is proposed in
+[draft PR24](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/24),
+with GitHub CI required before review acceptance. It is not merged or deployed. See the
+[current-source recovery review](docs/LATEST_SOURCE_RECOVERY.md).
+
+## Initial purchase recovery baseline - October 12, 2026
+
+The [merged PR23 follow-up](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/23)
 on **codex/purchase-request-reload-recovery** retains a
 submitted initial purchase's exact body and key across reload and same-user
 sign-in in the same tab. It saves the scoped recovery record before the first
@@ -10,7 +30,8 @@ POST, restores frozen review values, and checks saved status before permitting
 an explicit retry. No purchase is sent automatically. Storage failures stop
 initial posting; another user or restaurant cannot inherit the review through
 Invoice Master. Confirmed local discard checks status before and after
-confirmation, refuses own saved outcomes and reopens the current source.
+confirmation and refuses own saved outcomes. The separate-file newer-source
+reopen gap found during live acceptance is addressed in the local follow-up above.
 It does not cancel an earlier request. An already posted invoice follows the
 saved-purchase/correction path, while late-commit conflicts retain the revised
 command without an automatic resend. Capacity, size and storage errors have
@@ -26,8 +47,9 @@ parent using temporary two-call browser routing to a loopback relay. Its exact
 manual retry returned the original purchase with zero duplicate/updated rows,
 and all 86 observed relations preserved the original **$212** Food Cost control.
 The relay is stopped, the routing override is disabled and its temporary browser
-permission is reset. This draft reload-recovery implementation is unmerged and
-needs separate deployed acceptance after review. Manual source capture and
+permission was reset for that earlier trial. PR23's reload/sign-in and competing
+discard cases now pass live; newer-source reopening needs follow-up deployment
+and acceptance. Manual source capture and
 correction command persistence remain separate follow-ups.
 
 ## Saved purchase comparison follow-up - October 12, 2026

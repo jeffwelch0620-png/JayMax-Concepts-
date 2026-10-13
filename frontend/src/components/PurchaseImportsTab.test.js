@@ -14,7 +14,8 @@ jest.mock("../lib/api", () => ({
 
 const doc = {
   id: "document-1", status: "awaiting_review", errors: [],
-  header: { document_id: "identity-1", vendor_id: "pfg", document_number: "TEST-1", document_type: "invoice", invoice_date: "2026-10-01", confirmed_currency: "USD", fees_source: "1", tax_source: "2" },
+  currentSource: { documentId: "identity-1", versionId: "document-1", fileId: "file-1", revision: 1 },
+  header: { document_id: "identity-1", revision: 1, vendor_id: "pfg", document_number: "TEST-1", document_type: "invoice", invoice_date: "2026-10-01", confirmed_currency: "USD", fees_source: "1", tax_source: "2" },
   totals: { lineTotal: "40", statedTotal: "43", difference: "0" },
   lines: [{ id: "line-1", description_snapshot: "Synthetic food", shipped_quantity_source: "2", extended_amount_source: "40" }],
 };
@@ -694,14 +695,22 @@ test("discard does not make a still-held invoice postable", async () => {
 test("discarding a superseded held version opens the newer source version for an explicit review", async () => {
   crypto.randomUUID.mockReturnValueOnce("00000000-0000-4000-8000-000000000001").mockReturnValue("00000000-0000-4000-8000-000000000002");
   await submittedForDiscard();
-  const latest = { ...doc, id: "latest-version", lines: [{ ...doc.lines[0], id: "latest-line" }] };
-  api.purchaseFile.mockResolvedValue({ ...retainedFile, documents: [latest] });
+  const currentSource = { documentId: "identity-1", versionId: "latest-version", fileId: "latest-file", revision: 2 };
+  const latest = { ...doc, id: "latest-version", header: { ...doc.header, revision: 2 }, currentSource,
+    lines: [{ ...doc.lines[0], id: "latest-line", vendor_sku_snapshot: "TEST-R2" }] };
+  const superseded = { ...doc, currentSource, status: "held", errors: ["A newer source version exists"] };
+  // The original captured file still contains only R1, as it did in the live test.
+  api.purchaseFile.mockImplementation(async (_store, fileId) => fileId === "latest-file"
+    ? { ...retainedFile, id: "latest-file", documents: [latest] } : { ...retainedFile, documents: [superseded] });
   api.checkPurchaseSavedStatus.mockReset()
-    .mockResolvedValueOnce({ ...doc, status: "held", errors: ["A newer source version exists"] })
-    .mockResolvedValueOnce({ ...doc, status: "held", errors: ["A newer source version exists"] })
+    .mockResolvedValueOnce(superseded)
+    .mockResolvedValueOnce(superseded)
     .mockResolvedValue(latest);
   await click(discardButton()); await click(confirmDiscardButton());
+  expect(api.purchaseFile).toHaveBeenLastCalledWith("berts", "latest-file");
   expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual([]);
+  expect(container.textContent).toContain("TEST-R2");
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
   expect(container.querySelector("fieldset").disabled).toBe(false);
   await verifyFreshReview(); await click(button("Confirm and post purchase"));
   expect(api.postPurchase).toHaveBeenCalledTimes(2);
@@ -709,6 +718,49 @@ test("discarding a superseded held version opens the newer source version for an
   expect(api.postPurchase.mock.calls[1][2].lines[0].line_id).toBe("latest-line");
   expect(api.postPurchase.mock.calls[1][3]).toBe("00000000-0000-4000-8000-000000000002");
 });
+
+test.each([
+  undefined,
+  { ...doc.currentSource, documentId: "foreign-identity" },
+  { ...doc.currentSource, fileId: null },
+  { ...doc.currentSource, versionId: "" },
+  { ...doc.currentSource, revision: "1" },
+  { ...doc.currentSource, versionId: "another-version", revision: 1 },
+  { ...doc.currentSource, revision: 2 },
+])("an absent or malformed current-source pointer preserves the exact retained review", async currentSource => {
+  const original = await submittedForDiscard();
+  api.checkPurchaseSavedStatus.mockReset().mockResolvedValue({ ...doc, currentSource });
+  await click(discardButton());
+  expect(confirmDiscardButton()).toBeUndefined();
+  expect(container.textContent).toContain("Current source was not confirmed");
+  expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+  expect(api.postPurchase).toHaveBeenCalledTimes(1);
+});
+
+test.each(["wrong-file", "wrong-version", "wrong-identity", "wrong-revision", "duplicate", "newer-pointer", "fetch-failure", "final-pointer"])(
+  "a %s current-source reopening failure preserves the original command", async failure => {
+    const original = await submittedForDiscard();
+    const currentSource = { documentId: "identity-1", versionId: "latest-version", fileId: "latest-file", revision: 2 };
+    const superseded = { ...doc, currentSource, status: "held", errors: ["A newer source version exists"] };
+    const latest = { ...doc, id: "latest-version", currentSource, header: { ...doc.header, revision: 2 } };
+    const later = { ...currentSource, fileId: "revision-3-file", versionId: "revision-3", revision: 3 };
+    const returned = { ...latest,
+      ...(failure === "wrong-version" ? { id: "foreign-version" } : {}),
+      ...(failure === "wrong-identity" ? { header: { ...latest.header, document_id: "foreign-identity" } } : {}),
+      ...(failure === "wrong-revision" ? { header: { ...latest.header, revision: 1 } } : {}),
+      ...(failure === "newer-pointer" ? { currentSource: later } : {}) };
+    api.checkPurchaseSavedStatus.mockReset().mockResolvedValueOnce(superseded)
+      .mockResolvedValue(failure === "final-pointer" ? { ...superseded, currentSource: later } : superseded);
+    await click(discardButton());
+    api.purchaseFile.mockReset();
+    if (failure === "fetch-failure") api.purchaseFile.mockRejectedValue(new Error("Latest source unavailable"));
+    else api.purchaseFile.mockResolvedValue({ ...retainedFile, id: failure === "wrong-file" ? "file-1" : "latest-file",
+      documents: failure === "duplicate" ? [returned, returned] : [returned] });
+    await click(confirmDiscardButton());
+    expect(pendingPurchaseJournal("test-owner", "berts").list()).toEqual(original);
+    expect(confirmDiscardButton()).toBeDefined();
+    expect(api.postPurchase).toHaveBeenCalledTimes(1);
+  });
 
 test("discard leaves another submitted invoice in the same source frozen with its exact command", async () => {
   const original = await submittedForDiscard();

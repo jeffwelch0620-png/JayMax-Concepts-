@@ -357,13 +357,32 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
     if (["saved", "saved_corrected"].includes(outcome.kind)) throw new Error("Your original request was saved. The review was not discarded; restore it to inspect the saved purchase.");
     return outcome;
   }
+  function discardSource(outcome, record) {
+    // Already-posted reviews keep the existing saved-purchase/correction path.
+    if (outcome.kind === "other_request") return null;
+    const source = outcome.document.currentSource;
+    if (!source || source.documentId !== record.document.header.document_id
+      || typeof source.versionId !== "string" || !source.versionId
+      || typeof source.fileId !== "string" || !source.fileId
+      || !Number.isSafeInteger(source.revision) || source.revision < 1
+      || !Number.isSafeInteger(outcome.document.header.revision) || outcome.document.header.revision < 1
+      || source.revision < outcome.document.header.revision
+      || ((source.versionId === record.versionId) !== (source.revision === outcome.document.header.revision))) {
+      throw new Error("Current source was not confirmed. The retained review was not discarded. Reload or check again.");
+    }
+    return source;
+  }
+  function sameSource(a, b) {
+    return a?.documentId === b?.documentId && a?.versionId === b?.versionId
+      && a?.fileId === b?.fileId && a?.revision === b?.revision;
+  }
   async function prepareDiscard(record) {
     await action(async () => {
       const current = currentRetained(record);
       const result = await api.checkPurchaseSavedStatus(restaurantId, current.versionId);
       if (!scope.active) return;
       const outcome = discardOutcome(result, current);
-      setDiscardReview({ record: current, outcome });
+      setDiscardReview({ record: current, outcome, source: discardSource(outcome, current) });
     });
   }
   async function confirmDiscard() {
@@ -373,18 +392,23 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
       const current = currentRetained(choice.record);
       // Fetch the source before the second status read so a failed reopening
       // cannot consume the recovery copy. Confirmation never trusts cached status.
-      const file = await api.purchaseFile(restaurantId, current.source.id);
+      const fileId = choice.source?.fileId ?? current.source.id;
+      const file = await api.purchaseFile(restaurantId, fileId);
       if (!scope.active) return;
-      if (file?.id !== current.source.id || !Array.isArray(file.documents)) throw new Error("Saved source was not confirmed. The retained review was not discarded.");
+      if (file?.id !== fileId || !Array.isArray(file.documents)) throw new Error("Saved source was not confirmed. The retained review was not discarded.");
       for (const document of file.documents) {
         if (typeof document?.id !== "string" || !document.id || typeof document.header?.document_id !== "string" || !document.header.document_id) throw new Error("Saved source identity was not confirmed. The retained review was not discarded.");
         validatePurchaseDocument(document, document.id);
       }
-      const sourceDocument = file.documents.find(d => d.header?.document_id === current.document.header.document_id);
-      if (!sourceDocument) throw new Error("Saved source identity was not confirmed. The retained review was not discarded.");
+      const candidates = file.documents.filter(d => d.header.document_id === current.document.header.document_id
+        && (!choice.source || (d.id === choice.source.versionId && d.header.revision === choice.source.revision)));
+      if (candidates.length !== 1) throw new Error("Saved source identity was not confirmed. The retained review was not discarded.");
+      const sourceDocument = candidates[0];
+      if (choice.source && !sameSource(sourceDocument.currentSource, choice.source)) throw new Error("Current source changed. The retained review was not discarded. Cancel and check again.");
       const result = await api.checkPurchaseSavedStatus(restaurantId, current.versionId);
       if (!scope.active) return;
       const outcome = discardOutcome(result, current);
+      if (outcome.kind !== "other_request" && !sameSource(discardSource(outcome, current), choice.source)) throw new Error("Current source changed. The retained review was not discarded. Cancel and check again.");
       currentRetained(current);
       journal.clear(current.versionId, current.key);
       refreshPending();

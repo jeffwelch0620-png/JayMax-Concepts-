@@ -151,7 +151,21 @@ async def document_preview(conn, store_id, version_id):
                 and p['source_snapshot']['supplierProduct']['vendor_sku']==record['vendor_sku_snapshot']]
             if len(candidates)==1:record['unitProfileSuggestion']=serial(candidates[0])
     errors = list(header['projection_errors']) + totals['errors']
-    latest = await conn.fetchval('SELECT max(revision) FROM purchasing.document_versions WHERE document_id=$1', header['document_id'])
+    # A reissued invoice can be captured in a different file. Return the current
+    # source by invoice identity; reopening the original file alone stays stale.
+    current_source = await conn.fetchrow('''SELECT d.document_id AS "documentId",
+        d.id AS "versionId",d.revision,f.id AS "fileId"
+        FROM purchasing.document_versions d
+        JOIN purchasing.document_identities i ON i.id=d.document_id AND i.store_id=$2
+        LEFT JOIN LATERAL (
+            SELECT f.id FROM purchasing.document_source_rows s
+            JOIN purchasing.parse_runs p ON p.id=s.parse_run_id
+            JOIN purchasing.import_files f ON f.id=p.file_id AND f.store_id=$2
+            WHERE s.document_version_id=d.id
+            ORDER BY f.captured_at DESC,f.id DESC LIMIT 1
+        ) f ON true
+        WHERE d.document_id=$1 ORDER BY d.revision DESC LIMIT 1''', header['document_id'], store_id)
+    latest = current_source['revision']
     if header['revision'] != latest and header['posted_version_id'] != version_id:
         errors.append('A newer source version exists; review the latest version before posting')
     if legacy:
@@ -173,7 +187,8 @@ async def document_preview(conn, store_id, version_id):
         current_mappings=[dict(r) for r in await conn.fetch('''SELECT m.* FROM purchasing.current_posting_lines p
             JOIN purchasing.mapping_decisions m ON m.id=p.mapping_id WHERE p.document_version_id=$1''',version_id)]
     return serial({'correctionAvailable':bool(correction_ready and header['posted_batch_id'] and header['revision']==latest and not source_errors),
-                   'sourceErrors':source_errors,'currentMappings':current_mappings,'id': version_id, 'header': header, 'lines': records,
+                   'sourceErrors':source_errors,'currentMappings':current_mappings,'currentSource':dict(current_source),
+                   'id': version_id, 'header': header, 'lines': records,
                    'totals': totals, 'status': status, 'errors': sorted(set(errors))})
 
 

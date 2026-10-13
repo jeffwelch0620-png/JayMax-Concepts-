@@ -154,6 +154,48 @@ class PurchaseIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 target=doc['header'] if parts[0]=='documents' else doc['lines'][0] if parts[0]=='lines' else parties[parts[1]]
                 self.assertEqual(purchases.serial(target[parts[-1]]),purchases.serial(typed(raw,spec['type'])),spec['header'])
 
+    async def test_current_source_follows_reissued_invoice_across_files_without_writes(self):
+        first, first_bytes, *_ = await self.capture(number='TEST-ONLY-CURRENT-SOURCE')
+        old = first['documents'][0]
+        second, second_bytes, *_ = await self.capture(number='TEST-ONLY-CURRENT-SOURCE',
+            overrides={'vendor_sku_snapshot': 'TEST-R2'})
+        new = second['documents'][0]
+        self.assertNotEqual(first['id'], second['id'])
+        self.assertNotEqual(old['id'], new['id'])
+        self.assertEqual(old['header']['document_id'], new['header']['document_id'])
+        pointer = {'documentId': old['header']['document_id'], 'versionId': new['id'],
+                   'fileId': second['id'], 'revision': 2}
+        async def purchase_rows(conn):
+            tables = await conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='purchasing' ORDER BY tablename")
+            return {r['tablename']: await conn.fetchval(
+                f'SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM purchasing."{r["tablename"]}" r')
+                for r in tables}
+        async with self.pool.acquire() as conn:
+            before = await purchase_rows(conn)
+        old_read = await self.client.get(f"/api/pg/purchases/berts/documents/{old['id']}")
+        self.assertEqual(old_read.status_code, 200, old_read.text)
+        self.assertEqual(old_read.json()['currentSource'], pointer)
+        self.assertEqual(old_read.json()['status'], 'held')
+        self.assertIn('A newer source version exists; review the latest version before posting', old_read.json()['errors'])
+        original_file = await self.client.get(f"/api/pg/purchases/berts/files/{first['id']}")
+        self.assertEqual([d['id'] for d in original_file.json()['documents']], [old['id']])
+        self.assertEqual(original_file.json()['documents'][0]['currentSource'], pointer)
+        current_file = await self.client.get(f"/api/pg/purchases/berts/files/{pointer['fileId']}")
+        self.assertEqual(current_file.json()['documents'][0]['id'], new['id'])
+        self.assertEqual(current_file.json()['documents'][0]['currentSource'], pointer)
+        self.assertEqual(current_file.json()['documents'][0]['status'], 'awaiting_review')
+        for file, raw in ((first, first_bytes), (second, second_bytes)):
+            self.assertEqual((await self.client.get(f"/api/pg/purchases/berts/files/{file['id']}/source")).content, raw)
+        foreign = await self.client.get(f"/api/pg/purchases/rudds/documents/{old['id']}")
+        self.assertEqual(foreign.status_code, 404)
+        foreign_file = await self.client.get(f"/api/pg/purchases/rudds/files/{pointer['fileId']}")
+        self.assertEqual(foreign_file.status_code, 404)
+        async with self.pool.acquire() as conn:
+            after = await purchase_rows(conn)
+            self.assertEqual(after, before)
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.posting_batches'), 0)
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.actual_purchase_facts'), 0)
+
     async def test_received_date_cost_fee_tax_and_track_isolation(self):
         file,*_=await self.capture();doc=file['documents'][0]
         result=await self.post(doc);self.assertEqual(result.status_code,200,result.text)

@@ -43,6 +43,12 @@ no change. Confirmation fetches the source and reads status again before
 clearing the exact original version/key; failed or contradictory reads, foreign
 identities, storage failure or a user/location change preserve the record.
 
+The October 13 live test found that PR23 reopened the original file when a newer
+revision was captured in a separate file. It stayed held and created no purchase,
+but did not reopen the latest revision. The local
+[current-source follow-up](LATEST_SOURCE_RECOVERY.md) corrects that read path;
+its deployed acceptance remains pending.
+
 Reopening uses current server fields and requires a new explicit review, rather
 than unfreezing the old submitted body. An already posted document exposes its
 saved purchase/correction path. A still-held document remains blocked until its
@@ -99,13 +105,20 @@ lifecycle memo dependency warning; the identity-bearing scope was corrected
 without disabling lint, and the affected tests and final full suite passed.
 The amended output is `main.2a2c6bf8.js` and remains local.
 
-This implementation is proposed in draft PR23 from main `cd29f22`. It is not a deployed
-reload or session-expiry acceptance result. The prior real acknowledgement-drop
+PR23 was merged at `4f93748` and deployed on the Render frontend. The October 13
+live trial passed a pre-forward transport failure, same-tab reload and normal
+same-user sign-in, one exact manual retry, a real truncated acknowledgement after
+verified commit, and own-saved recovery after another reload. The competing-request
+trial passed frozen original fields, blocked retry, cancelled discard and confirmed
+discard into the saved-purchase comparison with one initial batch. The newer-source
+trial failed to reopen revision 2 across separate captured files and remains held
+with zero purchases for that invoice. The prior real acknowledgement-drop
 test passed in the full Render parent under controlled fixture-specific browser
 routing: **1 of 3,831 response bytes** after independently verified commit; exact
 manual retry returned the original batch with no added or updated rows. Its
 all-86-relation comparison preserved the original **$212** Food Cost control.
-Those transport results apply to the deployed baseline, not this new local code.
+Those earlier transport results retain their original scope. The current-source
+follow-up has local regression coverage and still requires separate deployed proof.
 
 This recovery copy is scoped to the current tab and logical user/restaurant
 identity; it is not encrypted browser storage or a separate authorization
@@ -125,15 +138,17 @@ policy, credential, server command, schema, migration, hosting or Supabase
 connection change is included. Track 1 accounting remains independent
 of prep and sales.
 
-## Next acceptance
+## Remaining acceptance
 
-1. Review this local follow-up as a draft PR and its required Inventory CI.
+1. Review the local current-source follow-up as a draft PR and its required Inventory CI.
 2. Obtain separate merge approval before the automatic Render test deployment.
-3. Rehearse a labelled fictional unresolved **initial purchase** across reload
-   and normal same-user reauthentication. Confirm the original key/body, fresh
-   reads, no automatic POST, exact manual retry and one committed purchase.
-   Exercise held and competing-request discard, cancellation of that local
-   confirmation, and an original commit arriving before revised posting.
+3. Re-run the newer-source hold and confirmed-discard case using distinct captured
+   files. Confirm the reopened revision, source identity and line IDs, an explicit
+   new review/key, and exactly one purchase of the latest version. Preserve the
+   failed fixture's two captured versions unposted; its local review was already
+   discarded. A fresh labelled fixture is needed to recreate that complete
+   unresolved-request sequence through normal controls. Do not count manual file
+   selection as proof of automatic current-source reopening.
 4. Preserve all existing fixtures and the closed **$212** control; finish with an
    independent complete database comparison. Concurrent first posting,
    independent employee authority and reviewed fictional-data cleanup remain
