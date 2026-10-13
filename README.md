@@ -15,7 +15,9 @@ server's current invoice identity, version and captured file, validates that
 source and checks status again before clearing the exact retained request.
 Missing or changed pointers and failed or foreign reads preserve recovery.
 There is no automatic posting, schema/migration change or hosted configuration
-change. This follow-up is not pushed or deployed. See the
+change. This follow-up is proposed in
+[draft PR24](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/24),
+with GitHub CI required before review acceptance. It is not merged or deployed. See the
 [current-source recovery review](docs/LATEST_SOURCE_RECOVERY.md).
 
 ## Initial purchase recovery baseline - October 12, 2026

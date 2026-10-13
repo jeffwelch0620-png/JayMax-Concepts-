@@ -76,8 +76,9 @@ regression initially failed because the test snapshot incorrectly assumed an
 purchasing table, and the new separate-file regression passed in a focused rerun
 (one passed, 21 deselected). These are **52 distinct backend checks** accepted
 across the broad run and focused rerun, not a claimed clean 52-test single run.
-The test server was stopped after each run. This branch is not
-pushed, merged or deployed. Review and required GitHub CI come before separate
+The test server was stopped after each run. This change is proposed in
+[draft PR24](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/24)
+and is not merged or deployed. Required GitHub CI and review come before separate
 merge approval and the automatic Render test deployment. Then validate the
 newer-source path live, with an independent database comparison and the original
 $212 control. Preserve the failed fixture's two unposted versions; a fresh
