@@ -1,5 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Additive source-index installer - local preparation, October 13, 2026
+
+[PR25](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/25) is merged at
+**fbf06b7**, incorporating documentation refresh **53809e1**. All four checks pass
+on the refreshed head and [merged main](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38498944157).
+Public app, bundle and API checks return HTTP 200; the API reports a connected
+database. These public checks do not identify the Render deployment commit.
+Migration 30 remains unapplied to Supabase.
+
+The separate **codex/additive-source-index-install** follow-up adds a read-only
+plan, atomic index/ledger application and independent uncertain-commit recovery.
+Its CLI accepts only disposable local PostgreSQL. It preserves the original
+29-file delivery mapping and complete earlier ledger, distinguishes raw file
+and executed SQL-body checksums, and holds changed database baselines. Final local
+validation passes **621 reported cases** with zero failures, errors or skips:
+569 Windows offline cases and 52 disposable PostgreSQL cases, including all 12
+incremental installer cases. The fictional **$55** actual Food Cost report is
+preserved, successful-run role/database inventories match and the server is
+stopped. Earlier corrected failures and the intermediate 30-case pass are
+retained as separate evidence. The follow-up remains local; GitHub CI has not
+run for it. Review precedes a separately approved hosted adapter and rollout.
+See [the incremental installation procedure and scope](docs/ADDITIVE_SOURCE_INDEX_INSTALL.md).
+
 ## Invoice-source lookup readiness - PR25 review, October 13, 2026
 
 The **codex/purchase-source-lookup-index** candidate adds a version-first source
@@ -15,9 +38,9 @@ runs preserve their database/role inventories, and the local server is stopped.
 689 frontend tests across 67 suites and the strict production build, 40 reported
 disposable PostgreSQL cases, 549 reported Windows offline cases and the required
 aggregate check. These CI results are separate from the additional 11 local
-installation/catalog cases. The owner approved refreshing documentation and
-merging PR25; the documentation revision must pass CI before merge. Migration 30
-has not been applied to Supabase. Next is a separately reviewed additive installer
+installation/catalog cases. The owner-approved documentation revision passed all
+four checks in [run 38498627229](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38498627229)
+before merge. Migration 30 has not been applied to Supabase. Next is the separately reviewed additive installer
 for the existing 29-file installation, preserving older migration history and
 handling uncertain commit outcomes before any approved hosted DDL.
 See the [index contract, validation and later rollout boundary](docs/PURCHASE_SOURCE_LOOKUP_INDEX.md).

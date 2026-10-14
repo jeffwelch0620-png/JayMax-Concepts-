@@ -16,7 +16,8 @@ OFFLINE_MODULES = ('catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hos
 OFFLINE_CLASSES = ('deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
- 'menu_contract::MenuGraphValidationTests native_purchases::ParserTests').split()
+ 'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
+ 'apply_additive_migration::AdditivePlanGuards').split()
 DATABASE_CASES = (
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_same_version_correction_and_exact_retry'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_reissued_version_correction_and_exact_retry'),
@@ -46,6 +47,19 @@ DATABASE_CASES = (
  ('deployment_readiness','DeploymentReadinessTests','test_readiness_detects_function_exposure_then_hardens_full_chain_and_restores'),
  ('actual_inventory','ActualInventoryTests','test_explicit_value_usage_math_ignores_sales_flag_and_prep'),
  ('actual_inventory','ActualInventoryTests','test_prepared_items_excluded_and_fixed_unit_conflict_rolls_back'))
+DATABASE_CASES += tuple(('apply_additive_migration', 'AdditiveDatabaseTests', name) for name in (
+ 'test_dry_run_is_readonly_and_success_is_durable_without_business_changes',
+ 'test_failed_ledger_insert_rolls_back_the_index_and_all_history',
+ 'test_lost_commit_ack_is_unknown_until_fresh_read_and_never_blindly_reapplied',
+ 'test_partial_or_changed_native_body_and_changed_older_history_are_refused',
+ 'test_changed_checksum_or_database_rows_hold_before_ddl',
+ 'test_existing_or_wrong_index_without_ledger_is_refused',
+ 'test_unrelated_readiness_failure_is_refused',
+ 'test_lock_contention_times_out_without_recording_or_index_creation',
+ 'test_wrong_database_identity_and_nested_application_are_refused',
+ 'test_reconcile_refuses_partial_index_and_forged_additive_history',
+ 'test_unresolved_writer_holds_reconciliation_until_disconnect_proves_rollback',
+ 'test_cli_modes_require_reviewed_plan_hash_and_keep_existing_receipts'))
 
 
 def main():
