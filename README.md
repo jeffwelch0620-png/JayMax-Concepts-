@@ -1,5 +1,25 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Hosted index preflight — merged adapter, backup hold, October 14, 2026
+
+[PR27](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/27) merged with
+owner approval at **a39e46f**, and all four
+[merged-main checks pass](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38606086807).
+Read-only hosted inspection verifies the original 29 deliveries and 25 historical
+records, all 54 ledger rows, client denial and the absent source index. The two
+recorded backend roles had no sessions in that observation; two active Toast
+ingestion jobs remain part of the writer inventory. No hosted index or privilege
+change, invoice import or hosting/connection change occurred.
+
+The fresh backup/restore rehearsal is **held** by connection loss during extended
+read-only inspection; no recovery or maintenance-window acceptance is claimed.
+The next local follow-up preserves the original disconnect when transaction
+cleanup also fails. It passes **242 offline methods plus 395 subtests (637)**,
+with zero failures/errors/skips, and is prepared for independent draft review. This offline checkpoint
+is distinct from PR27's earlier 637-case local offline/database checkpoint below.
+See the [preflight and backup-hold checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md)
+for evidence boundaries, scheduled-job review and the next approval sequence.
+
 ## Hosted source-index adapter - local preparation, October 14, 2026
 
 [PR26](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/26) is merged with

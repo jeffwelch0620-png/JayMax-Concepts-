@@ -20,6 +20,7 @@ import asyncpg
 from cryptography.fernet import Fernet
 from db_tls import connection_tls, DEFAULT_CA
 import native_backup as native
+from readonly_snapshot import readonly_snapshot
 
 SCHEMAS = ('public', 'purchasing', 'actual_inventory', 'prep_inventory', 'integrations', 'supabase_migrations')
 MANAGED = {'auth', 'cron', 'extensions', 'graphql', 'graphql_public', 'net', 'realtime', 'storage', 'vault'}
@@ -238,7 +239,7 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
     try:
         conn = await asyncpg.connect(url, ssl=context, timeout=20, command_timeout=60, statement_cache_size=0)
         await native.configure(conn)
-        async with conn.transaction(isolation='repeatable_read', readonly=True):
+        async with readonly_snapshot(conn):
             found = {r['nspname'] for r in await conn.fetch("SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname<>'information_schema'")}
             if set(SCHEMAS) - found or found - set(SCHEMAS) - MANAGED:
                 raise BackupError('Missing or unclassified database schemas')
@@ -340,7 +341,7 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
         await tool(pg_restore, ['--single-transaction', '--exit-on-error', '--clean', '--if-exists', '--use-list=' + str(listing), '--no-password', '--dbname=' + settings['database'], str(raw)], settings)
         conn = await asyncpg.connect(**settings, ssl=False)
         await native.configure(conn)
-        async with conn.transaction(isolation='repeatable_read', readonly=True):
+        async with readonly_snapshot(conn):
             algorithm = manifest.get('rowFingerprintAlgorithm')
             if algorithm not in (None, ROW_ALGORITHM):
                 raise BackupError('Unsupported row fingerprint algorithm')

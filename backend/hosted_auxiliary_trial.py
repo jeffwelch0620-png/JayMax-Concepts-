@@ -22,6 +22,7 @@ import db_pg
 import hosted_test_trial
 import runtime_permissions as candidate
 from dotenv import dotenv_values
+from readonly_snapshot import readonly_snapshot
 
 def quoted(value):
     return '"' + value.replace('"', '""') + '"'
@@ -29,7 +30,7 @@ def quoted(value):
 async def snapshot(conn):
     """Hash effective object ACL entries, policies and ledger; retain no business rows."""
     namespaces=['public', *auxiliary.PRIVATE]
-    async with conn.transaction(isolation='repeatable_read', readonly=True):
+    async with readonly_snapshot(conn):
         await conn.execute("SET LOCAL search_path=pg_catalog; SET LOCAL statement_timeout='20s'")
         catalog=await candidate.catalog_contracts(conn)
         acl=await conn.fetch('''
