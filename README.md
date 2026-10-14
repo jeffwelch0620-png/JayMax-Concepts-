@@ -15,7 +15,7 @@ The fresh backup/restore rehearsal is **held** by connection loss during extende
 read-only inspection; no recovery or maintenance-window acceptance is claimed.
 The next local follow-up preserves the original disconnect when transaction
 cleanup also fails. It passes **242 offline methods plus 395 subtests (637)**,
-with zero failures/errors/skips, and is not yet pushed. This offline checkpoint
+with zero failures/errors/skips, and is prepared for independent draft review. This offline checkpoint
 is distinct from PR27's earlier 637-case local offline/database checkpoint below.
 See the [preflight and backup-hold checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md)
 for evidence boundaries, scheduled-job review and the next approval sequence.

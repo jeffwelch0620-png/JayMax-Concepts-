@@ -68,7 +68,8 @@ connection loss, failed rollback, cancellation, failed begin/commit, and the
 actual metadata-reader/exporter entry points. The existing five dependency
 deprecation warnings are retained. This is local error-handling evidence, not a
 successful hosted export or local database restore. Counts overlap earlier
-checkpoints and are not summed. This follow-up is local and has not been pushed.
+checkpoints and are not summed. This follow-up is prepared for independent draft
+review; candidate CI is separate from the merged-main result above.
 
 ## Next approval and execution sequence
 
