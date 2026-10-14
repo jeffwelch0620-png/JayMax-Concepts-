@@ -218,9 +218,10 @@ class HostedAdapterGuards(unittest.TestCase):
 
 class HostedWriterGuards(unittest.IsolatedAsyncioTestCase):
     async def test_unobservable_unknown_role_writes_and_reviewed_idle_sessions_hold_with_redacted_counts(self):
-        for field in ('application_sessions', 'write_transactions', 'unobservable_sessions', 'verified_roles'):
-            counts = dict(verified_roles=2, application_sessions=0, write_transactions=0, unobservable_sessions=0)
-            counts[field] = 1
+        for field in ('application_sessions', 'write_transactions', 'unobservable_sessions', 'verified_roles', 'can_inspect'):
+            counts = dict(verified_roles=2, application_sessions=0, write_transactions=0, unobservable_sessions=0,
+                          can_inspect=True)
+            counts[field] = False if field == 'can_inspect' else 1
             conn = SimpleNamespace(is_in_transaction=lambda: True, execute=AsyncMock(),
                                    fetchrow=AsyncMock(return_value=counts))
             observed = []
@@ -235,7 +236,7 @@ class HostedWriterGuards(unittest.IsolatedAsyncioTestCase):
         tx = MagicMock()
         tx.__aenter__ = AsyncMock(); tx.__aexit__ = AsyncMock()
         conn = SimpleNamespace(is_in_transaction=lambda: False, transaction=MagicMock(return_value=tx),
-            execute=AsyncMock(), fetchrow=AsyncMock(return_value=dict(verified_roles=2,
+            execute=AsyncMock(), fetchrow=AsyncMock(return_value=dict(verified_roles=2, can_inspect=True,
                 application_sessions=0, write_transactions=0, unobservable_sessions=0)))
         observed = []
         await hosted.writer_sessions(conn, review(), 'prepare', observed)
@@ -459,7 +460,7 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
         try:
             with self.assertRaises(hosted.Held):
                 await hosted.writer_sessions(restricted, self.spec, 'restricted', observed)
-            self.assertGreater(observed[-1]['unobservableSessionCount'], 0)
+            self.assertFalse(observed[-1]['activityVisibilityVerified'])
         finally: await restricted.close()
 
     async def test_hosted_permission_checks_reject_client_private_access(self):

@@ -82,7 +82,10 @@ Track 1 accounting remains independent of prep/sales analytics.
    It also refuses any remaining session for a reviewed application LOGIN,
    any other client transaction holding a write-mode relation lock on an
    application/ledger table, and any client session with hidden/disabled activity
-   in this database. Idle ordinary observer sessions and unrelated database
+   in this database. The executing role must be a superuser or have immediately
+   available `pg_read_all_stats` privileges; otherwise the check holds even when
+   some activity fields are visible. The adapter never grants this privilege.
+   Idle ordinary observer sessions and unrelated database
    sessions do not block it. Supabase `authenticator` connections are evaluated
    by these rules, not rejected solely because of their name.
 5. Review/hash the generated `plan.json`; record elapsed time and exact project,

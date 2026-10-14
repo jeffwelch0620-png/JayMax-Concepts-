@@ -143,17 +143,22 @@ async def writer_sessions(conn, review, phase, observations):
               AND l.mode IN ('RowExclusiveLock','ShareRowExclusiveLock','ExclusiveLock','AccessExclusiveLock')
               AND s.state IN ('active','idle in transaction','idle in transaction (aborted)')
         ) SELECT
+          ((SELECT rolsuper FROM pg_roles WHERE rolname=current_user)
+            OR pg_has_role(current_user,'pg_read_all_stats','USAGE')) AS can_inspect,
           (SELECT count(*) FROM pg_roles WHERE rolname=ANY($1::text[]) AND rolcanlogin) AS verified_roles,
           (SELECT count(*) FROM sessions WHERE usename=ANY($1::text[])) AS application_sessions,
           (SELECT count(*) FROM writing) AS write_transactions,
           (SELECT count(*) FROM sessions WHERE state IS NULL OR state='disabled') AS unobservable_sessions
         """, names, list(backup.SCHEMAS) + ['supabase_migrations'])
         observed = {'phase': phase, 'reviewedLoginCount': len(names),
+                    'activityVisibilityVerified': row['can_inspect'],
                     'verifiedLoginCount': row['verified_roles'],
                     'applicationSessionCount': row['application_sessions'],
                     'applicationWriteTransactionCount': row['write_transactions'],
                     'unobservableSessionCount': row['unobservable_sessions']}
         observations.append(observed)
+        if observed['activityVisibilityVerified'] is not True:
+            raise Held('Complete session activity visibility is required; no privileges are changed by this tool')
         if observed['verifiedLoginCount'] != len(names):
             raise Held('Reviewed application LOGIN roles are missing or no longer LOGIN roles')
         if any(observed[k] for k in ('applicationSessionCount', 'applicationWriteTransactionCount',
