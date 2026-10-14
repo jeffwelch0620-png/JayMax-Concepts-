@@ -17,7 +17,8 @@ OFFLINE_CLASSES = ('deployment_readiness::ReadinessConfigurationTests runtime_pe
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
- 'apply_additive_migration::AdditivePlanGuards').split()
+ 'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
+ 'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_same_version_correction_and_exact_retry'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_reissued_version_correction_and_exact_retry'),
@@ -60,6 +61,22 @@ DATABASE_CASES += tuple(('apply_additive_migration', 'AdditiveDatabaseTests', na
  'test_reconcile_refuses_partial_index_and_forged_additive_history',
  'test_unresolved_writer_holds_reconciliation_until_disconnect_proves_rollback',
  'test_cli_modes_require_reviewed_plan_hash_and_keep_existing_receipts'))
+DATABASE_CASES += tuple(('hosted_additive_index', 'HostedAdapterDatabaseTests', name) for name in (
+ 'test_hosted_wrapper_is_readonly_then_preserves_exact_food_cost',
+ 'test_hosted_permission_checks_reject_client_private_access',
+ 'test_hosted_permission_checks_refuse_initial_ledger_column_exposure',
+ 'test_changed_ledger_defaults_permissions_and_uniqueness_hold_before_ddl',
+ 'test_duplicate_versions_cannot_collapse_into_fingerprint_map',
+ 'test_backup_sequence_drift_is_refused_inside_locked_apply',
+ 'test_precommit_backup_guard_failure_rolls_back_index_and_ledger',
+ 'test_hosted_commit_ack_loss_reconciles_without_reapplication',
+ 'test_hosted_active_writer_prevents_false_unapplied_reconciliation',
+ 'test_write_committing_during_lock_wait_is_seen_before_ddl',
+ 'test_reviewed_idle_login_holds_prepare_and_apply_before_table_locks',
+ 'test_unknown_login_write_transaction_holds_but_idle_observer_does_not',
+ 'test_activity_refresh_sees_new_session_in_same_transaction',
+ 'test_new_login_after_preflight_is_refused_by_locked_guard',
+ 'test_restricted_observer_cannot_claim_other_sessions_are_drained'))
 
 
 def main():
@@ -97,7 +114,7 @@ def main():
         dump = Path(env.get('NATIVE_BACKUP_PG_DUMP',''))
         if not dump.is_file(): parser.error('Set NATIVE_BACKUP_PG_DUMP to the local PostgreSQL pg_dump executable')
         env['NATIVE_PURCHASE_TEST_DSN'] = dsn
-    env['PYTHONPATH'] = os.pathsep.join([str(ROOT/'backend'),str(ROOT/'backend/tests'),str(ROOT),env.get('PYTHONPATH','')])
+    env['PYTHONPATH'] = os.pathsep.join([str(ROOT/'tools/ops'),str(ROOT/'backend'),str(ROOT/'backend/tests'),str(ROOT),env.get('PYTHONPATH','')])
     report.parent.mkdir(parents=True,exist_ok=True)
     check = subprocess.run([sys.executable,str(ROOT/'tools/review_contracts.py'),'--check'],cwd=ROOT,env=env)
     if check.returncode: raise SystemExit(check.returncode)

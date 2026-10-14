@@ -7,10 +7,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
+import sys
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import asyncpg
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/ops'))
 import apply_additive_migration as additive
 import deployment_readiness as readiness
 import hosted_install_preservation as preservation
@@ -101,7 +103,7 @@ class FaultConnection:
 
     def transaction(self, *args, **kwargs):
         tx = self.conn.transaction(*args, **kwargs)
-        if self.conn.is_in_transaction() or not self.commit_ack_loss:
+        if self.conn.is_in_transaction() or kwargs.get('readonly') or not self.commit_ack_loss:
             return tx
         drop_before_commit = self.drop_before_commit
         class LostAcknowledgement:

@@ -13,16 +13,20 @@ import os
 from pathlib import Path
 import re
 import traceback
+import sys
 from urllib.parse import urlsplit
 
+# Operations run from the repository checkout, outside Render's backend root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'backend'))
 import asyncpg
 import deployment_readiness as readiness
 import hosted_install_preservation as preservation
 import hosted_native_install as installer
 import hosted_test_trial as trial
 import schema_reconciliation as catalog
+from install_lock import INSTALLER_LOCK
 
-FORMAT = 'jaymax-additive-source-index-plan-v1'
+FORMAT = 'jaymax-additive-source-index-plan-v2'
 SOURCE = '20261013_purchase_source_lookup_index.sql'
 INDEX = 'purchasing.document_source_rows_version_run_idx'
 SHA = re.compile(r'[a-f0-9]{64}')
@@ -146,6 +150,7 @@ async def snapshot(conn):
                     "current_setting('server_version_num') AS server_version"))
     columns = await preservation.original_columns(conn)
     return {'identity': identity, 'ledger': await preservation.ledger_fingerprints(conn),
+            'ledgerCatalog': await preservation.ledger_contract(conn),
             'columns': [{'schema': k[0], 'table': k[1], 'columns': v} for k, v in sorted(columns.items())],
             'rows': await preservation.fingerprints(conn, columns),
             'catalog': (await catalog.capture(conn))['catalog']}
@@ -197,12 +202,12 @@ async def verify_outcome(conn, plan):
         raise ValueError('Independent reconciliation requires a fresh transaction')
     # Acquire before starting the snapshot: an unresolved original writer must
     # not appear unapplied merely because its transaction is still invisible.
-    if not await conn.fetchval('SELECT pg_try_advisory_lock(781340621::bigint)'):
+    if not await conn.fetchval('SELECT pg_try_advisory_lock($1::bigint)', INSTALLER_LOCK):
         raise ValueError('An installation writer is still active; retain the unknown outcome')
     try:
         return await _verify_outcome(conn, plan)
     finally:
-        await conn.execute('SELECT pg_advisory_unlock(781340621::bigint)')
+        await conn.execute('SELECT pg_advisory_unlock($1::bigint)', INSTALLER_LOCK)
 
 
 async def _verify_outcome(conn, plan):
@@ -213,6 +218,8 @@ async def _verify_outcome(conn, plan):
         baseline = plan['baseline']
         if current['identity'] != baseline['identity']:
             raise ValueError('Plan targets a different database identity or actor')
+        if current['ledgerCatalog'] != baseline['ledgerCatalog']:
+            raise ValueError('Migration ledger structure or access changed')
         version = plan['migration']['deliveryVersion']
         if current == baseline:
             return {'status': 'verified_not_applied', 'readOnly': True, 'sqlCommitted': False}
@@ -243,7 +250,7 @@ async def _verify_outcome(conn, plan):
                 'nativeReadiness': check}
 
 
-async def apply(conn, plan):
+async def apply(conn, plan, *, guard=None):
     """One outer transaction for index plus ledger. Refuse already-applied plans."""
     body = validate_plan(plan)
     if conn.is_in_transaction():
@@ -251,19 +258,30 @@ async def apply(conn, plan):
     report = {'status': 'held', 'sqlCommitted': False, 'commitAttempted': False,
               'migration': plan['migration'], 'automaticRetry': False}
     tx = None
+    session_locked = False
     try:
+        # Serialize with every older installer BEFORE starting repeatable read.
+        # A SELECT inside that transaction would freeze its snapshot before a
+        # blocking table lock. LOCK/SET themselves do not take that snapshot.
+        session_locked = await conn.fetchval('SELECT pg_try_advisory_lock($1::bigint)', INSTALLER_LOCK)
+        if not session_locked:
+            raise ValueError('Another installer is active; application remains held')
         tx = conn.transaction(isolation='repeatable_read')
         await tx.start()
         await conn.execute("SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s'; "
                            "SET LOCAL idle_in_transaction_session_timeout='120s'")
-        await conn.execute('SELECT pg_advisory_xact_lock(781340621)')
         await conn.execute('LOCK TABLE supabase_migrations.schema_migrations IN EXCLUSIVE MODE')
         columns = {(r['schema'], r['table']): r['columns'] for r in plan['baseline']['columns']}
         await preservation.lock_original_tables(conn, columns)
+        # Re-entrant acquisition cannot wait: our session already owns this key.
+        # This first SELECT freezes the snapshot only AFTER all row writers drain.
+        await conn.execute('SELECT pg_advisory_xact_lock($1::bigint)', INSTALLER_LOCK)
         if await snapshot(conn) != plan['baseline']:
             raise ValueError('Reviewed database baseline changed or migration is already applied')
         await verify_prior(conn, plan['originalInstallation'])
         await require_readiness(conn, plan['clientRoles'], before=True)
+        if guard is not None:
+            await guard(conn, 'before')
         await conn.execute("SET LOCAL statement_timeout='30s'")
         # The outer BEGIN/COMMIT have been validated and removed, preserving body bytes.
         await conn.execute(body)
@@ -273,6 +291,8 @@ async def apply(conn, plan):
         await conn.execute('INSERT INTO supabase_migrations.schema_migrations(version,name,statements) '
                            'VALUES($1,$2,$3::text[])', e['deliveryVersion'], e['name'], [body])
         report['precommitVerification'] = await _verify_outcome(conn, plan)
+        if guard is not None:
+            report['additionalPrecommitVerification'] = await guard(conn, 'after')
         report['commitAttempted'] = True
         await tx.commit()
         tx = None
@@ -291,6 +311,14 @@ async def apply(conn, plan):
             except Exception:
                 report.update(status='rollback_outcome_unknown', sqlCommitted=None)
         raise AdditiveFailure(report) from None
+    finally:
+        if session_locked:
+            try:
+                await conn.execute('SELECT pg_advisory_unlock($1::bigint)', INSTALLER_LOCK)
+            except Exception:
+                # Lost release acknowledgement cannot change a known COMMIT or
+                # rollback into the opposite outcome. Close/reconcile explicitly.
+                report['lockReleaseHeld'] = True
 
 
 async def main(args):
