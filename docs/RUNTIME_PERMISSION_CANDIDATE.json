@@ -30,7 +30,8 @@
     "20261007_container_waste.sql": "cd239e111b17d2638eaad55075fb1b66206a9ecf6575626f61c9e23d523099cd",
     "20261007_staff_prep_production.sql": "a459ca18cf9c7b4aadc821db13437af96b290c29657201851e32b81039b11ce8",
     "20261008_container_waste_corrections.sql": "5305cac1d00297f18a512959a0674d1ec277ae9c905b9ad4f0534d57e37028e0",
-    "20261007_native_private_access.sql": "0bc563d002299aec7a8d964841a528c754041f8f980901c0dc838c1948ddbfe5"
+    "20261007_native_private_access.sql": "0bc563d002299aec7a8d964841a528c754041f8f980901c0dc838c1948ddbfe5",
+    "20261013_purchase_source_lookup_index.sql": "2e9ea948fd2fb0c7f298ef3484fe838ec710ddbbeacf4bada7bb31241ba2eb97"
   },
   "tables": [
     "actual_inventory.count_lines",

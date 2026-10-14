@@ -64,8 +64,8 @@ class NativeInstallTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_commit_is_visible_to_new_connection_and_original_values_and_history_survive(self):
         report,columns=await self.run_install()
-        self.assertTrue(report['sqlCommitted']);self.assertEqual(len(report['completedMigrations']),29)
-        self.assertEqual(await self.conn.fetchval('SELECT count(*) FROM supabase_migrations.schema_migrations'),30)
+        self.assertTrue(report['sqlCommitted']);self.assertEqual(len(report['completedMigrations']),len(readiness.MIGRATIONS))
+        self.assertEqual(await self.conn.fetchval('SELECT count(*) FROM supabase_migrations.schema_migrations'),len(readiness.MIGRATIONS)+1)
         other=await asyncpg.connect(self.dsn)
         try:
             check=await installer.verify_install(other,report['delivery'],self.ledger,columns,self.rows,client_roles=())

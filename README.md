@@ -1,6 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Current source reopening follow-up - October 13, 2026
+## Invoice-source lookup readiness - PR25 review, October 13, 2026
+
+The **codex/purchase-source-lookup-index** candidate adds a version-first source
+lookup index as migration 30 and verifies its definition and usable state through
+the read-only deployment preflight. The original 29 migrations, public schema
+snapshot, permission matrix and function/table contracts are preserved. Source
+bytes, mappings, posting rules and Track 1 accounting remain unchanged. Local
+validation passes **600 reported cases**: 549 offline, 40 disposable database,
+10 fresh-install and one independent runtime catalog comparison. The successful
+runs preserve their database/role inventories, and the local server is stopped.
+[PR25](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/25) is pushed at
+**24dac66**. [All four Inventory CI checks pass](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38496408661):
+689 frontend tests across 67 suites and the strict production build, 40 reported
+disposable PostgreSQL cases, 549 reported Windows offline cases and the required
+aggregate check. These CI results are separate from the additional 11 local
+installation/catalog cases. The owner approved refreshing documentation and
+merging PR25; the documentation revision must pass CI before merge. Migration 30
+has not been applied to Supabase. Next is a separately reviewed additive installer
+for the existing 29-file installation, preserving older migration history and
+handling uncertain commit outcomes before any approved hosted DDL.
+See the [index contract, validation and later rollout boundary](docs/PURCHASE_SOURCE_LOOKUP_INDEX.md).
+
+## Current source reopening acceptance - October 13, 2026
 
 PR23 is merged at **4f93748** and deployed on the Render frontend. Its live
 same-tab reload/sign-in recovery and competing-request discard trials passed.
@@ -9,15 +31,26 @@ original file even though revision 2 was captured in another file. Posting staye
 blocked, revision 2 remains unposted, and the closed **$212** Food Cost control
 was preserved. The transport relay is stopped and normal app bundles are restored.
 
-The local **codex/latest-source-discard-reopen** follow-up adds a read-only
+The reviewed **codex/latest-source-discard-reopen** follow-up adds a read-only
 `currentSource` descriptor to purchase previews. Confirmed discard follows the
 server's current invoice identity, version and captured file, validates that
 source and checks status again before clearing the exact retained request.
 Missing or changed pointers and failed or foreign reads preserve recovery.
 There is no automatic posting, schema/migration change or hosted configuration
-change. This follow-up is proposed in
-[draft PR24](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/24),
-with GitHub CI required before review acceptance. It is not merged or deployed. See the
+change. [PR24](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/24)
+is merged at **9b09da5**, with reviewed-head and main CI green and both Render
+services verified Live. The fresh live trial preserved all 11 original values
+through reload, blocked retry after a separately captured revision 2 and confirmed
+that discard automatically reopened its newer file without posting. Browser
+detachment required a fresh normal tab for the final explicit review and posting.
+One fictional **October 13 / 1 each / $1** purchase saved on revision 2 using a new
+key and survived reload, with original source versions and the earlier failed
+fixture preserved. All 86 observed relations matched the verified post-commit
+baseline and the complete **$184 + $173 - $145 = $212** control stayed unchanged.
+The relay is stopped, its port closed and a normal reload has no marker. Override/
+permission cleanup is user-reported; permission reset itself was not independently
+inspected. The new purchase lies outside the original closed interval and does
+not establish measured usage or a new Food Cost result. See the
 [current-source recovery review](docs/LATEST_SOURCE_RECOVERY.md).
 
 ## Initial purchase recovery baseline - October 12, 2026
@@ -31,7 +64,7 @@ an explicit retry. No purchase is sent automatically. Storage failures stop
 initial posting; another user or restaurant cannot inherit the review through
 Invoice Master. Confirmed local discard checks status before and after
 confirmation and refuses own saved outcomes. The separate-file newer-source
-reopen gap found during live acceptance is addressed in the local follow-up above.
+reopen gap found during live acceptance is addressed in merged PR24 above.
 It does not cancel an earlier request. An already posted invoice follows the
 saved-purchase/correction path, while late-commit conflicts retain the revised
 command without an automatic resend. Capacity, size and storage errors have
@@ -48,8 +81,8 @@ manual retry returned the original purchase with zero duplicate/updated rows,
 and all 86 observed relations preserved the original **$212** Food Cost control.
 The relay is stopped, the routing override is disabled and its temporary browser
 permission was reset for that earlier trial. PR23's reload/sign-in and competing
-discard cases now pass live; newer-source reopening needs follow-up deployment
-and acceptance. Manual source capture and
+discard cases pass live; the fresh newer-source trial also passes within the
+segmented browser scope recorded above. Manual source capture and
 correction command persistence remain separate follow-ups.
 
 ## Saved purchase comparison follow-up - October 12, 2026

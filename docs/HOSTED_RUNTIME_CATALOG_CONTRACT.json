@@ -607,7 +607,7 @@
   },
   "hostedQueried": false,
   "hostedWrites": false,
-  "localFrozenContractSha256": "87b67649e66cfe5271cc1902893462c4e9bea507e4881a32858fa7fbaba3062f",
+  "localFrozenContractSha256": "c255fce7028cbed05cae7c8aa5dc31a2441519028867b9ae571524b5586916c8",
   "operationalReleaseApproved": false,
   "operationalRowsImported": 0,
   "permissionMatrixSha256": "c4113d46ca5730f680f80f19d872a42ea8b3fc3343c86a24de6152793aa6f46d",
@@ -1126,6 +1126,6 @@
   },
   "schemaExportProofSha256": "2699f8f77ef8719dcbbe61e2264745fe66312c4821279cbfc7608560fb22d4ee",
   "schemaExportSha256": "b41b50cdec7eeef316c2df94249855aeff89a78c4255df8b79cfcbd70bfffbf3",
-  "sourceProfileSha256": "a2c375b4375a962d0946423e8008296a5e4bbea130cad6924a22fc764b777c18",
+  "sourceProfileSha256": "c12a977f48555fe159092580923e6f2f225220f7c74db536a5192b0fb7dbf8af",
   "sourceReconstructionSha256": "bdb6bb149bad536971e32cdc4ff2191c75cd403638e008c244fd24270f634b75"
 }

@@ -14,6 +14,12 @@ ROOT=Path(__file__).resolve().parents[1]
 PRIVATE=('purchasing','actual_inventory','prep_inventory')
 COLUMN_MARKERS={'public.store_items':('control_number',),'prep_inventory.batch_events':('source_kind','opening_decision_id'),
     'prep_inventory.container_moves':('compartment',),'prep_inventory.execution_events':('link_event_id','task_complete','created_xid')}
+INDEX_CONTRACTS={'purchasing.document_source_rows_version_run_idx':{
+    'table':'purchasing.document_source_rows','method':'btree',
+    'columns':['document_version_id','parse_run_id'],'key_count':2,'column_count':2,
+    'is_unique':False,'is_partial':False,'has_expressions':False,
+    'options':[0,0],'opclasses':['pg_catalog.uuid_ops','pg_catalog.uuid_ops'],
+    'collations':[0,0],'valid':True,'ready':True,'live':True}}
 # Explicit dependency order; same-date alphabetical ordering is not a migration plan.
 MIGRATIONS=(
  '20261004_native_purchase_import.sql','20261004_actual_inventory_counts.sql',
@@ -28,7 +34,8 @@ MIGRATIONS=(
  '20261007_prep_planning.sql','20261007_prep_day_tasks.sql','20261007_prep_execution.sql',
  '20261007_prep_progress.sql','20261007_staff_prep_counts.sql','20261007_prep_containers.sql',
  '20261007_staff_prep_tasks.sql','20261007_container_waste.sql','20261007_staff_prep_production.sql',
- '20261008_container_waste_corrections.sql','20261007_native_private_access.sql')
+ '20261008_container_waste_corrections.sql','20261007_native_private_access.sql',
+ '20261013_purchase_source_lookup_index.sql')
 FEATURES={
  'PURCHASE_IMPORT':('NATIVE_PURCHASES',()),'ACTUAL_INVENTORY':('ACTUAL_INVENTORY',('PURCHASE_IMPORT',)),
  'CATALOG_MAPPING':('CATALOG_MAPPING',('ACTUAL_INVENTORY',)),
@@ -70,10 +77,39 @@ def migration_plan():
         tables=sorted(set(re.findall(r'CREATE\s+TABLE\s+([a-z_]+\.[a-z_]+)',text,re.I)))
         functions=sorted(set(re.findall(r'CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([a-z_]+\.[a-z_]+)',text,re.I)))
         triggers=sorted(set(re.findall(r'CREATE\s+(?:CONSTRAINT\s+)?TRIGGER\s+([a-z_]+)\s+[^;]*?\s+ON\s+([a-z_]+\.[a-z_]+)\b',text,re.I|re.S)))
-        entries.append({'file':name,'sha256':hashlib.sha256(raw).hexdigest(),'tables':tables,'functions':functions,'triggers':triggers})
+        indexes=sorted(set(re.findall(r'CREATE\s+(?:UNIQUE\s+)?INDEX\s+([a-z_]+)\s+ON\s+([a-z_]+\.[a-z_]+)\b',text,re.I)))
+        entries.append({'file':name,'sha256':hashlib.sha256(raw).hexdigest(),'tables':tables,'functions':functions,'triggers':triggers,'indexes':indexes})
     return {'base':'Existing reviewed application public schema; reference snapshot is not a live migration',
         'alreadyInBase':'20260930_recurring_prep_items.sql','applyAutomatically':False,'migrations':entries,
         'limit':'Catalog presence is not proof of an applied file checksum. Retain hosted migration history and review partially installed objects before any DDL.'}
+
+def index_mismatches(actual,expected):
+    return sorted(key for key,value in expected.items() if actual.get(key)!=value)
+
+async def inspect_index_contracts(conn):
+    issues=[]
+    for name,expected in INDEX_CONTRACTS.items():
+        actual=await conn.fetchrow('''SELECT tn.nspname||'.'||t.relname AS table,
+            am.amname AS method,i.indnkeyatts AS key_count,i.indnatts AS column_count,
+            i.indisunique AS is_unique,i.indpred IS NOT NULL AS is_partial,
+            i.indexprs IS NOT NULL AS has_expressions,i.indisvalid AS valid,
+            i.indisready AS ready,i.indislive AS live,
+            i.indoption::smallint[] AS options,i.indcollation::oid[] AS collations,
+            ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(attnum,position)
+                LEFT JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum
+                ORDER BY k.position) AS columns,
+            ARRAY(SELECT n.nspname||'.'||o.opcname FROM unnest(i.indclass) WITH ORDINALITY k(opclass,position)
+                JOIN pg_opclass o ON o.oid=k.opclass JOIN pg_namespace n ON n.oid=o.opcnamespace
+                ORDER BY k.position) AS opclasses
+            FROM pg_index i JOIN pg_class x ON x.oid=i.indexrelid
+            JOIN pg_am am ON am.oid=x.relam JOIN pg_class t ON t.oid=i.indrelid
+            JOIN pg_namespace tn ON tn.oid=t.relnamespace WHERE i.indexrelid=to_regclass($1)''',name)
+        if actual is None:
+            issues.append({'kind':'index_contract','object':name,'reason':'missing'})
+        else:
+            differences=index_mismatches(dict(actual),expected)
+            if differences:issues.append({'kind':'index_contract','object':name,'reason':'definition_or_state','fields':differences})
+    return issues
 
 async def inspect(conn,client_roles=('anon','authenticated'),stores=()):
     plan=migration_plan();issues=[];warnings=[];installed=[]
@@ -90,8 +126,12 @@ async def inspect(conn,client_roles=('anon','authenticated'),stores=()):
                 if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$1 AND p.proname=$2)',schema,fn):missing.append(name+'()')
             for name,table in entry['triggers']:
                 if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid=to_regclass($1) AND tgname=$2)',table,name):missing.append(table+':'+name)
+            for name,table in entry['indexes']:
+                if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_index WHERE indexrelid=to_regclass($1) AND indrelid=to_regclass($2))',table.split('.')[0]+'.'+name,table):
+                    missing.append(table+':'+name)
             installed.append({'file':entry['file'],'missingObjects':missing,'status':'missing_or_partial' if missing else 'objects_present_not_checksum_proof'})
             if missing:issues.append({'kind':'schema','file':entry['file'],'missingObjects':missing})
+        issues.extend(await inspect_index_contracts(conn))
         for table in ('public.app_users','public.store_state','public.stores'):
             if not await conn.fetchval('SELECT to_regclass($1) IS NOT NULL',table):issues.append({'kind':'base_schema','object':table})
         for table,columns in COLUMN_MARKERS.items():
