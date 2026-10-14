@@ -21,7 +21,11 @@ unchanged throughout the final run. The overnight interruption is retained in
 the elapsed evidence; every final case passed without relaxing deadlines.
 A separate earlier broad accounting/restore checkpoint passed 668 reported
 cases (605 offline/63 database); those overlapping counts are not added to 635.
-The current candidate is local; new PR CI and hosted acceptance remain pending.
+The candidate is published as [draft PR27](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/27)
+for independent review. The initial publication head **2e15b37** matches the
+source-pinned local acceptance; the publication follow-up changes this note only.
+The PR check panel is the authority for current-head CI. Hosted acceptance remains
+pending and the PR remains draft, with no merge or hosted installation approval.
 The current Render/Supabase connections stay in place. Hosted execution and the
 fictional $212/current-source acceptance require separate approval and evidence.
 
