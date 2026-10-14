@@ -1,4 +1,75 @@
-# Hosted source-index preflight and backup hold — October 14, 2026
+# Hosted source-index preflight and backup rehearsal — October 14, 2026
+
+## Fresh hosted export and disposable restore verified
+
+The owner authorized a fresh encrypted backup and disposable restore. The single
+attempt completed **October 14, 2026 at 7:08:48 p.m. EDT**, status
+`verified_fresh_hosted_application_backup_and_disposable_restore`, using clean
+source **7251683afea1ec149dea239bbb14ef258e2c3014** (PR30 runtime plus the preceding
+documentation checkpoint). Runtime hashes were frozen and verified after the
+rehearsal. No transport shims or mocked export/restore routines were used.
+
+- The existing certificate-verified owner session-pooler connection supplied a
+  read-only repeatable-read snapshot, fingerprints, dependency/role metadata and
+  the actual `pg_dump` archive. Sequence state was rechecked and observed stable.
+- Encryption, authenticated readback, archive listing, close and partial cleanup
+  passed before publication of the final encrypted archive. The backup and its
+  separately stored key remain in ACL-verified private local storage.
+- Fresh export took **369.219 seconds**: fingerprint **181.000 s**, `pg_dump`
+  **175.859 s**, overlapping snapshot aggregate **363.422 s**. All export phases
+  passed; all eight requested setting observations were captured and
+  `limitReadHeld` was false. Existing 20/60/240-second client deadlines and server
+  settings were unchanged. No idle-limit or connectivity cause is inferred.
+- Real `pg_restore` into a fresh UUID-named loopback database took **41.297 s**.
+  **120 relation fingerprints, 13 catalog groups and 27,271 rows matched** the
+  authenticated export manifest. Catalog comparisons include schema/relations,
+  columns, constraints, functions, triggers, indexes, views, policies, types,
+  sequence definitions and default ACLs. Source and local major versions match;
+  source is **17.6**, local tools **17.11**, so patch-version equality is false.
+- A second restore refused the populated destination before restoration. The
+  restored account role's private-schema denial and inventory role's account-table
+  denial passed. This checks those declared grants with local dependency stubs;
+  source role memberships, passwords and login behavior were not restored.
+- Seventeen new non-login/non-superuser local dependency stubs were prepared.
+  Only these newly created stubs and the newly created test database were removed.
+  Before/after role/database inventories match, cleanup reported no errors, and
+  the owned PostgreSQL server is stopped. No existing local role was modified.
+- Independent postflight reauthenticated the archive and verified encrypted,
+  manifest and receipt hashes, file ACLs, runtime source hashes and absence of
+  `archive.partial`/`backup.partial.enc`. The encrypted archive is **30,287,992
+  bytes**, containing a **17,014,272-byte** dump; no business rows, key contents,
+  credentials or private paths appear in public evidence.
+
+Evidence SHA-256 values:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Encrypted backup | `53a451e3c24a56ad971ddcc86e3e76a3d500b5fa9f40a44a08e77dccb2a9c59b` |
+| Inner archive | `06f6e75deee5c461c6779f8d06c7afecfdcc970d4d67ec24c1fc6f1afdcdf235` |
+| Application manifest | `1dfe84e02664ff9e5779336f4461d577d394ae9f1438503fdd9a63eba9f5c39c` |
+| Protected rehearsal receipt | `63f9a61908ecabadec19cc98edeaa6ea6f99afbc51174e4f430d2633fe095e26` |
+| Redacted public receipt | `92c9789329e9b2bb867599b010e6eb13dffa549a716017ff6099207ac4faa052` |
+
+**Acceptance boundary:** the fresh application-scope backup/restore prerequisite
+now has passing evidence. Managed Supabase recovery and combined credential
+rotation recovery remain unqualified; no operational release or hosted apply is
+approved. Two closed-period rows are included and fingerprint-matched, but no
+runtime Food Cost report comparison was performed. Writer draining was not
+demonstrated, and concurrent writers were not paused; this is a captured snapshot,
+not proof that today's hosted database remains unchanged after it.
+
+**Next:** refresh the writer inventory (actual Render backend and database role,
+Toast scheduled jobs and any other sources), prepare a coordinated stop/resume
+window with the observed rehearsal duration, and obtain exact plan approval. A
+maintenance-time backup may need refreshing if intervening writes invalidate the
+reviewed baseline. Apply only the single additive index and ledger entry after
+those gates, followed by independent reconciliation and the fictional accounting
+control. Hosted SQL/index, settings, services, credentials and scheduled jobs were
+unchanged in this rehearsal. These notes remain local on
+`codex/post-pr30-hosted-diagnostics`; no new PR is published by this step.
+
+The earlier backup hold below is retained as historical evidence, superseded only
+for the successful application-scope export/restore checks recorded above.
 
 ## PR30 merged and bounded metadata diagnostic
 

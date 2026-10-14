@@ -1,5 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Fresh encrypted backup and disposable restore passed — October 14, 2026
+
+The owner-authorized rehearsal completed at **7:08:48 p.m. EDT** using the
+existing hosted session-pooler connection and reviewed PR30 routines. The fresh
+encrypted export passed in **369.219 seconds**, and its disposable local restore
+passed in **41.297 seconds**: **27,271 rows, 120 relation fingerprints and 13
+catalog groups matched**. The populated-target refusal and inventory/account
+access guards passed. Temporary database/role stubs were removed, original local
+inventory was restored, and the owned test server stopped. Protected archive/key/
+receipt ACLs, archive authentication, hashes and absence of export partials were
+independently rechecked.
+
+This qualifies the captured application-scope backup and restore rehearsal. It
+does not qualify managed Supabase recovery, restored login/role memberships, or a
+closed-period Food Cost runtime comparison. PostgreSQL major versions match;
+source 17.6 and local tools 17.11 differ in patch version. The prior disconnect
+was not reproduced; its cause remains unproved. No hosted writes, index,
+configuration, credentials or scheduled jobs changed. Next is refreshed writer
+inventory and maintenance planning, followed by exact plan approval before any
+hosted index application. See the [checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md)
+for evidence hashes and remaining acceptance limits. The notes remain local on
+`codex/post-pr30-hosted-diagnostics`; no new PR was pushed.
+
 ## PR30 merged; bounded hosted metadata read passed — October 14, 2026
 
 [PR30](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/30) merged with
