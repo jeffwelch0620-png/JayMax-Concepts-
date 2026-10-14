@@ -111,8 +111,15 @@ Successful receipt **additive-source-index-tests-20261014T022756180722Z/receipt.
 records unchanged starting role/database inventories and a stopped server.
 Only fictional local databases were used; older unrelated failed fixtures remain
 retained. The intermediate receipt and first failed log are preserved separately.
-Frontend source is unchanged; its prior merged-head CI remains separate from
-these local results. This follow-up is local and its GitHub CI is pending.
+Frontend source is unchanged; the prior merged-head CI remains separate from
+these local results. This follow-up is published as
+[draft PR26](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/26).
+[All four initial-head CI checks pass at e1144cb](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38503716266):
+689 frontend tests across 67 suites and the strict build, 45 database methods
+plus 7 subtests, 218 Windows offline methods plus 351 subtests, and the aggregate
+check. The publication-only test cleanup removes one trailing blank line and
+retains identical parsed code. The PR check panel is the current-head authority;
+the original local acceptance and review manifest remain immutable checkpoints.
 
 Before hosted DDL, prepare a separately reviewed adapter that pins the intended
 Supabase build project and administrative connection, fresh private backup and

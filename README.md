@@ -19,8 +19,13 @@ validation passes **621 reported cases** with zero failures, errors or skips:
 incremental installer cases. The fictional **$55** actual Food Cost report is
 preserved, successful-run role/database inventories match and the server is
 stopped. Earlier corrected failures and the intermediate 30-case pass are
-retained as separate evidence. The follow-up remains local; GitHub CI has not
-run for it. Review precedes a separately approved hosted adapter and rollout.
+retained as separate evidence. The follow-up is published as
+[draft PR26](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/26).
+[All four CI checks passed at initial source head e1144cb](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38503716266),
+including 689 frontend tests and the strict build, plus the 621 reported backend
+cases. A publication cleanup removes only a trailing blank line from the test
+file; its parsed code is identical. The PR check panel tracks the current head.
+Review precedes a separately approved hosted adapter and rollout.
 See [the incremental installation procedure and scope](docs/ADDITIVE_SOURCE_INDEX_INSTALL.md).
 
 ## Invoice-source lookup readiness - PR25 review, October 13, 2026
