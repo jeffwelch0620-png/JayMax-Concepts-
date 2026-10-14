@@ -25,6 +25,7 @@ import hosted_native_install as installer
 import hosted_test_trial as trial
 import schema_reconciliation as catalog
 from install_lock import INSTALLER_LOCK
+from readonly_snapshot import readonly_snapshot, preserve_cleanup_failure, error_details
 
 FORMAT = 'jaymax-additive-source-index-plan-v2'
 SOURCE = '20261013_purchase_source_lookup_index.sql'
@@ -177,7 +178,7 @@ async def prepare(conn, original_receipt, version, client_roles=('anon', 'authen
     # Retain only reviewed, redacted fields; old SQL/connection material stays private.
     original = {'status': 'passed_durable_native_install', 'sqlCommitted': True,
                 'delivery': entries, 'historicalLedgerFingerprints': historical}
-    async with conn.transaction(isolation='repeatable_read', readonly=True):
+    async with readonly_snapshot(conn):
         await conn.execute("SET LOCAL statement_timeout='20s'")
         await verify_prior(conn, original)
         if await conn.fetchval('SELECT to_regclass($1) IS NOT NULL', INDEX):
@@ -204,15 +205,15 @@ async def verify_outcome(conn, plan):
     # not appear unapplied merely because its transaction is still invisible.
     if not await conn.fetchval('SELECT pg_try_advisory_lock($1::bigint)', INSTALLER_LOCK):
         raise ValueError('An installation writer is still active; retain the unknown outcome')
-    try:
+    async with preserve_cleanup_failure(
+            lambda: conn.execute('SELECT pg_advisory_unlock($1::bigint)', INSTALLER_LOCK),
+            'lockReleaseErrorType'):
         return await _verify_outcome(conn, plan)
-    finally:
-        await conn.execute('SELECT pg_advisory_unlock($1::bigint)', INSTALLER_LOCK)
 
 
 async def _verify_outcome(conn, plan):
     validate_plan(plan)
-    async with conn.transaction(isolation='repeatable_read', readonly=True):
+    async with readonly_snapshot(conn):
         await conn.execute("SET LOCAL statement_timeout='20s'")
         current = await snapshot(conn)
         baseline = plan['baseline']
@@ -299,7 +300,7 @@ async def apply(conn, plan, *, guard=None):
         report.update(status='committed_requires_independent_verification', sqlCommitted=True)
         return report
     except Exception as exc:
-        report['errorType'] = type(exc).__name__
+        report.update(error_details(exc))
         report['errorFrames'] = [{'file': Path(f.filename).name, 'function': f.name, 'line': f.lineno}
                                  for f in traceback.extract_tb(exc.__traceback__)]
         if report['commitAttempted']:
@@ -330,35 +331,38 @@ async def main(args):
                                  server_settings={'default_transaction_read_only': 'off' if args.mode == 'apply' else 'on'})
     result = {'status': 'held', 'commitAttempted': False, 'sqlCommitted': False}
     try:
-        if args.mode == 'dry-run':
-            receipt = json.loads(Path(args.original_install_receipt).read_text(encoding='utf-8-sig'))
-            result = await prepare(conn, receipt, args.delivery_version, client_roles=())
-        else:
-            raw = Path(args.plan).read_bytes()
-            if digest(raw) != args.plan_sha256:
-                raise ValueError('Reviewed plan checksum changed')
-            plan = json.loads(raw)
-            if args.mode == 'reconcile':
-                result = await verify_outcome(conn, plan)
+        async with preserve_cleanup_failure(lambda: conn.close(), 'connectionCloseErrorType'):
+            if args.mode == 'dry-run':
+                receipt = json.loads(Path(args.original_install_receipt).read_text(encoding='utf-8-sig'))
+                result = await prepare(conn, receipt, args.delivery_version, client_roles=())
             else:
-                result = await apply(conn, plan)
-                await conn.close()
-                conn = await asyncpg.connect(dsn, timeout=20, statement_cache_size=0,
-                                             server_settings={'default_transaction_read_only': 'on'})
-                result['independentVerification'] = await verify_outcome(conn, plan)
-                result['status'] = 'passed_local_additive_install'
+                raw = Path(args.plan).read_bytes()
+                if digest(raw) != args.plan_sha256:
+                    raise ValueError('Reviewed plan checksum changed')
+                plan = json.loads(raw)
+                if args.mode == 'reconcile':
+                    result = await verify_outcome(conn, plan)
+                else:
+                    result = await apply(conn, plan)
+                    await conn.close()
+                    conn = await asyncpg.connect(dsn, timeout=20, statement_cache_size=0,
+                                                 server_settings={'default_transaction_read_only': 'on'})
+                    result['independentVerification'] = await verify_outcome(conn, plan)
+                    result['status'] = 'passed_local_additive_install'
     except AdditiveFailure as exc:
         result = exc.report
+        # Close failure may be attached to the wrapper; retain the report's
+        # original driver category, SQLSTATE and known/unknown SQL outcome.
+        result.update({key: value for key, value in error_details(exc).items()
+                       if key != 'errorType' and key.endswith('ErrorType') and value is not None})
     except Exception as exc:
         result.update(status='committed_verification_held' if result.get('commitAttempted') else 'held',
-                      errorType=type(exc).__name__)
-    finally:
-        await conn.close()
+                      **error_details(exc))
     with Path(args.output).open('x', encoding='utf-8') as handle:
         json.dump(result, handle, indent=2, sort_keys=True)
         handle.write('\n')
     print(json.dumps({k: result[k] for k in ('status', 'format', 'sqlCommitted') if k in result}))
-    return 0 if result.get('format') == FORMAT or result.get('status') in (
+    return 0 if (result.get('format') == FORMAT and not result.get('status')) or result.get('status') in (
         'passed_local_additive_install', 'verified_applied', 'verified_not_applied') else 2
 
 

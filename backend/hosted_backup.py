@@ -20,7 +20,21 @@ import asyncpg
 from cryptography.fernet import Fernet
 from db_tls import connection_tls, DEFAULT_CA
 import native_backup as native
-from readonly_snapshot import readonly_snapshot
+from readonly_snapshot import readonly_snapshot, preserve_cleanup_failure
+
+
+async def remove_partial_files(paths):
+    """Attempt every fixed temporary file even if an earlier unlink fails."""
+    failure = None
+    for path in paths:
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError as exc:
+            if failure is None:
+                failure = exc
+    if failure is not None:
+        raise failure
 
 SCHEMAS = ('public', 'purchasing', 'actual_inventory', 'prep_inventory', 'integrations', 'supabase_migrations')
 MANAGED = {'auth', 'cron', 'extensions', 'graphql', 'graphql_public', 'net', 'realtime', 'storage', 'vault'}
@@ -236,7 +250,12 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
     raw = directory / 'archive.partial'
     candidate = directory / 'backup.partial.enc'
     conn = None
-    try:
+    async def close_connection():
+        if conn is not None:
+            await conn.close()
+    # Close before removing partials, but neither cleanup may mask the body error.
+    async with preserve_cleanup_failure(lambda: remove_partial_files((raw, candidate)), 'partialCleanupErrorType'), \
+               preserve_cleanup_failure(close_connection, 'connectionCloseErrorType'):
         conn = await asyncpg.connect(url, ssl=context, timeout=20, command_timeout=60, statement_cache_size=0)
         await native.configure(conn)
         async with readonly_snapshot(conn):
@@ -281,13 +300,6 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
             'encryptedSha256': digest(final.read_bytes()), 'archiveSha256': manifest['archiveSha256'],
             'tablesCaptured': len(facts['tables']), 'catalogGroupsCaptured': len(facts['catalog']), 'sourceReadOnly': True,
             'sequencesObservedStable': True, 'managedRecoveryVerified': False}
-    finally:
-        if conn:
-            await conn.close()
-        # Only fixed temporary names in our newly created private child directory.
-        for partial in (raw, candidate):
-            if partial.exists():
-                partial.unlink()
 
 
 async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_directory):
@@ -299,7 +311,11 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
     raw = directory / 'restore.partial'
     listing = directory / 'restore.list.partial'
     conn = None
-    try:
+    async def close_connection():
+        if conn is not None:
+            await conn.close()
+    async with preserve_cleanup_failure(lambda: remove_partial_files((raw, listing)), 'partialCleanupErrorType'), \
+               preserve_cleanup_failure(close_connection, 'connectionCloseErrorType'):
         with raw.open('xb') as stream:
             stream.write(archive)
         with listing.open('xb') as stream:
@@ -358,9 +374,3 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
             'rowsMatched': sum(t['rows'] for t in actual['tables'].values() if t['kind'] != 'S'),
             'majorVersionMatched': True, 'patchVersionMatched': await conn.fetchval('SHOW server_version_num') == manifest['serverVersionNum'],
             'managedRecoveryVerified': False, 'operationalReleaseApproved': False}
-    finally:
-        if conn:
-            await conn.close()
-        for temporary in (raw, listing):
-            if temporary.exists():
-                temporary.unlink()

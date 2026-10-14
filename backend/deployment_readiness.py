@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 from urllib.parse import urlparse
 import asyncpg
+from readonly_snapshot import readonly_snapshot, preserve_cleanup_failure, error_details
 from dotenv import dotenv_values
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -113,7 +114,7 @@ async def inspect_index_contracts(conn):
 
 async def inspect(conn,client_roles=('anon','authenticated'),stores=()):
     plan=migration_plan();issues=[];warnings=[];installed=[]
-    async with conn.transaction(isolation='repeatable_read',readonly=True):
+    async with readonly_snapshot(conn):
         await conn.execute("SET LOCAL statement_timeout='20s'")
         await conn.execute("SET LOCAL search_path=pg_catalog")
         role=await conn.fetchrow('SELECT current_user AS name,rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')
@@ -200,12 +201,11 @@ async def main(args):
             conn=None
             try:
                 conn=await asyncpg.connect(dsn,timeout=20,statement_cache_size=0,ssl='require',server_settings={'default_transaction_read_only':'on'})
-                report['database']=await inspect(conn,stores=args.store)
+                async with preserve_cleanup_failure(conn.close, 'connectionCloseErrorType'):
+                    report['database']=await inspect(conn,stores=args.store)
             except Exception as e:
                 # Driver errors can contain connection material. Never echo the DSN/error text.
-                report['database']={'status':'held','reason':'Read-only inspection failed','errorType':type(e).__name__}
-            finally:
-                if conn is not None:await conn.close()
+                report['database']={'status':'held','reason':'Read-only inspection failed',**error_details(e)}
     output=json.dumps(report,indent=2)+'\n'
     if args.output:Path(args.output).write_text(output,encoding='utf-8')
     else:print(output,end='')

@@ -1,5 +1,58 @@
 # Hosted source-index preflight and backup hold — October 14, 2026
 
+## PR28 merge and receipt/cleanup follow-up
+
+PR28 merged with owner approval at **c5cce2b858b59bad284db93725ef12ab7db0885b**
+(reviewed head **84e96a9**). All four
+[merged-main CI checks pass](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38630008470).
+The next local branch is `codex/readonly-receipt-cleanup-integrity`.
+
+The follow-up extends error-preserving read-only snapshots to native backup
+fingerprints, original-column preservation, deployment inspection, additive
+planning/reconciliation, and the hosted adapter. The short activity probe keeps
+its original default isolation. Existing write transactions, SQL bodies,
+snapshot boundaries and lock acquisition order remain unchanged.
+
+Held receipts record the original error class, a validated five-character
+SQLSTATE and the snapshot cleanup category. Unlock, connection-close and partial
+file cleanup categories are recorded when present. Driver messages, SQL text,
+credentials and exception representations are excluded. Cleanup-only failures
+hold the result; existing known/unknown commit outcomes are retained. Both
+reconcilers protect the original failure from a subsequent unlock failure.
+
+Local validation: **663 offline cases** (253 methods plus 410 subtests) pass,
+with zero failures, errors or skips. The canonical database selection completed
+with **71 passing cases** (60 methods plus 11 subtests) and one new fixture
+failure: the savepoint test used a read-committed outer transaction with a
+repeatable-read nested snapshot. Its fixture now uses matching repeatable-read
+isolation and separately verifies that mismatched isolation is refused. That
+one corrected case passes in a targeted PostgreSQL rerun. Thus **72 distinct
+database cases have passing evidence across the two runs**; no fresh all-green
+full database-profile XML or candidate CI is claimed. The initial failure XML is
+retained. No runtime code changed after the full database run; only that test
+fixture and documentation changed. The rerun's source hashes are verified, its
+role/database inventory is unchanged, and the owned PostgreSQL 17 server is
+stopped. The existing five dependency deprecation warnings remain.
+
+This follow-up is ready for independent draft review. No new hosted connections, migrations, index
+application, privilege changes, role/password changes, timeout changes or TCP
+keepalive changes were made in this follow-up. The hosted backup/restore hold
+below still applies; a merge is not backup acceptance.
+
+After independent review, begin diagnosis with elapsed phase/subphase timings
+and effective server **and client** limits on the same connections that perform
+the inspection/export. Include `transaction_timeout`,
+`idle_in_transaction_session_timeout`, `statement_timeout`,
+`idle_session_timeout`, TCP keepalive values, and client command/operation
+deadlines. Record only safe categories and durations. The captured failure was
+during metadata inspection, before the dump subprocess; dump-idle termination
+is a hypothesis, not the demonstrated cause. Table fingerprints already use
+separate statements under the same snapshot. Keepalive changes would be a
+separate controlled experiment, not the initial read-only observation, and must
+account for the client-to-pooler and pooler-to-database connection segments.
+
+The prior PR27/preflight checkpoint follows as historical evidence.
+
 PR27 merged with owner approval at **a39e46fd77b6799b4f12e3482a4ac14add9eb0d1**
 (approved head **168c02e**). All four
 [merged-main CI checks pass](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38606086807).

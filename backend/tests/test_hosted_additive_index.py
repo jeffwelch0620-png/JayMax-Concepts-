@@ -234,14 +234,17 @@ class HostedWriterGuards(unittest.IsolatedAsyncioTestCase):
 
     async def test_outside_transaction_probe_ends_before_engine_and_refreshes_each_observation(self):
         tx = MagicMock()
-        tx.__aenter__ = AsyncMock(); tx.__aexit__ = AsyncMock()
+        tx.start = AsyncMock(); tx.commit = AsyncMock(); tx.rollback = AsyncMock()
         conn = SimpleNamespace(is_in_transaction=lambda: False, transaction=MagicMock(return_value=tx),
             execute=AsyncMock(), fetchrow=AsyncMock(return_value=dict(verified_roles=2, can_inspect=True,
                 application_sessions=0, write_transactions=0, unobservable_sessions=0)))
         observed = []
         await hosted.writer_sessions(conn, review(), 'prepare', observed)
         await hosted.writer_sessions(conn, review(), 'before_table_locks', observed)
-        self.assertEqual(tx.__aexit__.await_count, 2)
+        self.assertEqual(tx.commit.await_count, 2)
+        self.assertEqual(tx.start.await_count, 2)
+        tx.rollback.assert_not_awaited()
+        self.assertTrue(all(call.kwargs == {'readonly':True} for call in conn.transaction.call_args_list))
         self.assertEqual(sum('pg_stat_clear_snapshot' in call.args[0] for call in conn.execute.await_args_list), 2)
 
     async def test_server_minimum_and_exact_backup_version_are_checked(self):
@@ -254,6 +257,27 @@ class HostedWriterGuards(unittest.IsolatedAsyncioTestCase):
 
 
 class HostedReceiptGuards(unittest.IsolatedAsyncioTestCase):
+    async def test_original_sqlstate_and_cleanup_categories_reach_held_receipt(self):
+        original = ConnectionError('TEST ONLY private password')
+        original.sqlstate = '08003'
+        original.snapshotCleanupErrorType = 'InterfaceError'
+        await self.exercise(original, 'apply_in_progress_outcome_unknown', None,
+            close_failure=RuntimeError('TEST ONLY private close'), expected_details={
+                'errorType':'ConnectionError', 'sqlState':'08003',
+                'snapshotCleanupErrorType':'InterfaceError', 'connectionCloseErrorType':'RuntimeError'})
+
+    async def test_close_failure_does_not_overwrite_original_unknown_commit(self):
+        await self.exercise(hosted.engine.AdditiveFailure({'status':'commit_outcome_unknown',
+            'commitAttempted':True, 'sqlCommitted':None, 'automaticRetry':False,
+            'errorType':'ConnectionError', 'sqlState':'08003'}), 'commit_outcome_unknown', None,
+            close_failure=RuntimeError('TEST ONLY private close'), expected_details={
+                'errorType':'ConnectionError', 'sqlState':'08003', 'connectionCloseErrorType':'RuntimeError'})
+
+    async def test_close_only_failure_retains_known_commit_but_holds_verification(self):
+        await self.exercise(None, 'committed_verification_held', True,
+            close_failure=ConnectionError('TEST ONLY close'), expected_details={
+                'errorType':'ConnectionError', 'connectionCloseErrorType':'ConnectionError'})
+
     async def test_timeout_and_lost_ack_receipts_retain_unknown_without_resending(self):
         await self.exercise(asyncio.TimeoutError(), 'apply_in_progress_outcome_unknown', None)
         await self.exercise(hosted.engine.AdditiveFailure({'status': 'commit_outcome_unknown',
@@ -266,7 +290,7 @@ class HostedReceiptGuards(unittest.IsolatedAsyncioTestCase):
         await self.exercise(None, 'held', None, mode='reconcile', connect_failure=True, expected_sends=0)
 
     async def exercise(self, error, status, committed, fresh_failure=False, mode='apply',
-                       connect_failure=False, expected_sends=1):
+                       connect_failure=False, expected_sends=1, close_failure=None, expected_details=None):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             spec, binding = review(), {'encryptedSha256': 'a' * 64}
@@ -279,7 +303,7 @@ class HostedReceiptGuards(unittest.IsolatedAsyncioTestCase):
                 plan=str(plan_path), plan_sha256=hosted.sha(plan_path.read_bytes()),
                 approve_plan_sha256=hosted.sha(plan_path.read_bytes()), output_directory=str(root / 'output'))
             output = root / 'output'; output.mkdir()
-            conn = SimpleNamespace(close=AsyncMock())
+            conn = SimpleNamespace(close=AsyncMock(side_effect=close_failure))
             connect = AsyncMock(side_effect=OSError('private driver detail') if connect_failure else
                                [conn, OSError('private driver detail')] if fresh_failure else [conn])
             send = AsyncMock(side_effect=error, return_value={'status': 'committed_requires_independent_verification',
@@ -294,6 +318,8 @@ class HostedReceiptGuards(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(await hosted.run(args), 2)
             result = json.loads((output / 'receipt.json').read_text())
             self.assertEqual(result['status'], status)
+            for key, value in (expected_details or {}).items():
+                self.assertEqual(result.get(key), value)
             self.assertEqual(result['sqlCommitted'], committed)
             if mode == 'apply': self.assertEqual(result['planSha256'], args.plan_sha256)
             self.assertFalse(result['automaticRetry'])

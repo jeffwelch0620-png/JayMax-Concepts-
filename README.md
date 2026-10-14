@@ -1,5 +1,21 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Read-only receipt and cleanup follow-up — October 14, 2026
+
+[PR28](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/28) merged with
+owner approval at **c5cce2b**; all four
+[merged-main checks pass](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38630008470).
+The next local follow-up records safe original/cleanup error categories in held
+receipts and extends error preservation through read-only snapshots, advisory
+unlock, connection close and partial-file cleanup. Cleanup failures still hold
+the result and preserve known/unknown commit outcomes. Local validation passes
+663 offline cases and 72 distinct database cases across the full run and a
+targeted savepoint-fixture rerun; the initial fixture failure is retained in the
+checkpoint. The owned local server is stopped. This follow-up is ready for draft
+review; candidate CI has not run. The hosted backup/restore hold remains unchanged.
+See the [current checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md)
+for review scope, evidence and the timing-first diagnostic sequence.
+
 ## Hosted index preflight — merged adapter, backup hold, October 14, 2026
 
 [PR27](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/27) merged with
