@@ -76,15 +76,56 @@ regression initially failed because the test snapshot incorrectly assumed an
 purchasing table, and the new separate-file regression passed in a focused rerun
 (one passed, 21 deselected). These are **52 distinct backend checks** accepted
 across the broad run and focused rerun, not a claimed clean 52-test single run.
-The test server was stopped after each run. This change is proposed in
-[draft PR24](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/24)
-and is not merged or deployed. Required GitHub CI and review come before separate
-merge approval and the automatic Render test deployment. Then validate the
-newer-source path live, with an independent database comparison and the original
-$212 control. Preserve the failed fixture's two unposted versions; a fresh
-labelled fixture is needed to recreate the unresolved original review through
-normal controls because that review was already discarded. Manual selection of
-revision 2 is not automatic-reopen acceptance.
+The test server was stopped after each run. These counts describe the historical
+local validation; the current live acceptance is below.
+
+[PR24](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/24) is merged at
+**9b09da529af1b3ed557718fa75351690e3c6d47c**, with all reviewed-head and main CI
+checks green. Both Render services were verified Live at that commit.
+
+The fresh **TEST-ONLY-PR24-LATEST-20261013-15** live trial passed. Its original
+421-byte request was dropped before API forwarding; all 11 original values
+survived reload unchanged and frozen. Capturing revision 2 in a different file
+produced the newer-source hold and blocked retry. Cancelling discard preserved
+the retained review. Confirmed discard automatically reopened the revision-2
+file and SKU with fresh editable fields and no automatic posting. This was
+observed through the original tab's DOM; browser detachment interrupted its
+separate screenshot export.
+
+After temporary test cleanup, the final explicit review and posting resumed in
+a fresh normal app tab. Automated date entry was refused without database
+changes. Its local review was discarded through normal confirmation; the user
+entered the date manually before a new review was posted. Exactly one initial
+batch **0c075457-2a9c-4f80-bee1-5674bb5c08a2** saved on revision 2 with new key
+**f6d81aa9-d94e-4769-92f2-69ebc7a0966c**, distinct from the original dropped key
+**86732db0-6769-45d9-8af0-edbc5e3254a4**. Its saved values are **berts_SH-003 /
+1 each / conversion 1 / $1 food / October 13**, separate zero tax/fees, and note
+**TEST ONLY PR24 latest revision 2: verified 1 each at $1.** Full reload retained
+the exact comparison, one history row, no corrections and no initial-post/retry
+controls. Revision 1 and the earlier failed fixture remain unposted.
+
+The final independent comparison preserves all **86 observed relations** against
+the verified post-commit baseline, migration identities and the entire closed
+**$184 + $173 - $145 = $212** report. The trial added exactly 15 capture/audit
+rows, four posting/audit rows, one food fact and one store revision/timestamp
+advance; the store payload is unchanged. The October 13 fictional purchase lies
+outside the original closed interval and is not measured usage or a new Food
+Cost result. The first final observer attempt exposed a local row-envelope
+KeyError; its helper was corrected and the fresh rerun passed.
+
+Private acceptance **pr24-live-newer-source-recovery-acceptance-20261014T001258966559Z.json**,
+SHA-256 **44dfe29c093a4c0a08bf0412ebecc243d5bfddefcb97d55b4996b6d45a0a36e3**,
+retains the receipts, wire identity, browser observations, final screenshot and
+limitations outside Git. The relay is stopped and its port independently closed.
+The user reports disabling overrides and resetting temporary device permission;
+a fresh normal reload has no test marker. The permission reset itself was not
+independently inspected. This is segmented browser acceptance, with automatic
+reopen in the original tab and final explicit posting/reload in the fresh normal
+tab. It does not claim uninterrupted completion in one tab.
+
+The supporting [invoice-source lookup index](PURCHASE_SOURCE_LOOKUP_INDEX.md) is
+a separate local schema proposal before bulk imports. It has not been applied
+to Supabase and is not a requirement for the PR24 accounting/recovery result.
 
 Browser restart, independent employee authority, concurrent first posting,
 source-capture/correction command persistence and reviewed fictional-data cleanup

@@ -6,6 +6,7 @@ No real supplier files, credentials or operational data are read.
 import asyncio
 import csv
 import io
+import json
 import os
 import sys
 from pathlib import Path
@@ -195,6 +196,42 @@ class PurchaseIntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(after, before)
             self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.posting_batches'), 0)
             self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.actual_purchase_facts'), 0)
+
+    async def test_source_lookup_index_preserves_reads_and_supports_selective_lookup(self):
+        first,first_bytes,*_=await self.capture(number='TEST-ONLY-INDEX-SOURCE')
+        second,second_bytes,*_=await self.capture(number='TEST-ONLY-INDEX-SOURCE',
+            overrides={'vendor_sku_snapshot':'TEST-ONLY-INDEX-R2'})
+        noise,*_=await self.capture(number='TEST-ONLY-INDEX-NOISE')
+        old_id=UUID(first['documents'][0]['id']);new_id=UUID(second['documents'][0]['id'])
+        run_id=UUID(noise['parse_run_id']);noise_id=UUID(noise['documents'][0]['id'])
+        async with self.pool.acquire() as conn:
+            # Fictional planner data in this disposable database only. Preserve
+            # the target invoice's two real capture graphs without adding a post.
+            await conn.execute('''INSERT INTO purchasing.raw_rows(parse_run_id,row_ordinal,raw_values,parse_errors)
+                SELECT $1,n,'[]'::jsonb,'[]'::jsonb FROM generate_series(2,5001) n''',run_id)
+            await conn.execute('''INSERT INTO purchasing.document_source_rows(parse_run_id,row_ordinal,document_version_id)
+                SELECT $1,n,$2 FROM generate_series(2,5001) n''',run_id,noise_id)
+            await conn.execute('ANALYZE purchasing.document_source_rows')
+            tables=await conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='purchasing' ORDER BY tablename")
+            async def snapshot():
+                return {r['tablename']:await conn.fetchval(
+                    f'SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM purchasing."{r["tablename"]}" r')
+                    for r in tables}
+            before=await snapshot()
+            previews=[await purchases.document_preview(conn,'berts',vid) for vid in (old_id,new_id)]
+            await conn.execute((ROOT/'migrations/20261013_purchase_source_lookup_index.sql').read_text())
+            self.assertEqual(await snapshot(),before)
+            self.assertEqual([await purchases.document_preview(conn,'berts',vid) for vid in (old_id,new_id)],previews)
+            explain=await conn.fetchval('EXPLAIN (FORMAT JSON) SELECT parse_run_id FROM purchasing.document_source_rows WHERE document_version_id=$1',new_id)
+            plan=(json.loads(explain) if isinstance(explain,str) else explain)[0]['Plan']
+            def indexes(node):
+                return ([node['Index Name']] if 'Index Name' in node else [])+[
+                    name for child in node.get('Plans',[]) for name in indexes(child)]
+            self.assertIn('document_source_rows_version_run_idx',indexes(plan))
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.posting_batches'),0)
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.actual_purchase_facts'),0)
+        for file,raw in ((first,first_bytes),(second,second_bytes)):
+            self.assertEqual((await self.client.get(f"/api/pg/purchases/berts/files/{file['id']}/source")).content,raw)
 
     async def test_received_date_cost_fee_tax_and_track_isolation(self):
         file,*_=await self.capture();doc=file['documents'][0]

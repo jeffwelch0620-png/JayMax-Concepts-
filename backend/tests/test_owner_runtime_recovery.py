@@ -44,7 +44,7 @@ class OwnerRuntimeRecoveryTests(checks.DeploymentReadinessTests):
             self.assertFalse(role['rolsuper']);self.assertFalse(role['rolbypassrls'])
             result=await readiness.inspect(conn,(self.client_role,),('berts','rudds'))
             self.assertEqual(result['status'],'passed',result['issues'])
-            self.assertEqual(len(result['migrations']),29)
+            self.assertEqual(len(result['migrations']),len(readiness.MIGRATIONS))
 
     async def test_ordinary_owner_inventory_transactions_and_restore_preserve_exact_replay(self):
         async with self.pool.acquire() as conn:

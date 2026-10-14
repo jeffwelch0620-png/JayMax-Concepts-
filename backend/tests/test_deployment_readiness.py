@@ -47,11 +47,22 @@ class ReadinessConfigurationTests(unittest.TestCase):
         expected={p.name for p in (readiness.ROOT/'migrations').glob('*.sql')} - {'20260930_recurring_prep_items.sql'}
         plan=readiness.migration_plan();self.assertEqual({e['file'] for e in plan['migrations']},expected)
         self.assertEqual(len(readiness.MIGRATIONS),len(expected));self.assertEqual(len(set(readiness.MIGRATIONS)),len(expected))
-        self.assertEqual(readiness.MIGRATIONS[-1],'20261007_native_private_access.sql')
-        self.assertEqual(readiness.MIGRATIONS[-2],'20261008_container_waste_corrections.sql')
+        self.assertEqual(readiness.MIGRATIONS[-1],'20261013_purchase_source_lookup_index.sql')
+        self.assertEqual(readiness.MIGRATIONS[-2],'20261007_native_private_access.sql')
         for e in plan['migrations']:
             self.assertRegex(e['sha256'],r'^[a-f0-9]{64}$')
             for name,table in e['triggers']:self.assertNotIn('%',table)
+
+    def test_required_index_refuses_unusable_or_different_definition(self):
+        expected=next(iter(readiness.INDEX_CONTRACTS.values()))
+        self.assertEqual(readiness.index_mismatches(expected,expected),[])
+        for field,changed in [('valid',False),('ready',False),('live',False),
+            ('columns',list(reversed(expected['columns']))),('key_count',1),('column_count',3),
+            ('is_unique',True),('is_partial',True),('has_expressions',True),
+            ('method','hash'),('options',[1,0]),('opclasses',['other.uuid_ops']*2),
+            ('collations',[1,0]),('table','public.store_state')]:
+            with self.subTest(field=field):
+                self.assertEqual(readiness.index_mismatches(expected|{field:changed},expected),[field])
 
 
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'),'Disposable PostgreSQL required')
@@ -94,7 +105,7 @@ class DeploymentReadinessTests(fixtures.NativeBackupTests):
             await conn.execute((readiness.ROOT/'migrations/20261007_native_private_access.sql').read_text())
         report=await self.probe();self.assertEqual(report['status'],'passed',report['issues'])
         self.assertTrue(report['readOnly']);self.assertFalse(report['operationalReleaseApproved'])
-        self.assertEqual(len(report['migrations']),29)
+        self.assertEqual(len(report['migrations']),30)
         # The inspector itself cannot write, and captures no operational row data.
         async with self.pool.acquire() as conn:
             before=await conn.fetchval('SELECT count(*) FROM purchasing.posting_batches')
@@ -106,6 +117,22 @@ class DeploymentReadinessTests(fixtures.NativeBackupTests):
         restored=await asyncpg.connect(target)
         try:self.assertEqual(await readiness.inspect(restored,(self.client_role,),('berts','rudds')),report)
         finally:await restored.close()
+
+    async def test_readiness_holds_missing_or_wrong_source_lookup_index(self):
+        async with self.pool.acquire() as conn:
+            await conn.execute((readiness.ROOT/'migrations/20261007_native_private_access.sql').read_text())
+            self.assertEqual((await self.probe())['status'],'passed')
+            await conn.execute('DROP INDEX purchasing.document_source_rows_version_run_idx')
+            report=await self.probe()
+            self.assertTrue(any(i['kind']=='index_contract' and i['reason']=='missing' for i in report['issues']))
+            entry=next(e for e in report['migrations'] if e['file']=='20261013_purchase_source_lookup_index.sql')
+            self.assertEqual(entry['status'],'missing_or_partial')
+            await conn.execute('CREATE INDEX document_source_rows_version_run_idx ON purchasing.document_source_rows(parse_run_id,document_version_id)')
+            report=await self.probe()
+            self.assertTrue(any(i['kind']=='index_contract' and 'columns' in i.get('fields',[]) for i in report['issues']))
+            await conn.execute('DROP INDEX purchasing.document_source_rows_version_run_idx')
+            await conn.execute((readiness.ROOT/'migrations/20261013_purchase_source_lookup_index.sql').read_text())
+            self.assertEqual((await self.probe())['status'],'passed')
 
     async def test_readiness_catches_inherited_access_missing_roles_disabled_guards_and_later_ddl(self):
         async with self.pool.acquire() as conn:

@@ -37,3 +37,4 @@ For an existing hosted database, compare recorded migration history and object d
 | 27 | [20261007_staff_prep_production.sql](20261007_staff_prep_production.sql) |
 | 28 | [20261008_container_waste_corrections.sql](20261008_container_waste_corrections.sql) |
 | 29 | [20261007_native_private_access.sql](20261007_native_private_access.sql) |
+| 30 | [20261013_purchase_source_lookup_index.sql](20261013_purchase_source_lookup_index.sql) |

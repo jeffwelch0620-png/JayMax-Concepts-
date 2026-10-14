@@ -27,11 +27,11 @@ class DeliveryTests(unittest.TestCase):
             manifest = development.prepare_bundle(root)
             self.assertEqual([e['sourceFile'] for e in manifest['migrations']],
                              ['migrations/' + name for name in readiness.MIGRATIONS])
-            self.assertEqual(development.verify_bundle(root)['files'], 29)
+            self.assertEqual(development.verify_bundle(root)['files'], len(readiness.MIGRATIONS))
             self.assertFalse(manifest['automaticApply'])
             self.assertFalse(manifest['deliveryVersionsAreHistoricalAppliedVersions'])
             versions = [e['deliveryVersion'] for e in manifest['migrations']]
-            self.assertEqual(len(set(versions)), 29)
+            self.assertEqual(len(set(versions)), len(readiness.MIGRATIONS))
             for entry in manifest['migrations']:
                 self.assertEqual((root / entry['deliveryFile']).read_bytes(),
                                  (readiness.ROOT / entry['sourceFile']).read_bytes())
