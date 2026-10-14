@@ -17,6 +17,22 @@ import sys
 import time
 from urllib.parse import urlsplit
 
+
+def require_runtime(version=None, platform=None):
+    if (version or sys.version_info) < (3, 12):
+        raise ValueError('Hosted adapter requires Python 3.12 or newer')
+    if (platform or os.name) != 'nt':
+        raise ValueError('Hosted adapter requires Windows and PowerShell 7')
+
+
+# Check before third-party imports or any output/connection preparation.
+if __name__ == '__main__':
+    try:
+        require_runtime()
+    except ValueError as exc:
+        print(json.dumps({'status': 'invocation_held', 'reason': str(exc), 'sqlCommitted': False}))
+        raise SystemExit(2)
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'backend'))
 import asyncpg
 from dotenv import dotenv_values
@@ -25,8 +41,8 @@ import hosted_backup as backup
 from db_tls import connection_tls, DEFAULT_CA
 from managed_development import project_identity
 
-FORMAT = 'jaymax-hosted-additive-index-plan-v1'
-REVIEW_FORMAT = 'jaymax-hosted-additive-index-review-v1'
+FORMAT = 'jaymax-hosted-additive-index-plan-v2'
+REVIEW_FORMAT = 'jaymax-hosted-additive-index-review-v2'
 BUDGETS = {'lockSeconds': 5, 'probeSeconds': 20, 'ddlSeconds': 30,
            'idleTransactionSeconds': 120, 'operationSeconds': 600}
 LEDGER = 'supabase_migrations.schema_migrations'
@@ -93,6 +109,65 @@ def roles(review):
     return value
 
 
+def writer_roles(review):
+    value = review.get('writerLoginRoles')
+    if (not isinstance(value, list) or not value
+            or any(not isinstance(r, str) or not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}', r) for r in value)
+            or len(value) != len(set(value))):
+        raise Held('A nonempty reviewed list of application LOGIN roles is required')
+    return value
+
+
+async def server_version(conn, binding=None):
+    value = await conn.fetchval('SHOW server_version_num')
+    if int(value) < 160000:
+        raise Held('Hosted adapter requires PostgreSQL 16 or newer; PostgreSQL 17 is tested')
+    if binding is not None and value != binding['serverVersionNum']:
+        raise Held('The live PostgreSQL version differs from the reviewed backup')
+
+
+async def writer_sessions(conn, review, phase, observations):
+    """A refreshed observation, not proof that disconnected writers cannot return."""
+    names = writer_roles(review)
+    async def probe():
+        await conn.execute("SET LOCAL statement_timeout='20s'")
+        await conn.execute('SELECT pg_stat_clear_snapshot()')
+        row = await conn.fetchrow("""WITH sessions AS (
+            SELECT pid,usename,state FROM pg_stat_activity
+            WHERE datname=current_database() AND pid<>pg_backend_pid()
+              AND backend_type='client backend'
+        ), writing AS (
+            SELECT DISTINCT s.pid FROM sessions s JOIN pg_locks l ON l.pid=s.pid
+              JOIN pg_class c ON c.oid=l.relation JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname=ANY($2::text[]) AND l.locktype='relation'
+              AND l.mode IN ('RowExclusiveLock','ShareRowExclusiveLock','ExclusiveLock','AccessExclusiveLock')
+              AND s.state IN ('active','idle in transaction','idle in transaction (aborted)')
+        ) SELECT
+          (SELECT count(*) FROM pg_roles WHERE rolname=ANY($1::text[]) AND rolcanlogin) AS verified_roles,
+          (SELECT count(*) FROM sessions WHERE usename=ANY($1::text[])) AS application_sessions,
+          (SELECT count(*) FROM writing) AS write_transactions,
+          (SELECT count(*) FROM sessions WHERE state IS NULL OR state='disabled') AS unobservable_sessions
+        """, names, list(backup.SCHEMAS) + ['supabase_migrations'])
+        observed = {'phase': phase, 'reviewedLoginCount': len(names),
+                    'verifiedLoginCount': row['verified_roles'],
+                    'applicationSessionCount': row['application_sessions'],
+                    'applicationWriteTransactionCount': row['write_transactions'],
+                    'unobservableSessionCount': row['unobservable_sessions']}
+        observations.append(observed)
+        if observed['verifiedLoginCount'] != len(names):
+            raise Held('Reviewed application LOGIN roles are missing or no longer LOGIN roles')
+        if any(observed[k] for k in ('applicationSessionCount', 'applicationWriteTransactionCount',
+                                     'unobservableSessionCount')):
+            raise Held('Live application sessions or write transactions remain, or visibility is incomplete')
+        return observed
+    if conn.is_in_transaction():
+        return await probe()
+    # This transaction ends before the engine starts its own repeatable-read
+    # transaction, preserving the table-lock-before-first-snapshot ordering.
+    async with conn.transaction(readonly=True):
+        return await probe()
+
+
 def checked_json(path, expected):
     raw = Path(path).read_bytes()
     if not isinstance(expected, str) or not re.fullmatch(r'[a-f0-9]{64}', expected) or sha(raw) != expected:
@@ -105,6 +180,7 @@ def load_evidence(review, *, now=None, active=True):
     if review.get('format') != REVIEW_FORMAT or review.get('budgets') != BUDGETS:
         raise Held('Unsupported hosted review or unreviewed timeout budgets')
     roles(review)
+    writer_roles(review)
     now = now or datetime.now(timezone.utc)
     start, end = maintenance(review, now=now, active=active)
     item = review['backup']
@@ -140,6 +216,7 @@ def load_evidence(review, *, now=None, active=True):
 
 
 def validate(plan, review, reviewed_target, binding):
+    writer_roles(review)
     if (plan.get('format') != FORMAT or plan.get('target') != reviewed_target
             or plan.get('reviewSha256') != fingerprint(review) or plan.get('backup') != binding
             or plan.get('budgets') != BUDGETS or plan.get('maintenance') != review['maintenance']):
@@ -182,29 +259,36 @@ async def ledger_clients(conn, clients):
             raise Held('Ordinary client access to the migration ledger is not allowed')
 
 
-async def prepare(conn, original, review, reviewed_target, facts, binding):
+async def prepare(conn, original, review, reviewed_target, facts, binding, *, observations=None):
     # Preparation and backup comparison share one consistent read-only snapshot.
     maintenance(review)
+    observations = observations if observations is not None else []
+    await server_version(conn, binding)
+    await writer_sessions(conn, review, 'prepare', observations)
     async with conn.transaction(isolation='repeatable_read', readonly=True):
         await conn.execute("SET LOCAL statement_timeout='20s'")
-        if await conn.fetchval('SHOW server_version_num') != binding['serverVersionNum']:
-            raise Held('The live PostgreSQL version differs from the reviewed backup')
         await ledger_clients(conn, roles(review))
         await backup_match(conn, facts)
         core = await engine.prepare(conn, original, review['deliveryVersion'], client_roles=roles(review))
     result = {'format': FORMAT, 'createdAt': datetime.now(timezone.utc).isoformat(),
               'target': reviewed_target, 'reviewSha256': fingerprint(review), 'backup': binding,
               'maintenance': review['maintenance'], 'budgets': BUDGETS, 'core': core,
+              'writerObservations': observations.copy(),
               'automaticApply': False, 'operationalReleaseApproved': False}
     validate(result, review, reviewed_target, binding)
     return result
 
 
-async def apply(conn, plan, review, reviewed_target, facts, binding):
+async def apply(conn, plan, review, reviewed_target, facts, binding, *, observations=None):
     validate(plan, review, reviewed_target, binding)
+    observations = observations if observations is not None else []
+    maintenance(review)
+    await server_version(conn, binding)
+    await writer_sessions(conn, review, 'before_table_locks', observations)
     async def guard(connection, phase):
         # Recheck after acquiring the engine's table locks and before COMMIT.
         maintenance(review)
+        await writer_sessions(connection, review, 'locked_' + phase, observations)
         await ledger_clients(connection, roles(review))
         checked = await backup_match(connection, facts, after=phase == 'after')
         maintenance(review)
@@ -214,6 +298,7 @@ async def apply(conn, plan, review, reviewed_target, facts, binding):
 
 async def reconcile(conn, plan, review, reviewed_target, facts, binding):
     validate(plan, review, reviewed_target, binding)
+    await server_version(conn, binding)
     if conn.is_in_transaction():
         raise Held('Hosted reconciliation requires an independent connection without a transaction')
     # Hold the same session lock throughout the engine and broader backup reads.
@@ -265,17 +350,40 @@ def verify_acl(path):
         raise Held('Private input ownership or ACL verification held')
 
 
+def write_private(path, raw):
+    """Only create a fresh generated artifact; never repair caller-owned inputs."""
+    with Path(path).open('xb') as stream:
+        stream.write(raw)
+    shell = shutil.which('pwsh')
+    if not shell:
+        raise Held('PowerShell 7 private output preparation is required')
+    script = """$ErrorActionPreference='Stop'; $p=$env:JAYMAX_ADDITIVE_PRIVATE;
+      $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User;
+      $acl=[Security.AccessControl.FileSecurity]::new();
+      $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false);
+      foreach($id in @($sid.Value,'S-1-5-18')) {
+        $rule=[Security.AccessControl.FileSystemAccessRule]::new(
+          [Security.Principal.SecurityIdentifier]::new($id),'FullControl','Allow');
+        $acl.AddAccessRule($rule) }; Set-Acl -LiteralPath $p -AclObject $acl"""
+    result = subprocess.run([shell, '-NoProfile', '-NonInteractive', '-Command', script],
+        env={**os.environ, 'JAYMAX_ADDITIVE_PRIVATE': str(path)}, capture_output=True, timeout=20,
+        creationflags=backup.FLAGS)
+    if result.returncode:
+        raise Held('Private output ownership or ACL preparation held')
+    verify_acl(path)
+
+
 async def run(args):
     # Create/ACL-verify a fresh output folder and initial receipt BEFORE connecting.
     directory = backup.private_directory(Path(args.output_directory), 'backups')
     output = directory / 'receipt.json'
     result = {'status': 'held', 'mode': args.mode, 'commitAttempted': False,
               'sqlCommitted': None if args.mode == 'reconcile' else False,
-              'automaticRetry': False, 'operationalReleaseApproved': False}
+              'automaticRetry': False, 'operationalReleaseApproved': False, 'writerObservations': []}
     def emit():
         # This is our fresh private receipt, never an existing caller artifact.
         temporary = directory / 'receipt.partial'
-        temporary.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+        write_private(temporary, (json.dumps(result, indent=2, sort_keys=True) + '\n').encode())
         temporary.replace(output)
     emit()
     conn = None
@@ -305,9 +413,10 @@ async def run(args):
         async with asyncio.timeout(BUDGETS['operationSeconds']):
             conn = await connect(args.mode != 'apply')
             if args.mode == 'dry-run':
-                plan = await prepare(conn, original, review, identity, facts, binding)
+                plan = await prepare(conn, original, review, identity, facts, binding,
+                                     observations=result['writerObservations'])
                 raw = (json.dumps(plan, indent=2, sort_keys=True) + '\n').encode()
-                (directory / 'plan.json').write_bytes(raw)
+                write_private(directory / 'plan.json', raw)
                 result.update(status='prepared_hosted_plan', planSha256=sha(raw), sqlCommitted=False)
             elif args.mode == 'reconcile':
                 result.update(await reconcile(conn, plan, review, identity, facts, binding))
@@ -317,7 +426,8 @@ async def run(args):
                 result.update(status='apply_in_progress_outcome_unknown', sqlCommitted=None,
                               planSha256=args.plan_sha256, commitAttempted=None)
                 emit()
-                result.update(await apply(conn, plan, review, identity, facts, binding))
+                result.update(await apply(conn, plan, review, identity, facts, binding,
+                                          observations=result['writerObservations']))
                 emit()
                 await conn.close()
                 conn = None

@@ -18,7 +18,7 @@ OFFLINE_CLASSES = ('deployment_readiness::ReadinessConfigurationTests runtime_pe
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
- 'hosted_additive_index::HostedReceiptGuards').split()
+ 'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_same_version_correction_and_exact_retry'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_reissued_version_correction_and_exact_retry'),
@@ -71,7 +71,12 @@ DATABASE_CASES += tuple(('hosted_additive_index', 'HostedAdapterDatabaseTests', 
  'test_precommit_backup_guard_failure_rolls_back_index_and_ledger',
  'test_hosted_commit_ack_loss_reconciles_without_reapplication',
  'test_hosted_active_writer_prevents_false_unapplied_reconciliation',
- 'test_write_committing_during_lock_wait_is_seen_before_ddl'))
+ 'test_write_committing_during_lock_wait_is_seen_before_ddl',
+ 'test_reviewed_idle_login_holds_prepare_and_apply_before_table_locks',
+ 'test_unknown_login_write_transaction_holds_but_idle_observer_does_not',
+ 'test_activity_refresh_sees_new_session_in_same_transaction',
+ 'test_new_login_after_preflight_is_refused_by_locked_guard',
+ 'test_restricted_observer_cannot_claim_other_sessions_are_drained'))
 
 
 def main():

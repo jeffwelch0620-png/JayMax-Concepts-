@@ -10,6 +10,13 @@ by this workflow. The live Render deployment commit has not been verified here.
 ## Connection and scope
 
 Run `tools/ops/hosted_additive_index.py` manually from the complete local checkout.
+The operator prerequisites are **Windows, PowerShell 7 and Python 3.12+**.
+The entry point checks Python/platform before third-party imports, creating
+output or connecting. `Path.is_junction()` is required by the adapter and the
+existing private-directory helper. This does not change Render's Python 3.11
+runtime. The adapter checks **PostgreSQL 16+** before reading the membership
+catalog's `inherit_option`/`set_option`; local database acceptance uses PostgreSQL
+17. The live server version must also exactly match the reviewed backup.
 It is outside Render's `backend` root and has no app route or deployment hook.
 The shared additive engine has moved to `tools/ops/apply_additive_migration.py`;
 existing installation/backup support modules remain in backend for their existing
@@ -43,6 +50,10 @@ Track 1 accounting remains independent of prep/sales analytics.
    other app instances, coworkers/browser submissions, jobs, imports and direct
    SQL sessions. Confirm the available Render controls before selecting a stop or
    read-only mechanism. This adapter does not suspend services or disable jobs.
+   Record the exact inventory/account and any other application LOGIN identities
+   in the private `writerLoginRoles` list. It must be nonempty, distinct and match
+   live LOGIN roles. This list requires operator review; the tool cannot discover
+   a disconnected external writer or prove that this list is exhaustive.
 3. Prepare private files under `%LOCALAPPDATA%\JayMaxBuild`, outside Git/Drive.
    Retain the successful original 29-file installation receipt and hash it.
    No password, owner URL, business rows or backup key belongs in README or Pages.
@@ -57,7 +68,8 @@ Track 1 accounting remains independent of prep/sales analytics.
 
 1. Stop submissions and all writers; drain in-flight requests. Record the method
    and confirmation in the private review file. These flags are operator
-   attestations: the tool cannot prove that every external writer is stopped.
+   attestations, supplemented by the live observations below. Neither a quiet
+   observation nor the flags prove that external writers cannot reconnect.
 2. Export a fresh encrypted backup and complete its disposable isolated restore.
    Keep the encrypted archive, separate key, restore receipt and their hashes.
 3. Complete the private review JSON described below. Pin it by raw SHA-256.
@@ -67,6 +79,12 @@ Track 1 accounting remains independent of prep/sales analytics.
    untrusted client roles may be listed; privileged backend roles are not ordinary
    denied clients. Existing runtime permissions are retained and still require
    their established profile checks and later live acceptance.
+   It also refuses any remaining session for a reviewed application LOGIN,
+   any other client transaction holding a write-mode relation lock on an
+   application/ledger table, and any client session with hidden/disabled activity
+   in this database. Idle ordinary observer sessions and unrelated database
+   sessions do not block it. Supabase `authenticator` connections are evaluated
+   by these rules, not rejected solely because of their name.
 5. Review/hash the generated `plan.json`; record elapsed time and exact project,
    actor, endpoint, CA hash, migration, permissions and backup bindings. The
    adapter rejects local-only plans, omitted client checks and changed evidence.
@@ -79,6 +97,13 @@ Track 1 accounting remains independent of prep/sales analytics.
    defaults, immediate unique non-null versions, ownership, ACLs, policies,
    triggers, role attributes and memberships. Recheck the backup under the locks,
    execute the unchanged index body plus one ledger row, then verify before COMMIT.
+   Apply repeats the live activity check before entering the engine/table locks,
+   after the locks and before COMMIT. Each observation clears the cached activity
+   snapshot. The preflight read-only transaction ends before the engine starts
+   repeatable read, preserving its table-lock-before-first-snapshot ordering.
+   Plans/receipts contain only the phase and aggregate counts, never session IDs,
+   query text or connection details. A late writer may still cause a bounded lock
+   wait or refusal; these checks are supplementary, not a maintenance mechanism.
 7. A fresh read-only connection reconciles the exact outcome. Verify readiness,
    the current-source reopening read and the closed fictional **$212** Food Cost
    control separately; record those results as hosted acceptance, not local proof.
@@ -114,10 +139,14 @@ available. Existing plan/evidence folders are never reused.
 Plans now use core format `jaymax-additive-source-index-plan-v2` because ledger
 metadata is part of the baseline. Old v1 local plans are not silently upgraded.
 Preserve their original source checkpoint if reconciliation is ever needed.
+The hosted envelope and review are now **v2**, requiring `writerLoginRoles`.
+Old hosted v1 plans/reviews are refused rather than silently upgraded. Retain
+their original source checkpoint for any prior recovery; this workflow has not
+executed either hosted format.
 
-## Local acceptance evidence
+## Previous local acceptance evidence
 
-The final source-pinned checkpoint passes **635 reported cases**, with zero
+The pre-amendment source checkpoint **2e15b37** passes **635 reported cases**, with zero
 failures, errors or skips: 230 offline methods plus 379 subtests (609), and 22
 additive-core/hosted-wrapper database methods plus 4 subtests (26). Existing
 dependency deprecation warnings are retained separately. Actual Windows protected
@@ -156,10 +185,11 @@ intentionally does not assert stopped writers or contain usable hosted evidence.
 
 ```json
 {
-  "format": "jaymax-hosted-additive-index-review-v1",
+  "format": "jaymax-hosted-additive-index-review-v2",
   "projectRef": "<designated-build-project-ref>",
   "deliveryVersion": "<new-reviewed-14-digit-timestamp>",
   "clientRoles": ["anon", "authenticated"],
+  "writerLoginRoles": ["<reviewed-inventory-login>", "<reviewed-account-login>"],
   "budgets": {"lockSeconds": 5, "probeSeconds": 20, "ddlSeconds": 30,
     "idleTransactionSeconds": 120, "operationSeconds": 600},
   "maintenance": {"startsAt": "<UTC ISO timestamp>", "endsAt": "<UTC ISO timestamp>",
@@ -179,6 +209,10 @@ Inputs are restricted to local JayMaxBuild files; redirected paths and grants to
 other identities are refused, and current-user ownership is verified. Retain
 protected ACLs using the existing private configuration and backup tools.
 Credentials stay in the owner dotenv file, not CLI arguments.
+New generated plan/receipt files explicitly receive and verify their own
+current-user ownership and protected current-user/SYSTEM ACLs. Directory owner
+settings do not establish a new child file's owner on an elevated Windows runner.
+Incoming files are still strictly verified and are never repaired by this tool.
 
 ```text
 python tools/ops/hosted_additive_index.py dry-run --owner-config <private-owner-env> --expected-project <ref> --review <private-review.json> --review-sha256 <review-file-sha256> --output-directory <new-private-directory>

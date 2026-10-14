@@ -9,7 +9,7 @@ import sys
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/ops'))
@@ -27,6 +27,7 @@ def review():
     now = datetime.now(timezone.utc)
     return {'format': hosted.REVIEW_FORMAT, 'projectRef': PROJECT,
             'deliveryVersion': '20261014010000', 'clientRoles': ['anon', 'authenticated'],
+            'writerLoginRoles': ['test_only_index_inventory', 'test_only_index_account'],
             'budgets': dict(hosted.BUDGETS), 'maintenance': {
                 'startsAt': (now - timedelta(minutes=5)).isoformat(),
                 'endsAt': (now + timedelta(minutes=20)).isoformat(),
@@ -51,6 +52,20 @@ def envelope(spec, core, binding):
 
 
 class HostedAdapterGuards(unittest.TestCase):
+    def test_runtime_prerequisites_refuse_before_output_or_database_preparation(self):
+        hosted.require_runtime((3, 12), 'nt')
+        for version, platform in (((3, 11), 'nt'), ((3, 12), 'posix')):
+            with self.subTest(version=version, platform=platform), self.assertRaisesRegex(ValueError, 'requires'):
+                hosted.require_runtime(version, platform)
+
+    def test_writer_role_list_cannot_be_missing_duplicated_or_malformed(self):
+        for value in (None, [], ['test_only'], ['same', 'same'], [{}], ['bad-name']):
+            if value == ['test_only']:
+                self.assertEqual(hosted.writer_roles({'writerLoginRoles': value}), value)
+                continue
+            with self.subTest(value=value), self.assertRaises(hosted.Held):
+                hosted.writer_roles({'writerLoginRoles': value})
+
     def test_target_retains_session_pooler_and_certificate_validation_without_credentials(self):
         dsn = 'postgresql://postgres.' + PROJECT + ':fictional-secret@fictional.pooler.supabase.com:5432/postgres'
         result = hosted.target(dsn, PROJECT)
@@ -136,18 +151,28 @@ class HostedAdapterGuards(unittest.TestCase):
         with TemporaryDirectory() as directory, patch.dict(os.environ, {'LOCALAPPDATA': directory}):
             root = Path(directory).resolve()
             protected = hosted.backup.private_directory(root / 'JayMaxBuild/backups' / ('backup-' + uuid4().hex), 'backups')
-            item = protected / 'TEST_ONLY_review.json'; item.write_text('{}')
+            item = protected / 'TEST_ONLY_review.json'
+            # Folder ownership is not inherited by a newly created child file,
+            # especially when the Windows runner uses an elevated token.
+            hosted.write_private(item, b'{}')
             self.assertEqual(hosted.private_file(item), item)
-            script = """$ErrorActionPreference='Stop'; $p=$env:JAYMAX_ADDITIVE_PRIVATE;
-                $acl=Get-Acl -LiteralPath $p;
-                $identity=[Security.Principal.SecurityIdentifier]::new('S-1-1-0');
-                $rule=[Security.AccessControl.FileSystemAccessRule]::new($identity,'Read','Allow');
-                $acl.AddAccessRule($rule); Set-Acl -LiteralPath $p -AclObject $acl"""
-            result = hosted.subprocess.run([hosted.shutil.which('pwsh'), '-NoProfile', '-NonInteractive', '-Command', script],
-                env={**os.environ, 'JAYMAX_ADDITIVE_PRIVATE': str(item)}, capture_output=True, timeout=20,
+            with self.assertRaises(FileExistsError): hosted.write_private(item, b'changed')
+            self.assertEqual(item.read_bytes(), b'{}')
+            # icacls modifies only the DACL. Set-Acl may attempt audit writes and
+            # require SeSecurityPrivilege on a protected descriptor.
+            result = hosted.subprocess.run(['icacls.exe', str(item), '/grant', '*S-1-1-0:(R)'],
+                capture_output=True, timeout=20,
                 creationflags=hosted.backup.FLAGS)
             self.assertEqual(result.returncode, 0)
             with self.assertRaises(hosted.Held): hosted.private_file(item)
+
+    def test_private_output_failure_retains_artifact_and_refuses_acceptance(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / 'TEST_ONLY_output'
+            with patch.object(hosted.shutil, 'which', return_value='pwsh'),\
+                 patch.object(hosted.subprocess, 'run', return_value=SimpleNamespace(returncode=2)):
+                with self.assertRaises(hosted.Held): hosted.write_private(path, b'TEST ONLY')
+            self.assertEqual(path.read_bytes(), b'TEST ONLY')
 
     def test_encrypted_backup_is_bound_to_fresh_restore_and_original_history(self):
         from cryptography.fernet import Fernet
@@ -190,6 +215,42 @@ class HostedAdapterGuards(unittest.TestCase):
             with self.assertRaises(hosted.Held): hosted.load_evidence(spec)
 
 
+class HostedWriterGuards(unittest.IsolatedAsyncioTestCase):
+    async def test_unobservable_unknown_role_writes_and_reviewed_idle_sessions_hold_with_redacted_counts(self):
+        for field in ('application_sessions', 'write_transactions', 'unobservable_sessions', 'verified_roles'):
+            counts = dict(verified_roles=2, application_sessions=0, write_transactions=0, unobservable_sessions=0)
+            counts[field] = 1
+            conn = SimpleNamespace(is_in_transaction=lambda: True, execute=AsyncMock(),
+                                   fetchrow=AsyncMock(return_value=counts))
+            observed = []
+            with self.subTest(field=field), self.assertRaises(hosted.Held):
+                await hosted.writer_sessions(conn, review(), 'TEST ONLY', observed)
+            self.assertEqual(len(observed), 1)
+            self.assertNotIn('test_only_index', json.dumps(observed))
+            self.assertNotIn('query', json.dumps(observed))
+            self.assertTrue(any('pg_stat_clear_snapshot' in call.args[0] for call in conn.execute.await_args_list))
+
+    async def test_outside_transaction_probe_ends_before_engine_and_refreshes_each_observation(self):
+        tx = MagicMock()
+        tx.__aenter__ = AsyncMock(); tx.__aexit__ = AsyncMock()
+        conn = SimpleNamespace(is_in_transaction=lambda: False, transaction=MagicMock(return_value=tx),
+            execute=AsyncMock(), fetchrow=AsyncMock(return_value=dict(verified_roles=2,
+                application_sessions=0, write_transactions=0, unobservable_sessions=0)))
+        observed = []
+        await hosted.writer_sessions(conn, review(), 'prepare', observed)
+        await hosted.writer_sessions(conn, review(), 'before_table_locks', observed)
+        self.assertEqual(tx.__aexit__.await_count, 2)
+        self.assertEqual(sum('pg_stat_clear_snapshot' in call.args[0] for call in conn.execute.await_args_list), 2)
+
+    async def test_server_minimum_and_exact_backup_version_are_checked(self):
+        for version in ('150012', '170007'):
+            conn = SimpleNamespace(fetchval=AsyncMock(return_value=version))
+            with self.subTest(version=version), self.assertRaises(hosted.Held):
+                await hosted.server_version(conn, {'serverVersionNum': '170006'})
+        await hosted.server_version(SimpleNamespace(fetchval=AsyncMock(return_value='170006')),
+                                    {'serverVersionNum': '170006'})
+
+
 class HostedReceiptGuards(unittest.IsolatedAsyncioTestCase):
     async def test_timeout_and_lost_ack_receipts_retain_unknown_without_resending(self):
         await self.exercise(asyncio.TimeoutError(), 'apply_in_progress_outcome_unknown', None)
@@ -222,6 +283,7 @@ class HostedReceiptGuards(unittest.IsolatedAsyncioTestCase):
             send = AsyncMock(side_effect=error, return_value={'status': 'committed_requires_independent_verification',
                 'sqlCommitted': True, 'commitAttempted': True})
             with patch.object(hosted.backup, 'private_directory', return_value=output),\
+                 patch.object(hosted, 'write_private', side_effect=lambda p, raw: Path(p).write_bytes(raw)),\
                  patch.object(hosted, 'private_file', side_effect=Path),\
                  patch.object(hosted, 'dotenv_values', return_value={'DATABASE_URL': 'TEST ONLY mocked URL'}),\
                  patch.object(hosted, 'target', return_value=TARGET), patch.object(hosted, 'connection_tls', return_value=True),\
@@ -251,6 +313,11 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
                     if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)', name):
                         await conn.execute('CREATE ROLE ' + name + ' NOLOGIN')
                         created.append(name)
+                cls.writer_login_roles = ['test_only_index_' + kind + '_' + uuid4().hex[:8]
+                                          for kind in ('inventory', 'account')]
+                for name in cls.writer_login_roles:
+                    await conn.execute('CREATE ROLE ' + name + ' LOGIN')
+                    created.append(name)
                 return created
             finally: await conn.close()
         cls.created_roles = asyncio.run(provision())
@@ -276,6 +343,7 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
 
     async def hosted_plan(self):
         self.spec = review()
+        self.spec['writerLoginRoles'] = self.writer_login_roles
         # The public CLI refuses this loopback identity. Only library helpers are
         # exercised against the explicitly disposable fixture, with no hosted DSN.
         self.target = TARGET | {'actor': 'purchase_implementation_test', 'host': '127.0.0.1'}
@@ -301,6 +369,91 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
         report = await actual.period_report(self.conn, self.workflow['temporaryStore'],
             UUID(params['opening']), UUID(params['closing']))
         self.assertEqual(report['actualFoodCost'], '55.00')
+
+    async def test_reviewed_idle_login_holds_prepare_and_apply_before_table_locks(self):
+        plan = await self.hosted_plan()
+        writer = await hosted.asyncpg.connect(self.dsn.replace('purchase_implementation_test', self.writer_login_roles[0]))
+        observed = []
+        try:
+            with self.assertRaises(hosted.Held):
+                await hosted.prepare(self.conn, self.original, self.spec, self.target, self.facts, self.binding,
+                                     observations=observed)
+            with patch.object(hosted.engine, 'apply', new_callable=AsyncMock) as send:
+                with self.assertRaises(hosted.Held):
+                    await hosted.apply(self.conn, plan, self.spec, self.target, self.facts, self.binding,
+                                       observations=observed)
+                send.assert_not_awaited()
+            self.assertEqual(observed[-1]['applicationSessionCount'], 1)
+            self.assertEqual(observed[-1]['phase'], 'before_table_locks')
+            self.assertNotIn(self.writer_login_roles[0], json.dumps(observed))
+            self.assertFalse(await self.conn.fetchval('SELECT to_regclass($1) IS NOT NULL', hosted.engine.INDEX))
+        finally: await writer.close()
+        self.assertTrue((await hosted.apply(self.conn, plan, self.spec, self.target, self.facts, self.binding))['sqlCommitted'])
+
+    async def test_unknown_login_write_transaction_holds_but_idle_observer_does_not(self):
+        plan = await self.hosted_plan()
+        writer = await hosted.asyncpg.connect(self.dsn)
+        observed = []
+        try:
+            await hosted.writer_sessions(self.conn, self.spec, 'idle_observer', observed)
+            tx = writer.transaction(); await tx.start()
+            await writer.execute("UPDATE public.stores SET name='TEST ONLY unreviewed writer' WHERE id='berts'")
+            with self.assertRaises(hosted.Held):
+                await hosted.apply(self.conn, plan, self.spec, self.target, self.facts, self.binding,
+                                   observations=observed)
+            self.assertEqual(observed[-1]['applicationWriteTransactionCount'], 1)
+            self.assertEqual(observed[-1]['applicationSessionCount'], 0)
+            await tx.rollback()
+        finally: await writer.close()
+        self.assertEqual((await self.independent(plan))['status'], 'verified_not_applied')
+
+    async def test_activity_refresh_sees_new_session_in_same_transaction(self):
+        await self.hosted_plan()
+        writer = None
+        observed = []
+        try:
+            async with self.conn.transaction(isolation='repeatable_read', readonly=True):
+                await hosted.writer_sessions(self.conn, self.spec, 'first', observed)
+                writer = await hosted.asyncpg.connect(self.dsn.replace('purchase_implementation_test', self.writer_login_roles[0]))
+                with self.assertRaises(hosted.Held):
+                    await hosted.writer_sessions(self.conn, self.spec, 'second', observed)
+                self.assertEqual(observed[-1]['applicationSessionCount'], 1)
+        finally:
+            if writer is not None: await writer.close()
+
+    async def test_new_login_after_preflight_is_refused_by_locked_guard(self):
+        plan = await self.hosted_plan()
+        probe = hosted.writer_sessions
+        writer = None
+        observed = []
+        async def arrive(conn, spec, phase, observations):
+            nonlocal writer
+            result = await probe(conn, spec, phase, observations)
+            if phase == 'before_table_locks':
+                writer = await hosted.asyncpg.connect(self.dsn.replace('purchase_implementation_test', self.writer_login_roles[0]))
+            return result
+        try:
+            with patch.object(hosted, 'writer_sessions', side_effect=arrive):
+                with self.assertRaises(hosted.engine.AdditiveFailure) as failure:
+                    await hosted.apply(self.conn, plan, self.spec, self.target, self.facts, self.binding,
+                                       observations=observed)
+            self.assertTrue(failure.exception.report['rollbackCompleted'])
+            self.assertFalse(failure.exception.report['commitAttempted'])
+            self.assertEqual(observed[-1]['phase'], 'locked_before')
+            self.assertEqual(observed[-1]['applicationSessionCount'], 1)
+            self.assertFalse(await self.conn.fetchval('SELECT to_regclass($1) IS NOT NULL', hosted.engine.INDEX))
+        finally:
+            if writer is not None: await writer.close()
+
+    async def test_restricted_observer_cannot_claim_other_sessions_are_drained(self):
+        await self.hosted_plan()
+        restricted = await hosted.asyncpg.connect(self.dsn.replace('purchase_implementation_test', self.writer_login_roles[0]))
+        observed = []
+        try:
+            with self.assertRaises(hosted.Held):
+                await hosted.writer_sessions(restricted, self.spec, 'restricted', observed)
+            self.assertGreater(observed[-1]['unobservableSessionCount'], 0)
+        finally: await restricted.close()
 
     async def test_hosted_permission_checks_reject_client_private_access(self):
         await self.conn.execute('GRANT USAGE ON SCHEMA purchasing TO anon')
@@ -382,19 +535,27 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
         writer = await asyncpg.connect(self.dsn)
         observer = await asyncpg.connect(self.dsn)
         tx = writer.transaction()
-        await tx.start()
         task = None
+        probe = hosted.writer_sessions
+        async def after_preflight(conn, spec, phase, observations):
+            result = await probe(conn, spec, phase, observations)
+            if phase == 'before_table_locks':
+                # Arrive AFTER the observed drain; the table lock and fresh
+                # snapshot must still refuse a changed baseline.
+                await tx.start()
+                await writer.execute("UPDATE public.stores SET name='TEST ONLY changed during wait' WHERE id='berts'")
+            return result
         try:
-            await writer.execute("UPDATE public.stores SET name='TEST ONLY changed during wait' WHERE id='berts'")
             pid = self.conn.get_server_pid()
-            task = asyncio.create_task(hosted.apply(self.conn, plan, self.spec, self.target, self.facts, self.binding))
-            for _ in range(100):
-                if await observer.fetchval("SELECT wait_event_type='Lock' FROM pg_stat_activity WHERE pid=$1", pid):
-                    break
-                await asyncio.sleep(.02)
-            else: self.fail('Installer did not enter the expected table-lock wait')
-            await tx.commit()
-            with self.assertRaises(hosted.engine.AdditiveFailure) as failure: await task
+            with patch.object(hosted, 'writer_sessions', side_effect=after_preflight):
+                task = asyncio.create_task(hosted.apply(self.conn, plan, self.spec, self.target, self.facts, self.binding))
+                for _ in range(100):
+                    if await observer.fetchval("SELECT wait_event_type='Lock' FROM pg_stat_activity WHERE pid=$1", pid):
+                        break
+                    await asyncio.sleep(.02)
+                else: self.fail('Installer did not enter the expected table-lock wait')
+                await tx.commit()
+                with self.assertRaises(hosted.engine.AdditiveFailure) as failure: await task
             self.assertFalse(failure.exception.report['commitAttempted'])
             self.assertTrue(failure.exception.report['rollbackCompleted'])
             self.assertFalse(await self.conn.fetchval('SELECT to_regclass($1) IS NOT NULL', hosted.engine.INDEX))

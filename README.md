@@ -9,7 +9,7 @@ The next **codex/hosted-additive-index-adapter** branch prepares a manual adapte
 outside Render's backend root, mandatory ordinary-client checks, full ledger
 metadata preservation, backup/restore bindings and an explicit maintenance plan.
 See the [hosted adapter runbook](docs/HOSTED_ADDITIVE_INDEX_RUNBOOK.md).
-Final source-pinned local validation passes **635 reported cases**: 230 offline
+The pre-amendment source checkpoint **2e15b37** passes **635 reported cases**: 230 offline
 methods plus 379 subtests (609), and 22 additive-core/hosted-wrapper database
 methods plus 4 subtests (26), with zero failures, errors or skips. The fictional
 $55 Food Cost report, all original rows and sequence states remain intact;
@@ -24,8 +24,18 @@ cases (605 offline/63 database); those overlapping counts are not added to 635.
 The candidate is published as [draft PR27](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/27)
 for independent review. The initial publication head **2e15b37** matches the
 source-pinned local acceptance; the publication follow-up changes this note only.
-The PR check panel is the authority for current-head CI. Hosted acceptance remains
-pending and the PR remains draft, with no merge or hosted installation approval.
+Publication head **102283a** failed the Windows offline check in
+[run 38567336949](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38567336949):
+229 methods/379 subtests passed, but generated-file ownership/ACL acceptance failed.
+The 689 frontend tests/build and 55 database methods/11 subtests passed separately.
+The PR27 amendment explicitly protects generated file ownership/ACLs without
+relaxing input checks, declares Windows/PowerShell 7/Python 3.12+ and PostgreSQL
+16+ (17 tested), and adds refreshed live writer observations before table locks
+and inside the locked guards. The hosted review/plan envelope is now v2 with a
+reviewed application LOGIN list; observations retain redacted counts and do not
+replace maintenance attestations. New source acceptance and current-head CI must
+be recorded separately from the historical checkpoint above. Hosted acceptance
+remains pending and the PR remains draft, with no merge or hosted installation approval.
 The current Render/Supabase connections stay in place. Hosted execution and the
 fictional $212/current-source acceptance require separate approval and evidence.
 
