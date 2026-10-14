@@ -336,4 +336,3 @@ class AdditiveDatabaseTests(unittest.IsolatedAsyncioTestCase):
             args.output = str(root / 'reconciled.json')
             self.assertEqual(await additive.main(args), 0)
             self.assertEqual(json.loads(Path(args.output).read_text())['status'], 'verified_applied')
-
