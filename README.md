@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Writer inventory and maintenance plan prepared — October 14, 2026
+
+Read-only verification confirms the live Render API at PR30, still using the
+existing `postgres` transaction-pooler connection on port 6543. The two restricted
+local credentials are not the deployed identity. Two idle postgres/pooler sessions
+hold the refreshed guard; no claim of stopped writers is made. Both Toast HTTP
+jobs remain active, with GMT schedules verified. Companion is recorded as a
+potential future writer; its current preparation records do not prove a live
+Supabase writer. No Companion code or deployment was changed.
+
+The [45-minute maintenance plan](docs/HOSTED_SOURCE_INDEX_MAINTENANCE_PLAN.md)
+defines the exact API/job stop and resume scope, downstream HTTP drain checks,
+mandatory new backup/restore inside the approved window, then read-only v2 plan
+preparation and separate exact-hash approval. It also accounts for Render's
+advertised 9 p.m. EDT infrastructure maintenance. No service/job was paused,
+index applied, credential changed or new PR pushed. Owner window and writer
+completeness confirmation remain pending.
+
 ## Fresh encrypted backup and disposable restore passed — October 14, 2026
 
 The owner-authorized rehearsal completed at **7:08:48 p.m. EDT** using the

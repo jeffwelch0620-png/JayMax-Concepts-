@@ -1,5 +1,25 @@
 # Hosted source-index preflight and backup rehearsal — October 14, 2026
 
+## Writer inventory and maintenance planning checkpoint
+
+The [maintenance plan](HOSTED_SOURCE_INDEX_MAINTENANCE_PLAN.md) records refreshed
+read-only Render/database evidence, Companion's potential-writer status, exact
+Toast jobs and GMT schedule, live-versus-local credential distinction, pooled
+session and HTTP-drain holds, the 45-minute proposal and pending approvals.
+The observed live API is PR30 at `6e08ba7`, with auto-deploy on, using `postgres`
+on transaction-pooler port 6543; no deployed connection was changed. Adding that
+actual role to the inventory reveals two idle pooled postgres sessions and causes
+the existing guard to hold. The earlier two-role quiet result was insufficient
+to establish the deployed backend was drained.
+
+The verified rehearsal remains passing evidence, but a **fresh backup and restore
+inside the approved window are mandatory**, not merely conditional on observed
+drift: the adapter's reviewed evidence guard requires this chronology. No v2
+execution plan is generated while stop/drain and window approvals are pending.
+A separate private non-executable planning packet is saved with all execution
+flags false. No services/jobs, hosted index, credentials, permissions or deployment
+settings were changed. The local documentation branch remains unpublished.
+
 ## Fresh hosted export and disposable restore verified
 
 The owner authorized a fresh encrypted backup and disposable restore. The single
