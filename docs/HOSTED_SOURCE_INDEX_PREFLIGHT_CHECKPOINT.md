@@ -1,5 +1,68 @@
 # Hosted source-index preflight and backup hold — October 14, 2026
 
+## PR30 merged and bounded metadata diagnostic
+
+PR30 merged with owner approval on October 14 at 6:30:56 p.m. EDT:
+**6e08ba7fca10d640ce311d0a9a10e75aa3838dfc**, amended head
+**202691137bdb67376798bff1bdad3ff358ed11fd**. All four
+[amended-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38647473285)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38648177850)
+pass: 689 frontend tests across 67 suites plus production build, 700 offline cases
+(267 methods plus 433 subtests), and 73 disposable PostgreSQL cases (62 methods
+plus 11 subtests). Backend profiles have zero failures, errors or skips.
+
+The next step ran one bounded read-only metadata diagnostic against the existing
+designated owner session-pooler connection, pinned to the merged source. It used
+the export's existing TLS, connection configuration, read-only repeatable-read
+snapshot and fingerprint code; it stopped before dependencies, dump, encryption
+or restore. The overall deadline was 180 seconds, with the unchanged 20-second
+connect and 60-second client command limits. There was no automatic retry.
+
+The diagnostic completed at **6:34:03 p.m. EDT** in **154.485 seconds**, status
+`metadata_diagnostic_passed_not_backup_verified`. All phases passed:
+
+| Phase | Seconds |
+| --- | ---: |
+| Connection and existing session configuration | 1.219 |
+| PostgreSQL setting observations | 0.187 |
+| Schema check | 0.203 |
+| Fingerprint metadata and rows | 152.594 |
+| Snapshot aggregate, overlapping the preceding subphases | 153.172 |
+| Connection close | 0.078 |
+
+Fingerprints captured **120 relations and 13 catalog groups**; no business rows,
+SQL, credentials or private paths appear in public evidence. The fingerprint
+SHA-256 is `2cbc5c682dd0a727889aa45e1549e226f0f57c6181fa551859057aa4941a5fef`.
+The protected private receipt's SHA-256 is
+`b0d0b5d66571757c7063b25074be054c38082ce815bebe9caf1ccc7f1c2a67d0`.
+
+All eight settings were captured; `limitReadHeld` is false:
+
+| PostgreSQL session setting | Observed value |
+| --- | ---: |
+| statement_timeout | 120000 ms |
+| idle_in_transaction_session_timeout | 0 ms |
+| idle_session_timeout | 0 ms |
+| transaction_timeout | 0 ms |
+| tcp_keepalives_idle | 1800 s |
+| tcp_keepalives_interval | 60 s |
+| tcp_keepalives_count | 9 |
+| tcp_user_timeout | 0 ms |
+
+These are observations, not changed settings. The statement/client limits apply
+to individual commands, not the sum of all fingerprint commands. Pooler limits
+remain outside `pg_settings`. The prior connection loss was not reproduced in
+this attempt; its cause remains unproved. Successful metadata inspection is not
+an encrypted backup, restore verification, or a writer-drain demonstration.
+
+**Next:** fresh encrypted export and disposable restore using the existing
+reviewed helpers, then independent acceptance of those receipts. Writer inventory
+(including both active Toast jobs), a coordinated window, exact plan approval and
+the single additive index installation still follow. No hosted migration/index,
+credentials/privileges, permanent settings, service pauses or scheduled-job changes
+were performed. This checkpoint update is local on
+`codex/post-pr30-hosted-diagnostics`; no new PR is published by this step.
+
 ## PR30 review amendments
 
 The independent review confirms the backup publication and plan guards. Its CI

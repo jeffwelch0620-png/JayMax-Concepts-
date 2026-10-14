@@ -1,5 +1,24 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR30 merged; bounded hosted metadata read passed — October 14, 2026
+
+[PR30](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/30) merged with
+owner approval at **6e08ba7** (amended head **2026911**). Both
+[amended-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38647473285)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38648177850)
+pass all four checks: 689 frontend tests plus build, 700 offline cases and 73
+disposable PostgreSQL cases.
+
+One read-only hosted metadata diagnostic completed in **154.485 seconds**,
+capturing fingerprints for 120 relations and 13 catalog groups, with successful
+snapshot completion and connection close. All eight requested PostgreSQL settings
+were captured; none were changed. This attempt did not reproduce the previous
+disconnect, and does not establish its cause or prove reliable future exports.
+No dump, restore, index application, writer pause or scheduled-job change ran.
+Next is a fresh encrypted export and disposable restore before backup acceptance
+and the separately reviewed maintenance/index workflow. Details and evidence
+hashes are in the [checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md).
+
 ## PR30 review amendments — October 14, 2026
 
 Unexpected limit metadata no longer aborts backup export: valid observations
