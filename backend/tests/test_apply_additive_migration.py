@@ -103,7 +103,7 @@ class FaultConnection:
 
     def transaction(self, *args, **kwargs):
         tx = self.conn.transaction(*args, **kwargs)
-        if self.conn.is_in_transaction() or not self.commit_ack_loss:
+        if self.conn.is_in_transaction() or kwargs.get('readonly') or not self.commit_ack_loss:
             return tx
         drop_before_commit = self.drop_before_commit
         class LostAcknowledgement:

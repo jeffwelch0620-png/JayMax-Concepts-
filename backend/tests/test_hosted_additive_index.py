@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/ops'))
 import hosted_additive_index as hosted
@@ -316,7 +317,7 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
                 cls.writer_login_roles = ['test_only_index_' + kind + '_' + uuid4().hex[:8]
                                           for kind in ('inventory', 'account')]
                 for name in cls.writer_login_roles:
-                    await conn.execute('CREATE ROLE ' + name + ' LOGIN')
+                    await conn.execute("CREATE ROLE " + name + " LOGIN PASSWORD 'TEST_ONLY_adapter_password'")
                     created.append(name)
                 return created
             finally: await conn.close()
@@ -359,6 +360,12 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
         try: return await hosted.reconcile(conn, plan, self.spec, self.target, self.facts, self.binding)
         finally: await conn.close()
 
+    async def writer_connection(self):
+        endpoint = urlsplit(self.dsn)
+        return await hosted.asyncpg.connect(user=self.writer_login_roles[0],
+            password='TEST_ONLY_adapter_password', host=endpoint.hostname, port=endpoint.port,
+            database=endpoint.path.lstrip('/'))
+
     async def test_hosted_wrapper_is_readonly_then_preserves_exact_food_cost(self):
         plan = await self.hosted_plan()
         self.assertEqual((await self.independent(plan))['status'], 'verified_not_applied')
@@ -372,7 +379,7 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
 
     async def test_reviewed_idle_login_holds_prepare_and_apply_before_table_locks(self):
         plan = await self.hosted_plan()
-        writer = await hosted.asyncpg.connect(self.dsn.replace('purchase_implementation_test', self.writer_login_roles[0]))
+        writer = await self.writer_connection()
         observed = []
         try:
             with self.assertRaises(hosted.Held):
@@ -414,7 +421,7 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
         try:
             async with self.conn.transaction(isolation='repeatable_read', readonly=True):
                 await hosted.writer_sessions(self.conn, self.spec, 'first', observed)
-                writer = await hosted.asyncpg.connect(self.dsn.replace('purchase_implementation_test', self.writer_login_roles[0]))
+                writer = await self.writer_connection()
                 with self.assertRaises(hosted.Held):
                     await hosted.writer_sessions(self.conn, self.spec, 'second', observed)
                 self.assertEqual(observed[-1]['applicationSessionCount'], 1)
@@ -430,7 +437,7 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
             nonlocal writer
             result = await probe(conn, spec, phase, observations)
             if phase == 'before_table_locks':
-                writer = await hosted.asyncpg.connect(self.dsn.replace('purchase_implementation_test', self.writer_login_roles[0]))
+                writer = await self.writer_connection()
             return result
         try:
             with patch.object(hosted, 'writer_sessions', side_effect=arrive):
@@ -447,7 +454,7 @@ class HostedAdapterDatabaseTests(AdditiveDatabaseTests):
 
     async def test_restricted_observer_cannot_claim_other_sessions_are_drained(self):
         await self.hosted_plan()
-        restricted = await hosted.asyncpg.connect(self.dsn.replace('purchase_implementation_test', self.writer_login_roles[0]))
+        restricted = await self.writer_connection()
         observed = []
         try:
             with self.assertRaises(hosted.Held):
