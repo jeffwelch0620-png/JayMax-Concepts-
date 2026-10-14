@@ -1,6 +1,6 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Invoice-source lookup readiness - local follow-up, October 13, 2026
+## Invoice-source lookup readiness - PR25 review, October 13, 2026
 
 The **codex/purchase-source-lookup-index** candidate adds a version-first source
 lookup index as migration 30 and verifies its definition and usable state through
@@ -10,7 +10,16 @@ bytes, mappings, posting rules and Track 1 accounting remain unchanged. Local
 validation passes **600 reported cases**: 549 offline, 40 disposable database,
 10 fresh-install and one independent runtime catalog comparison. The successful
 runs preserve their database/role inventories, and the local server is stopped.
-The candidate is not pushed or applied to Supabase; GitHub CI remains pending.
+[PR25](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/25) is pushed at
+**24dac66**. [All four Inventory CI checks pass](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38496408661):
+689 frontend tests across 67 suites and the strict production build, 40 reported
+disposable PostgreSQL cases, 549 reported Windows offline cases and the required
+aggregate check. These CI results are separate from the additional 11 local
+installation/catalog cases. The owner approved refreshing documentation and
+merging PR25; the documentation revision must pass CI before merge. Migration 30
+has not been applied to Supabase. Next is a separately reviewed additive installer
+for the existing 29-file installation, preserving older migration history and
+handling uncertain commit outcomes before any approved hosted DDL.
 See the [index contract, validation and later rollout boundary](docs/PURCHASE_SOURCE_LOOKUP_INDEX.md).
 
 ## Current source reopening acceptance - October 13, 2026

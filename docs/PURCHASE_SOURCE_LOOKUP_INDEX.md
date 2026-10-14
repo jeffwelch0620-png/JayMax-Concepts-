@@ -69,8 +69,13 @@ previews, missing/reversed index refusal, full-chain backup/restore and ordinary
 owner accounting/replay. The independently rebuilt local catalog still matches
 the unchanged function/table and permission contracts after adding the index.
 Both successful server runs preserve their starting database and role inventories
-and stop the local server. Frontend source is unchanged and was not retested for
-this candidate; GitHub CI has not run for the unpushed branch.
+and stop the local server. Frontend source is unchanged. After publication as
+[PR25](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/25),
+[Inventory CI run 38496408661](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38496408661)
+passed all four checks at **24dac66**: 689 frontend tests across 67 suites and the
+strict production build, 33 database tests plus 7 subtests (40 reported cases),
+212 Windows offline tests plus 337 subtests (549 reported cases), and the aggregate
+status. The additional 11 installation/catalog cases remain local evidence.
 
 Private successful-run receipts are in
 `purchase-source-index-tests-20261014T004127151480Z/receipt.json` and
@@ -86,19 +91,31 @@ hosted connection was used.
 
 ## Review and later rollout
 
-This is a local candidate. Existing Render hosting, Supabase connections, roles
-and feature settings are retained. The hosted database currently retains its
-previous installation; this workflow has not applied migration 30.
+The owner approved refreshing documentation and merging PR25, subject to CI on
+the documentation revision. Existing Render hosting, Supabase connections, roles
+and feature settings are retained. Merging deploys the test application through
+the existing Render workflow; it does not execute migration 30. The hosted
+database retains its previous installation until a separate additive rollout.
 
 For the already installed build database, first review its history, retained
 backup/restore evidence and the actual index definition. Plan only the additional
 migration and its new checksum-bearing ledger entry; do not replay the 30-file
 fresh-install bundle over the existing 29-file installation. The existing fresh
 native installer is not an incremental-upgrade tool. Prepare that additive apply
-procedure for separate approval before using it on Supabase.
+procedure for separate approval before using it on Supabase. Verify the original
+delivery-version mapping and recorded SQL bodies for all 29 native files while
+preserving the complete earlier ledger; raw source-file hashes and applied-body
+hashes are distinct. Run the validated migration body and its ledger insertion
+in one outer transaction under the existing installer advisory lock, check
+readiness before commit, and verify through a fresh connection afterward.
+An uncertain commit must be reconciled by reading the index and ledger rather
+than blindly reapplying. Local rehearsal must cover rollback, contention,
+changed checksums, pre-existing index/ledger mismatches and lost acknowledgement.
 
 The file uses a normal transactional index build with a five-second lock-wait
-limit, suitable for a separately approved build/test maintenance window. Index
+limit, suitable for a separately approved build/test maintenance window. This
+limits lock acquisition waits, not the index build's total duration; the additive
+installer must also impose a statement timeout. Index
 creation adds storage and write-maintenance work and blocks table writes while it builds;
 lock contention holds the migration rather than silently treating it as installed.
 There is no `IF NOT EXISTS` shortcut: PostgreSQL warns that an existing name does
