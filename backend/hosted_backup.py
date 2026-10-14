@@ -5,14 +5,17 @@ Connection errors and dump stderr must never be printed or attached to receipts.
 """
 import asyncio
 import base64
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import time
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
@@ -43,6 +46,107 @@ ROW_ALGORITHM = 'sha256-sorted-sha256-canonical-jsonb-utf8-v1'
 MAX_ARCHIVE = 64 * 1024 * 1024  # Bounded build tool; larger backups need streaming encryption.
 MAX_ENVELOPE = 3 * MAX_ARCHIVE
 FLAGS = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+CONNECT_TIMEOUT_SECONDS = 20
+COMMAND_TIMEOUT_SECONDS = 60
+TOOL_TIMEOUT_SECONDS = 240
+LIMIT_NAMES = ('idle_in_transaction_session_timeout', 'statement_timeout',
+    'idle_session_timeout', 'transaction_timeout', 'tcp_keepalives_idle',
+    'tcp_keepalives_interval', 'tcp_keepalives_count', 'tcp_user_timeout')
+EXPORT_PHASES = frozenset(('connect', 'effective_limits', 'snapshot_total', 'schema_check',
+    'export_snapshot', 'fingerprint', 'dependencies', 'role_metadata', 'pg_dump',
+    'sequence_recheck', 'manifest', 'encrypt', 'read_back', 'archive_list',
+    'connection_close', 'partial_cleanup', 'publish'))
+
+
+def safe_export_diagnostics(value):
+    """Allow fixed labels/numbers only; never trust exception-attached dictionaries."""
+    if not isinstance(value, dict) or value.get('format') != 'jaymax-backup-diagnostics-v1':
+        return None
+    def duration(number):
+        return (isinstance(number, (int, float)) and not isinstance(number, bool)
+                and 0 <= number <= 10**9 and math.isfinite(number))
+    phases = value.get('phases', [])
+    safe = {'format': value['format'], 'phases': [], 'serverLimits': {}, 'clientLimits': {}}
+    if duration(value.get('totalElapsedSeconds')):
+        safe['totalElapsedSeconds'] = value['totalElapsedSeconds']
+    if isinstance(phases, list):
+        for phase in phases[:32]:
+            if (isinstance(phase, dict) and isinstance(phase.get('phase'), str) and phase['phase'] in EXPORT_PHASES
+                    and duration(phase.get('elapsedSeconds')) and phase.get('outcome') in ('passed', 'held')):
+                safe['phases'].append({key: phase[key] for key in ('phase', 'elapsedSeconds', 'outcome')})
+    limits = value.get('serverLimits', {})
+    if isinstance(limits, dict):
+        for name in LIMIT_NAMES:
+            item = limits.get(name)
+            if (isinstance(item, dict) and isinstance(item.get('value'), int)
+                    and not isinstance(item['value'], bool) and -10**18 <= item['value'] <= 10**18
+                    and item.get('unit') in (None, 'ms', 's', 'min', 'h')):
+                safe['serverLimits'][name] = {'value': item['value'], 'unit': item.get('unit')}
+    clients = value.get('clientLimits', {})
+    if isinstance(clients, dict):
+        for name in ('connectSeconds', 'commandSeconds', 'subprocessSeconds'):
+            if duration(clients.get(name)):
+                safe['clientLimits'][name] = clients[name]
+    safe['serverLimitsNotCaptured'] = [name for name in LIMIT_NAMES if name not in safe['serverLimits']]
+    if isinstance(value.get('limitReadHeld'), bool):
+        safe['limitReadHeld'] = value['limitReadHeld']
+    return safe
+
+
+def safe_export_artifacts(value):
+    """Fixed presence flags only; never expose paths or key contents."""
+    if not isinstance(value, dict):
+        return None
+    safe = {name: value[name] for name in ('privateKeyRetained', 'encryptedPartialRetained',
+        'rawPartialRetained', 'finalBackupPresent', 'artifactInspectionHeld')
+        if isinstance(value.get(name), bool)}
+    return safe or None
+
+
+class ExportDiagnostics:
+    def __init__(self):
+        self.started = time.monotonic()
+        self.phases = []
+        self.server_limits = {}
+        self.limit_read_held = False
+
+    @contextmanager
+    def phase(self, name):
+        if name not in EXPORT_PHASES:
+            raise ValueError('Unsupported export phase')
+        started = time.monotonic()
+        outcome = 'passed'
+        try:
+            yield
+        except BaseException:
+            outcome = 'held'
+            raise
+        finally:
+            self.phases.append({'phase': name, 'elapsedSeconds': round(time.monotonic()-started, 6),
+                                'outcome': outcome})
+
+    async def read_limits(self, conn):
+        # Observe effective settings after the existing native.configure call.
+        # No SET, ALTER ROLE or endpoint changes are introduced by diagnostics.
+        rows = await conn.fetch('SELECT name,setting,unit FROM pg_settings WHERE name=ANY($1::text[])', list(LIMIT_NAMES))
+        for row in rows:
+            name, setting, unit = row['name'], row['setting'], row['unit']
+            if name not in LIMIT_NAMES:
+                continue
+            # Socket getters on the Windows test server can report -1. Preserve
+            # signed observations; do not reinterpret them as usable durations.
+            if (not isinstance(setting, str) or not re.fullmatch(r'-?[0-9]{1,19}', setting)
+                    or abs(int(setting)) > 10**18 or unit not in (None, 'ms', 's', 'min', 'h')):
+                self.limit_read_held = True
+                continue
+            self.server_limits[name] = {'value': int(setting), 'unit': unit}
+
+    def report(self):
+        return safe_export_diagnostics({'format':'jaymax-backup-diagnostics-v1',
+            'totalElapsedSeconds':round(time.monotonic()-self.started, 6),
+            'phases':self.phases, 'serverLimits':self.server_limits, 'limitReadHeld':self.limit_read_held,
+            'clientLimits':{'connectSeconds':CONNECT_TIMEOUT_SECONDS, 'commandSeconds':COMMAND_TIMEOUT_SECONDS,
+                            'subprocessSeconds':TOOL_TIMEOUT_SECONDS}})
 
 
 class BackupError(RuntimeError):
@@ -118,7 +222,7 @@ def process_env(settings, remote):
 async def tool(executable, args, settings=None, remote=False):
     result = await asyncio.to_thread(subprocess.run, [str(executable), *args],
         env=process_env(settings, remote) if settings else os.environ.copy(),
-        capture_output=True, timeout=240, creationflags=FLAGS)
+        capture_output=True, timeout=TOOL_TIMEOUT_SECONDS, creationflags=FLAGS)
     if result.returncode:
         error = BackupError('PostgreSQL tool failed; private diagnostic text withheld')
         error.toolErrorCategories = [label for phrase, label in (
@@ -240,6 +344,29 @@ def restore_list(toc):
 
 
 async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory, migration_hashes):
+    diagnostics = ExportDiagnostics()
+    try:
+        result = await _export_backup(url, project, pg_dump, pg_restore, backup_directory,
+                                      key_directory, migration_hashes, diagnostics)
+    except BaseException as error:
+        error.backupDiagnostics = diagnostics.report()
+        artifacts = {}
+        for name, path in (
+            ('privateKeyRetained', Path(key_directory) / 'backup.key'),
+            ('encryptedPartialRetained', Path(backup_directory) / 'backup.partial.enc'),
+            ('rawPartialRetained', Path(backup_directory) / 'archive.partial'),
+            ('finalBackupPresent', Path(backup_directory) / 'backup.jmax.enc')):
+            try:
+                artifacts[name] = path.exists()
+            except OSError:
+                artifacts['artifactInspectionHeld'] = True
+        error.backupArtifacts = artifacts
+        raise
+    return result | {'backupDiagnostics':diagnostics.report()}
+
+
+async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory,
+                         migration_hashes, diagnostics):
     settings = hosted_connection(url, project)
     context = connection_tls(url)
     directory = private_directory(backup_directory, 'backups')
@@ -250,56 +377,81 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
     raw = directory / 'archive.partial'
     candidate = directory / 'backup.partial.enc'
     conn = None
+    body_completed = False
     async def close_connection():
-        if conn is not None:
-            await conn.close()
-    # Close before removing partials, but neither cleanup may mask the body error.
-    async with preserve_cleanup_failure(lambda: remove_partial_files((raw, candidate)), 'partialCleanupErrorType'), \
-               preserve_cleanup_failure(close_connection, 'connectionCloseErrorType'):
-        conn = await asyncpg.connect(url, ssl=context, timeout=20, command_timeout=60, statement_cache_size=0)
-        await native.configure(conn)
-        async with readonly_snapshot(conn):
-            found = {r['nspname'] for r in await conn.fetch("SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname<>'information_schema'")}
-            if set(SCHEMAS) - found or found - set(SCHEMAS) - MANAGED:
-                raise BackupError('Missing or unclassified database schemas')
-            snapshot = await conn.fetchval('SELECT pg_export_snapshot()')
-            facts = await fingerprint(conn)
-            dependency = await dependencies(conn)
-            roles = [dict(r) for r in await conn.fetch('''SELECT rolname,rolinherit,rolconnlimit,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication,rolcanlogin,rolvaliduntil::text,rolconfig
-                FROM pg_roles WHERE rolname NOT LIKE 'pg_%' ORDER BY rolname''')]
-            memberships = [dict(r) for r in await conn.fetch('''SELECT pg_get_userbyid(roleid) AS role,pg_get_userbyid(member) AS member,admin_option,inherit_option,set_option FROM pg_auth_members ORDER BY 1,2''')]
-            await tool(pg_dump, ['--format=custom', '--quote-all-identifiers', '--encoding=UTF8', '--lock-wait-timeout=5000',
-                '--snapshot=' + snapshot, '--file=' + str(raw), '--no-password', *['--schema=' + schema for schema in SCHEMAS]], settings, True)
-            if raw.stat().st_size > MAX_ARCHIVE:
-                raise BackupError('Archive exceeds build encryption bound; streaming export required')
-            # Sequence values are outside MVCC: compare after dump and hold on observed changes.
-            for name, fact in facts['tables'].items():
-                if fact['kind'] == 'S':
-                    schema, table = name.split('.')
-                    row = await conn.fetchval(f"SELECT jsonb_build_object('last_value',last_value,'is_called',is_called)::text FROM {native.quoted(schema)}.{native.quoted(table)}")
-                    if digest((row + '\n').encode()) != fact['sha256']:
-                        raise BackupError('Sequence changed during export')
-            data = raw.read_bytes()
-            manifest = {'format': FORMAT, 'projectRef': project, 'schemas': list(SCHEMAS),
-                'rowFingerprintAlgorithm': ROW_ALGORITHM, 'databaseOwner': await conn.fetchval('SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()'),
-                'schemaOwners': {r['nspname']: r['owner'] for r in await conn.fetch('SELECT nspname,pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname=ANY($1::text[])', list(SCHEMAS))},
-                'createdAt': datetime.now(timezone.utc).isoformat(), 'serverVersionNum': await conn.fetchval('SHOW server_version_num'),
-                'archiveBytes': len(data), 'archiveSha256': digest(data), 'dependencies': dependency,
-                'rolesWithoutPasswords': roles, 'roleMemberships': memberships, 'migrationFileHashes': migration_hashes,
-                'sequenceStateIsMvcc': False, 'sequencesObservedStable': True, 'managedRecoveryVerified': False, **facts}
-        with candidate.open('xb') as stream:
-            stream.write(Fernet(key).encrypt(json.dumps({'manifest': manifest, 'archive': base64.b64encode(data).decode()}).encode()))
-        verified, archive = open_backup(candidate, private_key, project)
-        if verified != manifest or archive != data:
-            raise BackupError('Encrypted readback mismatch')
-        await tool(pg_restore, ['--list', str(raw)])
-        raw.unlink()
+        with diagnostics.phase('connection_close'):
+            if conn is not None:
+                await conn.close()
+    async def clean_partials():
+        with diagnostics.phase('partial_cleanup'):
+            # Candidate survives only after the body AND connection close pass.
+            await remove_partial_files((raw,) if body_completed else (raw, candidate))
+    async with preserve_cleanup_failure(clean_partials, 'partialCleanupErrorType'):
+        async with preserve_cleanup_failure(close_connection, 'connectionCloseErrorType'):
+            with diagnostics.phase('connect'):
+                conn = await asyncpg.connect(url, ssl=context, timeout=CONNECT_TIMEOUT_SECONDS,
+                    command_timeout=COMMAND_TIMEOUT_SECONDS, statement_cache_size=0)
+                await native.configure(conn)
+            # This aggregate overlaps its named subphases; do not sum all timings.
+            with diagnostics.phase('snapshot_total'):
+                async with readonly_snapshot(conn):
+                    with diagnostics.phase('effective_limits'):
+                        await diagnostics.read_limits(conn)
+                    with diagnostics.phase('schema_check'):
+                        found = {r['nspname'] for r in await conn.fetch("SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname<>'information_schema'")}
+                        if set(SCHEMAS) - found or found - set(SCHEMAS) - MANAGED:
+                            raise BackupError('Missing or unclassified database schemas')
+                    with diagnostics.phase('export_snapshot'):
+                        snapshot = await conn.fetchval('SELECT pg_export_snapshot()')
+                    with diagnostics.phase('fingerprint'):
+                        facts = await fingerprint(conn)
+                    with diagnostics.phase('dependencies'):
+                        dependency = await dependencies(conn)
+                    with diagnostics.phase('role_metadata'):
+                        roles = [dict(r) for r in await conn.fetch("SELECT rolname,rolinherit,rolconnlimit,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication,rolcanlogin,rolvaliduntil::text,rolconfig FROM pg_roles WHERE rolname NOT LIKE 'pg_%' ORDER BY rolname")]
+                        memberships = [dict(r) for r in await conn.fetch('SELECT pg_get_userbyid(roleid) AS role,pg_get_userbyid(member) AS member,admin_option,inherit_option,set_option FROM pg_auth_members ORDER BY 1,2')]
+                    with diagnostics.phase('pg_dump'):
+                        await tool(pg_dump, ['--format=custom', '--quote-all-identifiers', '--encoding=UTF8', '--lock-wait-timeout=5000',
+                            '--snapshot=' + snapshot, '--file=' + str(raw), '--no-password', *['--schema=' + schema for schema in SCHEMAS]], settings, True)
+                        if raw.stat().st_size > MAX_ARCHIVE:
+                            raise BackupError('Archive exceeds build encryption bound; streaming export required')
+                    with diagnostics.phase('sequence_recheck'):
+                        # Sequence values are outside MVCC: hold on observed changes.
+                        for name, fact in facts['tables'].items():
+                            if fact['kind'] == 'S':
+                                schema, table = name.split('.')
+                                row = await conn.fetchval(f"SELECT jsonb_build_object('last_value',last_value,'is_called',is_called)::text FROM {native.quoted(schema)}.{native.quoted(table)}")
+                                if digest((row + '\n').encode()) != fact['sha256']:
+                                    raise BackupError('Sequence changed during export')
+                    with diagnostics.phase('manifest'):
+                        data = raw.read_bytes()
+                        manifest = {'format': FORMAT, 'projectRef': project, 'schemas': list(SCHEMAS),
+                            'rowFingerprintAlgorithm': ROW_ALGORITHM, 'databaseOwner': await conn.fetchval('SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()'),
+                            'schemaOwners': {r['nspname']: r['owner'] for r in await conn.fetch('SELECT nspname,pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname=ANY($1::text[])', list(SCHEMAS))},
+                            'createdAt': datetime.now(timezone.utc).isoformat(), 'serverVersionNum': await conn.fetchval('SHOW server_version_num'),
+                            'archiveBytes': len(data), 'archiveSha256': digest(data), 'dependencies': dependency,
+                            'rolesWithoutPasswords': roles, 'roleMemberships': memberships, 'migrationFileHashes': migration_hashes,
+                            'sequenceStateIsMvcc': False, 'sequencesObservedStable': True, 'managedRecoveryVerified': False, **facts}
+            with diagnostics.phase('encrypt'):
+                with candidate.open('xb') as stream:
+                    stream.write(Fernet(key).encrypt(json.dumps({'manifest': manifest, 'archive': base64.b64encode(data).decode()}).encode()))
+            with diagnostics.phase('read_back'):
+                verified, archive = open_backup(candidate, private_key, project)
+                if verified != manifest or archive != data:
+                    raise BackupError('Encrypted readback mismatch')
+                encrypted_sha256 = digest(candidate.read_bytes())
+            with diagnostics.phase('archive_list'):
+                await tool(pg_restore, ['--list', str(raw)])
+        # Reached only after the protected connection-close step succeeds.
+        body_completed = True
+    # No final filename or successful receipt exists while cleanup is held.
+    with diagnostics.phase('publish'):
         final = directory / 'backup.jmax.enc'
         candidate.rename(final)
-        return {'status': 'exported_not_restore_verified', 'encryptedBackup': str(final), 'privateKey': str(private_key),
-            'encryptedSha256': digest(final.read_bytes()), 'archiveSha256': manifest['archiveSha256'],
-            'tablesCaptured': len(facts['tables']), 'catalogGroupsCaptured': len(facts['catalog']), 'sourceReadOnly': True,
-            'sequencesObservedStable': True, 'managedRecoveryVerified': False}
+    return {'status': 'exported_not_restore_verified', 'encryptedBackup': str(final), 'privateKey': str(private_key),
+        'encryptedSha256': encrypted_sha256, 'archiveSha256': manifest['archiveSha256'],
+        'tablesCaptured': len(facts['tables']), 'catalogGroupsCaptured': len(facts['catalog']), 'sourceReadOnly': True,
+        'sequencesObservedStable': True, 'managedRecoveryVerified': False}
 
 
 async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_directory):

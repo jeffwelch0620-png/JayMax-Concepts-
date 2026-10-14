@@ -7,6 +7,20 @@ from pathlib import Path
 from uuid import uuid4
 from dotenv import dotenv_values
 import hosted_backup as backup
+from readonly_snapshot import error_details
+
+
+def held_result(error):
+    result = {'status': 'held', **error_details(error), 'operationalReleaseApproved': False}
+    diagnostics = backup.safe_export_diagnostics(getattr(error, 'backupDiagnostics', None))
+    if diagnostics is not None:
+        result['backupDiagnostics'] = diagnostics
+    artifacts = backup.safe_export_artifacts(getattr(error, 'backupArtifacts', None))
+    if artifacts is not None:
+        result['backupArtifacts'] = artifacts
+    if isinstance(error, backup.BackupError):
+        result['reason'] = str(error)
+    return result
 
 
 async def main():
@@ -42,13 +56,15 @@ async def main():
     print(json.dumps(result, indent=2))
 
 
-if __name__ == '__main__':
+def run():
     try:
         asyncio.run(main())
     except Exception as exc:
         # Even unexpected driver/subprocess errors must not reveal credentials/rows.
-        result = {'status': 'held', 'errorType': type(exc).__name__, 'operationalReleaseApproved': False}
-        if isinstance(exc, backup.BackupError):
-            result['reason'] = str(exc)
-        print(json.dumps(result))
-        raise SystemExit(2)
+        print(json.dumps(held_result(exc)))
+        return 2
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(run())

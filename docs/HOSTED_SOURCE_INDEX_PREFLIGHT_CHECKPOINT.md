@@ -1,5 +1,94 @@
 # Hosted source-index preflight and backup hold — October 14, 2026
 
+## PR30 review amendments
+
+The independent review confirms the backup publication and plan guards. Its CI
+observation predates the completed [four green checks at a6229a2](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38645650942):
+689 frontend tests, 695 offline cases and a fresh full 73-case disposable database
+profile. The initial local parser failure remains in the history below.
+
+- Unexpected diagnostic setting values/units are omitted from `serverLimits`,
+  listed in `serverLimitsNotCaptured`, and marked by `limitReadHeld: true`.
+  This metadata problem does not abort export. Actual query/connection failures,
+  snapshot failures, verification failures and cleanup failures still hold it.
+- `pg_settings` observes the PostgreSQL server session only. The session pooler's
+  own client/idle limits are not captured. Clean server readings cannot rule out
+  a pooler timeout; phase and elapsed-time observations suggest hypotheses, not
+  a proved cause. No limits, keepalives or connection settings are changed.
+- Held CLI receipts include boolean-only `backupArtifacts` flags for retained
+  `backup.key`, `backup.partial.enc`, `archive.partial`, and a final backup's
+  presence. Failed inspection is flagged separately, never inferred as absence.
+  Paths and key contents are excluded. Keys remain private, including when a
+  candidate survives cleanup/publication failure; no automatic deletion of
+  recovery material is introduced. A retained key or partial is not an accepted
+  backup. The original failure remains primary if artifact inspection fails.
+
+Amendment validation passes **700 offline cases** (267 methods plus 433
+subtests), zero failures/errors/skips. Tests cover unexpected values/units,
+continued authenticated export with valid settings retained, a real query-error
+category still holding export, and failed artifact inspection preserving the
+original error. A focused first run exposed an overly broad test assertion that
+rejected the safe field name `privateKeyRetained`; the assertion now checks actual
+sensitive values and paths. The final offline XML is retained separately.
+The amended head requires fresh CI before the owner-authorized merge.
+Hosted backup/restore and index application remain held pending their own evidence.
+
+## PR29 merge and backup-artifact/diagnostic follow-up
+
+PR29 merged with owner approval at **6f27edcfeb80c92d18eda09798cc9a9c295791ab**
+(reviewed head **50485a5**). All four
+[merged-main CI checks pass](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38640974919).
+The next local branch is `codex/backup-artifact-diagnostics`.
+
+- **N1:** encrypted readback, archive listing, connection close and partial-file
+  cleanup complete before `backup.partial.enc` is promoted to `backup.jmax.enc`.
+  A close-only failure removes the candidate; other cleanup/publication failures
+  may retain a protected partial artifact, but no accepted final name or success
+  receipt is produced. The key remains private; no automatic recovery/retry is added.
+- **N2:** additive plans have a fixed top-level field allowlist. Held receipt/error
+  fields and unknown keys are rejected; optional execution flags must be explicitly
+  false. Original source/history checks remain. Hashing a held local dry-run
+  receipt cannot make it executable.
+- **CLI gap:** standalone held backup output uses the shared original error,
+  validated SQLSTATE and cleanup categories, plus allowlisted diagnostics.
+  Driver text, SQL, URLs, credentials and arbitrary attached metadata are excluded.
+- **N3 preparation:** export records named phases, effective server limits after
+  existing connection configuration, and the existing 20-second connection,
+  60-second command and 240-second subprocess deadlines. No timeout, keepalive,
+  role, endpoint or hosting setting is changed. Unsupported/not-captured settings
+  are listed explicitly. Signed values such as the Windows socket getter's
+  observed `-1` are retained without interpreting them as usable durations.
+  `snapshot_total` overlaps its subphases; do not sum all
+  durations to estimate a window. Diagnostics identify a failed phase and preserve
+  the original error, including failed rollback/close.
+
+Local validation passes **695 offline cases** (264 methods plus 431 subtests),
+with zero failures, errors or skips and the existing five dependency warnings.
+Two targeted database cases passed on the first run: durable read-only planning/
+application with the unchanged fictional $55 Food Cost control, and CLI plan-hash/
+retained-receipt behavior. The new export/restore case initially failed because
+the diagnostic parser rejected a legitimate signed observation (`-1`) from the
+Windows socket getters. That parser was corrected and the export case passes in
+a targeted rerun. Thus **3 distinct targeted database cases have passing evidence
+across two runs**; a fresh full 73-case database-profile result and candidate CI
+have not yet been produced. The initial failure XML is retained. Source hashes
+match the rerun, the local role/database inventory is unchanged, and the owned
+PostgreSQL 17 server is stopped.
+
+The new fixture uses real dump/restore tools with two labelled fictional rows on
+disposable loopback databases; its test-only transport shim does not qualify the
+hosted pooler or its TLS path. It verifies authenticated export, matching isolated
+restore, unchanged source rows and absence of a final-named backup after a close
+failure. No runtime plan-validator code changed after its passing database tests.
+The follow-up is prepared for independent draft review.
+The previous hosted connection-loss/backup hold remains in force. Finish
+independent review before another bounded hosted diagnostic; only then determine
+the actual failure phase and whether a controlled connection experiment is useful.
+No operational invoices were imported, hosted index was applied, or active
+configuration, privileges, credentials or scheduled jobs were changed here.
+
+The prior checkpoints below are retained as historical evidence.
+
 ## PR28 merge and receipt/cleanup follow-up
 
 PR28 merged with owner approval at **c5cce2b858b59bad284db93725ef12ab7db0885b**

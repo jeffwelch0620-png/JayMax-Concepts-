@@ -35,6 +35,18 @@ def receipt(history):
 
 
 class AdditivePlanGuards(unittest.TestCase):
+    def test_receipt_fields_unknown_keys_and_execution_flags_are_refused_as_plans(self):
+        from test_hosted_additive_index import core_plan
+        plan = core_plan()
+        additive.validate_plan(plan)
+        for key, value in (('status','held'), ('errorType','ConnectionError'), ('sqlState','08003'),
+                ('snapshotCleanupErrorType','InterfaceError'), ('connectionCloseErrorType','RuntimeError'),
+                ('lockReleaseErrorType','RuntimeError'), ('partialCleanupErrorType','OSError'),
+                ('commitAttempted',False), ('sqlCommitted',False), ('unreviewedField','TEST ONLY'),
+                ('automaticApply',True), ('hostedInvocationSupported',True), ('operationalReleaseApproved',True)):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                additive.validate_plan(plan | {key:value})
+
     def test_changed_runtime_source_manifest_refuses_the_additive_file(self):
         self.assertTrue(additive.source_bytes())
         with patch.object(additive.json, 'loads', return_value={'migrationSha256': {additive.SOURCE: '0' * 64}}):
@@ -353,3 +365,91 @@ class AdditiveDatabaseTests(unittest.IsolatedAsyncioTestCase):
             args.output = str(root / 'reconciled.json')
             self.assertEqual(await additive.main(args), 0)
             self.assertEqual(json.loads(Path(args.output).read_text())['status'], 'verified_applied')
+
+
+@unittest.skipUnless(os.environ.get('NATIVE_PURCHASE_TEST_DSN'), 'Dedicated disposable PostgreSQL required')
+class HostedBackupLocalDatabaseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_encrypted_export_restore_and_close_failure_stay_disposable(self):
+        import hosted_backup as backup
+        control=os.environ['NATIVE_PURCHASE_TEST_DSN']
+        additive.local_target(control)
+        source='native_purchase_test_backup_source_'+uuid4().hex
+        restored='native_purchase_test_backup_'+uuid4().hex
+        source_dsn=control.rsplit('/',1)[0]+'/'+source
+        restore_dsn=control.rsplit('/',1)[0]+'/'+restored
+        source_settings=backup.native.disposable_connection(source_dsn)
+        dump=Path(os.environ['NATIVE_BACKUP_PG_DUMP'])
+        restore=dump.with_name('pg_restore'+dump.suffix)
+        real_connect=asyncpg.connect
+        real_tool=backup.tool
+        controller=await real_connect(control,ssl=False)
+        created=[]
+        project='abcdefghijklmnopqrst'
+        fictional_url='postgresql://postgres.'+project+':TEST_ONLY@aws-0.pooler.supabase.com:5432/postgres'
+        fail_close=False
+        class CloseFailure:
+            def __init__(self,conn): self.conn=conn
+            def __getattr__(self,name): return getattr(self.conn,name)
+            async def close(self):
+                await self.conn.close()
+                raise ConnectionError('TEST ONLY lost close acknowledgement')
+        async def local_connect(url=None,**kwargs):
+            # Only this test maps the fictional hosted URL to its owned loopback
+            # source. Production endpoint and certificate checks remain intact.
+            if url is not None:
+                self.assertEqual(url,fictional_url)
+                conn=await real_connect(**source_settings,ssl=False,timeout=kwargs['timeout'],
+                    command_timeout=kwargs['command_timeout'],statement_cache_size=0)
+                return CloseFailure(conn) if fail_close else conn
+            self.assertEqual(kwargs['database'],restored)
+            self.assertEqual(kwargs['host'],'127.0.0.1')
+            return await real_connect(**kwargs)
+        async def local_tool(executable,args,settings=None,remote=False):
+            # Real pg_dump/pg_restore; TLS disabled only for disposable loopback.
+            return await real_tool(executable,args,source_settings if remote else settings,False)
+        def directory(path,area): path.mkdir();return path
+        try:
+            for name in (source,restored):
+                await controller.execute('CREATE DATABASE '+backup.native.quoted(name)+' WITH TEMPLATE template0')
+                created.append(name)
+            setup=await real_connect(source_dsn,ssl=False)
+            try:
+                for schema in backup.SCHEMAS:
+                    if schema!='public': await setup.execute('CREATE SCHEMA '+backup.native.quoted(schema))
+                await setup.execute('CREATE TABLE public.test_only_backup_lifecycle(id integer PRIMARY KEY,label text NOT NULL)')
+                await setup.executemany('INSERT INTO public.test_only_backup_lifecycle VALUES($1,$2)',
+                    [(1,'TEST ONLY CRLF\r\nfictional row'),(2,'TEST ONLY Unicode café')])
+            finally: await setup.close()
+            with TemporaryDirectory() as temporary:
+                root=Path(temporary)
+                with patch.object(backup,'private_directory',side_effect=directory), \
+                     patch.object(backup,'connection_tls',return_value=True), \
+                     patch.object(backup.asyncpg,'connect',side_effect=local_connect), \
+                     patch.object(backup,'tool',side_effect=local_tool):
+                    exported=await backup.export_backup(fictional_url,project,dump,restore,
+                        root/'archive',root/'key',{})
+                    self.assertEqual(exported['status'],'exported_not_restore_verified')
+                    self.assertIn('statement_timeout',exported['backupDiagnostics']['serverLimits'])
+                    self.assertTrue(all(phase['outcome']=='passed' for phase in exported['backupDiagnostics']['phases']))
+                    verified=await backup.verify_restore(restore_dsn,exported['encryptedBackup'],
+                        exported['privateKey'],project,restore,root/'restore')
+                    self.assertEqual(verified['status'],'verified_application_restore')
+                    self.assertEqual(verified['archiveSha256'],exported['archiveSha256'])
+                    self.assertEqual(verified['rowsMatched'],2)
+                    self.assertFalse(verified['operationalReleaseApproved'])
+                    fail_close=True
+                    with self.assertRaises(ConnectionError) as caught:
+                        await backup.export_backup(fictional_url,project,dump,restore,
+                            root/'held-archive',root/'held-key',{})
+                    self.assertEqual(caught.exception.connectionCloseErrorType,'ConnectionError')
+                    self.assertFalse((root/'held-archive/backup.jmax.enc').exists())
+                    self.assertFalse((root/'held-archive/backup.partial.enc').exists())
+                    self.assertFalse((root/'held-archive/archive.partial').exists())
+                check=await real_connect(source_dsn,ssl=False)
+                try:
+                    self.assertEqual(await check.fetchval('SELECT count(*) FROM public.test_only_backup_lifecycle'),2)
+                finally: await check.close()
+        finally:
+            for name in reversed(created):
+                await controller.execute('DROP DATABASE '+backup.native.quoted(name)+' WITH (FORCE)')
+            await controller.close()

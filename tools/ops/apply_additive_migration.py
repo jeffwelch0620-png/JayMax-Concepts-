@@ -104,6 +104,15 @@ def checked_delivery(receipt):
 
 
 def validate_plan(plan):
+    # Plans and receipts are distinct artifacts. A held dry-run receipt must not
+    # become executable merely because an operator hashes its retained contents.
+    required = {'format', 'originalInstallation', 'clientRoles', 'baseline', 'migration'}
+    allowed = required | {'createdAt', 'automaticApply', 'hostedInvocationSupported', 'operationalReleaseApproved'}
+    if not isinstance(plan, dict) or not required <= plan.keys() or plan.keys() - allowed:
+        raise ValueError('Additive plan schema excludes receipts and unreviewed fields')
+    for flag in ('automaticApply', 'hostedInvocationSupported', 'operationalReleaseApproved'):
+        if flag in plan and plan[flag] is not False:
+            raise ValueError('Additive plan cannot authorize automatic or operational execution')
     if plan.get('format') != FORMAT:
         raise ValueError('Unsupported additive plan')
     checked_delivery(plan['originalInstallation'])
