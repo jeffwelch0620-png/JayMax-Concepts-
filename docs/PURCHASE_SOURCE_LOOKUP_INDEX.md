@@ -91,8 +91,11 @@ hosted connection was used.
 
 ## Review and later rollout
 
-The owner approved refreshing documentation and merging PR25, subject to CI on
-the documentation revision. Existing Render hosting, Supabase connections, roles
+The owner-approved documentation refresh **53809e1** passed all four checks in
+[run 38498627229](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38498627229).
+PR25 is merged at **fbf06b7** and main CI also passes. The separate
+[additive installation rehearsal](ADDITIVE_SOURCE_INDEX_INSTALL.md) prepares
+the incremental engine locally. Existing Render hosting, Supabase connections, roles
 and feature settings are retained. Merging deploys the test application through
 the existing Render workflow; it does not execute migration 30. The hosted
 database retains its previous installation until a separate additive rollout.
