@@ -18,6 +18,7 @@ import hosted_test_trial as trial
 import hosted_install_preservation as preservation
 import managed_development as delivery
 import schema_reconciliation as reconciliation
+from install_lock import INSTALLER_LOCK
 
 
 class InstallFailure(RuntimeError):
@@ -77,7 +78,7 @@ async def apply(conn, directory, expected_catalog, expected_rows, expected_ledge
     try:
         transaction=conn.transaction(isolation='repeatable_read');await transaction.start()
         await conn.execute("SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s'; SET LOCAL idle_in_transaction_session_timeout='120s'")
-        await conn.execute('SELECT pg_advisory_xact_lock(781340621)')
+        await conn.execute('SELECT pg_advisory_xact_lock($1::bigint)', INSTALLER_LOCK)
         await ledger_shape(conn)
         columns=await preservation.original_columns(conn)
         await preservation.lock_original_tables(conn,columns)

@@ -3,8 +3,12 @@
 PR25 is merged at **fbf06b7c9beda305ef42fb3b06d8215d165202bf**. All four CI
 checks passed on refreshed head **53809e1** and on merged main. Migration 30
 remains unapplied on Supabase. The first follow-up provides an incremental engine
-and a disposable-only CLI in `backend/apply_additive_migration.py`; it is not a
-hosted installation adapter or an operational release approval.
+and a disposable-only CLI, now moved to `tools/ops/apply_additive_migration.py`.
+PR26 is merged at **51b0f6d** with owner approval; all four merged-main checks
+pass in [run 38506067983](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38506067983).
+The next local branch prepares a separately reviewed hosted adapter and
+[maintenance procedure](HOSTED_ADDITIVE_INDEX_RUNBOOK.md). Neither merge nor
+adapter preparation authorizes hosted execution.
 
 ## Reviewed history and plan
 
@@ -71,9 +75,9 @@ application connection are refused. The default safety boundary is enforced for
 all three modes; library helpers are not exposed as application routes.
 
 ```text
-python backend/apply_additive_migration.py dry-run --original-install-receipt <fictional-install-receipt.json> --delivery-version <new-14-digit-version> --output <new-plan.json>
-python backend/apply_additive_migration.py apply --plan <reviewed-plan.json> --plan-sha256 <exact-file-sha256> --output <new-apply-receipt.json>
-python backend/apply_additive_migration.py reconcile --plan <reviewed-plan.json> --plan-sha256 <exact-file-sha256> --output <new-reconciliation.json>
+python tools/ops/apply_additive_migration.py dry-run --original-install-receipt <fictional-install-receipt.json> --delivery-version <new-14-digit-version> --output <new-plan.json>
+python tools/ops/apply_additive_migration.py apply --plan <reviewed-plan.json> --plan-sha256 <exact-file-sha256> --output <new-apply-receipt.json>
+python tools/ops/apply_additive_migration.py reconcile --plan <reviewed-plan.json> --plan-sha256 <exact-file-sha256> --output <new-reconciliation.json>
 ```
 
 Keep plans and receipts outside Git. New evidence paths are required; existing
@@ -113,7 +117,7 @@ Only fictional local databases were used; older unrelated failed fixtures remain
 retained. The intermediate receipt and first failed log are preserved separately.
 Frontend source is unchanged; the prior merged-head CI remains separate from
 these local results. This follow-up is published as
-[draft PR26](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/26).
+[merged PR26](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/26).
 [All four initial-head CI checks pass at e1144cb](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38503716266):
 689 frontend tests across 67 suites and the strict build, 45 database methods
 plus 7 subtests, 218 Windows offline methods plus 351 subtests, and the aggregate
@@ -124,10 +128,11 @@ the original local acceptance and review manifest remain immutable checkpoints.
 Before hosted DDL, prepare a separately reviewed adapter that pins the intended
 Supabase build project and administrative connection, fresh private backup and
 isolated restore evidence, original installation receipt and reviewed plan hash.
-The hosted adapter must also pin the migration ledger's column/default, unique
-version constraint and access metadata; local fixture ledgers use a version
-primary key, and the engine's existing ledger-shape check is limited to the
-required column types and unexpected mandatory fields. Review the maintenance
+The local hosted-adapter candidate now adds the migration ledger's column/default,
+unique-version and access metadata to core plan v2. Local fixture ledgers use a
+version primary key; missing/deferred uniqueness and changed defaults or grants
+hold before DDL. The legacy fresh installer's basic ledger-shape check remains
+limited to required types and unexpected mandatory fields. Review the maintenance
 window and lock scope, retain uncertain-commit evidence,
 and obtain explicit hosted installation approval. Then independently inspect
 readiness and recheck current-source reads plus the closed **$212** accounting

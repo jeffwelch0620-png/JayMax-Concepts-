@@ -21,6 +21,7 @@ from uuid import uuid4
 from unittest.mock import patch
 
 import asyncpg
+from install_lock import INSTALLER_LOCK
 from dotenv import dotenv_values
 import deployment_readiness as readiness
 from managed_development import project_identity, DevelopmentTargetError
@@ -359,7 +360,7 @@ async def trial(config, identity, backup_manifest, output, emit=None):
         report['rowFingerprintsBefore'] = await row_fingerprints(conn)
         transaction = conn.transaction(isolation='repeatable_read'); await transaction.start()
         await conn.execute("SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s'; SET LOCAL idle_in_transaction_session_timeout='120s'")
-        await conn.execute('SELECT pg_advisory_xact_lock(781340621)')
+        await conn.execute('SELECT pg_advisory_xact_lock($1::bigint)', INSTALLER_LOCK)
         report['stage'] = 'native_migrations'
         for entry in report['migrationPlan']['migrations']:
             raw = (readiness.ROOT/'migrations'/entry['file']).read_bytes()

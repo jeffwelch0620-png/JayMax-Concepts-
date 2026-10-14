@@ -1,6 +1,29 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Additive source-index installer - local preparation, October 13, 2026
+## Hosted source-index adapter - local preparation, October 14, 2026
+
+[PR26](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/26) is merged with
+owner approval at **51b0f6d**. All four merged-main checks pass in
+[run 38506067983](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38506067983).
+The next **codex/hosted-additive-index-adapter** branch prepares a manual adapter
+outside Render's backend root, mandatory ordinary-client checks, full ledger
+metadata preservation, backup/restore bindings and an explicit maintenance plan.
+See the [hosted adapter runbook](docs/HOSTED_ADDITIVE_INDEX_RUNBOOK.md).
+Final source-pinned local validation passes **635 reported cases**: 230 offline
+methods plus 379 subtests (609), and 22 additive-core/hosted-wrapper database
+methods plus 4 subtests (26), with zero failures, errors or skips. The fictional
+$55 Food Cost report, all original rows and sequence states remain intact;
+changed ledger defaults, column grants, missing uniqueness, active writers and
+writes committed during a table-lock wait are refused before DDL. Lost commit
+responses reconcile independently. Starting/ending local database and role
+inventories match, the server is stopped and all nine tested source hashes remain
+unchanged throughout the final run. The overnight interruption is retained in
+the elapsed evidence; every final case passed without relaxing deadlines.
+A separate earlier broad accounting/restore checkpoint passed 668 reported
+cases (605 offline/63 database); those overlapping counts are not added to 635.
+The current candidate is local; new PR CI and hosted acceptance remain pending.
+The current Render/Supabase connections stay in place. Hosted execution and the
+fictional $212/current-source acceptance require separate approval and evidence.
 
 [PR25](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/25) is merged at
 **fbf06b7**, incorporating documentation refresh **53809e1**. All four checks pass
@@ -20,7 +43,7 @@ incremental installer cases. The fictional **$55** actual Food Cost report is
 preserved, successful-run role/database inventories match and the server is
 stopped. Earlier corrected failures and the intermediate 30-case pass are
 retained as separate evidence. The follow-up is published as
-[draft PR26](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/26).
+[merged PR26](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/26).
 [All four CI checks passed at initial source head e1144cb](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38503716266),
 including 689 frontend tests and the strict build, plus the 621 reported backend
 cases. A publication cleanup removes only a trailing blank line from the test

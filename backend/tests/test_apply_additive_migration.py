@@ -7,10 +7,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
+import sys
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import asyncpg
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/ops'))
 import apply_additive_migration as additive
 import deployment_readiness as readiness
 import hosted_install_preservation as preservation

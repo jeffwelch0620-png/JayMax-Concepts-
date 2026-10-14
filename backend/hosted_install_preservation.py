@@ -4,6 +4,7 @@ Metadata and digests only; no rows, SQL defaults or connection values returned.
 New fields are excluded explicitly, while removed/retyped original fields hold.
 """
 import asyncpg
+import json
 from uuid import UUID
 import schema_reconciliation as reconciliation
 
@@ -63,9 +64,56 @@ async def fingerprints(conn, baseline, *, exclude_synthetic=None):
 
 async def ledger_fingerprints(conn):
     """Hash entire existing ledger rows so old statements cannot change silently."""
-    return {row['version']:row['sha256'] for row in await conn.fetch("""SELECT version::text,
+    rows = await conn.fetch("""SELECT version::text,
         encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS sha256
-        FROM supabase_migrations.schema_migrations t ORDER BY version::text""")}
+        FROM supabase_migrations.schema_migrations t ORDER BY version::text""")
+    if any(r['version'] is None for r in rows) or len({r['version'] for r in rows}) != len(rows):
+        raise ValueError('Migration versions must be non-null and unique')
+    return {row['version']: row['sha256'] for row in rows}
+
+
+async def ledger_contract(conn):
+    """Pin ledger defaults, uniqueness, ownership and access without SQL bodies."""
+    unique = await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM pg_index i
+        JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attname='version'
+        WHERE i.indrelid=to_regclass('supabase_migrations.schema_migrations')
+        AND a.attnotnull AND i.indisunique AND i.indisvalid AND i.indisready AND i.indislive
+        AND i.indimmediate AND i.indnkeyatts=1 AND i.indkey[0]=a.attnum
+        AND i.indpred IS NULL AND i.indexprs IS NULL)""")
+    if not unique:
+        raise ValueError('Migration ledger requires immediate valid unique non-null versions')
+    result = {}
+    from native_backup import CATALOG, NAMESPACES
+    for group in ('schemas', 'relations', 'columns', 'constraints', 'indexes', 'triggers',
+                  'internal_trigger_states', 'policies', 'functions'):
+        sql = CATALOG[group].replace(NAMESPACES, "n.nspname='supabase_migrations'")
+        rows = await conn.fetch('SELECT to_jsonb(r)::text AS value FROM (' + sql + ') r')
+        result[group] = sorted((reconciliation.safe_record(json.loads(r['value'])) for r in rows),
+                               key=lambda r: json.dumps(r, sort_keys=True))
+    result['indexState'] = [dict(r) for r in await conn.fetch("""SELECT c.relname,
+        i.indisunique,i.indisvalid,i.indisready,i.indislive,i.indimmediate,
+        i.indnkeyatts,i.indnatts,i.indkey::text AS keys
+        FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid
+        JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='supabase_migrations'
+        ORDER BY c.relname""")]
+    result['defaultAcl'] = [dict(r) for r in await conn.fetch("""SELECT
+        pg_get_userbyid(d.defaclrole) AS creator,coalesce(n.nspname,'global') AS scope,
+        d.defaclobjtype::text AS kind,d.defaclacl::text AS acl FROM pg_default_acl d
+        LEFT JOIN pg_namespace n ON n.oid=d.defaclnamespace
+        WHERE d.defaclnamespace=0 OR n.nspname='supabase_migrations' ORDER BY 1,2,3""")]
+    result['columnAcl'] = [dict(r) for r in await conn.fetch("""SELECT c.relname,a.attname,
+        a.attacl::text AS acl FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+        JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='supabase_migrations'
+        AND a.attnum>0 AND NOT a.attisdropped ORDER BY 1,2""")]
+    # Roles and memberships affect effective grants. Never select password catalogs.
+    result['roles'] = [dict(r) for r in await conn.fetch("""SELECT rolname,rolsuper,
+        rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,rolreplication,rolbypassrls
+        FROM pg_roles ORDER BY rolname""")]
+    result['memberships'] = [dict(r) for r in await conn.fetch("""SELECT
+        pg_get_userbyid(roleid) AS role,pg_get_userbyid(member) AS member,
+        pg_get_userbyid(grantor) AS grantor,admin_option,inherit_option,set_option
+        FROM pg_auth_members ORDER BY 1,2,3""")]
+    return result
 
 
 async def lock_original_tables(conn, baseline):
