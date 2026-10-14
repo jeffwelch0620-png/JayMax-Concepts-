@@ -1,5 +1,20 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Backup artifact acceptance and diagnostic preparation — October 14, 2026
+
+[PR29](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/29) merged with
+owner approval at **6f27edc**; all four
+[merged-main checks pass](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38640974919).
+The next local follow-up publishes a final backup filename only after successful
+verification/cleanup, rejects receipt fields in additive plans, and brings safe
+SQLSTATE/cleanup categories plus phase timings to the standalone backup CLI.
+Diagnostics observe effective limits without changing them. Local validation
+passes **695 offline cases** and **3 targeted database cases across the initial
+run and export rerun**; the checkpoint retains the initial parser failure and
+its correction. The test server is stopped. This follow-up is ready for draft
+review; no new hosted rehearsal or index application has occurred.
+See the [current checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md).
+
 ## Read-only receipt and cleanup follow-up — October 14, 2026
 
 [PR28](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/28) merged with

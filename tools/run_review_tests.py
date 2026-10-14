@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-OFFLINE_MODULES = ('catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_build_workflows '
+OFFLINE_MODULES = ('catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
  'managed_development rotate_build_connections provision_build_connections staff_response pg_routes pg_migrations '
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
@@ -20,6 +20,7 @@ OFFLINE_CLASSES = ('deployment_readiness::ReadinessConfigurationTests runtime_pe
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
+ ('apply_additive_migration','HostedBackupLocalDatabaseTests','test_encrypted_export_restore_and_close_failure_stay_disposable'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_same_version_correction_and_exact_retry'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_reissued_version_correction_and_exact_retry'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_competing_review_reads_winning_request_identity_without_another_posting'),

@@ -1,5 +1,61 @@
 # Hosted source-index preflight and backup hold — October 14, 2026
 
+## PR29 merge and backup-artifact/diagnostic follow-up
+
+PR29 merged with owner approval at **6f27edcfeb80c92d18eda09798cc9a9c295791ab**
+(reviewed head **50485a5**). All four
+[merged-main CI checks pass](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38640974919).
+The next local branch is `codex/backup-artifact-diagnostics`.
+
+- **N1:** encrypted readback, archive listing, connection close and partial-file
+  cleanup complete before `backup.partial.enc` is promoted to `backup.jmax.enc`.
+  A close-only failure removes the candidate; other cleanup/publication failures
+  may retain a protected partial artifact, but no accepted final name or success
+  receipt is produced. The key remains private; no automatic recovery/retry is added.
+- **N2:** additive plans have a fixed top-level field allowlist. Held receipt/error
+  fields and unknown keys are rejected; optional execution flags must be explicitly
+  false. Original source/history checks remain. Hashing a held local dry-run
+  receipt cannot make it executable.
+- **CLI gap:** standalone held backup output uses the shared original error,
+  validated SQLSTATE and cleanup categories, plus allowlisted diagnostics.
+  Driver text, SQL, URLs, credentials and arbitrary attached metadata are excluded.
+- **N3 preparation:** export records named phases, effective server limits after
+  existing connection configuration, and the existing 20-second connection,
+  60-second command and 240-second subprocess deadlines. No timeout, keepalive,
+  role, endpoint or hosting setting is changed. Unsupported/not-captured settings
+  are listed explicitly. Signed values such as the Windows socket getter's
+  observed `-1` are retained without interpreting them as usable durations.
+  `snapshot_total` overlaps its subphases; do not sum all
+  durations to estimate a window. Diagnostics identify a failed phase and preserve
+  the original error, including failed rollback/close.
+
+Local validation passes **695 offline cases** (264 methods plus 431 subtests),
+with zero failures, errors or skips and the existing five dependency warnings.
+Two targeted database cases passed on the first run: durable read-only planning/
+application with the unchanged fictional $55 Food Cost control, and CLI plan-hash/
+retained-receipt behavior. The new export/restore case initially failed because
+the diagnostic parser rejected a legitimate signed observation (`-1`) from the
+Windows socket getters. That parser was corrected and the export case passes in
+a targeted rerun. Thus **3 distinct targeted database cases have passing evidence
+across two runs**; a fresh full 73-case database-profile result and candidate CI
+have not yet been produced. The initial failure XML is retained. Source hashes
+match the rerun, the local role/database inventory is unchanged, and the owned
+PostgreSQL 17 server is stopped.
+
+The new fixture uses real dump/restore tools with two labelled fictional rows on
+disposable loopback databases; its test-only transport shim does not qualify the
+hosted pooler or its TLS path. It verifies authenticated export, matching isolated
+restore, unchanged source rows and absence of a final-named backup after a close
+failure. No runtime plan-validator code changed after its passing database tests.
+The follow-up is prepared for independent draft review.
+The previous hosted connection-loss/backup hold remains in force. Finish
+independent review before another bounded hosted diagnostic; only then determine
+the actual failure phase and whether a controlled connection experiment is useful.
+No operational invoices were imported, hosted index was applied, or active
+configuration, privileges, credentials or scheduled jobs were changed here.
+
+The prior checkpoints below are retained as historical evidence.
+
 ## PR28 merge and receipt/cleanup follow-up
 
 PR28 merged with owner approval at **c5cce2b858b59bad284db93725ef12ab7db0885b**

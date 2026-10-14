@@ -66,7 +66,7 @@ class ReadonlySnapshotTests(unittest.IsolatedAsyncioTestCase):
     async def test_export_snapshot_preserves_disconnect_before_dump(self):
         import hosted_backup as backup
         conn, tx = self.connection(rollback=RuntimeError('TEST ONLY cleanup'))
-        conn.fetch=AsyncMock(return_value=[{'nspname':s} for s in backup.SCHEMAS])
+        conn.fetch=AsyncMock(side_effect=lambda sql,*args: [] if 'pg_settings' in sql else [{'nspname':s} for s in backup.SCHEMAS])
         conn.fetchval=AsyncMock(return_value='TEST ONLY snapshot')
         conn.close=AsyncMock(side_effect=RuntimeError('TEST ONLY private close failure'))
         original=ConnectionError('TEST ONLY source disconnect')
@@ -179,6 +179,7 @@ class ReadonlySnapshotTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_local_cli_writes_original_categories_when_close_also_fails(self):
         import apply_additive_migration as additive
+        from test_hosted_additive_index import core_plan
         import json
         import os
         for body_fails in (True, False):
@@ -194,11 +195,13 @@ class ReadonlySnapshotTests(unittest.IsolatedAsyncioTestCase):
                         'postgresql://purchase_implementation_test@127.0.0.1:55439/native_purchase_test_control'}), \
                      patch.object(additive.asyncpg, 'connect', AsyncMock(return_value=conn)), \
                      patch.object(additive, 'prepare', AsyncMock(side_effect=original if body_fails else None,
-                         return_value={'format':additive.FORMAT})):
+                         return_value=core_plan())):
                     self.assertEqual(await additive.main(args), 2)
                 raw = Path(args.output).read_text(); result = json.loads(raw)
                 self.assertEqual(result['status'], 'held')
                 self.assertEqual(result['connectionCloseErrorType'], 'RuntimeError')
+                with self.assertRaises(ValueError): additive.validate_plan(result)
+                with self.assertRaises(ValueError): await additive.apply(SimpleNamespace(), result)
                 if body_fails:
                     self.assertEqual(result['errorType'], 'ConnectionError')
                     self.assertEqual(result['sqlState'], '08003')
