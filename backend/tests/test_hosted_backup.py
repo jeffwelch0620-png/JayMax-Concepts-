@@ -211,6 +211,10 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((root/'archive/backup.partial.enc').exists())
             self.assertFalse((root/'archive/archive.partial').exists())
             self.assertTrue((root/'key/backup.key').exists())
+            from hosted_backup_cli import held_result
+            self.assertEqual(held_result(caught.exception)['backupArtifacts'], {
+                'privateKeyRetained':True, 'encryptedPartialRetained':False,
+                'rawPartialRetained':False, 'finalBackupPresent':False})
             self.assertNotIn('publish',[p['phase'] for p in caught.exception.backupDiagnostics['phases']])
             tx.commit.assert_awaited_once()
 
@@ -222,9 +226,24 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(OSError) as caught: await self.export(root,conn,**arguments)
                 self.assertFalse((root/'archive/backup.jmax.enc').exists())
                 self.assertTrue((root/'archive/backup.partial.enc').exists())
+                self.assertTrue(caught.exception.backupArtifacts['privateKeyRetained'])
+                self.assertTrue(caught.exception.backupArtifacts['encryptedPartialRetained'])
+                self.assertFalse(caught.exception.backupArtifacts['finalBackupPresent'])
                 phase='partial_cleanup' if operation=='cleanup' else 'publish'
                 self.assertTrue(any(p['phase']==phase and p['outcome']=='held'
                     for p in caught.exception.backupDiagnostics['phases']))
+
+    async def test_artifact_inspection_failure_preserves_original_close_error(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);original=ConnectionError('TEST ONLY private close')
+            conn,tx=self.connection(close_error=original)
+            with patch.object(Path,'exists',side_effect=PermissionError('TEST ONLY private path')):
+                with self.assertRaises(ConnectionError) as caught: await self.export(root,conn)
+            self.assertIs(caught.exception,original)
+            from hosted_backup_cli import held_result
+            self.assertEqual(held_result(original)['backupArtifacts'],{'artifactInspectionHeld':True})
+            self.assertEqual(original.partialCleanupErrorType,'PermissionError')
+            self.assertFalse((root/'archive/backup.jmax.enc').exists())
 
     async def test_fingerprint_disconnect_keeps_failed_phase_sqlstate_and_close_category(self):
         with TemporaryDirectory() as temporary:
@@ -240,7 +259,8 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(receipt['snapshotCleanupErrorType'],'RuntimeError')
             self.assertEqual(receipt['connectionCloseErrorType'],'RuntimeError')
             self.assertTrue(any(p['phase']=='fingerprint' and p['outcome']=='held' for p in receipt['backupDiagnostics']['phases']))
-            self.assertNotIn('private',json.dumps(receipt))
+            for sensitive in ('TEST ONLY', 'private password', 'private rollback', 'private close', str(root)):
+                self.assertNotIn(sensitive,json.dumps(receipt))
             self.assertFalse((root/'archive/backup.jmax.enc').exists())
 
     async def test_readback_and_sequence_drift_hold_before_publication(self):
@@ -257,14 +277,32 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(any(p['phase']==phase and p['outcome']=='held'
                     for p in caught.exception.backupDiagnostics['phases']))
 
-    async def test_unexpected_limit_metadata_is_held_without_echoing_values(self):
+    async def test_unexpected_limit_metadata_does_not_abort_or_echo_values(self):
+        for setting,unit in (('TEST ONLY private password','ms'),('120000','TEST ONLY unknown unit')):
+            with self.subTest(setting=setting,unit=unit),TemporaryDirectory() as temporary:
+                root=Path(temporary);conn,tx=self.connection(settings=[
+                    {'name':'statement_timeout','setting':setting,'unit':unit},
+                    {'name':'tcp_keepalives_count','setting':'10','unit':None}])
+                result=await self.export(root,conn)
+                self.assertEqual(result['status'],'exported_not_restore_verified')
+                self.assertTrue((root/'archive/backup.jmax.enc').exists())
+                self.assertTrue(result['backupDiagnostics']['limitReadHeld'])
+                self.assertIn('statement_timeout',result['backupDiagnostics']['serverLimitsNotCaptured'])
+                self.assertEqual(result['backupDiagnostics']['serverLimits']['tcp_keepalives_count'],{'value':10,'unit':None})
+                self.assertNotIn('TEST ONLY',json.dumps(result['backupDiagnostics']))
+                tx.commit.assert_awaited_once()
+
+    async def test_limit_query_disconnect_still_holds_original_error(self):
         with TemporaryDirectory() as temporary:
-            root=Path(temporary);conn,tx=self.connection(settings=[
-                {'name':'statement_timeout','setting':'TEST ONLY private password','unit':'ms'}])
-            with self.assertRaises(backup.BackupError) as caught: await self.export(root,conn)
-            from hosted_backup_cli import held_result
-            self.assertNotIn('private password',json.dumps(held_result(caught.exception)))
+            root=Path(temporary);conn,tx=self.connection()
+            original=ConnectionError('TEST ONLY private disconnect');original.sqlstate='08003'
+            conn.fetch.side_effect=original
+            with self.assertRaises(ConnectionError) as caught: await self.export(root,conn)
+            self.assertIs(caught.exception,original)
+            self.assertEqual(caught.exception.sqlstate,'08003')
             self.assertFalse((root/'archive/backup.jmax.enc').exists())
+            tx.rollback.assert_awaited_once()
+            tx.commit.assert_not_awaited()
 
     async def test_negative_socket_observation_is_retained_without_changing_settings(self):
         with TemporaryDirectory() as temporary:

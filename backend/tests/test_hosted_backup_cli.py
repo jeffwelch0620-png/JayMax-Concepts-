@@ -56,3 +56,17 @@ class BackupCliTests(unittest.TestCase):
         def finish(coroutine): coroutine.close()
         with patch.object(cli.asyncio,'run',side_effect=finish):
             self.assertEqual(cli.run(),0)
+
+    def test_held_artifacts_and_limit_flag_are_boolean_only(self):
+        error=ConnectionError('TEST ONLY private message')
+        error.backupArtifacts={'privateKeyRetained':True,'encryptedPartialRetained':True,
+            'rawPartialRetained':'private path','finalBackupPresent':False,
+            'privateKey':'TEST ONLY secret','artifactInspectionHeld':True}
+        error.backupDiagnostics={'format':'jaymax-backup-diagnostics-v1','limitReadHeld':True}
+        result=cli.held_result(error)
+        self.assertEqual(result['backupArtifacts'],{'privateKeyRetained':True,
+            'encryptedPartialRetained':True,'finalBackupPresent':False,'artifactInspectionHeld':True})
+        self.assertTrue(result['backupDiagnostics']['limitReadHeld'])
+        self.assertNotIn('TEST ONLY',json.dumps(result))
+        error.backupDiagnostics['limitReadHeld']='private'
+        self.assertNotIn('limitReadHeld',cli.held_result(error)['backupDiagnostics'])

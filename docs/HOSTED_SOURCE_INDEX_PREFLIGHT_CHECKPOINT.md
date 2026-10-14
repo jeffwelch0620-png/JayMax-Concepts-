@@ -1,5 +1,38 @@
 # Hosted source-index preflight and backup hold — October 14, 2026
 
+## PR30 review amendments
+
+The independent review confirms the backup publication and plan guards. Its CI
+observation predates the completed [four green checks at a6229a2](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38645650942):
+689 frontend tests, 695 offline cases and a fresh full 73-case disposable database
+profile. The initial local parser failure remains in the history below.
+
+- Unexpected diagnostic setting values/units are omitted from `serverLimits`,
+  listed in `serverLimitsNotCaptured`, and marked by `limitReadHeld: true`.
+  This metadata problem does not abort export. Actual query/connection failures,
+  snapshot failures, verification failures and cleanup failures still hold it.
+- `pg_settings` observes the PostgreSQL server session only. The session pooler's
+  own client/idle limits are not captured. Clean server readings cannot rule out
+  a pooler timeout; phase and elapsed-time observations suggest hypotheses, not
+  a proved cause. No limits, keepalives or connection settings are changed.
+- Held CLI receipts include boolean-only `backupArtifacts` flags for retained
+  `backup.key`, `backup.partial.enc`, `archive.partial`, and a final backup's
+  presence. Failed inspection is flagged separately, never inferred as absence.
+  Paths and key contents are excluded. Keys remain private, including when a
+  candidate survives cleanup/publication failure; no automatic deletion of
+  recovery material is introduced. A retained key or partial is not an accepted
+  backup. The original failure remains primary if artifact inspection fails.
+
+Amendment validation passes **700 offline cases** (267 methods plus 433
+subtests), zero failures/errors/skips. Tests cover unexpected values/units,
+continued authenticated export with valid settings retained, a real query-error
+category still holding export, and failed artifact inspection preserving the
+original error. A focused first run exposed an overly broad test assertion that
+rejected the safe field name `privateKeyRetained`; the assertion now checks actual
+sensitive values and paths. The final offline XML is retained separately.
+The amended head requires fresh CI before the owner-authorized merge.
+Hosted backup/restore and index application remain held pending their own evidence.
+
 ## PR29 merge and backup-artifact/diagnostic follow-up
 
 PR29 merged with owner approval at **6f27edcfeb80c92d18eda09798cc9a9c295791ab**

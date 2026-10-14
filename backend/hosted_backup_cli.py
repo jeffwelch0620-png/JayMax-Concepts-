@@ -15,6 +15,9 @@ def held_result(error):
     diagnostics = backup.safe_export_diagnostics(getattr(error, 'backupDiagnostics', None))
     if diagnostics is not None:
         result['backupDiagnostics'] = diagnostics
+    artifacts = backup.safe_export_artifacts(getattr(error, 'backupArtifacts', None))
+    if artifacts is not None:
+        result['backupArtifacts'] = artifacts
     if isinstance(error, backup.BackupError):
         result['reason'] = str(error)
     return result

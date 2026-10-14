@@ -1,5 +1,18 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR30 review amendments — October 14, 2026
+
+Unexpected limit metadata no longer aborts backup export: valid observations
+remain, unsupported ones are explicitly uncaptured, and `limitReadHeld` records
+the diagnostic gap. Actual database/snapshot failures still stop export. Held
+receipts identify retained private artifacts with boolean-only flags; they expose
+no paths or key contents. PostgreSQL settings do not show the pooler's own limits.
+The original PR30 head has four green CI checks (689 frontend tests, 695 offline
+cases, 73 database cases). The amendments pass **700 offline cases**; fresh
+published-head CI is required before the
+owner-authorized merge. Hosted backup/restore and index application remain held.
+See the [checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md).
+
 ## Backup artifact acceptance and diagnostic preparation — October 14, 2026
 
 [PR29](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/29) merged with

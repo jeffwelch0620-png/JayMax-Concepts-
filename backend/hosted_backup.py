@@ -88,7 +88,19 @@ def safe_export_diagnostics(value):
             if duration(clients.get(name)):
                 safe['clientLimits'][name] = clients[name]
     safe['serverLimitsNotCaptured'] = [name for name in LIMIT_NAMES if name not in safe['serverLimits']]
+    if isinstance(value.get('limitReadHeld'), bool):
+        safe['limitReadHeld'] = value['limitReadHeld']
     return safe
+
+
+def safe_export_artifacts(value):
+    """Fixed presence flags only; never expose paths or key contents."""
+    if not isinstance(value, dict):
+        return None
+    safe = {name: value[name] for name in ('privateKeyRetained', 'encryptedPartialRetained',
+        'rawPartialRetained', 'finalBackupPresent', 'artifactInspectionHeld')
+        if isinstance(value.get(name), bool)}
+    return safe or None
 
 
 class ExportDiagnostics:
@@ -96,6 +108,7 @@ class ExportDiagnostics:
         self.started = time.monotonic()
         self.phases = []
         self.server_limits = {}
+        self.limit_read_held = False
 
     @contextmanager
     def phase(self, name):
@@ -124,13 +137,14 @@ class ExportDiagnostics:
             # signed observations; do not reinterpret them as usable durations.
             if (not isinstance(setting, str) or not re.fullmatch(r'-?[0-9]{1,19}', setting)
                     or abs(int(setting)) > 10**18 or unit not in (None, 'ms', 's', 'min', 'h')):
-                raise BackupError('Unexpected limit metadata; values withheld')
+                self.limit_read_held = True
+                continue
             self.server_limits[name] = {'value': int(setting), 'unit': unit}
 
     def report(self):
         return safe_export_diagnostics({'format':'jaymax-backup-diagnostics-v1',
             'totalElapsedSeconds':round(time.monotonic()-self.started, 6),
-            'phases':self.phases, 'serverLimits':self.server_limits,
+            'phases':self.phases, 'serverLimits':self.server_limits, 'limitReadHeld':self.limit_read_held,
             'clientLimits':{'connectSeconds':CONNECT_TIMEOUT_SECONDS, 'commandSeconds':COMMAND_TIMEOUT_SECONDS,
                             'subprocessSeconds':TOOL_TIMEOUT_SECONDS}})
 
@@ -336,6 +350,17 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
                                       key_directory, migration_hashes, diagnostics)
     except BaseException as error:
         error.backupDiagnostics = diagnostics.report()
+        artifacts = {}
+        for name, path in (
+            ('privateKeyRetained', Path(key_directory) / 'backup.key'),
+            ('encryptedPartialRetained', Path(backup_directory) / 'backup.partial.enc'),
+            ('rawPartialRetained', Path(backup_directory) / 'archive.partial'),
+            ('finalBackupPresent', Path(backup_directory) / 'backup.jmax.enc')):
+            try:
+                artifacts[name] = path.exists()
+            except OSError:
+                artifacts['artifactInspectionHeld'] = True
+        error.backupArtifacts = artifacts
         raise
     return result | {'backupDiagnostics':diagnostics.report()}
 
