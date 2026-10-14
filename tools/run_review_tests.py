@@ -49,6 +49,7 @@ DATABASE_CASES = (
  ('actual_inventory','ActualInventoryTests','test_explicit_value_usage_math_ignores_sales_flag_and_prep'),
  ('actual_inventory','ActualInventoryTests','test_prepared_items_excluded_and_fixed_unit_conflict_rolls_back'))
 DATABASE_CASES += tuple(('apply_additive_migration', 'AdditiveDatabaseTests', name) for name in (
+ 'test_readonly_nested_failure_rolls_back_savepoint_and_keeps_outer_transaction',
  'test_dry_run_is_readonly_and_success_is_durable_without_business_changes',
  'test_failed_ledger_insert_rolls_back_the_index_and_all_history',
  'test_lost_commit_ack_is_unknown_until_fresh_read_and_never_blindly_reapplied',

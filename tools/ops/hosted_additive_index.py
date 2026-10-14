@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'backend'))
 import asyncpg
 from dotenv import dotenv_values
 import apply_additive_migration as engine
+from readonly_snapshot import readonly_snapshot, preserve_cleanup_failure, error_details
 import hosted_backup as backup
 from db_tls import connection_tls, DEFAULT_CA
 from managed_development import project_identity
@@ -169,7 +170,7 @@ async def writer_sessions(conn, review, phase, observations):
         return await probe()
     # This transaction ends before the engine starts its own repeatable-read
     # transaction, preserving the table-lock-before-first-snapshot ordering.
-    async with conn.transaction(readonly=True):
+    async with readonly_snapshot(conn, isolation=None):
         return await probe()
 
 
@@ -270,7 +271,7 @@ async def prepare(conn, original, review, reviewed_target, facts, binding, *, ob
     observations = observations if observations is not None else []
     await server_version(conn, binding)
     await writer_sessions(conn, review, 'prepare', observations)
-    async with conn.transaction(isolation='repeatable_read', readonly=True):
+    async with readonly_snapshot(conn):
         await conn.execute("SET LOCAL statement_timeout='20s'")
         await ledger_clients(conn, roles(review))
         await backup_match(conn, facts)
@@ -310,14 +311,14 @@ async def reconcile(conn, plan, review, reviewed_target, facts, binding):
     # Re-entrant engine lock is balanced independently; no snapshot predates it.
     if not await conn.fetchval('SELECT pg_try_advisory_lock($1::bigint)', engine.INSTALLER_LOCK):
         raise Held('An original writer is still active; reconciliation remains held')
-    try:
-        async with conn.transaction(isolation='repeatable_read', readonly=True):
+    async with preserve_cleanup_failure(
+            lambda: conn.execute('SELECT pg_advisory_unlock($1::bigint)', engine.INSTALLER_LOCK),
+            'lockReleaseErrorType'):
+        async with readonly_snapshot(conn):
             outcome = await engine._verify_outcome(conn, plan['core'])
             await ledger_clients(conn, roles(review))
             await backup_match(conn, facts, after=outcome['sqlCommitted'])
             return outcome | {'backedUpRowsAndSequencesPreserved': True}
-    finally:
-        await conn.execute('SELECT pg_advisory_unlock($1::bigint)', engine.INSTALLER_LOCK)
 
 
 def private_file(path):
@@ -446,15 +447,22 @@ async def run(args):
             result['status'] = 'committed_verification_held'
         elif result['status'] != 'apply_in_progress_outcome_unknown':
             result['status'] = 'held'
-        result['errorType'] = type(exc).__name__
+        result.update(error_details(exc))
         if isinstance(exc, Held):
             result['reason'] = str(exc)
     finally:
         if conn is not None:
             try:
                 await conn.close(timeout=5)
-            except Exception:
+            except Exception as close_error:
                 result['connectionCloseHeld'] = True
+                if result.get('errorType'):
+                    result['connectionCloseErrorType'] = error_details(close_error)['errorType']
+                else:
+                    result.update(error_details(close_error))
+                    result['connectionCloseErrorType'] = result['errorType']
+                    if result['status'] not in ('apply_in_progress_outcome_unknown', 'commit_outcome_unknown'):
+                        result['status'] = 'committed_verification_held' if result.get('sqlCommitted') is True else 'held'
         result['elapsedSeconds'] = round(time.monotonic() - started, 3)
         emit()
     print(json.dumps({k: result[k] for k in ('status', 'sqlCommitted', 'planSha256', 'reason') if k in result}))

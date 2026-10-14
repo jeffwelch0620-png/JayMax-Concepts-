@@ -22,7 +22,7 @@ import db_pg
 import hosted_test_trial
 import runtime_permissions as candidate
 from dotenv import dotenv_values
-from readonly_snapshot import readonly_snapshot
+from readonly_snapshot import readonly_snapshot, error_details
 
 def quoted(value):
     return '"' + value.replace('"', '""') + '"'
@@ -174,7 +174,7 @@ async def run(config_path, expected_project, output):
         report.update(status='passed_hosted_two_pool_trial',stage='verified',authenticatedClients=sessions,
           sourceContractSha256=candidate.digest(expected),crossBoundaryReadsDenied=True)
     except Exception as exc:
-        report.update(status='held',errorType=type(exc).__name__,errorFrames=[
+        report.update(status='held',**error_details(exc),errorFrames=[
           {'file':Path(f.filename).name,'line':f.lineno,'function':f.name} for f in traceback.extract_tb(exc.__traceback__)])
     finally:
         progress('cleanup')

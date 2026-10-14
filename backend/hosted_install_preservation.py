@@ -4,6 +4,7 @@ Metadata and digests only; no rows, SQL defaults or connection values returned.
 New fields are excluded explicitly, while removed/retyped original fields hold.
 """
 import asyncpg
+from readonly_snapshot import readonly_snapshot
 import json
 from uuid import UUID
 import schema_reconciliation as reconciliation
@@ -35,7 +36,7 @@ async def fingerprints(conn, baseline, *, exclude_synthetic=None):
         values=[value] if isinstance(value,str) else value
         if permitted.get(key)!=field or not isinstance(values,list) or not values or any(not isinstance(v,str) or not v for v in values) or len(set(values))!=len(values) or key not in baseline:
             raise ValueError('Only exact invented store/item/audit identities may be excluded')
-    async with conn.transaction(isolation='repeatable_read',readonly=True):
+    async with readonly_snapshot(conn):
         await conn.execute("SET LOCAL statement_timeout='20s'; SET LOCAL TIME ZONE 'UTC'")
         current = await original_columns(conn)
         for key, columns in baseline.items():

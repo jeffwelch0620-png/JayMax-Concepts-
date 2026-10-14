@@ -119,6 +119,21 @@ class FaultConnection:
 
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'), 'Disposable PostgreSQL required')
 class AdditiveDatabaseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_readonly_nested_failure_rolls_back_savepoint_and_keeps_outer_transaction(self):
+        from readonly_snapshot import readonly_snapshot
+        async with self.conn.transaction(isolation='repeatable_read'):
+            with self.assertRaises(asyncpg.DivisionByZeroError):
+                async with readonly_snapshot(self.conn):
+                    await self.conn.fetchval('SELECT 1/0')
+            self.assertTrue(self.conn.is_in_transaction())
+            self.assertEqual(await self.conn.fetchval('SELECT 42'), 42)
+        self.assertFalse(self.conn.is_in_transaction())
+        # Retain the prior contract: incompatible outer isolation is refused.
+        async with self.conn.transaction(isolation='read_committed'):
+            with self.assertRaises(asyncpg.InterfaceError):
+                async with readonly_snapshot(self.conn): pass
+            self.assertEqual(await self.conn.fetchval('SELECT 42'), 42)
+
     @classmethod
     def setUpClass(cls):
         cls.control = os.environ['NATIVE_PURCHASE_TEST_DSN']

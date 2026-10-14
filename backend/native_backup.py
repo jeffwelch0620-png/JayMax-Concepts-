@@ -15,6 +15,7 @@ import subprocess
 from urllib.parse import unquote, urlparse
 
 import asyncpg
+from readonly_snapshot import readonly_snapshot, preserve_cleanup_failure
 
 SCHEMAS=('public','purchasing','actual_inventory')
 REQUIRED=('purchasing.import_files','purchasing.posting_batches','purchasing.corrections',
@@ -119,9 +120,9 @@ async def create_backup(dsn,pg_dump,output_directory):
     directory=Path(output_directory)
     directory.mkdir(parents=True,exist_ok=False)  # Never overwrite an earlier recovery snapshot.
     conn=await asyncpg.connect(**settings)
-    try:
+    async with preserve_cleanup_failure(conn.close, 'connectionCloseErrorType'):
         await configure(conn)
-        async with conn.transaction(isolation='repeatable_read',readonly=True):
+        async with readonly_snapshot(conn):
             await schema_ready(conn)
             snapshot=await conn.fetchval('SELECT pg_export_snapshot()')
             facts=await snapshot_manifest(conn)
@@ -137,7 +138,6 @@ async def create_backup(dsn,pg_dump,output_directory):
                 'dump':{'filename':dump.name,'bytes':dump.stat().st_size,'sha256':digest_file(dump)},**facts}
             (directory/'manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
             return manifest
-    finally:await conn.close()
 
 
 def validated_sql(directory,manifest):
@@ -169,7 +169,7 @@ async def verify_restore(dsn,backup_directory):
     sql=validated_sql(directory,manifest)  # Refuse damage before connecting or writing anything.
     if settings['database']==manifest['database']:raise BackupError('Restore must use a different, empty disposable database')
     conn=await asyncpg.connect(**settings)
-    try:
+    async with preserve_cleanup_failure(conn.close, 'connectionCloseErrorType'):
         await configure(conn)
         # Any user objects make this an existing database, even if its tables are empty.
         occupied=await conn.fetchval(f"SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE {NAMESPACES}) OR EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE {NAMESPACES}) OR EXISTS(SELECT 1 FROM pg_namespace n WHERE {NAMESPACES} AND n.nspname<>'public')")
@@ -184,7 +184,7 @@ async def verify_restore(dsn,backup_directory):
         except asyncpg.PostgresError as exc:
             raise BackupError('Native restore failed and its transaction was rolled back') from exc
         await configure(conn)  # Dump session settings must not affect deterministic comparisons.
-        async with conn.transaction(isolation='repeatable_read',readonly=True):
+        async with readonly_snapshot(conn):
             await schema_ready(conn)
             actual=await snapshot_manifest(conn)
         if actual!={'tables':manifest['tables'],'catalog':manifest['catalog']}:
@@ -201,7 +201,6 @@ async def verify_restore(dsn,backup_directory):
         path.mkdir(exist_ok=True)
         (path/(settings['database']+'.json')).write_text(json.dumps(result,indent=2),encoding='utf-8')
         return result
-    finally:await conn.close()
 
 
 async def main():
