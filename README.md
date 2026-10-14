@@ -32,9 +32,23 @@ The PR27 amendment explicitly protects generated file ownership/ACLs without
 relaxing input checks, declares Windows/PowerShell 7/Python 3.12+ and PostgreSQL
 16+ (17 tested), and adds refreshed live writer observations before table locks
 and inside the locked guards. The hosted review/plan envelope is now v2 with a
-reviewed application LOGIN list; observations retain redacted counts and do not
-replace maintenance attestations. New source acceptance and current-head CI must
-be recorded separately from the historical checkpoint above. Hosted acceptance
+reviewed application LOGIN list; observations retain redacted counts and a
+verified activity-visibility flag, and do not replace maintenance attestations.
+The observer must be a superuser or have immediately available pg_read_all_stats
+privileges; the tool refuses insufficient authority and never grants privileges.
+Source head **aec7795** passes all four checks in
+[run 38600775607](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38600775607):
+689 frontend tests/build, 236 offline methods plus 393 subtests (629), and 60
+disposable-database methods plus 11 subtests (71), with no failures/errors/skips.
+The lost-ack fixture targets the write commit, and the fictional LOGIN fixtures
+authenticate explicitly without changing database authentication rules.
+Current source-pinned local validation passes **637 reported cases**: 236 offline
+methods plus 393 subtests (629), and eight hosted-adapter database regressions.
+The exact fictional $55 Food Cost result is preserved, role/database inventories
+match, all nine source hashes remain unchanged and the owned server stops.
+The interrupted superseded run is not acceptance; counts from local/CI/historical
+checkpoints overlap and are not summed. The PR
+check panel remains the authority for documentation follow-up heads. Hosted acceptance
 remains pending and the PR remains draft, with no merge or hosted installation approval.
 The current Render/Supabase connections stay in place. Hosted execution and the
 fictional $212/current-source acceptance require separate approval and evidence.

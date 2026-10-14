@@ -104,7 +104,8 @@ Track 1 accounting remains independent of prep/sales analytics.
    after the locks and before COMMIT. Each observation clears the cached activity
    snapshot. The preflight read-only transaction ends before the engine starts
    repeatable read, preserving its table-lock-before-first-snapshot ordering.
-   Plans/receipts contain only the phase and aggregate counts, never session IDs,
+   Activity observations contain only the phase, aggregate counts and verified
+   visibility flag, never session IDs,
    query text or connection details. A late writer may still cause a bounded lock
    wait or refusal; these checks are supplementary, not a maintenance mechanism.
 7. A fresh read-only connection reconciles the exact outcome. Verify readiness,
@@ -146,6 +147,41 @@ The hosted envelope and review are now **v2**, requiring `writerLoginRoles`.
 Old hosted v1 plans/reviews are refused rather than silently upgraded. Retain
 their original source checkpoint for any prior recovery; this workflow has not
 executed either hosted format.
+
+## PR27 review amendment validation
+
+Source head **aec7795** passes all four Inventory CI checks in
+[run 38600775607](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38600775607):
+689 frontend tests and the strict build; 236 offline methods plus 393 subtests
+(629); and 60 disposable-database methods plus 11 subtests (71). There are no
+failures, errors or skips. Existing dependency deprecation warnings remain.
+The actual Windows ACL check accepts the explicitly protected child file and
+refuses a deliberate Everyone read grant. New logins authenticate with a
+fictional password in the disposable fixture; database authentication is not
+weakened. Lost-ack injection applies only to the write commit, not read-only
+preflight transactions. The limited observer is held by the explicit authority
+check, even when some activity fields remain visible.
+
+Current source-pinned local validation passes **637 reported cases**, with zero
+failures/errors/skips: 236 offline methods plus 393 subtests (629) and eight
+hosted-adapter database regressions. These cover exact $55 Food Cost preservation,
+lost commit acknowledgement, a write committing during lock wait, idle application
+logins, unknown-role write transactions, refreshed activity, late logins and the
+restricted observer. All nine source hashes are unchanged; initial/final role
+and database inventories match and the owned PostgreSQL server stops. The eight
+database methods took 556.41 seconds locally; this is not a hosted operation or
+backup/restore benchmark. Complete disposable-database coverage is the separate
+71-case CI result, not a claim that 71 methods ran locally.
+
+Private receipt `additive-source-index-tests-20261014T164600594683Z/receipt.json`
+has SHA-256 **1c97ef4be36e8c530a916e002c776c46ca17e9d6d9d134562e52e28b291eb657**.
+No hosted connections or real invoice imports occurred. Local/CI/historical
+counts overlap and are not summed. The superseded local full run had a multi-hour clock
+interruption and is retained as failed evidence, not acceptance; its initial/final
+role and database inventories match and its owned server stopped. No maintenance
+or operation budget was relaxed. These test durations are not backup/restore or
+hosted-maintenance benchmarks. Time the actual fresh backup and isolated restore
+in a rehearsal and record their durations before scheduling hosted execution.
 
 ## Previous local acceptance evidence
 
