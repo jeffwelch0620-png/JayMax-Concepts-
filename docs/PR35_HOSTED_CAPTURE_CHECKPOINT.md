@@ -67,7 +67,44 @@ field that is derived rather than stored on document versions. Those operator
 script errors caused no hosted writes. The corrected complete observation above
 passed; failed receipts are retained and are not acceptance evidence.
 
-## Prepared transport tests, not yet live acceptance
+## Controlled manual transport case
+
+The owner enabled Chrome's pinned Local Override and its yellow PR35 marker was
+verified on October 15. The fresh read-only pre-transport checkpoint
+`pr35-live-before_transport-20261015T225006035221Z.json` confirmed the earlier
+normal capture and all protected accounting data remained unchanged.
+
+The manual case used `TEST-ONLY-PR35-MANUAL-20261015`, registered supplier
+`other`, one fictional $1 line, and no attachments. The first command was
+physically truncated before forwarding: the API received zero capture requests.
+Its actual status read returned no complete capture. Reload restored the tab's
+manual request without automatically sending it or displaying a retry action.
+An explicit new status read was required to expose retry.
+
+The operator armed one retry and clicked the retained request's retry action.
+The relay confirmed identical original JSON wire bytes and request key
+`ceb8d9a6-1083-4843-95f5-7dfe8ba8e6c4`. The API returned HTTP 200, but only one
+byte of its 4,094-byte acknowledgement reached Chrome before disconnection.
+The subsequent actual saved-status read succeeded; the UI validated/opened the
+manual invoice and cleared the pending record. One capture was forwarded, no
+purchase posting route was available, and no second capture was needed to
+recover the lost acknowledgement.
+
+Transport receipt: `pr35-capture-relay-20261015T225001668967Z.json`; UI evidence:
+`pr35-manual-before-reload-dom.txt`, `pr35-manual-after-reload-dom.txt`, and
+`pr35-manual-recovered-dom.txt`. Independent post-case table/accounting
+verification is a separate observation, not inferred from HTTP 200. It passed
+at `pr35-live-manual_completed-20261015T225432980994Z.json`, SHA-256
+`9a9bc7e22d61824ac72a007fe681d9e546b89bf443893270f48637ef015a9870`.
+Manual file `06b96c21-4725-437f-8d9f-0f882eccbffd` has exactly one upload
+attempt and source fingerprint
+`b08df3ae5825a456721ee2c63872929a4d007adbc09767c6b227e818e0d7c2db`.
+Version `9a5ef535-db10-40c7-8f2a-2889f00f461a` is unposted. Exact added-row
+counts match just the earlier CSV plus this manual source; existing rows across
+all 82 protected relations, purchase facts, store-state payloads and the complete
+historical $212.00 Food Cost report are unchanged. The read-only connections closed.
+
+## Remaining prepared transport tests
 
 A temporary client-only override is pinned to the exact public bundle above.
 Only four named fictional source-capture/status requests for Bert's can route
@@ -80,19 +117,31 @@ No secrets are embedded in fixtures, public override or receipts.
 
 Preparation passed 20 routing guards, JavaScript syntax, and 13 offline relay
 gate tests. This is operator-tool validation, not additional product-suite or
-live transport acceptance. No failure relay was started during preparation.
+live transport acceptance. The initial preparation started no listener. During
+execution, an initial noninteractive launch stopped immediately on standard-input
+EOF with zero requests; the subsequent owned interactive listener ran the manual
+case above and has a 30-minute expiry.
 
-Planned cases: manual loss before forwarding plus exact retry; file loss before
-forwarding with same-owner sign-in and exact reselection; file commit with lost
+Remaining cases: file loss before forwarding with same-owner sign-in and exact
+reselection; file commit with lost
 acknowledgement/status followed by reload; and a scoped fictional filename
 mismatch with failed-then-confirmed local discard. Each must preserve inventory
 facts and historical accounting, and no retry or rekey may occur automatically.
 
-The in-app browser cannot intercept requests. Chrome Local Overrides must be
-enabled by the operator for these cases. Any temporary local-service permission
+The in-app browser cannot intercept requests. Chrome Local Overrides were
+enabled by the operator for these cases. Chrome's extension refuses automated
+file selection. The owner reported enabling its file-URL permission, but
+automation still refused selection; that permission state is not independently
+verified. Browser security policy also blocked opening the extension settings
+page. No alternate browser/internal API was used to bypass that block. The owner
+was asked to select the exact fictional CSV through the app's own file control
+and confirm its visible filename; an earlier reported manual selection left the
+actual input empty and no file request was sent. Restore the temporary file-URL
+permission along with the other test settings during cleanup.
+Any temporary local-service permission
 must be handled by the owner, then reset after testing. Stop the owned relay,
 disable overrides, verify the normal deployed asset and record cleanup. Until
-then the controlled failure cases remain pending.
+then full controlled-file acceptance remains pending.
 
 ## Scope and next gate
 

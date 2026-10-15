@@ -29,7 +29,11 @@ passed. Both Render services are verified Live on that merge. A normal fictional
 CSV capture, saved-status confirmation and reopening after reload passed; one
 source/attempt was retained, zero purchases posted, and pre-existing rows across
 82 protected relations and the historical $212.00 Food Cost report were unchanged.
-Deliberate transport-loss/reload/sign-in acceptance remains in progress. See the
+The manual-source transport case also passed loss before forwarding, reload,
+explicit exact retry and loss of its successful acknowledgement: saved lookup
+recovered one retained manual source without another capture or purchase posting.
+Independent database verification preserved all protected accounting data.
+File transport-loss/reload/sign-in acceptance remains in progress. See the
 [PR35 live checkpoint](docs/PR35_HOSTED_CAPTURE_CHECKPOINT.md). The completed
 maintenance window remains closed; this acceptance does not change connections,
 roles, credentials, migrations or deployment settings.
