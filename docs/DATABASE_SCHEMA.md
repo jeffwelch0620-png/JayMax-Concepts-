@@ -1,5 +1,13 @@
 # Database Schema / Collection Definitions
 
+> **Historical Mongo compatibility reference.** This describes the earlier
+> document model, not the current PostgreSQL deployment, native schemas or
+> migration procedure. Do not use its float/unit/loader statements as the native
+> accounting contract. See [current workflow status](WORKFLOW_RECONCILIATION_20261015.md),
+> [deployment readiness](SUPABASE_DEPLOYMENT_READINESS.md) and the generated
+> [migration order](../migrations/APPLY_ORDER.md). Mongo is not a parallel inventory
+> ledger to synchronize. Hosted testing remains held.
+
 MongoDB (single database, name from `DB_NAME`). Most documents use application-generated
 string ids (e.g. `po_ab12cd34ef`, `dish_...`, uuid hex) stored in an `id` field; the
 BSON `_id` is never returned to clients. `items` is the exception — it's keyed by

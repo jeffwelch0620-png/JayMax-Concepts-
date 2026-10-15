@@ -1,5 +1,16 @@
 # Hosted source-index preflight and backup rehearsal — October 14, 2026
 
+## Current hold — October 15, 2026
+
+PR33 is merged at **16e21c5**; amended-head and merged-main CI passed all four
+jobs. [Current reconciliation](WORKFLOW_RECONCILIATION_20261015.md) records the
+exact commits/CI links, writer review, owner-confirmed local-only Companion and
+separately approved frontend-only secret cleanup. Credential rotation is deferred.
+**Hosted testing remains held**, including backup/cancellation rehearsal and index
+preparation/application. No maintenance window is active, and no new database
+probe or writer pause was performed in this documentation follow-up.
+Earlier entries retain their historical state and evidence.
+
 ## PR31 merged; local review follow-ups
 
 PR31 merged with owner approval at **cb63129**; exact-head CI and merged-main CI

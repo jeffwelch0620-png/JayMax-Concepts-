@@ -1,5 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Current workflow — October 15, 2026
+
+[PR33](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/33) merged at
+**16e21c5** from amended head **f65b552**.
+[Amended-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38679694060)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38680039543)
+both passed all four checks. Recorded coverage is 689 frontend tests/build,
+741 offline cases and 79 disposable PostgreSQL cases; these are prior CI results.
+
+**Hosted testing remains on owner hold; the old maintenance window is closed.**
+The owner confirms Companion is local-only and has not migrated to Supabase.
+The separately approved static-frontend cleanup removed eight backend-only
+variables, retained `CI` and all `REACT_APP_*` settings, and used Save only with
+reload verification. No deployment, API/Toast setting change or credential
+rotation accompanied that cleanup. Rotation is explicitly deferred.
+
+Use [the current workflow reconciliation](docs/WORKFLOW_RECONCILIATION_20261015.md)
+for the writer-review limits, original-finding scope matrix and proposed next
+local slice: submitted invoice-correction recovery across reload/sign-in.
+Implementation and a new draft PR require their respective owner approvals.
+Older entries below preserve their original evidence and next-step wording;
+they do not override the current hold or make completed work pending again.
+
 ## PR32 merged; fingerprint path diagnostics follow-up
 
 [PR32](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/32) merged with

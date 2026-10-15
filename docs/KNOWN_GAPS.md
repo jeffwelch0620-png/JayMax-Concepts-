@@ -1,5 +1,25 @@
 # Known Gaps & Roadmap
 
+## Current status guide — October 15, 2026
+
+Use [Workflow reconciliation](WORKFLOW_RECONCILIATION_20261015.md) for the
+PR33 baseline, implementation/acceptance distinctions and next local work.
+Hosted testing is held. Submitted invoice-correction recovery is the recommended
+next local slice; initial purchase recovery already has a same-tab session journal.
+Companion is local-only per the owner. Credential rotation, restricted deployed
+roles, broad UI rework and future integrations remain separately coordinated.
+
+The list below is **historical legacy-app context**, not the current backlog.
+In particular, current source includes authentication middleware, location/role
+checks and rate limiting; native purchase mappings, received-date accounting,
+supplier price history and prep/count/container replacement workflows exist.
+Those implementations do not establish comprehensive security or live acceptance.
+Toast ingestion jobs are recorded separately from future sales-to-recipe analytical
+integration. No blanket "no authentication" or "Toast not built" conclusion
+should be carried forward from this older list.
+
+## Historical legacy-app gaps and roadmap (retained)
+
 ## Known gaps / limitations
 - **No authentication / RBAC** (SEC-002). All APIs are open; PO approval separation is not
   enforced server-side. Highest-priority gap before multi-user rollout.
