@@ -1,5 +1,22 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Current hosted checkpoint — October 15, 2026
+
+PR34 is merged at **ce7eb27** and verified live on both Render services. The
+owner lifted the broad hosted-test hold. Scoped fictional correction tests
+passed: stale-source/competing requests survive reload, stay blocked from retry,
+support confirmed local discard, and allow a fresh reviewed correction. Eight
+read-only database checkpoints preserved protected pre-existing rows and the
+historical **$212.00** Food Cost report. See the
+[hosted recovery checkpoint](docs/PR34_HOSTED_RECOVERY_CHECKPOINT.md) for exact
+evidence and limits. This is not dropped-response transport proof.
+
+No maintenance window is active. API/Toast writers remain running, the hosted
+source index is unapplied, and connections/credentials are unchanged. A newly
+approved window and fresh backup/restore evidence precede exact index-plan
+approval. Earlier hold/draft wording below describes earlier checkpoints;
+this entry and the linked hosted record supersede it.
+
 ## PR34 submitted-correction recovery — October 15, 2026
 
 The owner-approved local follow-up retains a submitted invoice correction's

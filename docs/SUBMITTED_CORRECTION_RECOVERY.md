@@ -1,5 +1,11 @@
 # Submitted invoice-correction recovery
 
+**Later hosted checkpoint:** PR34 merged as `ce7eb27`; after the owner lifted
+the broad hold, the scoped stale-source/competing-request reload and discard
+walkthrough passed. See [hosted results and limits](PR34_HOSTED_RECOVERY_CHECKPOINT.md).
+The earlier local/draft statements below are historical. This adds no live
+dropped-response proof or approval for maintenance/index application.
+
 Local continuation of PR33 (`16e21c5`) and the October 15 workflow reconciliation
 (`a798cbb`). The owner approved implementation and local testing. Hosted testing,
 deployment, migrations, connection changes and credential rotation remain held

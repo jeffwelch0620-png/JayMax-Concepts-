@@ -1,5 +1,13 @@
 # Inventory workflow checkpoint and remaining work
 
+**Later same-day update:** PR34 merged as `ce7eb27`, both Render services were
+verified live, and the owner lifted the broad hosted-test hold. See the
+[hosted recovery checkpoint](PR34_HOSTED_RECOVERY_CHECKPOINT.md) for eight passed
+scoped database observations and remaining live-test limits. No maintenance
+window is active; writer suspension, fresh backup/restore and exact index
+application retain separate gates. The reconciliation below preserves the
+earlier assessment and hold, not the current execution status.
+
 October 15, 2026. Source baseline: `16e21c51cb9a1a60c59a5c2ec54765ecc5509692`
 (PR33 merge). This reconciliation is local documentation only. No application,
 SQL, test implementation, credential or deployment changes are included.
