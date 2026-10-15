@@ -10,7 +10,7 @@ passed all four checks: 689 frontend tests/build, 724 offline cases and 78 full
 PostgreSQL cases. [Merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38672033102)
 also completed successfully. These results supersede the historical pending-CI
 entries in PR31's preparation notes. A new local branch starts from that merge;
-no new PR has been pushed.
+the follow-up is [PR32](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/32).
 
 ## Implementation and compatibility
 
@@ -70,8 +70,12 @@ The final source-frozen run completed **October 14 at 10:50:16 p.m. EDT
   real invoice was used. Only existing dependency deprecation warnings remain.
 
 The full database selection and frontend build were not repeated locally for
-this follow-up. New full CI awaits a separately approved draft push; PR31's green
-CI is baseline evidence, not CI for this new branch. JUnit reports, frozen source
+this follow-up. [PR32 CI at reviewed head 49291d0](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38674127950)
+subsequently passed all four checks: 689 frontend tests across 67 suites plus
+production build, 728 offline cases (283 methods and 445 subtests), and 79
+PostgreSQL cases (64 methods and 15 subtests), with no failures/errors/skips.
+The owner approved the documentation refresh and merge; the documentation
+commit must also have green CI before merging. JUnit reports, frozen source
 hashes, the initial heartbeat-test failure and the final receipt are retained
 locally for independent review.
 
@@ -110,4 +114,7 @@ verify the exact export/tool sessions and the broader writer guard; local tests
 do not qualify Supabase pooler cleanup or managed-service recovery. The old
 October 14 window and active control pointer remain closed. No hosted database,
 job, index, credentials, schema migrations or Companion integration changed in
-this local follow-up. Prompt before pushing its new draft PR.
+this follow-up. Diagnostic path counters are a separate local follow-up;
+command/export budgets stay unchanged. At the next approved hosted rehearsal,
+record fingerprint duration against the earlier 158.9/181.0-second observations;
+those historical durations do not establish a comparable benchmark or cause.

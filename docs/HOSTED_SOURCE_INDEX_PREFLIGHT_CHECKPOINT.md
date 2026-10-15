@@ -7,7 +7,9 @@ passed. Full head CI includes 689 frontend tests/build, 724 offline cases and
 78 PostgreSQL cases. The [next checkpoint](BOUNDED_FINGERPRINT_CHECKPOINT.md)
 records bounded server aggregation, backward-compatibility checks, the named
 pre-operations credential gate, and the private retained-artifact inventory.
-That follow-up remains local pending a new draft PR prompt. No new maintenance
+PR32's reviewed-head CI passed 689 frontend tests/build, 728 offline cases and
+79 PostgreSQL cases. Owner approval covers documentation refresh and merge
+after current-head CI. No new maintenance
 window, hosted index application or connection cutover is authorized.
 
 ## Local reliability remediation; hosted retry remains held

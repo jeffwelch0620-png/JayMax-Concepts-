@@ -16,8 +16,12 @@ snapshot ownership and the stored fingerprint format remain unchanged. See the
 [follow-up checkpoint](docs/BOUNDED_FINGERPRINT_CHECKPOINT.md) for validation,
 compatibility tests and limits. **728 offline cases and 8 targeted PostgreSQL
 cases pass**, with unchanged local database/role inventory and the test server
-stopped. Full CI for this follow-up awaits push. This follow-up is unpublished pending a new draft
-PR prompt. No new hosted maintenance window or index application is authorized.
+stopped. [PR32](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/32)
+completed [full CI at reviewed head 49291d0](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38674127950):
+689 frontend tests and production build, 728 offline cases, and 79 PostgreSQL
+cases, with no failures/errors/skips. Documentation is refreshed for the
+owner-approved merge; CI for this documentation commit is checked separately.
+No new hosted maintenance window or index application is authorized.
 
 ## Pre-operations gate: restricted deployed database roles — OPEN
 

@@ -4,8 +4,9 @@
 
 PR31 merged at **cb63129** after owner approval, with exact-head and merged-main
 CI green. The old window remains closed. The
-[bounded fingerprint follow-up](BOUNDED_FINGERPRINT_CHECKPOINT.md) is local and
-requires a separate draft PR prompt. No private operator runner with historical
+[bounded fingerprint follow-up](BOUNDED_FINGERPRINT_CHECKPOINT.md) is PR32, with
+full reviewed-head CI green and owner approval to merge after documentation
+refresh and current-head CI. No private operator runner with historical
 commit pins is an approved execution path for a new window.
 
 **OPEN — restricted deployed runtime credentials before operational use.** The
