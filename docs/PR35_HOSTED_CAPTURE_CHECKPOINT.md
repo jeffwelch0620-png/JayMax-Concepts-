@@ -129,6 +129,36 @@ Resume must preserve the recorded completed manual case and run only the three
 remaining fictional file cases; do not repeat it with a new key. Chrome's
 override remains a pending test setup, not a hosted deployment change.
 
+### File before-save/sign-in case in progress
+
+The owner subsequently selected the fictional file through Chrome's app control.
+The enabled capture control and displayed filename were verified. The relay's
+resume mode validates the SHA-256 of the stopped manual receipt and preserves
+its key, counters and completed events. Fourteen offline relay guard tests now
+pass, including refusal to repeat the completed manual capture. The new receipt
+is `pr35-capture-relay-20261015T231936261165Z.json`, linked to its immutable
+stopped predecessor; its listener started at 23:19:36 UTC with another 30-minute
+expiry. This is a local test relay, not a new hosted maintenance window.
+
+The actual file submission matched `TEST-ONLY-PR35-BEFORE-20261015.csv` and its
+790-byte fixture fingerprint
+`e563b73f4eb50e480d7441fd3a8e5c26b6840fbaac87bea0b5b1914c1a0f9721`.
+Original key: `ac62fff6-ff76-4f7a-aa99-716614546aa1`. The relay dropped the first
+command before forwarding; the real status route returned HTTP 200 and the UI
+displayed its negative-read/same-request retry guidance. The recovery region
+is saved in `pr35-file-before-signout-dom.txt`. Normal sign-out reached the
+existing owner sign-in screen. Same-owner sign-in and exact reselection/retry
+remain pending at this checkpoint.
+
+The independent pre-retry observation passed:
+`pr35-live-file_before_unforwarded-20261015T232146787666Z.json`, SHA-256
+`5d4875d627c8fccf895caeb899c37526a69b29833972e2f4edfd73eb1034a78f`.
+Its exact fixture set remains only the earlier normal CSV and manual source,
+each with one upload attempt and no posting batch. The dropped BEFORE file has
+no server-side file/attempt/version. All pre-existing row hashes across 82
+protected relations, purchase facts, store-state payloads and the complete
+historical $212.00 Food Cost report remain unchanged; read-only sessions closed.
+
 Remaining cases: file loss before forwarding with same-owner sign-in and exact
 reselection; file commit with lost
 acknowledgement/status followed by reload; and a scoped fictional filename
