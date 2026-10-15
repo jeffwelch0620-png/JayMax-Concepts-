@@ -1,5 +1,20 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local submitted-correction recovery — October 15, 2026
+
+The owner-approved local follow-up retains a submitted invoice correction's
+exact request before sending. A fresh read-only saved-status check distinguishes
+own saved/replaced, retryable, competing and held outcomes; retries remain
+explicit and retain the original body/key. See
+[submitted correction recovery](docs/SUBMITTED_CORRECTION_RECOVERY.md) for the
+contract, validation and limits. No migration, hosted test, deployment, credential
+rotation or PR push accompanies this local work. Hosted testing remains held.
+Local validation passes **741 frontend tests in 69 suites**, the strict production
+build, **741 offline cases** and **46 purchase/correction backend cases**, including
+the new read-only status and exact replay checks. Local role/database inventories
+are unchanged and the owned PostgreSQL server is stopped. CI awaits an approved
+draft push; these results do not claim live transport or full hosted acceptance.
+
 ## Current workflow — October 15, 2026
 
 [PR33](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/33) merged at

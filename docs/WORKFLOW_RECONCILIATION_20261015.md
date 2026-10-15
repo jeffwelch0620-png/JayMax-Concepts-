@@ -4,6 +4,12 @@ October 15, 2026. Source baseline: `16e21c51cb9a1a60c59a5c2ec54765ecc5509692`
 (PR33 merge). This reconciliation is local documentation only. No application,
 SQL, test implementation, credential or deployment changes are included.
 
+Subsequent owner approval authorized the local
+[submitted-correction recovery implementation](SUBMITTED_CORRECTION_RECOVERY.md).
+The matrix and proposal below preserve the reconciliation-time assessment;
+use that linked checkpoint for this slice's implementation and test status.
+Hosted testing remains held.
+
 ## Current decision and evidence boundaries
 
 **Hosted testing remains on owner hold.** No current maintenance window exists.

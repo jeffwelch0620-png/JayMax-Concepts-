@@ -48,6 +48,92 @@ class PostedInvoiceCorrectionTests(unittest.IsolatedAsyncioTestCase):
         async with self.pool.acquire() as conn:
             return [dict(r) for r in await conn.fetch('SELECT * FROM purchasing.actual_purchase_facts')]
 
+    def correction_body(self, plan):
+        return {**plan['review'], 'expected_plan_hash': plan['planHash'],
+                'expected_initial_batch_id': plan['initialBatchId'], 'expected_correction_id': plan['previousCorrectionId']}
+
+    async def recovery_status(self, doc, plan, key, **kwargs):
+        return await self.client.post(f"/api/pg/purchases/berts/documents/{doc['id']}/correction-status",
+                                      json=self.correction_body(plan), headers={'Idempotency-Key': key}, **kwargs)
+
+    async def correction_snapshot(self):
+        async with self.pool.acquire() as conn:
+            names = await conn.fetch("SELECT schemaname,tablename FROM pg_tables WHERE schemaname IN ('purchasing','actual_inventory') OR (schemaname='public' AND tablename='store_state') ORDER BY 1,2")
+            return {(r['schemaname'], r['tablename']): await conn.fetch(
+                f'''SELECT row_to_json(t)::text AS row FROM "{r['schemaname']}"."{r['tablename']}" t ORDER BY row_to_json(t)::text''') for r in names}
+
+    async def test_submitted_correction_status_before_and_after_commit_is_readonly_and_exact_retry_preserves_all_facts(self):
+        doc, batch = await self.initial()
+        plan = (await self.plan(doc, received_quantity='3')).json(); key = str(uuid4())
+        before = await self.correction_snapshot()
+        unseen = await self.recovery_status(doc, plan, key)
+        self.assertEqual(unseen.status_code, 200, unseen.text)
+        self.assertEqual(unseen.json()['outcome'], 'retry_available')
+        self.assertEqual(unseen.json()['actorId'], 'synthetic-manager')
+        self.assertEqual(unseen.json()['initialBatchId'], batch)
+        self.assertEqual(await self.correction_snapshot(), before)
+        # Ignore the acknowledgement: recovery after a lost response must find
+        # the committed command, including after opening a fresh connection.
+        committed = await self.correct(doc, plan, key); self.assertEqual(committed.status_code, 200, committed.text)
+        saved = await self.correction_snapshot()
+        read = await self.recovery_status(doc, plan, key)
+        self.assertEqual(read.json()['outcome'], 'saved', read.text)
+        self.assertEqual(read.json()['correctionId'], committed.json()['correctionId'])
+        for _ in range(2):
+            retry = await self.correct(doc, plan, key)
+            self.assertEqual(retry.status_code, 200, retry.text)
+            self.assertEqual(retry.json()['correctionId'], committed.json()['correctionId'])
+        self.assertEqual(await self.correction_snapshot(), saved)
+        # Even when an earlier request commits after the negative status read,
+        # retrying its unchanged key/body above returns exactly one correction.
+        self.assertEqual(len((await self.client.get(f"/api/pg/purchases/berts/documents/{doc['id']}/corrections")).json()), 1)
+
+    async def test_submitted_correction_status_distinguishes_competitor_later_replacement_and_wrong_actor_or_body(self):
+        import purchase_corrections
+        from fastapi import HTTPException
+        doc, _ = await self.initial(); plan = (await self.plan(doc, received_quantity='3')).json()
+        own_key, competing_key = str(uuid4()), str(uuid4())
+        self.assertEqual((await self.recovery_status(doc, plan, own_key)).json()['outcome'], 'retry_available')
+        winner = await self.correct(doc, plan, competing_key); self.assertEqual(winner.status_code, 200, winner.text)
+        before = await self.correction_snapshot()
+        self.assertEqual((await self.recovery_status(doc, plan, own_key)).json()['outcome'], 'other_request')
+        self.assertEqual((await self.correct(doc, plan, own_key)).status_code, 409)
+        self.assertEqual(await self.correction_snapshot(), before)
+        later_plan = (await self.plan(doc, received_quantity='4')).json()
+        self.assertEqual((await self.correct(doc, later_plan)).status_code, 200)
+        before = await self.correction_snapshot()
+        self.assertEqual((await self.recovery_status(doc, plan, competing_key)).json()['outcome'], 'saved_replaced')
+        changed = self.correction_body(plan); changed['reason'] = 'A different correction review'
+        wrong = await self.client.post(f"/api/pg/purchases/berts/documents/{doc['id']}/correction-status", json=changed, headers={'Idempotency-Key': competing_key})
+        self.assertEqual(wrong.status_code, 409)
+        async with self.pool.acquire() as conn:
+            async with conn.transaction(readonly=True):
+                with self.assertRaises(HTTPException) as held:
+                    await purchase_corrections.correction_status(conn, 'berts', 'different-manager', UUID(doc['id']),
+                        purchase_corrections.ConfirmCorrection(**self.correction_body(plan)), competing_key)
+                self.assertEqual(held.exception.status_code, 409)
+        self.assertEqual(await self.correction_snapshot(), before)
+
+    async def test_submitted_correction_status_holds_changed_period_source_and_access_without_writes(self):
+        scope, opening, closing = await self.pair()
+        doc, _ = await self.initial(); plan = (await self.plan(doc, received_quantity='3')).json(); key = str(uuid4())
+        self.assertEqual((await self.recovery_status(doc, plan, key)).json()['outcome'], 'retry_available')
+        closed = await self.close((await self.report(opening, closing)).json()); self.assertEqual(closed.status_code, 200, closed.text)
+        before = await self.correction_snapshot()
+        self.assertEqual((await self.recovery_status(doc, plan, key)).json()['outcome'], 'held')
+        self.assertEqual((await self.correct(doc, plan, key)).status_code, 409)
+        denied = await self.client.post(f"/api/pg/purchases/rudds/documents/{doc['id']}/correction-status", json=self.correction_body(plan), headers={'Idempotency-Key': key})
+        self.assertEqual(denied.status_code, 404)
+        denied = await self.client.post(f"/api/pg/purchases/berts/documents/{doc['id']}/correction-status", json=self.correction_body(plan), headers={'Idempotency-Key': key, 'Authorization': 'Bearer other'})
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(await self.correction_snapshot(), before)
+        # A newer source must hold the original uncommitted review as well.
+        number = doc['header']['document_number']
+        await self.capture(number=number, amounts=('50.00',))
+        before = await self.correction_snapshot()
+        self.assertEqual((await self.recovery_status(doc, plan, key)).json()['outcome'], 'held')
+        self.assertEqual(await self.correction_snapshot(), before)
+
     async def assert_original_request_survives_correction(self, reissued):
         file,*_=await self.capture(number='TEST-RECOVERY-CORRECTION')
         original=file['documents'][0];body=self.body(original);key=str(uuid4())

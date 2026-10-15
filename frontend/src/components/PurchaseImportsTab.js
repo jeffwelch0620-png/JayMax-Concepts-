@@ -5,6 +5,7 @@ import { ManualPurchaseEntry } from "./ManualPurchaseEntry";
 import { InventoryUnitSetup } from "./InventoryUnitSetup";
 import { purchaseRecoveryOutcome, validatePurchaseDocument } from "../lib/purchaseRecovery";
 import { pendingPurchaseJournal, pendingPurchaseRecord } from "../lib/pendingPurchases";
+import { pendingCorrectionJournal, pendingCorrectionRecord, correctionRecoveryOutcome } from "../lib/pendingCorrections";
 import { PURCHASE_BASE_UNITS as units } from "../lib/purchaseContract";
 
 const errorText = e => {
@@ -146,7 +147,7 @@ export function PurchaseCorrectionReview({ document, items, history, onPreview, 
     setError("");
     if (!pending.current) pending.current = { key: crypto.randomUUID(), body: { ...plan.review,
       expected_plan_hash: plan.planHash, expected_initial_batch_id: plan.initialBatchId, expected_correction_id: plan.previousCorrectionId } };
-    try { await onCorrect(document.id, pending.current.body, pending.current.key); }
+    try { await onCorrect(document.id, pending.current.body, pending.current.key, plan); }
     catch (e) { setError(errorText(e)); }
   }
   return <section className={`${cardCls} p-4 space-y-3`} aria-label="Posted invoice correction">
@@ -194,8 +195,52 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
   const upload = useRef(null);
   const scope = useMemo(() => ({ active: true, restaurantId, actorId }), [restaurantId, actorId]);
   const journal = useMemo(() => pendingPurchaseJournal(actorId, restaurantId), [actorId, restaurantId]);
+  const correctionJournal = useMemo(() => pendingCorrectionJournal(actorId, restaurantId), [actorId, restaurantId]);
+  const [pendingCorrections, setPendingCorrections] = useState([]), [correctionChecks, setCorrectionChecks] = useState({});
+  const [correctionRecoveryUnavailable, setCorrectionRecoveryUnavailable] = useState(false);
   const [pendingPurchases, setPendingPurchases] = useState([]), [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
   const [discardReview, setDiscardReview] = useState(null);
+  function refreshCorrections() {
+    try { const records = correctionJournal.list(); if (scope.active) { setPendingCorrections(records); setCorrectionRecoveryUnavailable(false); } return records; }
+    catch (e) { if (scope.active) { setCorrectionRecoveryUnavailable(true); setError(errorText(e)); } throw e; }
+  }
+  function currentCorrection(record) {
+    if (!scope.active) throw new Error("The signed-in user or restaurant changed. Reopen this correction.");
+    const current = refreshCorrections().find(r => r.versionId === record.versionId && r.key === record.key);
+    if (!current || JSON.stringify(current) !== JSON.stringify(record)) throw new Error("The retained correction changed. Check its saved status again.");
+    return current;
+  }
+  function clearCorrection(record) {
+    correctionJournal.clear(record.versionId, record.key); refreshCorrections();
+  }
+  async function checkCorrection(record) {
+    await action(async () => {
+      const current = currentCorrection(record);
+      setCorrectionChecks(s => ({ ...s, [current.key]: null }));
+      const result = await api.checkCorrectionSavedStatus(restaurantId, current.versionId, current.body, current.key);
+      if (!scope.active) return;
+      currentCorrection(current);
+      const outcome = correctionRecoveryOutcome(result, current, actorId);
+      setCorrectionChecks(s => ({ ...s, [current.key]: outcome }));
+      if (["saved", "saved_replaced"].includes(outcome.outcome)) {
+        setMessage(outcome.outcome === "saved" ? "Your invoice correction was saved and confirmed."
+          : "Your invoice correction was saved and has a later replacement. Review the current invoice history.");
+        // A saved result closes only this exact request. Read failures never do.
+        try { clearCorrection(current); }
+        catch (e) { setCorrectionRecoveryUnavailable(true); throw new Error(`Correction saved; retained-review cleanup failed: ${errorText(e)}`); }
+        setSelected(null);
+        api.purchaseHistory(restaurantId).then(h => scope.active && setHistory(h)).catch(e => scope.active && setError(`Correction saved; history refresh failed: ${errorText(e)}`));
+      }
+    });
+  }
+  async function retryCorrection(record) {
+    if (correctionChecks[record.key]?.outcome !== "retry_available") return;
+    await action(async () => {
+      const current = currentCorrection(record);
+      setCorrectionChecks(s => ({ ...s, [current.key]: null }));
+      await sendCorrection(current);
+    });
+  }
   function refreshPending() {
     try { const records = journal.list(); if (scope.active) { setPendingPurchases(records); setRecoveryUnavailable(false); } return records; }
     catch (e) { if (scope.active) { setRecoveryUnavailable(true); setError(errorText(e)); } throw e; }
@@ -223,6 +268,9 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
     scope.active = true;
     setSelected(null); setPendingPurchases([]); setDiscardReview(null); setReady(false); setError(""); setMessage("");
     setBusy(false); setFiles([]); setItems([]); setHistory([]); setSourceRows(null); upload.current = null;
+    setPendingCorrections([]); setCorrectionChecks({});
+    try { setPendingCorrections(correctionJournal.list()); setCorrectionRecoveryUnavailable(false); }
+    catch (e) { setCorrectionRecoveryUnavailable(true); setError(errorText(e)); }
     try { setPendingPurchases(journal.list()); setRecoveryUnavailable(false); }
     catch (e) { setRecoveryUnavailable(true); setError(errorText(e)); }
     Promise.all([api.purchaseCapabilities(restaurantId), api.purchaseItems(restaurantId)]).then(async ([capabilities, list]) => {
@@ -240,7 +288,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
       }
     }).catch(e => scope.active && setError(errorText(e)));
     return () => { scope.active = false; };
-  }, [restaurantId, scope, journal]);
+  }, [restaurantId, scope, journal, correctionJournal]);
   async function action(fn) {
     if (!scope.active) return;
     setBusy(true); setError(""); setMessage("");
@@ -452,20 +500,38 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
     if (scope.active) setSourceRows(rows);
   }
   async function previewCorrection(id, body) {
+    if (!scope.active) throw new Error("The signed-in user or restaurant changed. Reopen this correction.");
+    const documentId = selected.documents.find(d => d.id === id)?.header.document_id;
+    if (refreshCorrections().some(r => r.documentId === documentId)) throw new Error("Resolve the retained submitted correction before starting another review.");
     setBusy(true);
     try { return await api.previewPurchaseCorrection(restaurantId, id, body); }
     finally { if (scope.active) setBusy(false); }
   }
-  async function correct(id, body, key) {
+  async function correct(id, body, key, plan) {
+    if (!scope.active) throw new Error("The signed-in user or restaurant changed. Reopen this correction.");
     setBusy(true);
     try {
+      const document = selected.documents.find(d => d.id === id);
+      const record = correctionJournal.save(pendingCorrectionRecord(document, body, key, plan));
+      refreshCorrections();
+      await sendCorrection(record);
+    } catch (e) { if (scope.active) setError(errorText(e)); throw e; }
+    finally { if (scope.active) setBusy(false); }
+  }
+  async function sendCorrection(record) {
+      const { versionId: id, body, key } = currentCorrection(record);
       const result = await api.correctPurchase(restaurantId, id, body, key);
-      if (!result.correctionId || result.correction?.id !== result.correctionId || result.correction?.initial_batch_id !== body.expected_initial_batch_id || result.correction?.previous_correction_id !== body.expected_correction_id || result.correction?.reviewed_plan?.planHash !== body.expected_plan_hash || result.document?.id !== id || typeof result.isCurrent !== "boolean" || (result.isCurrent && result.document.status !== "posted")) throw new Error("Saved correction was not confirmed. Retry this request.");
+      if (!result.correctionId || result.correction?.id !== result.correctionId || result.correction?.idempotency_key !== key
+        || result.correction?.corrected_by !== actorId || result.correction?.replacement_version_id !== id
+        || result.document?.header?.document_id !== record.documentId || result.document?.header?.posted_batch_id !== body.expected_initial_batch_id
+        || (result.isCurrent && result.document?.header?.current_correction_id !== result.correctionId)
+        || result.correction?.initial_batch_id !== body.expected_initial_batch_id || result.correction?.previous_correction_id !== body.expected_correction_id || result.correction?.reviewed_plan?.planHash !== body.expected_plan_hash || result.document?.id !== id || typeof result.isCurrent !== "boolean" || (result.isCurrent && result.document.status !== "posted")) throw new Error("Saved correction was not confirmed. Retry this request.");
       if (!scope.active) return;
-      setSelected(s => ({ ...s, documents: s.documents.map(d => d.id === id ? result.document : d) })); setPreviewEpoch(n => n + 1);
+      try { clearCorrection(record); }
+      catch (e) { setCorrectionRecoveryUnavailable(true); throw new Error(`Correction saved; retained-review cleanup failed: ${errorText(e)}`); }
+      setSelected(s => s && ({ ...s, documents: s.documents.map(d => d.id === id ? result.document : d) })); setPreviewEpoch(n => n + 1);
       setMessage(result.isCurrent ? "Invoice correction saved and confirmed. Original entries and source files are retained." : "This correction was already saved and has a later replacement. Review the current invoice history.");
       api.purchaseHistory(restaurantId).then(h => scope.active && setHistory(h)).catch(e => scope.active && setError(`Correction saved; history refresh failed: ${errorText(e)}`));
-    } finally { if (scope.active) setBusy(false); }
   }
   return <div className="space-y-5">
     <PageTitle>Invoice Master · {restaurantName}</PageTitle>
@@ -474,6 +540,21 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
       : "Purchase review is in build testing. These received-date purchase records are not yet included in Food Cost reports; count scope and historical valuation still need to be connected."}</p>
     {error && <p role="alert" className="text-red-300">{error}</p>}{message && <p role="status" className="text-emerald-300">{message}</p>}
     {!ready ? <p className="text-slate-400">Purchase review setup is awaiting enablement.</p> : <>
+      {!!pendingCorrections.length && <section aria-label="Retained submitted corrections" className={`${cardCls} p-4 space-y-4`}>
+        <h3>Submitted invoice corrections retained in this tab</h3>
+        <p>These frozen requests survive reload and sign-in by the same user in this tab. Check saved status before explicitly retrying. Nothing is sent automatically. New-tab or browser-restart recovery is not guaranteed.</p>
+        {pendingCorrections.map(r => <div key={r.key} className="space-y-2 border border-slate-700 p-3">
+          <h4>{r.documentNumber || r.versionId}</h4><p>Reason: {r.body.reason}</p>
+          <p>Received date: {r.body.received_date || "Not stated"} · Previous correction: {r.body.expected_correction_id || "Initial invoice"}</p>
+          {r.body.lines.map(l => <p key={l.line_id}>Retained line {l.line_id}: {l.item_code || l.classification} · {l.received_quantity ?? "No quantity"} {l.received_unit} · conversion {l.base_units_per_received_unit ?? "Not applicable"} · {l.note}</p>)}
+          {["before", "after"].map(side => <div key={side}><p>{side === "before" ? "Original entries to reverse" : "Reviewed replacement entries"}</p>{r.comparison[side].map((l, i) => <p key={`${l.line_id}:${i}`}>{l.item_code || l.classification} · {l.base_quantity} {l.base_unit} · food amount {l.inventory_cost_amount} · {l.inventory_record_date}</p>)}</div>)}
+          <p>Separate fees: {r.comparison.feesBefore ?? "Not stated"} → {r.comparison.feesAfter ?? "Not stated"} · Separate tax: {r.comparison.taxBefore ?? "Not stated"} → {r.comparison.taxAfter ?? "Not stated"}</p>
+          {correctionChecks[r.key]?.message && <p role="status">{correctionChecks[r.key].message}</p>}
+          <button className={btnGhost} disabled={busy || correctionRecoveryUnavailable} onClick={() => checkCorrection(r)}>Check saved correction status</button>
+          <button className={btnAcc} disabled={busy || correctionRecoveryUnavailable || correctionChecks[r.key]?.outcome !== "retry_available"} onClick={() => retryCorrection(r)}>Retry exact retained correction</button>
+          <p>No saved outcome in a read does not cancel an earlier request. A held or competing correction stays retained for manager review.</p>
+        </div>)}
+      </section>}
       {!!pendingPurchases.length && <section aria-label="Retained submitted purchases" className={`${cardCls} p-4 space-y-2`}>
         <h3>Submitted reviews retained in this tab</h3>
         <p>These reviews survive a reload and sign-in by the same user in this tab. Restore a review to check its saved outcome before retrying. Keep this tab open until the outcome is confirmed; recovery in a new tab or after a browser restart is not guaranteed.</p>
@@ -523,7 +604,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
           {sourceRows && <div className="overflow-auto max-h-96"><table className="text-xs"><thead><tr><th>Record</th>{sourceRows.headers.map((h, i) => <th className="px-2" key={i}>{h} [{i + 1}]</th>)}</tr></thead><tbody>{sourceRows.rows.map(row => <tr key={row.row_ordinal}><td>{row.row_ordinal}</td>{row.raw_values.map((v, i) => <td className="border border-slate-700 p-2 whitespace-nowrap" key={i}>{v}</td>)}</tr>)}</tbody></table>{sourceRows.nextOffset != null && <button className={btnGhost} disabled={busy} onClick={() => action(() => loadSourceRows(sourceRows.nextOffset))}>Next source records</button>}</div>}
         </div>
         {selected.documents.map(d => <PurchaseDocumentReview key={`${previewEpoch}:${selected.id}:${d.id}:${d.status}`} document={d} items={items} history={history} onPost={post} onCheckSaved={checkSaved} onInspectSaved={inspectSaved} busy={busy || recoveryUnavailable || !!discardReview} />)}
-        {selected.documents.filter(d => d.correctionAvailable).map(d => <PurchaseCorrectionReview key={`correction:${previewEpoch}:${d.id}`} document={d} items={items} history={history} onPreview={previewCorrection} onCorrect={correct} onHistory={id => api.purchaseCorrections(restaurantId, id)} busy={busy} />)}
+        {selected.documents.filter(d => d.correctionAvailable && !pendingCorrections.some(r => r.documentId === d.header.document_id)).map(d => <PurchaseCorrectionReview key={`correction:${previewEpoch}:${scope.actorId}:${d.id}`} document={d} items={items} history={history} onPreview={previewCorrection} onCorrect={correct} onHistory={id => api.purchaseCorrections(restaurantId, id)} busy={busy || correctionRecoveryUnavailable} />)}
       </>}
       <div className={`${cardCls} p-4 overflow-auto`}><h3 className="font-semibold mb-2">Food purchase history</h3><table className="text-sm w-full"><thead><tr>{["Received / movement date", "Invoice", "Entry", "Item", "Quantity", "Inventory unit", "Food amount"].map(h => <th className="text-left p-2" key={h}>{h}</th>)}</tr></thead><tbody>{history.map(h => <tr key={h.fact_id || h.line_id}><td className="p-2">{h.inventory_record_date}</td><td>{h.document_number}</td><td>{h.fact_kind || "initial"}</td><td>{h.description_snapshot}</td><td>{h.base_quantity}</td><td>{h.base_unit}</td><td>{h.inventory_cost_amount}</td></tr>)}</tbody></table></div>
     </>}

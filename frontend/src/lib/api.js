@@ -86,6 +86,10 @@ export const purchaseHistory = (rid) => axios.get(`${purchaseUrl(rid)}/history`)
 export const nativeOperatingSummary = (rid) => axios.get(`${purchaseUrl(rid)}/operating-summary`).then(r => r.data);
 export const previewPurchaseCorrection = (rid, id, body) => axios.post(`${purchaseUrl(rid)}/documents/${id}/correction-preview`, body).then(r => r.data);
 export const correctPurchase = (rid, id, body, key) => axios.post(`${purchaseUrl(rid)}/documents/${id}/correct`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const checkCorrectionSavedStatus = (rid, id, body, key) => readStateWithDeadline(async options =>
+  (await axios.post(`${purchaseUrl(rid)}/documents/${id}/correction-status`, body,
+    { ...options, headers: { "Idempotency-Key": key } })).data,
+  "Saved correction status loading timed out. Check again; the original correction is retained.");
 export const purchaseCorrections = (rid, id) => axios.get(`${purchaseUrl(rid)}/documents/${id}/corrections`).then(r => r.data);
 export const purchaseRawRows = (rid, id, offset = 0) => axios.get(`${purchaseUrl(rid)}/files/${id}/rows`, { params: { offset } }).then(r => r.data);
 export const purchaseSource = (rid, id) => axios.get(`${purchaseUrl(rid)}/files/${id}/source`, { responseType: "blob" }).then(r => r.data);
