@@ -74,8 +74,10 @@ this follow-up. [PR32 CI at reviewed head 49291d0](https://github.com/jeffwelch0
 subsequently passed all four checks: 689 frontend tests across 67 suites plus
 production build, 728 offline cases (283 methods and 445 subtests), and 79
 PostgreSQL cases (64 methods and 15 subtests), with no failures/errors/skips.
-The owner approved the documentation refresh and merge; the documentation
-commit must also have green CI before merging. JUnit reports, frozen source
+The owner approved the documentation refresh and merge. Documentation head
+**3d1eacc** also passed [all four CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38674779748)
+before PR32 merged at **7b616204852217ca31c5ce352bdc67043899902a**.
+The original unpublished/pending-CI notes are historical. JUnit reports, frozen source
 hashes, the initial heartbeat-test failure and the final receipt are retained
 locally for independent review.
 

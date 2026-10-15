@@ -516,6 +516,12 @@ class HostedBackupLocalDatabaseTests(unittest.IsolatedAsyncioTestCase):
                             root/'cursor-archive',root/'cursor-key',{})
                     current_manifest,_=backup.open_backup(exported['encryptedBackup'],exported['privateKey'],project)
                     cursor_manifest,_=backup.open_backup(old['encryptedBackup'],old['privateKey'],project)
+                    self.assertEqual(exported['backupDiagnostics']['fingerprintPaths'],{
+                        'serverAggregateRelations':1,'cursorFallbackRelations':0,'cursorOnlyRelations':0})
+                    self.assertEqual(old['backupDiagnostics']['fingerprintPaths'],{
+                        'serverAggregateRelations':0,'cursorFallbackRelations':0,'cursorOnlyRelations':1})
+                    self.assertNotIn('fingerprintPaths',current_manifest)
+                    self.assertNotIn('fingerprintPaths',cursor_manifest)
                     self.assertEqual(current_manifest['rowFingerprintAlgorithm'],cursor_manifest['rowFingerprintAlgorithm'])
                     for field in ('tables','catalog'):self.assertEqual(current_manifest[field],cursor_manifest[field])
                     verified=await backup.verify_restore(restore_dsn,old['encryptedBackup'],

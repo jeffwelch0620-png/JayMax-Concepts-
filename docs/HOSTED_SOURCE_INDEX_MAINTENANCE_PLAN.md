@@ -2,6 +2,19 @@
 
 ## Current follow-up and pre-operations gate
 
+PR32 merged with owner approval at **7b61620**, refreshed documentation head
+**3d1eacc**, after [all four exact-head checks passed](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38674779748).
+The next local follow-up adds allowlisted export diagnostic counts for completed
+server aggregation, size-triggered cursor fallback and cursor-only relations.
+Counts contain no table names; failed/incomplete relations are not counted.
+They do not change archived fingerprints, command timeouts or hosted settings.
+The 60-second client command budget applies to each aggregate statement; retain
+the current budgets until a separately approved hosted rehearsal supplies evidence.
+For that rehearsal, record fingerprint-phase duration, path counts, relation/row
+counts and effective client/server limits. Compare with the earlier 158.9/181.0 s
+observations only with their differing source and environment limits recorded;
+local equivalence tests do not establish a speed improvement or the earlier cause.
+
 PR31 merged at **cb63129** after owner approval, with exact-head and merged-main
 CI green. The old window remains closed. The
 [bounded fingerprint follow-up](BOUNDED_FINGERPRINT_CHECKPOINT.md) is PR32, with
