@@ -1,5 +1,15 @@
 # Inventory workflow checkpoint and remaining work
 
+**Current execution:** the owner-approved PR35 merge is `edbf232`, from amended
+head `7ae28da`. Amended-head and merged-main CI passed all four jobs; both Render
+services are Live on the merge. Normal fictional CSV capture/status/reload passed
+with one retained source/attempt, no purchase posting, 82 protected relations'
+pre-existing rows unchanged and the $212.00 Food Cost control preserved.
+Controlled transport-loss acceptance is prepared and awaits Chrome Local
+Overrides. See [the current live checkpoint](PR35_HOSTED_CAPTURE_CHECKPOINT.md).
+The draft/re-review/merge gates below are historical. No new maintenance window
+is open, and no connection, credential, role or schema change is part of this work.
+
 **Current local slice:** [submitted source-capture recovery](SOURCE_CAPTURE_RECOVERY.md)
 now covers manual entries and file-upload identities. Local validation passes
 789 frontend tests, 741 offline cases, the strict build, and 38 manual/native

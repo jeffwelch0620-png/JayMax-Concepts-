@@ -20,7 +20,21 @@ accounting control verified. See the [backup/index window record](docs/HOSTED_IN
 Connections/credentials are unchanged. Earlier hold, draft and unapplied-index
 wording below describes earlier checkpoints; this entry supersedes it.
 
-## Draft PR35 source-capture recovery — October 15, 2026
+## PR35 merged; source-capture live acceptance in progress — October 15, 2026
+
+The owner approved [PR35](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/35),
+merged at **edbf232** from amended head **7ae28da**. Amended-head and
+[merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38805231168)
+passed. Both Render services are verified Live on that merge. A normal fictional
+CSV capture, saved-status confirmation and reopening after reload passed; one
+source/attempt was retained, zero purchases posted, and pre-existing rows across
+82 protected relations and the historical $212.00 Food Cost report were unchanged.
+Deliberate transport-loss/reload/sign-in acceptance remains in progress. See the
+[PR35 live checkpoint](docs/PR35_HOSTED_CAPTURE_CHECKPOINT.md). The completed
+maintenance window remains closed; this acceptance does not change connections,
+roles, credentials, migrations or deployment settings.
+
+### Historical PR35 draft and local validation
 
 The next local slice retains submitted manual entries and file-capture request
 identities across reload/sign-in in the same browser tab. Read-only status
