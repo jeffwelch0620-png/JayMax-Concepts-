@@ -1,5 +1,11 @@
 # PR34 hosted correction recovery checkpoint
 
+**Subsequent same-day completion:** the separately approved fresh application
+backup/disposable restore and exact source-index installation passed. API/Toast
+writers are restored and that window is closed. See the
+[backup/index execution record](HOSTED_INDEX_WINDOW_20261015.md). The next-step
+list below preserves what remained when this earlier recovery checkpoint ended.
+
 October 15, 2026. The owner lifted the broad hosted-test hold and signed in to
 the build app. This supersedes earlier hold wording for these scoped tests,
 without approving maintenance, index installation or connection changes.

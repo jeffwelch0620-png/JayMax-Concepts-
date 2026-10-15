@@ -11,11 +11,14 @@ historical **$212.00** Food Cost report. See the
 [hosted recovery checkpoint](docs/PR34_HOSTED_RECOVERY_CHECKPOINT.md) for exact
 evidence and limits. This is not dropped-response transport proof.
 
-No maintenance window is active. API/Toast writers remain running, the hosted
-source index is unapplied, and connections/credentials are unchanged. A newly
-approved window and fresh backup/restore evidence precede exact index-plan
-approval. Earlier hold/draft wording below describes earlier checkpoints;
-this entry and the linked hosted record supersede it.
+The separately approved hosted maintenance window is now **completed and closed**.
+A fresh encrypted application backup and disposable restore matched **29,088
+rows, 120 relations and 13 catalog groups**. The owner-approved exact source-index
+plan was applied and independently verified; the ledger now has 55 rows and the
+index is present. API and both Toast jobs are restored, with health and the $212
+accounting control verified. See the [backup/index window record](docs/HOSTED_INDEX_WINDOW_20261015.md).
+Connections/credentials are unchanged. Earlier hold, draft and unapplied-index
+wording below describes earlier checkpoints; this entry supersedes it.
 
 ## PR34 submitted-correction recovery — October 15, 2026
 

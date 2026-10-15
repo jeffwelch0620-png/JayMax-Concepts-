@@ -1,5 +1,11 @@
 # Inventory workflow checkpoint and remaining work
 
+**Latest same-day result:** the separately approved hosted backup/index window
+completed and closed at 2:14 p.m. EDT. Fresh application backup/restore and the
+exact index application passed; all writers are restored and the accounting
+control remains $212. See [execution evidence and remaining gates](HOSTED_INDEX_WINDOW_20261015.md).
+The hold/window/index-next-step language below is historical.
+
 **Later same-day update:** PR34 merged as `ce7eb27`, both Render services were
 verified live, and the owner lifted the broad hosted-test hold. See the
 [hosted recovery checkpoint](PR34_HOSTED_RECOVERY_CHECKPOINT.md) for eight passed
