@@ -122,6 +122,13 @@ execution, an initial noninteractive launch stopped immediately on standard-inpu
 EOF with zero requests; the subsequent owned interactive listener ran the manual
 case above and has a 30-minute expiry.
 
+The owned listener was explicitly stopped at **23:00:30 UTC** while awaiting
+the CSV selection. Its receipt records `listenerClosed: true`, one forwarded
+manual capture and zero file-capture attempts. No temporary listener remains.
+Resume must preserve the recorded completed manual case and run only the three
+remaining fictional file cases; do not repeat it with a new key. Chrome's
+override remains a pending test setup, not a hosted deployment change.
+
 Remaining cases: file loss before forwarding with same-owner sign-in and exact
 reselection; file commit with lost
 acknowledgement/status followed by reload; and a scoped fictional filename
