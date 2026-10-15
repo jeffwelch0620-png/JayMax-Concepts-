@@ -369,11 +369,85 @@ class AdditiveDatabaseTests(unittest.IsolatedAsyncioTestCase):
 
 @unittest.skipUnless(os.environ.get('NATIVE_PURCHASE_TEST_DSN'), 'Dedicated disposable PostgreSQL required')
 class HostedBackupLocalDatabaseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_export_deadline_and_operator_cancel_remove_only_owned_database_sessions(self):
+        import hosted_backup as backup
+        control=os.environ['NATIVE_PURCHASE_TEST_DSN'];additive.local_target(control)
+        name='native_purchase_test_bsrc_'+uuid4().hex
+        dsn=control.rsplit('/',1)[0]+'/'+name
+        settings=backup.native.disposable_connection(dsn)
+        real_connect=asyncpg.connect
+        observer=await real_connect(control,ssl=False)
+        created=False
+        project='abcdefghijklmnopqrst'
+        url='postgresql://postgres.'+project+':TEST_ONLY@aws-0.pooler.supabase.com:5432/postgres'
+        connections=[];labels=[]
+        async def connect(source_url,**kwargs):
+            self.assertEqual(source_url,url)
+            connection=await real_connect(**settings,ssl=False,timeout=kwargs['timeout'],
+                command_timeout=kwargs['command_timeout'],statement_cache_size=0,server_settings=kwargs['server_settings'])
+            connections.append(connection);labels.append(kwargs['server_settings']['application_name'])
+            return connection
+        def directory(path,area):path.mkdir();return path
+        try:
+            await observer.execute('CREATE DATABASE '+backup.native.quoted(name)+' WITH TEMPLATE template0')
+            created=True
+            setup=await real_connect(dsn,ssl=False)
+            try:
+                for schema in backup.SCHEMAS:
+                    if schema!='public':await setup.execute('CREATE SCHEMA '+backup.native.quoted(schema))
+                await setup.execute("CREATE TABLE public.test_only_deadline(id integer); INSERT INTO public.test_only_deadline VALUES(1)")
+            finally:await setup.close()
+            with TemporaryDirectory() as temporary:
+                root=Path(temporary)
+                for mode in ('busy','idle','operator','operator_busy'):
+                    with self.subTest(mode=mode):
+                        entered=asyncio.Event()
+                        async def stalled(connection):
+                            await connection.fetchval('SELECT 1')
+                            entered.set()
+                            if mode in ('busy','operator_busy'):await connection.execute('SELECT pg_sleep(60)')
+                            else:await asyncio.Event().wait()
+                        with patch.object(backup,'private_directory',side_effect=directory),\
+                             patch.object(backup,'connection_tls',return_value=True),\
+                             patch.object(backup.asyncpg,'connect',side_effect=connect),\
+                             patch.object(backup,'fingerprint',side_effect=stalled):
+                            task=asyncio.create_task(backup.export_backup(url,project,'unused','unused',
+                                root/(mode+'-archive'),root/(mode+'-key'),{},timeout_seconds=600 if mode.startswith('operator') else 2))
+                            try:
+                                await asyncio.wait_for(entered.wait(),3)
+                                self.assertTrue(await observer.fetchval('SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=$1::text AND application_name=$2::text)',name,labels[-1]))
+                                if mode.startswith('operator'):task.cancel()
+                                with self.assertRaises(asyncio.CancelledError if mode.startswith('operator') else backup.BackupError):
+                                    await asyncio.wait_for(task,4)
+                            finally:
+                                if not task.done():task.cancel()
+                                try:await task
+                                except (Exception,asyncio.CancelledError):pass
+                        self.assertTrue(connections[-1].is_closed())
+                        # Allow the server to process transport termination; never
+                        # terminate by role or broad pg_stat_activity selection.
+                        for _ in range(60):
+                            remains=await observer.fetchval('SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=$1::text AND application_name=$2::text)',name,labels[-1])
+                            if not remains:break
+                            await asyncio.sleep(0.02)
+                        self.assertFalse(remains)
+                        self.assertFalse((root/(mode+'-archive')/'backup.jmax.enc').exists())
+                        self.assertEqual(await observer.fetchval('SELECT 1'),1)
+                self.assertEqual(len(set(labels)),4)
+            check=await real_connect(dsn,ssl=False)
+            try:self.assertEqual(await check.fetchval('SELECT count(*) FROM public.test_only_deadline'),1)
+            finally:await check.close()
+        finally:
+            for connection in connections:
+                if not connection.is_closed():connection.terminate()
+            if created:await observer.execute('DROP DATABASE '+backup.native.quoted(name)+' WITH (FORCE)')
+            await observer.close()
+
     async def test_encrypted_export_restore_and_close_failure_stay_disposable(self):
         import hosted_backup as backup
         control=os.environ['NATIVE_PURCHASE_TEST_DSN']
         additive.local_target(control)
-        source='native_purchase_test_backup_source_'+uuid4().hex
+        source='native_purchase_test_bsrc_'+uuid4().hex
         restored='native_purchase_test_backup_'+uuid4().hex
         source_dsn=control.rsplit('/',1)[0]+'/'+source
         restore_dsn=control.rsplit('/',1)[0]+'/'+restored
@@ -390,8 +464,8 @@ class HostedBackupLocalDatabaseTests(unittest.IsolatedAsyncioTestCase):
         class CloseFailure:
             def __init__(self,conn): self.conn=conn
             def __getattr__(self,name): return getattr(self.conn,name)
-            async def close(self):
-                await self.conn.close()
+            async def close(self,**kwargs):
+                await self.conn.close(**kwargs)
                 raise ConnectionError('TEST ONLY lost close acknowledgement')
         async def local_connect(url=None,**kwargs):
             # Only this test maps the fictional hosted URL to its owned loopback
@@ -399,7 +473,8 @@ class HostedBackupLocalDatabaseTests(unittest.IsolatedAsyncioTestCase):
             if url is not None:
                 self.assertEqual(url,fictional_url)
                 conn=await real_connect(**source_settings,ssl=False,timeout=kwargs['timeout'],
-                    command_timeout=kwargs['command_timeout'],statement_cache_size=0)
+                    command_timeout=kwargs['command_timeout'],statement_cache_size=0,
+                    server_settings=kwargs['server_settings'])
                 return CloseFailure(conn) if fail_close else conn
             self.assertEqual(kwargs['database'],restored)
             self.assertEqual(kwargs['host'],'127.0.0.1')

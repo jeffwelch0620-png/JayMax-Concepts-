@@ -6,6 +6,7 @@ Connection errors and dump stderr must never be printed or attached to receipts.
 import asyncio
 import base64
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -49,6 +50,10 @@ FLAGS = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 CONNECT_TIMEOUT_SECONDS = 20
 COMMAND_TIMEOUT_SECONDS = 60
 TOOL_TIMEOUT_SECONDS = 240
+EXPORT_TIMEOUT_SECONDS = 600
+CLEANUP_TIMEOUT_SECONDS = 5
+PROGRESS_INTERVAL_SECONDS = 5
+EXPORT_CONTROL = ContextVar('jaymax_backup_export_control', default=None)
 LIMIT_NAMES = ('idle_in_transaction_session_timeout', 'statement_timeout',
     'idle_session_timeout', 'transaction_timeout', 'tcp_keepalives_idle',
     'tcp_keepalives_interval', 'tcp_keepalives_count', 'tcp_user_timeout')
@@ -59,7 +64,7 @@ EXPORT_PHASES = frozenset(('connect', 'effective_limits', 'snapshot_total', 'sch
 
 
 def safe_export_diagnostics(value):
-    """Allow fixed labels/numbers only; never trust exception-attached dictionaries."""
+    """Allow fixed labels/numbers and a hex run reference; never trust attached dictionaries."""
     if not isinstance(value, dict) or value.get('format') != 'jaymax-backup-diagnostics-v1':
         return None
     def duration(number):
@@ -67,6 +72,9 @@ def safe_export_diagnostics(value):
                 and 0 <= number <= 10**9 and math.isfinite(number))
     phases = value.get('phases', [])
     safe = {'format': value['format'], 'phases': [], 'serverLimits': {}, 'clientLimits': {}}
+    reference = value.get('exportReference')
+    if isinstance(reference, str) and re.fullmatch(r'[a-f0-9]{32}', reference):
+        safe['exportReference'] = reference
     if duration(value.get('totalElapsedSeconds')):
         safe['totalElapsedSeconds'] = value['totalElapsedSeconds']
     if isinstance(phases, list):
@@ -84,12 +92,15 @@ def safe_export_diagnostics(value):
                 safe['serverLimits'][name] = {'value': item['value'], 'unit': item.get('unit')}
     clients = value.get('clientLimits', {})
     if isinstance(clients, dict):
-        for name in ('connectSeconds', 'commandSeconds', 'subprocessSeconds'):
+        for name in ('connectSeconds', 'commandSeconds', 'subprocessSeconds', 'exportSeconds', 'cleanupSeconds'):
             if duration(clients.get(name)):
                 safe['clientLimits'][name] = clients[name]
     safe['serverLimitsNotCaptured'] = [name for name in LIMIT_NAMES if name not in safe['serverLimits']]
     if isinstance(value.get('limitReadHeld'), bool):
         safe['limitReadHeld'] = value['limitReadHeld']
+    for name in ('deadlineExceeded', 'ownedConnectionTerminated', 'ownedConnectionClosed', 'progressReportingHeld'):
+        if isinstance(value.get(name), bool):
+            safe[name] = value[name]
     return safe
 
 
@@ -104,11 +115,29 @@ def safe_export_artifacts(value):
 
 
 class ExportDiagnostics:
-    def __init__(self):
+    def __init__(self, timeout_seconds=EXPORT_TIMEOUT_SECONDS, progress=None):
         self.started = time.monotonic()
         self.phases = []
         self.server_limits = {}
         self.limit_read_held = False
+        self.timeout_seconds = timeout_seconds
+        self.progress = progress
+        self.active = []
+        self.deadline_exceeded = False
+        self.connection_terminated = False
+        self.connection_closed = False
+        self.progress_held = False
+        self.export_reference = uuid4().hex
+
+    def emit(self, phase, state):
+        # Only fixed phase/state labels and monotonic elapsed time leave the tool.
+        if self.progress is not None:
+            try:
+                self.progress({'format':'jaymax-backup-progress-v1', 'phase':phase, 'state':state,
+                    'exportReference':self.export_reference,
+                    'elapsedSeconds':round(time.monotonic()-self.started, 6)})
+            except Exception:
+                self.progress_held = True
 
     @contextmanager
     def phase(self, name):
@@ -116,14 +145,18 @@ class ExportDiagnostics:
             raise ValueError('Unsupported export phase')
         started = time.monotonic()
         outcome = 'passed'
+        self.active.append(name)
+        self.emit(name, 'started')
         try:
             yield
         except BaseException:
             outcome = 'held'
             raise
         finally:
+            self.active.pop()
             self.phases.append({'phase': name, 'elapsedSeconds': round(time.monotonic()-started, 6),
                                 'outcome': outcome})
+            self.emit(name, outcome)
 
     async def read_limits(self, conn):
         # Observe effective settings after the existing native.configure call.
@@ -143,10 +176,83 @@ class ExportDiagnostics:
 
     def report(self):
         return safe_export_diagnostics({'format':'jaymax-backup-diagnostics-v1',
+            'exportReference':self.export_reference,
             'totalElapsedSeconds':round(time.monotonic()-self.started, 6),
             'phases':self.phases, 'serverLimits':self.server_limits, 'limitReadHeld':self.limit_read_held,
+            'deadlineExceeded':self.deadline_exceeded, 'ownedConnectionTerminated':self.connection_terminated,
+            'ownedConnectionClosed':self.connection_closed,
+            'progressReportingHeld':self.progress_held,
             'clientLimits':{'connectSeconds':CONNECT_TIMEOUT_SECONDS, 'commandSeconds':COMMAND_TIMEOUT_SECONDS,
-                            'subprocessSeconds':TOOL_TIMEOUT_SECONDS}})
+                            'subprocessSeconds':TOOL_TIMEOUT_SECONDS, 'exportSeconds':self.timeout_seconds,
+                            'cleanupSeconds':CLEANUP_TIMEOUT_SECONDS}})
+
+
+class ExportControl:
+    """Own exactly one export connection; never select or terminate other sessions."""
+    def __init__(self, diagnostics):
+        self.diagnostics = diagnostics
+        self.application_name = 'jaymax-backup-' + diagnostics.export_reference
+        self.connection = None
+        self.termination_error = None
+        self.tool_cleanup_held = False
+        self.close_task = None
+        self.stop_started = False
+
+    async def close_owned(self):
+        if self.connection is None:
+            return
+        if self.close_task is None:
+            self.close_task = asyncio.create_task(self._close_owned())
+        await asyncio.shield(self.close_task)
+
+    async def _close_owned(self):
+        try:
+            # asyncpg's graceful close cancels an active server command before
+            # sending Terminate. A transport abort alone leaves pg_sleep (and
+            # real queries) alive until the backend next notices a dead socket.
+            await asyncio.wait_for(self.connection.close(timeout=CLEANUP_TIMEOUT_SECONDS), CLEANUP_TIMEOUT_SECONDS)
+            self.diagnostics.connection_closed = True
+        except BaseException:
+            self.abort()
+            raise
+
+    async def stop(self, worker):
+        if not self.stop_started:
+            self.stop_started = True
+            # Keep the protocol alive for its cancellation request; graceful
+            # close and bounded rollback share one owned close task.
+            worker.cancel()
+        try:
+            await self.close_owned()
+        except Exception:
+            # The worker awaits the same close task in its protected cleanup,
+            # preserving the original failure and recording the close category.
+            pass
+
+    def abort(self):
+        if self.connection is not None:
+            try:
+                self.connection.terminate()
+                self.diagnostics.connection_terminated = True
+            except Exception as error:
+                self.termination_error = type(error).__name__
+
+    def check_deadline(self):
+        if time.monotonic()-self.diagnostics.started >= self.diagnostics.timeout_seconds:
+            self.diagnostics.deadline_exceeded = True
+            self.abort()
+            raise BackupError('Overall backup export deadline exceeded')
+
+    async def watch(self, worker):
+        while not worker.done():
+            remaining = self.diagnostics.timeout_seconds - (time.monotonic()-self.diagnostics.started)
+            if remaining <= 0:
+                self.diagnostics.deadline_exceeded = True
+                await self.stop(worker)
+                return
+            await asyncio.sleep(min(PROGRESS_INTERVAL_SECONDS, remaining))
+            if self.diagnostics.active:
+                self.diagnostics.emit(self.diagnostics.active[-1], 'running')
 
 
 class BackupError(RuntimeError):
@@ -216,22 +322,42 @@ def process_env(settings, remote):
     if remote:
         env.update(PGSSLROOTCERT=os.environ.get('DATABASE_SSL_ROOT_CERT', str(DEFAULT_CA)),
                    PGOPTIONS='-c default_transaction_read_only=on')
+    control = EXPORT_CONTROL.get()
+    if control is not None:
+        env['PGAPPNAME'] = control.application_name + '-tool'
     return env
 
 
 async def tool(executable, args, settings=None, remote=False):
-    result = await asyncio.to_thread(subprocess.run, [str(executable), *args],
+    # Popen gives this coroutine ownership before its first cancellation point.
+    # A cancelled to_thread(subprocess.run) used to leave pg_dump writing after
+    # partial-file cleanup. Kill and reap this exact child before unwinding.
+    process = subprocess.Popen([str(executable), *args],
         env=process_env(settings, remote) if settings else os.environ.copy(),
-        capture_output=True, timeout=TOOL_TIMEOUT_SECONDS, creationflags=FLAGS)
-    if result.returncode:
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=FLAGS)
+    communication = asyncio.create_task(asyncio.to_thread(process.communicate))
+    try:
+        stdout, stderr = await asyncio.wait_for(asyncio.shield(communication), TOOL_TIMEOUT_SECONDS)
+    except BaseException as original:
+        try:
+            if process.poll() is None:
+                process.kill()
+            await asyncio.wait_for(asyncio.shield(communication), CLEANUP_TIMEOUT_SECONDS)
+        except BaseException as cleanup:
+            original.subprocessCleanupErrorType = type(cleanup).__name__
+            control = EXPORT_CONTROL.get()
+            if control is not None:
+                control.tool_cleanup_held = True
+        raise
+    if process.returncode:
         error = BackupError('PostgreSQL tool failed; private diagnostic text withheld')
         error.toolErrorCategories = [label for phrase, label in (
             (b'already exists', 'existing_object'), (b'does not exist', 'missing_dependency'),
             (b'permission denied', 'permission'), (b'must be owner', 'ownership'),
             (b'unrecognized configuration parameter', 'configuration'), (b'version mismatch', 'version'))
-            if phrase in result.stderr]
+            if phrase in stderr]
         raise error
-    return result.stdout
+    return stdout
 
 
 async def fingerprint(conn, row_hashes=True):
@@ -343,12 +469,41 @@ def restore_list(toc):
     return ''.join(lines).encode('utf-8')
 
 
-async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory, migration_hashes):
-    diagnostics = ExportDiagnostics()
+async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory, migration_hashes,
+                        *, timeout_seconds=EXPORT_TIMEOUT_SECONDS, progress=None):
+    if (isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float))
+            or not 0 < timeout_seconds <= EXPORT_TIMEOUT_SECONDS or not math.isfinite(timeout_seconds)):
+        raise BackupError('Export timeout must be positive and at most 600 seconds')
+    diagnostics = ExportDiagnostics(timeout_seconds, progress)
+    control = ExportControl(diagnostics)
+    token = EXPORT_CONTROL.set(control)
+    worker = asyncio.create_task(_export_backup(url, project, pg_dump, pg_restore, backup_directory,
+                                               key_directory, migration_hashes, diagnostics))
+    watcher = asyncio.create_task(control.watch(worker))
     try:
-        result = await _export_backup(url, project, pg_dump, pg_restore, backup_directory,
-                                      key_directory, migration_hashes, diagnostics)
+        try:
+            result = await asyncio.shield(worker)
+        except asyncio.CancelledError as interrupted:
+            # User cancellation reaches the supervisor while the worker remains
+            # shielded. Cancel and gracefully close only its owned resources.
+            await control.stop(worker)
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError as cancelled:
+                if diagnostics.deadline_exceeded:
+                    held = BackupError('Overall backup export deadline exceeded')
+                    for name in ('snapshotCleanupErrorType', 'connectionCloseErrorType',
+                                 'partialCleanupErrorType', 'subprocessCleanupErrorType'):
+                        if hasattr(cancelled, name):
+                            setattr(held, name, getattr(cancelled, name))
+                    raise held from cancelled
+                raise
+            # A cancellation racing a completed export is still reported held;
+            # artifact flags disclose any final file instead of inventing success.
+            raise interrupted
     except BaseException as error:
+        if control.termination_error is not None:
+            error.connectionTerminateErrorType = control.termination_error
         error.backupDiagnostics = diagnostics.report()
         artifacts = {}
         for name, path in (
@@ -362,6 +517,13 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
                 artifacts['artifactInspectionHeld'] = True
         error.backupArtifacts = artifacts
         raise
+    finally:
+        watcher.cancel()
+        try:
+            await watcher
+        except asyncio.CancelledError:
+            pass
+        EXPORT_CONTROL.reset(token)
     return result | {'backupDiagnostics':diagnostics.report()}
 
 
@@ -381,20 +543,24 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
     async def close_connection():
         with diagnostics.phase('connection_close'):
             if conn is not None:
-                await conn.close()
+                await EXPORT_CONTROL.get().close_owned()
     async def clean_partials():
         with diagnostics.phase('partial_cleanup'):
+            if EXPORT_CONTROL.get().tool_cleanup_held:
+                raise BackupError('PostgreSQL tool cleanup held; partials retained')
             # Candidate survives only after the body AND connection close pass.
             await remove_partial_files((raw,) if body_completed else (raw, candidate))
     async with preserve_cleanup_failure(clean_partials, 'partialCleanupErrorType'):
         async with preserve_cleanup_failure(close_connection, 'connectionCloseErrorType'):
             with diagnostics.phase('connect'):
                 conn = await asyncpg.connect(url, ssl=context, timeout=CONNECT_TIMEOUT_SECONDS,
-                    command_timeout=COMMAND_TIMEOUT_SECONDS, statement_cache_size=0)
+                    command_timeout=COMMAND_TIMEOUT_SECONDS, statement_cache_size=0,
+                    server_settings={'application_name':EXPORT_CONTROL.get().application_name})
+                EXPORT_CONTROL.get().connection = conn
                 await native.configure(conn)
             # This aggregate overlaps its named subphases; do not sum all timings.
             with diagnostics.phase('snapshot_total'):
-                async with readonly_snapshot(conn):
+                async with readonly_snapshot(conn, rollback_timeout=CLEANUP_TIMEOUT_SECONDS):
                     with diagnostics.phase('effective_limits'):
                         await diagnostics.read_limits(conn)
                     with diagnostics.phase('schema_check'):
@@ -445,6 +611,9 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
         # Reached only after the protected connection-close step succeeds.
         body_completed = True
     # No final filename or successful receipt exists while cleanup is held.
+    # Synchronous bounded encryption/filesystem work cannot be interrupted by an
+    # asyncio timer; check monotonic wall time again before publishing anything.
+    EXPORT_CONTROL.get().check_deadline()
     with diagnostics.phase('publish'):
         final = directory / 'backup.jmax.enc'
         candidate.rename(final)

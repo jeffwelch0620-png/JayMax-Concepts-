@@ -1,4 +1,248 @@
-# Hosted source-index preflight and backup hold — October 14, 2026
+# Hosted source-index preflight and backup rehearsal — October 14, 2026
+
+## Local reliability remediation; hosted retry remains held
+
+The owner authorized local fixes and testing, with a prompt before pushing a new
+draft PR. The CLI now captures canonical migration paths, and the export helper
+has an overall deadline, safe progress, exact connection/child ownership and
+cancellation cleanup. The [local review package](BACKUP_EXPORT_RELIABILITY_REVIEW.md)
+records the changes, validation and remaining hosted acceptance boundaries.
+Final source-frozen local validation passed **724 offline cases and 7 targeted
+PostgreSQL cases**, including graceful busy-query cancellation, idle-session
+cleanup, real encrypted export/restore, and the fresh active-writer guard.
+Local role/database inventories match and the owned test server is stopped.
+The earlier failed broad run remains documented separately; full CI awaits push.
+The October 14 window remains closed; no service/job changes, hosted probes,
+index application or new PR publication are part of this local work.
+
+## Approved window attempted and closed early; no index application
+
+The owner explicitly approved **October 14, 7:32:32–8:17:32 p.m. EDT**, limited
+to temporary API/Toast pauses, writer drain and fresh backup; applying the index
+still required a separate prompt. The exact API was suspended in Render, and
+only cron jobs 3 and 4 were set inactive after identity/command-hash verification.
+Fresh connections independently confirmed their paused states. No schedules,
+credentials, permissions or saved connection URLs changed.
+
+The pooled sessions cleared. The reviewed three-role guard passed with zero
+application sessions, zero write transactions and no unobservable sessions.
+Both jobs were inactive, with no queued HTTP requests or running cron entries.
+The protected drain receipt SHA-256 is
+`1eb98a77b898b0c2d6b3fb9316eceb605ec4426d2d723166798eaa48546db45e`.
+A second observation before the corrected recapture also passed.
+
+The first in-window export/restore passed at **7:45:47 p.m. EDT**, using runtime
+source at **c5bfa493e4d1b0b0172ddfe448f5d2fd3bb2a331**:
+
+- Export **314.281 s**, including fingerprint **158.891 s** and dump **142.922 s**.
+- Disposable restore **26.968 s**: **27,431 rows, 120 relation fingerprints and 13
+  catalog groups matched**. This is the new snapshot, not the earlier rehearsal's
+  27,271-row baseline. No cause for the pre-window difference is inferred.
+- Authenticated readback, archive listing, close, partial cleanup and final
+  publication all passed. Access guards, populated-target refusal, source hash
+  checks and local role/database cleanup passed; the owned test server stopped.
+- Encrypted SHA-256:
+  `dc0c927f09592157fade4330e290a66b909b7b17fbe9034dfd0655fea61cf20e`.
+- Inner archive SHA-256:
+  `47ead0d07cf5aad009138bebba923b8dcefceaab6a2e88d84128d5bf3a4fe9a9`.
+- Protected window-backup receipt SHA-256:
+  `6713839e3bd2f28c2fd35e5163f2ff323ed7d0ea188dc745390963e8a2e0297e`.
+
+**Plan qualification held before hosted dry-run SQL.** The Windows operator
+collector used `str(path.relative_to(REPO))`, producing backslash keys, while
+`load_evidence` requires `migrations/<name>`. All 30 reviewed SQL hashes match
+after a canonical path projection, but zero required forward-slash keys exist
+in that authenticated manifest. The same `str(relative_to(...))` pattern exists
+in the standalone CLI and needs a Windows regression test. The archive was not
+modified and the binding guard was not weakened; no valid v2 plan/hash was
+produced, and no index approval was requested on invalid evidence.
+
+The operator collector was corrected to `.as_posix()` for a separate fresh
+recapture; it did not change runtime helpers or the first encrypted archive.
+That attempt stalled during the client fingerprint step. A read-only observer
+saw its transaction idle with its fingerprint cursor, despite no dump process
+running. The cause is unproved. To preserve time for recovery, the attempt was
+cancelled before DDL. Its exact abandoned transaction was closed only after
+matching the role, start-time interval, cursor query against generated queries
+for authenticated manifest relations, and current backend identity. No other
+sessions were terminated. A protected orphan key remains; no raw partial,
+encrypted candidate or final archive exists for this cancelled attempt.
+
+**Recovery verified:** Toast jobs 3 and 4 are active again, with original
+schedules/command hashes preserved. Render reports the API **Live** at the same
+PR30 commit, `/api/health` reports `database: connected`, and a normal signed-in
+ownership read loaded without an error. The index is absent and the ledger still
+contains **54 rows**. Local restore server/process cleanup is complete. The
+window was closed early at **8:09:20 p.m. EDT**; the active control pointer was
+archived so it cannot be reused accidentally. There is no authorized pending
+index apply and no new PR was pushed.
+
+Protected cancellation-cleanup receipt SHA-256:
+`28045945c0a5464dbebb921f31b1dc8d7776fe2924e46d37f95afb8276508dbc`.
+Protected early-close receipt SHA-256:
+`66d92164fc7d07af37459fc23b196b04aaa8ad1357c3f83943ac87e93a1069b3`.
+
+**Next offline work:** canonicalize migration names at the collection boundary
+and test the Windows CLI-to-adapter binding; add and test a bounded overall
+export/window deadline with progress and cancellation cleanup, including owned
+connection identification. Validate those changes before requesting another
+window. A new window still needs a new correctly labelled backup/restore and
+separate exact-plan approval. The passing archive/restore evidence remains
+useful, but it is not an accepted installation plan or managed-service recovery.
+
+## Writer inventory and maintenance planning checkpoint
+
+The [maintenance plan](HOSTED_SOURCE_INDEX_MAINTENANCE_PLAN.md) records refreshed
+read-only Render/database evidence, Companion's potential-writer status, exact
+Toast jobs and GMT schedule, live-versus-local credential distinction, pooled
+session and HTTP-drain holds, the 45-minute proposal and pending approvals.
+The observed live API is PR30 at `6e08ba7`, with auto-deploy on, using `postgres`
+on transaction-pooler port 6543; no deployed connection was changed. Adding that
+actual role to the inventory reveals two idle pooled postgres sessions and causes
+the existing guard to hold. The earlier two-role quiet result was insufficient
+to establish the deployed backend was drained.
+
+The verified rehearsal remains passing evidence, but a **fresh backup and restore
+inside the approved window are mandatory**, not merely conditional on observed
+drift: the adapter's reviewed evidence guard requires this chronology. No v2
+execution plan is generated while stop/drain and window approvals are pending.
+A separate private non-executable planning packet is saved with all execution
+flags false. No services/jobs, hosted index, credentials, permissions or deployment
+settings were changed. The local documentation branch remains unpublished.
+
+## Fresh hosted export and disposable restore verified
+
+The owner authorized a fresh encrypted backup and disposable restore. The single
+attempt completed **October 14, 2026 at 7:08:48 p.m. EDT**, status
+`verified_fresh_hosted_application_backup_and_disposable_restore`, using clean
+source **7251683afea1ec149dea239bbb14ef258e2c3014** (PR30 runtime plus the preceding
+documentation checkpoint). Runtime hashes were frozen and verified after the
+rehearsal. No transport shims or mocked export/restore routines were used.
+
+- The existing certificate-verified owner session-pooler connection supplied a
+  read-only repeatable-read snapshot, fingerprints, dependency/role metadata and
+  the actual `pg_dump` archive. Sequence state was rechecked and observed stable.
+- Encryption, authenticated readback, archive listing, close and partial cleanup
+  passed before publication of the final encrypted archive. The backup and its
+  separately stored key remain in ACL-verified private local storage.
+- Fresh export took **369.219 seconds**: fingerprint **181.000 s**, `pg_dump`
+  **175.859 s**, overlapping snapshot aggregate **363.422 s**. All export phases
+  passed; all eight requested setting observations were captured and
+  `limitReadHeld` was false. Existing 20/60/240-second client deadlines and server
+  settings were unchanged. No idle-limit or connectivity cause is inferred.
+- Real `pg_restore` into a fresh UUID-named loopback database took **41.297 s**.
+  **120 relation fingerprints, 13 catalog groups and 27,271 rows matched** the
+  authenticated export manifest. Catalog comparisons include schema/relations,
+  columns, constraints, functions, triggers, indexes, views, policies, types,
+  sequence definitions and default ACLs. Source and local major versions match;
+  source is **17.6**, local tools **17.11**, so patch-version equality is false.
+- A second restore refused the populated destination before restoration. The
+  restored account role's private-schema denial and inventory role's account-table
+  denial passed. This checks those declared grants with local dependency stubs;
+  source role memberships, passwords and login behavior were not restored.
+- Seventeen new non-login/non-superuser local dependency stubs were prepared.
+  Only these newly created stubs and the newly created test database were removed.
+  Before/after role/database inventories match, cleanup reported no errors, and
+  the owned PostgreSQL server is stopped. No existing local role was modified.
+- Independent postflight reauthenticated the archive and verified encrypted,
+  manifest and receipt hashes, file ACLs, runtime source hashes and absence of
+  `archive.partial`/`backup.partial.enc`. The encrypted archive is **30,287,992
+  bytes**, containing a **17,014,272-byte** dump; no business rows, key contents,
+  credentials or private paths appear in public evidence.
+
+Evidence SHA-256 values:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Encrypted backup | `53a451e3c24a56ad971ddcc86e3e76a3d500b5fa9f40a44a08e77dccb2a9c59b` |
+| Inner archive | `06f6e75deee5c461c6779f8d06c7afecfdcc970d4d67ec24c1fc6f1afdcdf235` |
+| Application manifest | `1dfe84e02664ff9e5779336f4461d577d394ae9f1438503fdd9a63eba9f5c39c` |
+| Protected rehearsal receipt | `63f9a61908ecabadec19cc98edeaa6ea6f99afbc51174e4f430d2633fe095e26` |
+| Redacted public receipt | `92c9789329e9b2bb867599b010e6eb13dffa549a716017ff6099207ac4faa052` |
+
+**Acceptance boundary:** the fresh application-scope backup/restore prerequisite
+now has passing evidence. Managed Supabase recovery and combined credential
+rotation recovery remain unqualified; no operational release or hosted apply is
+approved. Two closed-period rows are included and fingerprint-matched, but no
+runtime Food Cost report comparison was performed. Writer draining was not
+demonstrated, and concurrent writers were not paused; this is a captured snapshot,
+not proof that today's hosted database remains unchanged after it.
+
+**Next:** refresh the writer inventory (actual Render backend and database role,
+Toast scheduled jobs and any other sources), prepare a coordinated stop/resume
+window with the observed rehearsal duration, and obtain exact plan approval. A
+maintenance-time backup may need refreshing if intervening writes invalidate the
+reviewed baseline. Apply only the single additive index and ledger entry after
+those gates, followed by independent reconciliation and the fictional accounting
+control. Hosted SQL/index, settings, services, credentials and scheduled jobs were
+unchanged in this rehearsal. These notes remain local on
+`codex/post-pr30-hosted-diagnostics`; no new PR is published by this step.
+
+The earlier backup hold below is retained as historical evidence, superseded only
+for the successful application-scope export/restore checks recorded above.
+
+## PR30 merged and bounded metadata diagnostic
+
+PR30 merged with owner approval on October 14 at 6:30:56 p.m. EDT:
+**6e08ba7fca10d640ce311d0a9a10e75aa3838dfc**, amended head
+**202691137bdb67376798bff1bdad3ff358ed11fd**. All four
+[amended-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38647473285)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38648177850)
+pass: 689 frontend tests across 67 suites plus production build, 700 offline cases
+(267 methods plus 433 subtests), and 73 disposable PostgreSQL cases (62 methods
+plus 11 subtests). Backend profiles have zero failures, errors or skips.
+
+The next step ran one bounded read-only metadata diagnostic against the existing
+designated owner session-pooler connection, pinned to the merged source. It used
+the export's existing TLS, connection configuration, read-only repeatable-read
+snapshot and fingerprint code; it stopped before dependencies, dump, encryption
+or restore. The overall deadline was 180 seconds, with the unchanged 20-second
+connect and 60-second client command limits. There was no automatic retry.
+
+The diagnostic completed at **6:34:03 p.m. EDT** in **154.485 seconds**, status
+`metadata_diagnostic_passed_not_backup_verified`. All phases passed:
+
+| Phase | Seconds |
+| --- | ---: |
+| Connection and existing session configuration | 1.219 |
+| PostgreSQL setting observations | 0.187 |
+| Schema check | 0.203 |
+| Fingerprint metadata and rows | 152.594 |
+| Snapshot aggregate, overlapping the preceding subphases | 153.172 |
+| Connection close | 0.078 |
+
+Fingerprints captured **120 relations and 13 catalog groups**; no business rows,
+SQL, credentials or private paths appear in public evidence. The fingerprint
+SHA-256 is `2cbc5c682dd0a727889aa45e1549e226f0f57c6181fa551859057aa4941a5fef`.
+The protected private receipt's SHA-256 is
+`b0d0b5d66571757c7063b25074be054c38082ce815bebe9caf1ccc7f1c2a67d0`.
+
+All eight settings were captured; `limitReadHeld` is false:
+
+| PostgreSQL session setting | Observed value |
+| --- | ---: |
+| statement_timeout | 120000 ms |
+| idle_in_transaction_session_timeout | 0 ms |
+| idle_session_timeout | 0 ms |
+| transaction_timeout | 0 ms |
+| tcp_keepalives_idle | 1800 s |
+| tcp_keepalives_interval | 60 s |
+| tcp_keepalives_count | 9 |
+| tcp_user_timeout | 0 ms |
+
+These are observations, not changed settings. The statement/client limits apply
+to individual commands, not the sum of all fingerprint commands. Pooler limits
+remain outside `pg_settings`. The prior connection loss was not reproduced in
+this attempt; its cause remains unproved. Successful metadata inspection is not
+an encrypted backup, restore verification, or a writer-drain demonstration.
+
+**Next:** fresh encrypted export and disposable restore using the existing
+reviewed helpers, then independent acceptance of those receipts. Writer inventory
+(including both active Toast jobs), a coordinated window, exact plan approval and
+the single additive index installation still follow. No hosted migration/index,
+credentials/privileges, permanent settings, service pauses or scheduled-job changes
+were performed. This checkpoint update is local on
+`codex/post-pr30-hosted-diagnostics`; no new PR is published by this step.
 
 ## PR30 review amendments
 

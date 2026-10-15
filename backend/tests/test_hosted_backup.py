@@ -1,7 +1,11 @@
 """Backup authenticity, scope, restore boundary and secret-safe subprocess guards."""
 import base64
+import asyncio
 import json
 import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -121,14 +125,144 @@ class BoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('default_transaction_read_only=on', env['PGOPTIONS'])
 
     async def test_dump_errors_do_not_expose_driver_text(self):
-        result = type('Result', (), {'returncode': 1, 'stderr': b'synthetic-private-password', 'stdout': b''})()
-        with patch.object(backup.subprocess, 'run', return_value=result):
+        result = SimpleNamespace(returncode=1,communicate=lambda:(b'',b'synthetic-private-password'))
+        with patch.object(backup.subprocess, 'Popen', return_value=result):
             with self.assertRaises(backup.BackupError) as caught:
                 await backup.tool('synthetic', [])
         self.assertNotIn('synthetic-private-password', str(caught.exception))
 
 
 class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_transport_termination_cannot_leave_rollback_unbounded(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection()
+            conn.terminate.side_effect=RuntimeError('TEST ONLY private termination error')
+            async def stalled(*args,**kwargs):await asyncio.Event().wait()
+            conn.close.side_effect=stalled
+            tx.rollback.side_effect=stalled
+            with patch.object(backup,'CLEANUP_TIMEOUT_SECONDS',0.03):
+                with self.assertRaises(backup.BackupError) as caught:
+                    await asyncio.wait_for(self.export(root,conn,fingerprint_action=stalled,timeout_seconds=0.06),2)
+            from hosted_backup_cli import held_result
+            result=held_result(caught.exception)
+            self.assertEqual(result['snapshotCleanupErrorType'],'TimeoutError')
+            self.assertEqual(result['connectionTerminateErrorType'],'RuntimeError')
+            self.assertNotIn('private termination error',json.dumps(result))
+            self.assertFalse((root/'archive/backup.jmax.enc').exists())
+
+    async def test_deadline_closes_owned_connection_with_bounded_rollback_and_safe_progress(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection();events=[]
+            async def stalled(connection):
+                await asyncio.Event().wait()
+            started=time.monotonic()
+            with patch.object(backup,'PROGRESS_INTERVAL_SECONDS',0.01):
+                with self.assertRaisesRegex(backup.BackupError,'deadline exceeded') as caught:
+                    await self.export(root,conn,fingerprint_action=stalled,timeout_seconds=0.06,progress=events.append)
+            self.assertLess(time.monotonic()-started,2)
+            self.assertTrue(caught.exception.backupDiagnostics['deadlineExceeded'])
+            self.assertTrue(caught.exception.backupDiagnostics['ownedConnectionClosed'])
+            conn.terminate.assert_not_called()
+            self.assertTrue(any(e['phase']=='fingerprint' and e['state']=='running' for e in events))
+            self.assertTrue(any(e['phase']=='fingerprint' and e['state']=='held' for e in events))
+            self.assertNotIn('TEST ONLY',json.dumps(events))
+            self.assertNotIn(str(root),json.dumps(events))
+            tx.rollback.assert_awaited_once();conn.close.assert_awaited_once()
+            self.assertFalse((root/'archive/backup.jmax.enc').exists())
+            self.assertFalse((root/'archive/archive.partial').exists())
+            self.assertTrue((root/'key/backup.key').exists())
+
+    async def test_operator_cancellation_waits_for_worker_cleanup_without_claiming_success(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection();entered=asyncio.Event()
+            async def stalled(connection):
+                entered.set();await asyncio.Event().wait()
+            task=asyncio.create_task(self.export(root,conn,fingerprint_action=stalled))
+            await asyncio.wait_for(entered.wait(),2)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError) as caught:
+                await asyncio.wait_for(task,2)
+            conn.terminate.assert_not_called();conn.close.assert_awaited_once();tx.rollback.assert_awaited_once()
+            self.assertFalse(caught.exception.backupDiagnostics['deadlineExceeded'])
+            self.assertFalse((root/'archive/backup.jmax.enc').exists())
+            self.assertFalse((root/'archive/backup.partial.enc').exists())
+
+    async def test_export_deadline_reaps_writing_child_before_removing_raw_partial(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection();children=[]
+            real_popen=subprocess.Popen;real_tool=backup.tool;real_cleanup=backup.remove_partial_files
+            def start(*args,**kwargs):
+                process=real_popen(*args,**kwargs);children.append(process);return process
+            async def dumping(executable,args,*extra):
+                filename=next(arg[7:] for arg in args if arg.startswith('--file='))
+                script='import pathlib,sys,time; pathlib.Path(sys.argv[1]).write_bytes(b"TEST ONLY partial"); time.sleep(600)'
+                return await real_tool(sys.executable,['-c',script,filename])
+            async def cleanup(paths):
+                self.assertEqual(len(children),1)
+                self.assertIsNotNone(children[0].poll())
+                await real_cleanup(paths)
+            with patch.object(backup.subprocess,'Popen',side_effect=start),\
+                 patch.object(backup,'remove_partial_files',side_effect=cleanup):
+                with self.assertRaisesRegex(backup.BackupError,'deadline exceeded') as caught:
+                    await self.export(root,conn,tool_action=dumping,timeout_seconds=0.4)
+            self.assertFalse((root/'archive/archive.partial').exists())
+            self.assertFalse((root/'archive/backup.jmax.enc').exists())
+            self.assertNotIn('subprocessCleanupErrorType',vars(caught.exception))
+
+    async def test_stalled_rollback_keeps_original_sqlstate_after_deadline_abort(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection()
+            original=ConnectionError('TEST ONLY secret disconnect');original.sqlstate='08003'
+            async def stalled_rollback(): await asyncio.Event().wait()
+            tx.rollback.side_effect=stalled_rollback
+            with self.assertRaises(ConnectionError) as caught:
+                await asyncio.wait_for(self.export(root,conn,fingerprint_error=original,timeout_seconds=0.06),2)
+            self.assertIs(caught.exception,original)
+            from hosted_backup_cli import held_result
+            receipt=held_result(original)
+            self.assertEqual(receipt['sqlState'],'08003')
+            self.assertEqual(receipt['snapshotCleanupErrorType'],'CancelledError')
+            self.assertTrue(receipt['backupDiagnostics']['deadlineExceeded'])
+            self.assertNotIn('secret disconnect',json.dumps(receipt))
+
+    async def test_close_timeout_terminates_owned_connection_and_refuses_publication(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection()
+            async def stalled_close(**kwargs): await asyncio.Event().wait()
+            conn.close.side_effect=stalled_close
+            with patch.object(backup,'CLEANUP_TIMEOUT_SECONDS',0.03):
+                with self.assertRaises(TimeoutError) as caught:
+                    await self.export(root,conn)
+            self.assertEqual(caught.exception.connectionCloseErrorType,'TimeoutError')
+            conn.terminate.assert_called()
+            self.assertFalse((root/'archive/backup.jmax.enc').exists())
+            self.assertFalse((root/'archive/backup.partial.enc').exists())
+
+    async def test_synchronous_overrun_is_held_before_final_rename(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection()
+            async def cpu_delay(connection):
+                time.sleep(0.06)
+                return {'tables':{},'catalog':{}}
+            with self.assertRaisesRegex(backup.BackupError,'deadline exceeded'):
+                await self.export(root,conn,fingerprint_action=cpu_delay,timeout_seconds=0.03)
+            self.assertFalse((root/'archive/backup.jmax.enc').exists())
+
+    async def test_invalid_budgets_are_refused_before_connection_or_files(self):
+        for budget in (0,-1,601,True,float('nan'),float('inf'),'600'):
+            with self.subTest(budget=budget),patch.object(backup.asyncpg,'connect',AsyncMock()) as connect:
+                with self.assertRaises(backup.BackupError):
+                    await backup.export_backup('TEST ONLY',PROJECT,'dump','restore','archive','key',{},timeout_seconds=budget)
+                connect.assert_not_awaited()
+
+    async def test_progress_sink_failure_is_reported_without_echoing_sink_exception(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection()
+            def sink(event): raise OSError('TEST ONLY private console')
+            result=await self.export(root,conn,progress=sink)
+            self.assertTrue(result['backupDiagnostics']['progressReportingHeld'])
+            self.assertNotIn('private console',json.dumps(result))
+
     def connection(self, *, close_error=None, settings=None):
         tx=SimpleNamespace(start=AsyncMock(),commit=AsyncMock(),rollback=AsyncMock())
         async def fetch(sql,*args):
@@ -150,10 +284,12 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             if 'pg_get_userbyid(datdba)' in sql: return 'TEST ONLY owner'
             raise AssertionError('Unexpected fictional scalar')
         return SimpleNamespace(transaction=MagicMock(return_value=tx),fetch=AsyncMock(side_effect=fetch),
-            fetchval=AsyncMock(side_effect=scalar),execute=AsyncMock(),close=AsyncMock(side_effect=close_error)),tx
+            fetchval=AsyncMock(side_effect=scalar),execute=AsyncMock(),close=AsyncMock(side_effect=close_error),
+            terminate=MagicMock()),tx
 
     async def export(self, root, conn, *, fingerprint_error=None, facts=None,
-                     cleanup_error=None, readback_error=None, publish_error=None):
+                     cleanup_error=None, readback_error=None, publish_error=None,
+                     fingerprint_action=None, tool_action=None, timeout_seconds=600, progress=None):
         def directory(path,area): path.mkdir();return path
         async def tool(executable,args,*extra):
             filename=next((arg[7:] for arg in args if arg.startswith('--file=')),None)
@@ -164,10 +300,10 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             connect=patches.enter_context(patch.object(backup.asyncpg,'connect',AsyncMock(return_value=conn)))
             patches.enter_context(patch.object(backup,'connection_tls',return_value=True))
             patches.enter_context(patch.object(backup.native,'configure',AsyncMock()))
-            patches.enter_context(patch.object(backup,'fingerprint',AsyncMock(side_effect=fingerprint_error,
+            patches.enter_context(patch.object(backup,'fingerprint',AsyncMock(side_effect=fingerprint_action or fingerprint_error,
                 return_value=facts or {'tables':{},'catalog':{}})))
             patches.enter_context(patch.object(backup,'dependencies',AsyncMock(return_value={})))
-            patches.enter_context(patch.object(backup,'tool',AsyncMock(side_effect=tool)))
+            patches.enter_context(patch.object(backup,'tool',AsyncMock(side_effect=tool_action or tool)))
             if cleanup_error:
                 patches.enter_context(patch.object(backup,'remove_partial_files',AsyncMock(side_effect=cleanup_error)))
             if readback_error:
@@ -175,16 +311,19 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             if publish_error:
                 patches.enter_context(patch.object(Path,'rename',side_effect=publish_error))
             result=await backup.export_backup('postgresql://postgres.'+PROJECT+':TEST_ONLY@aws-0.pooler.supabase.com:5432/postgres',
-                PROJECT,'TEST ONLY dump','TEST ONLY restore',root/'archive',root/'key',{})
+                PROJECT,'TEST ONLY dump','TEST ONLY restore',root/'archive',root/'key',{},
+                timeout_seconds=timeout_seconds,progress=progress)
             self.assertEqual(connect.await_args.kwargs['timeout'],20)
             self.assertEqual(connect.await_args.kwargs['command_timeout'],60)
-            self.assertNotIn('server_settings',connect.await_args.kwargs)
+            self.assertRegex(connect.await_args.kwargs['server_settings']['application_name'],r'^jaymax-backup-[a-f0-9]{32}$')
+            self.assertEqual(connect.await_args.kwargs['server_settings']['application_name'],
+                'jaymax-backup-'+result['backupDiagnostics']['exportReference'])
             return result
 
     async def test_success_publishes_only_after_close_and_cleanup_with_authenticated_archive(self):
         with TemporaryDirectory() as temporary:
             root=Path(temporary);conn,tx=self.connection()
-            def closed(): self.assertFalse((root/'archive/backup.jmax.enc').exists())
+            def closed(**kwargs): self.assertFalse((root/'archive/backup.jmax.enc').exists())
             conn.close.side_effect=closed
             result=await self.export(root,conn)
             self.assertEqual(result['status'],'exported_not_restore_verified')
@@ -199,7 +338,7 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(all(phase['outcome']=='passed' for phase in result['backupDiagnostics']['phases']))
             self.assertEqual(result['backupDiagnostics']['serverLimits']['statement_timeout'],{'value':120000,'unit':'ms'})
             self.assertEqual(result['backupDiagnostics']['clientLimits'],
-                {'connectSeconds':20,'commandSeconds':60,'subprocessSeconds':240})
+                {'connectSeconds':20,'commandSeconds':60,'subprocessSeconds':240,'exportSeconds':600,'cleanupSeconds':5})
             conn.execute.assert_not_awaited();tx.commit.assert_awaited_once()
 
     async def test_close_only_failure_leaves_no_accepted_or_partial_archive(self):
@@ -313,3 +452,29 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                              {'value':-1,'unit':'s'})
             self.assertIn('transaction_timeout',result['backupDiagnostics']['serverLimitsNotCaptured'])
             conn.execute.assert_not_awaited()
+
+
+class OwnedToolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_real_child_is_reaped_on_timeout_or_cancellation_before_partial_cleanup(self):
+        for mode in ('timeout','cancel'):
+            with self.subTest(mode=mode),TemporaryDirectory() as temporary:
+                marker=Path(temporary)/'TEST_ONLY_child.partial'
+                child=[];real_popen=subprocess.Popen
+                def start(*args,**kwargs):
+                    process=real_popen(*args,**kwargs);child.append(process);return process
+                script='import pathlib,sys,time; pathlib.Path(sys.argv[1]).write_text("TEST ONLY"); time.sleep(600)'
+                with patch.object(backup.subprocess,'Popen',side_effect=start),patch.object(backup,'TOOL_TIMEOUT_SECONDS',0.25 if mode=='timeout' else 240):
+                    task=asyncio.create_task(backup.tool(sys.executable,['-c',script,str(marker)]))
+                    if mode=='cancel':
+                        for _ in range(200):
+                            if marker.exists(): break
+                            await asyncio.sleep(0.01)
+                        self.assertTrue(marker.exists())
+                        task.cancel()
+                    with self.assertRaises(TimeoutError if mode=='timeout' else asyncio.CancelledError):
+                        await asyncio.wait_for(task,3)
+                self.assertEqual(len(child),1)
+                self.assertIsNotNone(child[0].poll())
+                marker.unlink(missing_ok=True)
+                await asyncio.sleep(0.03)
+                self.assertFalse(marker.exists())

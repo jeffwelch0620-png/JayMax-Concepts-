@@ -1,5 +1,116 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local backup reliability follow-up — October 14, 2026
+
+The standalone export CLI now collects canonical forward-slash migration names,
+including either migration root. Existing authenticated archives are not rewritten;
+the hosted adapter still rejects backslash-labelled or changed-source evidence.
+
+Exports now have a 600-second overall budget (the CLI can shorten it), safe phase
+and heartbeat progress on stderr, a safe export reference matching its ownership
+labels, and cancellation that
+gracefully cancels/closes only the owned connection and kills/reaps the owned PostgreSQL tool before
+partial-file cleanup. Rollback, connection close and child reap each have a
+separate five-second bound. Final
+publication rechecks monotonic elapsed time after synchronous work; a late or held
+export cannot report success. Keys and any unsafe-to-remove partials remain held
+for private inspection. Original SQLSTATE and cleanup categories remain separate.
+
+Validation and limitations are recorded in the
+[local review package](docs/BACKUP_EXPORT_RELIABILITY_REVIEW.md): **724 offline
+cases and 7 targeted PostgreSQL cases pass**, including busy/idle cancellation
+and real encrypted export/restore. The earlier broad database run and its
+resolved failures are recorded separately; a new full CI run is pending push.
+The local database/role inventory is unchanged and the test server stopped. This change is
+local and unpublished pending owner approval to push a draft PR. No new hosted
+connection, writer pause, index application, deployment or migration ran. The old
+maintenance window is closed; another window and exact index-plan approval remain
+separate steps after independent review.
+
+## Approved window closed early; index remains held — October 14, 2026
+
+The owner approved **7:32:32–8:17:32 p.m. EDT** for temporary API/Toast pauses,
+drain verification and fresh backup, with separate approval required before the
+index. The API was suspended, only Toast jobs 3/4 were paused, and the reviewed
+writer guard reached zero sessions/write transactions with complete visibility.
+The fresh encrypted backup and disposable restore passed: **27,431 rows, 120
+relation fingerprints and 13 catalog groups matched**.
+
+Read-only plan qualification then correctly rejected Windows backslash migration
+labels in the operator-generated manifest. The SQL hashes match after canonical
+path projection, but the authenticated archive was not rewritten and the guard
+was not relaxed. A corrected recapture stalled during fingerprinting and was
+cancelled. Its identified abandoned read-only transaction was closed; unrelated
+platform sessions were left alone. **No index or ledger change was attempted.**
+
+The API is Live, health reports its database connected, a signed-in ownership
+read passed, and both Toast jobs are restored to their exact original active
+states. The index remains absent and the ledger at 54 rows. The window was closed
+early at **8:09:20 p.m. EDT**; its active pointer is archived. Protected backups
+and failure evidence are retained. Canonical manifest capture and bounded
+export/cancellation handling need offline validation before another window.
+See the [checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md).
+
+## Writer inventory and maintenance plan prepared — October 14, 2026
+
+Read-only verification confirms the live Render API at PR30, still using the
+existing `postgres` transaction-pooler connection on port 6543. The two restricted
+local credentials are not the deployed identity. Two idle postgres/pooler sessions
+hold the refreshed guard; no claim of stopped writers is made. Both Toast HTTP
+jobs remain active, with GMT schedules verified. Companion is recorded as a
+potential future writer; its current preparation records do not prove a live
+Supabase writer. No Companion code or deployment was changed.
+
+The [45-minute maintenance plan](docs/HOSTED_SOURCE_INDEX_MAINTENANCE_PLAN.md)
+defines the exact API/job stop and resume scope, downstream HTTP drain checks,
+mandatory new backup/restore inside the approved window, then read-only v2 plan
+preparation and separate exact-hash approval. It also accounts for Render's
+advertised 9 p.m. EDT infrastructure maintenance. No service/job was paused,
+index applied, credential changed or new PR pushed. Owner window and writer
+completeness confirmation remain pending.
+
+## Fresh encrypted backup and disposable restore passed — October 14, 2026
+
+The owner-authorized rehearsal completed at **7:08:48 p.m. EDT** using the
+existing hosted session-pooler connection and reviewed PR30 routines. The fresh
+encrypted export passed in **369.219 seconds**, and its disposable local restore
+passed in **41.297 seconds**: **27,271 rows, 120 relation fingerprints and 13
+catalog groups matched**. The populated-target refusal and inventory/account
+access guards passed. Temporary database/role stubs were removed, original local
+inventory was restored, and the owned test server stopped. Protected archive/key/
+receipt ACLs, archive authentication, hashes and absence of export partials were
+independently rechecked.
+
+This qualifies the captured application-scope backup and restore rehearsal. It
+does not qualify managed Supabase recovery, restored login/role memberships, or a
+closed-period Food Cost runtime comparison. PostgreSQL major versions match;
+source 17.6 and local tools 17.11 differ in patch version. The prior disconnect
+was not reproduced; its cause remains unproved. No hosted writes, index,
+configuration, credentials or scheduled jobs changed. Next is refreshed writer
+inventory and maintenance planning, followed by exact plan approval before any
+hosted index application. See the [checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md)
+for evidence hashes and remaining acceptance limits. The notes remain local on
+`codex/post-pr30-hosted-diagnostics`; no new PR was pushed.
+
+## PR30 merged; bounded hosted metadata read passed — October 14, 2026
+
+[PR30](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/30) merged with
+owner approval at **6e08ba7** (amended head **2026911**). Both
+[amended-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38647473285)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38648177850)
+pass all four checks: 689 frontend tests plus build, 700 offline cases and 73
+disposable PostgreSQL cases.
+
+One read-only hosted metadata diagnostic completed in **154.485 seconds**,
+capturing fingerprints for 120 relations and 13 catalog groups, with successful
+snapshot completion and connection close. All eight requested PostgreSQL settings
+were captured; none were changed. This attempt did not reproduce the previous
+disconnect, and does not establish its cause or prove reliable future exports.
+No dump, restore, index application, writer pause or scheduled-job change ran.
+Next is a fresh encrypted export and disposable restore before backup acceptance
+and the separately reviewed maintenance/index workflow. Details and evidence
+hashes are in the [checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md).
+
 ## PR30 review amendments — October 14, 2026
 
 Unexpected limit metadata no longer aborts backup export: valid observations

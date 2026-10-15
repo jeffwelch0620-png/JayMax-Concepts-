@@ -20,6 +20,7 @@ OFFLINE_CLASSES = ('deployment_readiness::ReadinessConfigurationTests runtime_pe
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
+ ('apply_additive_migration','HostedBackupLocalDatabaseTests','test_export_deadline_and_operator_cancel_remove_only_owned_database_sessions'),
  ('apply_additive_migration','HostedBackupLocalDatabaseTests','test_encrypted_export_restore_and_close_failure_stay_disposable'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_same_version_correction_and_exact_retry'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_reissued_version_correction_and_exact_retry'),
