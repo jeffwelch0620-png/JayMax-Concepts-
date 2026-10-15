@@ -1,5 +1,42 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR31 merged; bounded fingerprint follow-up — October 14, 2026
+
+[PR31](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/31) merged with
+owner approval at **cb63129** (reviewed head **7be06da**).
+[Head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38670997386)
+passed 689 frontend tests plus build, 724 offline cases and 78 full PostgreSQL
+cases; [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38672033102)
+also passed. The earlier PR31 local-only/pending-CI entries below are historical.
+
+The new local branch `codex/bounded-table-fingerprints` moves the final folding of
+modern row hashes onto PostgreSQL for bounded tables. A full 8-MiB hash-line
+probe selects the existing cursor fallback. Sequences, older backup algorithms,
+snapshot ownership and the stored fingerprint format remain unchanged. See the
+[follow-up checkpoint](docs/BOUNDED_FINGERPRINT_CHECKPOINT.md) for validation,
+compatibility tests and limits. **728 offline cases and 8 targeted PostgreSQL
+cases pass**, with unchanged local database/role inventory and the test server
+stopped. Full CI for this follow-up awaits push. This follow-up is unpublished pending a new draft
+PR prompt. No new hosted maintenance window or index application is authorized.
+
+## Pre-operations gate: restricted deployed database roles — OPEN
+
+The recorded Render configuration uses the privileged `postgres` role on the
+transaction pooler (6543); the saved restricted inventory/account credentials are
+not the deployed API identities. Before operational use, complete a separately
+approved deployment cutover with coworkers: wire the inventory `DATABASE_URL`
+and account `AUXILIARY_DATABASE_URL` to their reviewed restricted roles, confirm
+the intended pooler mode/capacity, test allowed and denied operations through the
+actual deployed pools, and prove rollback of the configuration. Session-pooler
+5432 is the reviewed option; final connection/capacity decisions remain in that
+deployment workflow. Application authorization and integrity constraints continue
+to apply in build, but restricted-role grants do not constrain an owner connection.
+
+Keep the current deployment/connection standard during build. This named gate
+does not change roles, grants, credentials, Render settings or paid networking.
+See the [maintenance plan](docs/HOSTED_SOURCE_INDEX_MAINTENANCE_PLAN.md) for the
+separate gate and future hosted cancellation checks.
+
 ## Local backup reliability follow-up — October 14, 2026
 
 The standalone export CLI now collects canonical forward-slash migration names,
