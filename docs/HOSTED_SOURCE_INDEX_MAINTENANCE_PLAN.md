@@ -1,5 +1,14 @@
 # Hosted source-index maintenance plan — October 14, 2026
 
+**Local follow-up:** see the
+[backup reliability review](BACKUP_EXPORT_RELIABILITY_REVIEW.md). A future fresh
+export must use canonical migration names and an explicit budget that leaves
+time for cleanup, restore, plan review and recovery. The helper's 600-second
+default is not permission to exceed a window. Verify the uniquely labelled
+export connection and tool have drained after cancellation; do not terminate
+other postgres/platform sessions to make a guard pass. Review/merge and a new
+window approval remain pending separately from these local changes.
+
 **Execution update:** the owner approved 7:32:32–8:17:32 p.m. EDT. The API/jobs
 were paused, reviewed writers drained, and a fresh encrypted backup/restore
 passed. Plan qualification rejected Windows migration-path labels; a corrected

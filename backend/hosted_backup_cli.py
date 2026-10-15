@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 from uuid import uuid4
 from dotenv import dotenv_values
@@ -28,6 +29,8 @@ async def main():
     commands = parser.add_subparsers(dest='action', required=True)
     export = commands.add_parser('export')
     export.add_argument('--owner-config', required=True, help='Private dotenv file; never pass a URL/password as an argument')
+    export.add_argument('--timeout-seconds', type=int, default=backup.EXPORT_TIMEOUT_SECONDS,
+        help='Overall export budget, 1–600 seconds; reserve additional time for cleanup and service recovery')
     restore = commands.add_parser('verify-restore')
     restore.add_argument('--connection-env', required=True, help='Name of environment variable containing a disposable loopback DSN')
     restore.add_argument('--backup', required=True)
@@ -42,11 +45,12 @@ async def main():
     if args.action == 'export':
         config = dotenv_values(args.owner_config)
         repo = Path(__file__).resolve().parents[1]
-        migrations = {str(path.relative_to(repo)): backup.digest(path.read_bytes()) for directory in
+        migrations = {path.relative_to(repo).as_posix(): backup.digest(path.read_bytes()) for directory in
             (repo / 'migrations', repo / 'supabase/migrations') for path in directory.glob('*.sql')}
         result = await backup.export_backup(config.get('DATABASE_URL', ''), args.expected_project,
             binaries / 'pg_dump.exe', binaries / 'pg_restore.exe', root / 'backups' / label,
-            root / 'credentials' / label, migrations)
+            root / 'credentials' / label, migrations, timeout_seconds=args.timeout_seconds,
+            progress=lambda event: print(json.dumps(event), file=sys.stderr, flush=True))
     else:
         dsn = os.environ.get(args.connection_env)
         if not dsn:
@@ -59,6 +63,13 @@ async def main():
 def run():
     try:
         asyncio.run(main())
+    except KeyboardInterrupt as interrupted:
+        # asyncio.run translates its cancelled task into KeyboardInterrupt. Keep
+        # the worker's safe artifact/cleanup evidence when that context exists.
+        cancelled = interrupted.__context__
+        error = cancelled if isinstance(cancelled, asyncio.CancelledError) else backup.BackupError('Backup operation cancelled by operator')
+        print(json.dumps(held_result(error)))
+        return 130
     except Exception as exc:
         # Even unexpected driver/subprocess errors must not reveal credentials/rows.
         print(json.dumps(held_result(exc)))

@@ -1,5 +1,6 @@
 """Read-only snapshots preserve the original error if rollback also fails."""
 from contextlib import asynccontextmanager
+import asyncio
 import re
 
 
@@ -11,7 +12,8 @@ def error_details(error):
     result = {'errorType': category(type(error).__name__),
               'sqlState': state if isinstance(state, str) and re.fullmatch(r'[A-Z0-9]{5}', state) else None,
               'snapshotCleanupErrorType': category(getattr(error, 'snapshotCleanupErrorType', None))}
-    for key in ('lockReleaseErrorType', 'connectionCloseErrorType', 'partialCleanupErrorType'):
+    for key in ('lockReleaseErrorType', 'connectionCloseErrorType', 'partialCleanupErrorType',
+                'subprocessCleanupErrorType', 'connectionTerminateErrorType'):
         value = category(getattr(error, key, None))
         if value is not None:
             result[key] = value
@@ -40,7 +42,7 @@ async def preserve_cleanup_failure(cleanup, category):
 
 
 @asynccontextmanager
-async def readonly_snapshot(conn, *, isolation='repeatable_read'):
+async def readonly_snapshot(conn, *, isolation='repeatable_read', rollback_timeout=None):
     # None preserves the existing default isolation of the short activity probe.
     options = {'readonly': True}
     if isolation is not None:
@@ -51,7 +53,10 @@ async def readonly_snapshot(conn, *, isolation='repeatable_read'):
         yield
     except BaseException as original:
         try:
-            await tx.rollback()
+            if rollback_timeout is None:
+                await tx.rollback()
+            else:
+                await asyncio.wait_for(tx.rollback(), rollback_timeout)
         except BaseException as cleanup:
             # Only a safe category: never attach driver text, SQL or credentials.
             original.snapshotCleanupErrorType = type(cleanup).__name__

@@ -1,5 +1,20 @@
 # Hosted source-index preflight and backup rehearsal — October 14, 2026
 
+## Local reliability remediation; hosted retry remains held
+
+The owner authorized local fixes and testing, with a prompt before pushing a new
+draft PR. The CLI now captures canonical migration paths, and the export helper
+has an overall deadline, safe progress, exact connection/child ownership and
+cancellation cleanup. The [local review package](BACKUP_EXPORT_RELIABILITY_REVIEW.md)
+records the changes, validation and remaining hosted acceptance boundaries.
+Final source-frozen local validation passed **724 offline cases and 7 targeted
+PostgreSQL cases**, including graceful busy-query cancellation, idle-session
+cleanup, real encrypted export/restore, and the fresh active-writer guard.
+Local role/database inventories match and the owned test server is stopped.
+The earlier failed broad run remains documented separately; full CI awaits push.
+The October 14 window remains closed; no service/job changes, hosted probes,
+index application or new PR publication are part of this local work.
+
 ## Approved window attempted and closed early; no index application
 
 The owner explicitly approved **October 14, 7:32:32–8:17:32 p.m. EDT**, limited

@@ -1,5 +1,32 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local backup reliability follow-up — October 14, 2026
+
+The standalone export CLI now collects canonical forward-slash migration names,
+including either migration root. Existing authenticated archives are not rewritten;
+the hosted adapter still rejects backslash-labelled or changed-source evidence.
+
+Exports now have a 600-second overall budget (the CLI can shorten it), safe phase
+and heartbeat progress on stderr, a safe export reference matching its ownership
+labels, and cancellation that
+gracefully cancels/closes only the owned connection and kills/reaps the owned PostgreSQL tool before
+partial-file cleanup. Rollback, connection close and child reap each have a
+separate five-second bound. Final
+publication rechecks monotonic elapsed time after synchronous work; a late or held
+export cannot report success. Keys and any unsafe-to-remove partials remain held
+for private inspection. Original SQLSTATE and cleanup categories remain separate.
+
+Validation and limitations are recorded in the
+[local review package](docs/BACKUP_EXPORT_RELIABILITY_REVIEW.md): **724 offline
+cases and 7 targeted PostgreSQL cases pass**, including busy/idle cancellation
+and real encrypted export/restore. The earlier broad database run and its
+resolved failures are recorded separately; a new full CI run is pending push.
+The local database/role inventory is unchanged and the test server stopped. This change is
+local and unpublished pending owner approval to push a draft PR. No new hosted
+connection, writer pause, index application, deployment or migration ran. The old
+maintenance window is closed; another window and exact index-plan approval remain
+separate steps after independent review.
+
 ## Approved window closed early; index remains held — October 14, 2026
 
 The owner approved **7:32:32–8:17:32 p.m. EDT** for temporary API/Toast pauses,
