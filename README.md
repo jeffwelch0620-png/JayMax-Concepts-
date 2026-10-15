@@ -1,5 +1,29 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Approved window closed early; index remains held — October 14, 2026
+
+The owner approved **7:32:32–8:17:32 p.m. EDT** for temporary API/Toast pauses,
+drain verification and fresh backup, with separate approval required before the
+index. The API was suspended, only Toast jobs 3/4 were paused, and the reviewed
+writer guard reached zero sessions/write transactions with complete visibility.
+The fresh encrypted backup and disposable restore passed: **27,431 rows, 120
+relation fingerprints and 13 catalog groups matched**.
+
+Read-only plan qualification then correctly rejected Windows backslash migration
+labels in the operator-generated manifest. The SQL hashes match after canonical
+path projection, but the authenticated archive was not rewritten and the guard
+was not relaxed. A corrected recapture stalled during fingerprinting and was
+cancelled. Its identified abandoned read-only transaction was closed; unrelated
+platform sessions were left alone. **No index or ledger change was attempted.**
+
+The API is Live, health reports its database connected, a signed-in ownership
+read passed, and both Toast jobs are restored to their exact original active
+states. The index remains absent and the ledger at 54 rows. The window was closed
+early at **8:09:20 p.m. EDT**; its active pointer is archived. Protected backups
+and failure evidence are retained. Canonical manifest capture and bounded
+export/cancellation handling need offline validation before another window.
+See the [checkpoint](docs/HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md).
+
 ## Writer inventory and maintenance plan prepared — October 14, 2026
 
 Read-only verification confirms the live Render API at PR30, still using the

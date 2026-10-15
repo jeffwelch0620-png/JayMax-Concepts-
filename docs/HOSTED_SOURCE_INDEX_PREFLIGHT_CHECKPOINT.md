@@ -1,5 +1,80 @@
 # Hosted source-index preflight and backup rehearsal — October 14, 2026
 
+## Approved window attempted and closed early; no index application
+
+The owner explicitly approved **October 14, 7:32:32–8:17:32 p.m. EDT**, limited
+to temporary API/Toast pauses, writer drain and fresh backup; applying the index
+still required a separate prompt. The exact API was suspended in Render, and
+only cron jobs 3 and 4 were set inactive after identity/command-hash verification.
+Fresh connections independently confirmed their paused states. No schedules,
+credentials, permissions or saved connection URLs changed.
+
+The pooled sessions cleared. The reviewed three-role guard passed with zero
+application sessions, zero write transactions and no unobservable sessions.
+Both jobs were inactive, with no queued HTTP requests or running cron entries.
+The protected drain receipt SHA-256 is
+`1eb98a77b898b0c2d6b3fb9316eceb605ec4426d2d723166798eaa48546db45e`.
+A second observation before the corrected recapture also passed.
+
+The first in-window export/restore passed at **7:45:47 p.m. EDT**, using runtime
+source at **c5bfa493e4d1b0b0172ddfe448f5d2fd3bb2a331**:
+
+- Export **314.281 s**, including fingerprint **158.891 s** and dump **142.922 s**.
+- Disposable restore **26.968 s**: **27,431 rows, 120 relation fingerprints and 13
+  catalog groups matched**. This is the new snapshot, not the earlier rehearsal's
+  27,271-row baseline. No cause for the pre-window difference is inferred.
+- Authenticated readback, archive listing, close, partial cleanup and final
+  publication all passed. Access guards, populated-target refusal, source hash
+  checks and local role/database cleanup passed; the owned test server stopped.
+- Encrypted SHA-256:
+  `dc0c927f09592157fade4330e290a66b909b7b17fbe9034dfd0655fea61cf20e`.
+- Inner archive SHA-256:
+  `47ead0d07cf5aad009138bebba923b8dcefceaab6a2e88d84128d5bf3a4fe9a9`.
+- Protected window-backup receipt SHA-256:
+  `6713839e3bd2f28c2fd35e5163f2ff323ed7d0ea188dc745390963e8a2e0297e`.
+
+**Plan qualification held before hosted dry-run SQL.** The Windows operator
+collector used `str(path.relative_to(REPO))`, producing backslash keys, while
+`load_evidence` requires `migrations/<name>`. All 30 reviewed SQL hashes match
+after a canonical path projection, but zero required forward-slash keys exist
+in that authenticated manifest. The same `str(relative_to(...))` pattern exists
+in the standalone CLI and needs a Windows regression test. The archive was not
+modified and the binding guard was not weakened; no valid v2 plan/hash was
+produced, and no index approval was requested on invalid evidence.
+
+The operator collector was corrected to `.as_posix()` for a separate fresh
+recapture; it did not change runtime helpers or the first encrypted archive.
+That attempt stalled during the client fingerprint step. A read-only observer
+saw its transaction idle with its fingerprint cursor, despite no dump process
+running. The cause is unproved. To preserve time for recovery, the attempt was
+cancelled before DDL. Its exact abandoned transaction was closed only after
+matching the role, start-time interval, cursor query against generated queries
+for authenticated manifest relations, and current backend identity. No other
+sessions were terminated. A protected orphan key remains; no raw partial,
+encrypted candidate or final archive exists for this cancelled attempt.
+
+**Recovery verified:** Toast jobs 3 and 4 are active again, with original
+schedules/command hashes preserved. Render reports the API **Live** at the same
+PR30 commit, `/api/health` reports `database: connected`, and a normal signed-in
+ownership read loaded without an error. The index is absent and the ledger still
+contains **54 rows**. Local restore server/process cleanup is complete. The
+window was closed early at **8:09:20 p.m. EDT**; the active control pointer was
+archived so it cannot be reused accidentally. There is no authorized pending
+index apply and no new PR was pushed.
+
+Protected cancellation-cleanup receipt SHA-256:
+`28045945c0a5464dbebb921f31b1dc8d7776fe2924e46d37f95afb8276508dbc`.
+Protected early-close receipt SHA-256:
+`66d92164fc7d07af37459fc23b196b04aaa8ad1357c3f83943ac87e93a1069b3`.
+
+**Next offline work:** canonicalize migration names at the collection boundary
+and test the Windows CLI-to-adapter binding; add and test a bounded overall
+export/window deadline with progress and cancellation cleanup, including owned
+connection identification. Validate those changes before requesting another
+window. A new window still needs a new correctly labelled backup/restore and
+separate exact-plan approval. The passing archive/restore evidence remains
+useful, but it is not an accepted installation plan or managed-service recovery.
+
 ## Writer inventory and maintenance planning checkpoint
 
 The [maintenance plan](HOSTED_SOURCE_INDEX_MAINTENANCE_PLAN.md) records refreshed

@@ -1,5 +1,14 @@
 # Hosted source-index maintenance plan — October 14, 2026
 
+**Execution update:** the owner approved 7:32:32–8:17:32 p.m. EDT. The API/jobs
+were paused, reviewed writers drained, and a fresh encrypted backup/restore
+passed. Plan qualification rejected Windows migration-path labels; a corrected
+recapture stalled and was cancelled. API/jobs were restored and verified, the
+window was closed early at 8:09:20 p.m. EDT, and no index or ledger change was
+attempted. See the [current checkpoint](HOSTED_SOURCE_INDEX_PREFLIGHT_CHECKPOINT.md)
+for evidence and offline prerequisites before a new window. The proposal below
+is retained as historical planning context; it is not an active approval.
+
 Status: **planning only; no writer pause, job change, plan approval or hosted DDL**.
 Proposed duration: **45 minutes**, with actual timezone-aware start/end still
 requiring owner approval. The private planning draft is deliberately not an
