@@ -14,8 +14,11 @@ table names or changes to archived fingerprints and timeout budgets. See the
 validation and the future hosted measurement plan. The source-frozen local run
 passed **741 offline cases and all 79 PostgreSQL cases**, with zero
 failures/errors/skips, unchanged database/role inventory and the local server
-stopped. Full CI for this new follow-up awaits a draft push. Prompt before pushing a new
-draft PR; no new hosted maintenance window or index application is authorized.
+stopped. [PR33 CI at reviewed head 28fad50](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38679036355)
+passed all four checks: 689 frontend tests/build, 741 offline cases and 79
+PostgreSQL cases. Owner approval covers the small documentation/test polish
+and merge after amended-head CI. No new hosted maintenance window or index
+application is authorized.
 
 ## PR31 merged; bounded fingerprint follow-up — October 14, 2026
 

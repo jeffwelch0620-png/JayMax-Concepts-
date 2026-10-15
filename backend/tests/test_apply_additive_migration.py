@@ -520,6 +520,9 @@ class HostedBackupLocalDatabaseTests(unittest.IsolatedAsyncioTestCase):
                         'serverAggregateRelations':1,'cursorFallbackRelations':0,'cursorOnlyRelations':0})
                     self.assertEqual(old['backupDiagnostics']['fingerprintPaths'],{
                         'serverAggregateRelations':0,'cursorFallbackRelations':0,'cursorOnlyRelations':1})
+                    for result,manifest in ((exported,current_manifest),(old,cursor_manifest)):
+                        self.assertEqual(sum(result['backupDiagnostics']['fingerprintPaths'].values()),
+                                         len(manifest['tables']))
                     self.assertNotIn('fingerprintPaths',current_manifest)
                     self.assertNotIn('fingerprintPaths',cursor_manifest)
                     self.assertEqual(current_manifest['rowFingerprintAlgorithm'],cursor_manifest['rowFingerprintAlgorithm'])

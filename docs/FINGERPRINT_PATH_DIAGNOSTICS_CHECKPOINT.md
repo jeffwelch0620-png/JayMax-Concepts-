@@ -28,6 +28,13 @@ backup. Counts are scoped to the current export, contain no relation names, and
 are excluded from manifests and fingerprint equality comparisons. Calls outside
 an export, including ordinary restore verification, have no export counters.
 
+For a completed default current-format export, `cursorOnlyRelations` should
+equal the number of sequence entries (`kind == 'S'`) in the manifest. Zero
+`cursorFallbackRelations` is expected for the previously measured small dataset;
+a future nonzero count means a relation safely reached the size fallback, not
+that its backup is corrupt. Completed path counts sum to the manifest relation
+count, including sequences and the existing partition relation semantics.
+
 The existing diagnostics sanitizer rejects booleans, negative/excessive numbers,
 floats, strings and unknown keys. Old diagnostics without this optional field
 remain readable. No archive version, hash algorithm, SQL behavior, connection,
@@ -53,8 +60,22 @@ export/restore with matching optimized/cursor table and catalog fingerprints.
 Receipt SHA-256:
 `c5b719f8f7ecc306d1f264c466b75d3601a35850e8131beabacfcded0d83b65f`.
 JUnit/logs and frozen source hashes are retained locally. Frontend code and
-migrations are unchanged; frontend tests/build were not rerun locally. New full
-CI awaits an approved draft push; the green PR32 baseline is separate evidence.
+migrations are unchanged; frontend tests/build were not rerun locally.
+[PR33 CI at reviewed head 28fad50](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38679036355)
+passed all four checks: 689 frontend tests across 67 suites and production build,
+741 offline cases, and 79 PostgreSQL cases, with no failures/errors/skips.
+The owner approved the small documentation/test polish and merge. The real-export
+test now also checks that completed counts sum to the manifest relation count
+for both optimized and cursor-selected exports. Amended-head CI must pass before
+merge; the original source-frozen receipt above remains historical evidence.
+
+The amended real encrypted export/restore case passed locally with its new
+total-count assertions: **1 targeted PostgreSQL case**, zero failures/errors/skips,
+source hashes unchanged, database/role inventories unchanged and local server
+stopped. No hosted connection was used. Receipt SHA-256:
+`aa4010f40d2587c38ce8697ff6d96b78dc6cc41e86934a3dadc860953f48706c`.
+The full selection is checked by amended-head CI rather than repeating the
+41-minute Windows suite for this test-only and documentation amendment.
 
 ## Next hosted rehearsal remains separate
 

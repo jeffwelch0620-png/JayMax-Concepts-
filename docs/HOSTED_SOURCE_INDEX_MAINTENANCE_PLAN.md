@@ -15,6 +15,14 @@ counts and effective client/server limits. Compare with the earlier 158.9/181.0 
 observations only with their differing source and environment limits recorded;
 local equivalence tests do not establish a speed improvement or the earlier cause.
 
+For a completed default current-format export, expect `cursorOnlyRelations`
+to equal the manifest's sequence count and all three completed counts to sum
+to the manifest relation count. Zero fallbacks is expected for the previously
+measured small dataset, not a permanent size invariant or a validity gate.
+A nonzero fallback count identifies a safe full-cursor path to investigate for
+timing, not corruption. Legacy or explicitly cursor-selected exports have
+different expected cursor-only counts.
+
 PR31 merged at **cb63129** after owner approval, with exact-head and merged-main
 CI green. The old window remains closed. The
 [bounded fingerprint follow-up](BOUNDED_FINGERPRINT_CHECKPOINT.md) is PR32, with
