@@ -1,5 +1,17 @@
 # Hosted source-index preflight and backup rehearsal — October 14, 2026
 
+## PR31 merged; local review follow-ups
+
+PR31 merged with owner approval at **cb63129**; exact-head CI and merged-main CI
+passed. Full head CI includes 689 frontend tests/build, 724 offline cases and
+78 PostgreSQL cases. The [next checkpoint](BOUNDED_FINGERPRINT_CHECKPOINT.md)
+records bounded server aggregation, backward-compatibility checks, the named
+pre-operations credential gate, and the private retained-artifact inventory.
+PR32's reviewed-head CI passed 689 frontend tests/build, 728 offline cases and
+79 PostgreSQL cases. Owner approval covers documentation refresh and merge
+after current-head CI. No new maintenance
+window, hosted index application or connection cutover is authorized.
+
 ## Local reliability remediation; hosted retry remains held
 
 The owner authorized local fixes and testing, with a prompt before pushing a new

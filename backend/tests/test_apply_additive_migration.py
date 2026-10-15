@@ -456,6 +456,7 @@ class HostedBackupLocalDatabaseTests(unittest.IsolatedAsyncioTestCase):
         restore=dump.with_name('pg_restore'+dump.suffix)
         real_connect=asyncpg.connect
         real_tool=backup.tool
+        real_fingerprint=backup.fingerprint
         controller=await real_connect(control,ssl=False)
         created=[]
         project='abcdefghijklmnopqrst'
@@ -506,10 +507,21 @@ class HostedBackupLocalDatabaseTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(exported['status'],'exported_not_restore_verified')
                     self.assertIn('statement_timeout',exported['backupDiagnostics']['serverLimits'])
                     self.assertTrue(all(phase['outcome']=='passed' for phase in exported['backupDiagnostics']['phases']))
-                    verified=await backup.verify_restore(restore_dsn,exported['encryptedBackup'],
-                        exported['privateKey'],project,restore,root/'restore')
+                    # A real cursor-generated archive must restore through the
+                    # optimized reader without changing the algorithm/version.
+                    async def cursor_fingerprint(connection):
+                        return await real_fingerprint(connection,server_aggregation=False)
+                    with patch.object(backup,'fingerprint',side_effect=cursor_fingerprint):
+                        old=await backup.export_backup(fictional_url,project,dump,restore,
+                            root/'cursor-archive',root/'cursor-key',{})
+                    current_manifest,_=backup.open_backup(exported['encryptedBackup'],exported['privateKey'],project)
+                    cursor_manifest,_=backup.open_backup(old['encryptedBackup'],old['privateKey'],project)
+                    self.assertEqual(current_manifest['rowFingerprintAlgorithm'],cursor_manifest['rowFingerprintAlgorithm'])
+                    for field in ('tables','catalog'):self.assertEqual(current_manifest[field],cursor_manifest[field])
+                    verified=await backup.verify_restore(restore_dsn,old['encryptedBackup'],
+                        old['privateKey'],project,restore,root/'restore')
                     self.assertEqual(verified['status'],'verified_application_restore')
-                    self.assertEqual(verified['archiveSha256'],exported['archiveSha256'])
+                    self.assertEqual(verified['archiveSha256'],old['archiveSha256'])
                     self.assertEqual(verified['rowsMatched'],2)
                     self.assertFalse(verified['operationalReleaseApproved'])
                     fail_close=True

@@ -1,5 +1,42 @@
 # Hosted source-index maintenance plan — October 14, 2026
 
+## Current follow-up and pre-operations gate
+
+PR31 merged at **cb63129** after owner approval, with exact-head and merged-main
+CI green. The old window remains closed. The
+[bounded fingerprint follow-up](BOUNDED_FINGERPRINT_CHECKPOINT.md) is PR32, with
+full reviewed-head CI green and owner approval to merge after documentation
+refresh and current-head CI. No private operator runner with historical
+commit pins is an approved execution path for a new window.
+
+**OPEN — restricted deployed runtime credentials before operational use.** The
+recorded live API owner connection is not protected by the inventory/account
+role separation tested locally. Retain the current build configuration while
+the owner coordinates with coworkers. A separate approved deployment workflow
+must select the connection/pooler capacity, stage the two restricted connections
+privately, update the actual deployed inventory/account pools, run positive and
+negative permission/workflow smoke tests, and retain a verified configuration
+rollback. Application permission checks and integrity constraints still apply;
+this gate concerns the missing database-level restriction on the owner pool.
+No connection cutover, role/grant change or paid add-on is approved by this note.
+
+**Future hosted cancellation acceptance:** record the export reference from its
+safe progress/result and verify the exact `jaymax-backup-<reference>` and
+`jaymax-backup-<reference>-tool` sessions are absent after cancellation. Combine
+this with the full writer/activity visibility guard; a pooled/reset label alone
+cannot establish drain. If a session remains or visibility is insufficient,
+hold and investigate ownership, backend start/identity and downstream activity.
+Do not terminate by role or broad application-name prefix. This is a future
+read-only acceptance step inside a newly approved rehearsal, not proof supplied
+by local direct-PostgreSQL cancellation tests.
+
+Retained backup/key artifacts now have an ACL-verified private metadata inventory,
+including the known cancelled recapture key. No key contents or business rows
+were read, and nothing was deleted. Counts, inventory hash and review limits are
+in the [follow-up checkpoint](BOUNDED_FINGERPRINT_CHECKPOINT.md). Any later cleanup
+must resolve provenance/retention deliberately; key-only presence is not proof
+that a key is safe to discard.
+
 **Local follow-up:** see the
 [backup reliability review](BACKUP_EXPORT_RELIABILITY_REVIEW.md). A future fresh
 export must use canonical migration names and an explicit budget that leaves

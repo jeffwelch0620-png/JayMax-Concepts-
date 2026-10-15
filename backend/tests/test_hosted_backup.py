@@ -158,7 +158,9 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             started=time.monotonic()
             with patch.object(backup,'PROGRESS_INTERVAL_SECONDS',0.01):
                 with self.assertRaisesRegex(backup.BackupError,'deadline exceeded') as caught:
-                    await self.export(root,conn,fingerprint_action=stalled,timeout_seconds=0.06,progress=events.append)
+                    # Allow multiple Windows timer ticks under load before
+                    # requiring a heartbeat; this is only the test budget.
+                    await self.export(root,conn,fingerprint_action=stalled,timeout_seconds=0.5,progress=events.append)
             self.assertLess(time.monotonic()-started,2)
             self.assertTrue(caught.exception.backupDiagnostics['deadlineExceeded'])
             self.assertTrue(caught.exception.backupDiagnostics['ownedConnectionClosed'])

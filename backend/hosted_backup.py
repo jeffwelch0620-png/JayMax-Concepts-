@@ -44,6 +44,11 @@ SCHEMAS = ('public', 'purchasing', 'actual_inventory', 'prep_inventory', 'integr
 MANAGED = {'auth', 'cron', 'extensions', 'graphql', 'graphql_public', 'net', 'realtime', 'storage', 'vault'}
 FORMAT = 'jaymax-encrypted-application-backup-v1'
 ROW_ALGORITHM = 'sha256-sorted-sha256-canonical-jsonb-utf8-v1'
+# Each modern row contributes 64 ASCII hex bytes plus one LF. Bound the
+# aggregation input, including the sentinel row used to select cursor fallback.
+# This is not a bound on all PostgreSQL sorting/JSON workspace memory.
+MAX_FINGERPRINT_AGGREGATE_BYTES = 8 * 1024 * 1024
+ROW_HASH_LINE_BYTES = 65
 MAX_ARCHIVE = 64 * 1024 * 1024  # Bounded build tool; larger backups need streaming encryption.
 MAX_ENVELOPE = 3 * MAX_ARCHIVE
 FLAGS = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -360,7 +365,34 @@ async def tool(executable, args, settings=None, remote=False):
     return stdout
 
 
-async def fingerprint(conn, row_hashes=True):
+async def relation_fingerprint(conn, quoted, kind, row_hashes=True, *, server_aggregation=True):
+    if kind != 'S' and row_hashes and server_aggregation:
+        probe_rows = MAX_FINGERPRINT_AGGREGATE_BYTES // ROW_HASH_LINE_BYTES
+        if probe_rows < 1:
+            raise BackupError('Fingerprint aggregate bound must allow a row')
+        # LIMIT bounds the aggregate even when this table is far larger than the
+        # limit. A full probe is inconclusive and must stream the entire relation
+        # in the same caller-owned snapshot. No estimates or error fallback.
+        fact = await conn.fetchrow(f"""SELECT count(*) AS rows,
+            encode(sha256(convert_to(coalesce(string_agg(value || E'\\n', ''
+                ORDER BY value COLLATE "C"), ''), 'UTF8')), 'hex') AS sha256
+            FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value
+                FROM {quoted} t LIMIT $1::bigint) hashed""", probe_rows)
+        if fact['rows'] < probe_rows:
+            return {'rows': fact['rows'], 'sha256': fact['sha256']}
+    # Sequences and pre-row-hash archives retain their existing byte/order rules.
+    sql = (f"SELECT jsonb_build_object('last_value',last_value,'is_called',is_called)::text AS value FROM {quoted}"
+           if kind == 'S' else
+           (f"SELECT value FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value FROM {quoted} t) hashed ORDER BY value COLLATE \"C\"" if row_hashes
+            else f'SELECT to_jsonb(t)::text AS value FROM {quoted} t ORDER BY to_jsonb(t)::text'))
+    count = 0
+    sha = hashlib.sha256()
+    async for row in conn.cursor(sql, prefetch=100):
+        sha.update(row['value'].encode()); sha.update(b'\n'); count += 1
+    return {'rows': count, 'sha256': sha.hexdigest()}
+
+
+async def fingerprint(conn, row_hashes=True, *, server_aggregation=True):
     # Deparser output is session-sensitive (pg_dump uses quote_all_identifiers).
     # Normalize within the caller's snapshot, without changing role/app defaults.
     await conn.execute("SET LOCAL quote_all_identifiers=off; SET LOCAL TIME ZONE 'UTC'; SET LOCAL search_path=pg_catalog; SET LOCAL DateStyle='ISO,YMD'; SET LOCAL IntervalStyle=postgres; SET LOCAL bytea_output=hex; SET LOCAL extra_float_digits=3; SET LOCAL standard_conforming_strings=on; SET LOCAL row_security=off")
@@ -388,20 +420,14 @@ async def fingerprint(conn, row_hashes=True):
     for relation in relations:
         name = relation['nspname'] + '.' + relation['relname']
         quoted = native.quoted(relation['nspname']) + '.' + native.quoted(relation['relname'])
-        sql = (f"SELECT jsonb_build_object('last_value',last_value,'is_called',is_called)::text AS value FROM {quoted}"
-               if relation['kind'] == 'S' else
-               (f"SELECT value FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value FROM {quoted} t) hashed ORDER BY value COLLATE \"C\"" if row_hashes
-                else f'SELECT to_jsonb(t)::text AS value FROM {quoted} t ORDER BY to_jsonb(t)::text'))
-        count = 0
-        sha = hashlib.sha256()
         try:
-            async for row in conn.cursor(sql, prefetch=100):
-                sha.update(row['value'].encode()); sha.update(b'\n'); count += 1
+            fact = await relation_fingerprint(conn, quoted, relation['kind'], row_hashes,
+                                              server_aggregation=server_aggregation)
         except TimeoutError as exc:
             error = BackupError('Table fingerprint query timed out')
             error.failureObject = name
             raise error from exc
-        tables[name] = {'rows': count, 'sha256': sha.hexdigest(), 'kind': relation['kind']}
+        tables[name] = {**fact, 'kind': relation['kind']}
     return {'tables': tables, 'catalog': catalog}
 
 
