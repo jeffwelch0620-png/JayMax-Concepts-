@@ -1,5 +1,17 @@
 # Fingerprint path diagnostics follow-up
 
+## Merge and owner hold — October 15, 2026
+
+PR33 merged at **16e21c51cb9a1a60c59a5c2ec54765ecc5509692** from amended
+head **f65b552f5e5b95f4dcd22ef1a8338f04367d7f3f**. All four jobs passed in
+[amended-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38679694060)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38680039543),
+rechecked read-only on October 15. Prior coverage: 689 frontend tests/build,
+741 offline cases and 79 PostgreSQL cases. No new runtime test is claimed here.
+Hosted tests remain on owner hold; the old window is closed. See
+[current workflow reconciliation](WORKFLOW_RECONCILIATION_20261015.md).
+The original local/review-stage entries below are historical.
+
 ## Accepted baseline
 
 PR32 merged with owner approval at **7b616204852217ca31c5ce352bdc67043899902a**.

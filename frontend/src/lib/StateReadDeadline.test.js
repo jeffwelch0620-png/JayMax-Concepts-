@@ -112,3 +112,22 @@ test("late saved-purchase completion after timeout cannot replace the failed res
   expect(failed).toHaveBeenCalledWith(new Error(api.PURCHASE_STATUS_TIMEOUT_MESSAGE));
   expect(jest.getTimerCount()).toBe(0);
 });
+
+test("correction status observes the exact body/key with a bounded read and never calls correct", async () => {
+  const body = { reason: "TEST ONLY", expected_plan_hash: "a".repeat(64) };
+  axios.post.mockResolvedValue({ data: { outcome: "held" } });
+  await expect(api.checkCorrectionSavedStatus("berts", "fictional-version", body, "fictional-key")).resolves.toEqual({ outcome: "held" });
+  expect(axios.post).toHaveBeenCalledWith(expect.stringContaining("/documents/fictional-version/correction-status"), body,
+    { signal: expect.any(AbortSignal), headers: { "Idempotency-Key": "fictional-key" } });
+  expect(axios.post.mock.calls).toHaveLength(1); expect(jest.getTimerCount()).toBe(0);
+});
+
+test("late correction status after timeout cannot authorize retry", async () => {
+  const pending = deferred(), completed = jest.fn(), failed = jest.fn(); axios.post.mockReturnValue(pending.promise);
+  const result = api.checkCorrectionSavedStatus("berts", "fictional-version", {}, "fictional-key").then(completed, failed);
+  jest.advanceTimersByTime(timeout); await flush(); await result;
+  pending.resolve({ data: { outcome: "retry_available" } }); await flush();
+  expect(completed).not.toHaveBeenCalled(); expect(failed).toHaveBeenCalledTimes(1);
+  expect(failed.mock.calls[0][0].message).toContain("original correction is retained");
+  expect(axios.post.mock.calls[0][2].signal.aborted).toBe(true); expect(axios.post).toHaveBeenCalledTimes(1);
+});

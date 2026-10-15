@@ -1,5 +1,23 @@
 # Hosted source-index maintenance plan — October 14, 2026
 
+## Owner hold and updated writer scope — October 15, 2026
+
+**Do not execute this historical plan while hosted testing is held.** PR33 is
+merged with amended-head and merged-main CI passing. No current maintenance
+window exists. The owner confirms Companion writes locally and has not migrated
+to Supabase; treat it as a future integration, and recheck before any new window.
+The known producer list remains the API and two Toast jobs, with other direct
+clients/manual activity still requiring completeness confirmation. Empty Render
+or Sites configuration lists are not proof of a complete database writer drain.
+
+Frontend-only removal of unnecessary backend variables was separately approved
+and saved without deployment; it did not change the API, jobs or database
+credential. Rotation is deferred. See [current workflow reconciliation](WORKFLOW_RECONCILIATION_20261015.md)
+for evidence boundaries and the local backlog. This paragraph supersedes the
+older Companion uncertainty below; it does not authorize a new window, index
+plan, hosted test or connection/role cutover. Rebuild dates and provider-status
+checks when a future window is actually proposed.
+
 ## Current follow-up and pre-operations gate
 
 PR32 merged with owner approval at **7b61620**, refreshed documentation head

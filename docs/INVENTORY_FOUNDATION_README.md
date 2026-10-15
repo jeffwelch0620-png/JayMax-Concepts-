@@ -1,5 +1,12 @@
 # Inventory foundation: completed work and remaining workflow
 
+> Historical foundation checkpoint. Use the
+> [October 15 workflow reconciliation](WORKFLOW_RECONCILIATION_20261015.md) for
+> current merge, acceptance and remaining-work scope. Staff prep counts,
+> assignments/production, measured containers and dependency review were added
+> after this checkpoint. Original totals and `INVENTORY_REVIEW_STATUS.json`
+> remain dated evidence, not current release or hosted-acceptance totals.
+
 October 6, 2026. Cumulative draft PR checkpoint against `main` at
 `1a5e97243009a922d38596d6559c6d9be7f6b5f3`.
 

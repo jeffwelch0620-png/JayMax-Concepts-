@@ -1,5 +1,55 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR34 submitted-correction recovery — October 15, 2026
+
+The owner-approved local follow-up retains a submitted invoice correction's
+exact request before sending. A fresh read-only saved-status check distinguishes
+own saved/replaced, retryable, competing and held outcomes; retries remain
+explicit and retain the original body/key. See
+[submitted correction recovery](docs/SUBMITTED_CORRECTION_RECOVERY.md) for the
+contract, validation and limits. [Draft PR34](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/34)
+is under independent review. Original-head CI passed all four jobs; amended-head
+CI is a separate gate before owner merge approval. Hosted testing remains held.
+
+The owner-approved review amendment adds confirmed local discard with fresh
+status reads both before and at confirmation. Saved outcomes refuse discard;
+the reason and before/after comparison remain visible. Discard clears only the
+matching tab record, never cancels an original command or overrides source/period
+holds, and requires reopening the current invoice for a fresh review. The API
+command/status routes now share actor/version/batch/fingerprint replay checks
+and invoice/location-scoped detail reads with a generic foreign-key conflict.
+
+Amendment validation passes **756 frontend tests in 69 suites**, the strict
+production build, **741 offline cases**, and **49 PostgreSQL tests plus two race
+subtests**. Local database/role inventories are unchanged and the owned server
+is stopped. The linked checkpoint records the evidence. No migration, hosted test,
+deployment, connection change or credential rotation accompanies this work;
+these results do not claim live transport or full hosted acceptance.
+
+## Current workflow — October 15, 2026
+
+[PR33](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/33) merged at
+**16e21c5** from amended head **f65b552**.
+[Amended-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38679694060)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38680039543)
+both passed all four checks. Recorded coverage is 689 frontend tests/build,
+741 offline cases and 79 disposable PostgreSQL cases; these are prior CI results.
+
+**Hosted testing remains on owner hold; the old maintenance window is closed.**
+The owner confirms Companion is local-only and has not migrated to Supabase.
+The separately approved static-frontend cleanup removed eight backend-only
+variables, retained `CI` and all `REACT_APP_*` settings, and used Save only with
+reload verification. No deployment, API/Toast setting change or credential
+rotation accompanied that cleanup. Rotation is explicitly deferred.
+
+Use [the current workflow reconciliation](docs/WORKFLOW_RECONCILIATION_20261015.md)
+for the writer-review limits and historical original-finding scope matrix.
+Submitted invoice-correction recovery and its review amendments are now
+owner-approved work in draft PR34. New PRs and merging retain their separate
+approval steps.
+Older entries below preserve their original evidence and next-step wording;
+they do not override the current hold or make completed work pending again.
+
 ## PR32 merged; fingerprint path diagnostics follow-up
 
 [PR32](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/32) merged with

@@ -31,8 +31,8 @@ beforeEach(() => {
 const postedDoc = { ...doc, status: "posted", correctionAvailable: true, sourceErrors: [],
   currentMappings: [{ line_id: "line-1", classification: "food", movement_kind: "receipt", item_code: "food", base_unit: "lb",
     received_quantity: "2", received_unit: "case", base_units_per_received_unit: "20", inventory_record_date: "2026-10-04", decision_note: "Synthetic confirmed mapping" }] };
-const correctionPlan = { planHash: "reviewed-plan", status: "ready", initialBatchId: "batch-1", previousCorrectionId: null,
-  review: { reason: "Verified delivered quantities", confirmed_currency: "USD", received_date: "2026-10-04", lines: [] },
+const correctionPlan = { planHash: "1".repeat(64), status: "ready", initialBatchId: "batch-1", previousCorrectionId: null,
+  review: { reason: "Verified delivered quantities", confirmed_currency: "USD", received_date: "2026-10-04", lines: [{ line_id: "line-1", classification: "food", movement_kind: "receipt", item_code: "food", base_unit: "lb", received_quantity: "3", received_unit: "case", base_units_per_received_unit: "20", movement_date: null, original_line_id: null, verified: true, note: "Counted and converted delivered quantity" }] },
   before: [{ line_id: "line-1", item_code: "food", base_quantity: "40", inventory_cost_amount: "40", inventory_record_date: "2026-10-04" }],
   after: [{ line_id: "line-1", item_code: "food", base_quantity: "60", inventory_cost_amount: "40", inventory_record_date: "2026-10-04" }],
   blocks: [], affectedPeriods: [], legacyClosedPeriods: [], linkedDocuments: [],
@@ -85,7 +85,7 @@ test("a failed correction freezes the review and retries its exact body and key"
   expect(container.textContent).toContain("Connection lost"); expect(button("Revise / refresh correction")).toBeUndefined();
   expect(container.querySelector('[aria-label="Correction reason"]').disabled).toBe(true);
   await click(button("Retry same invoice correction")); expect(correct.mock.calls[1]).toEqual(correct.mock.calls[0]);
-  expect(correct.mock.calls[0][1].expected_plan_hash).toBe("reviewed-plan");
+  expect(correct.mock.calls[0][1].expected_plan_hash).toBe(correctionPlan.planHash);
 });
 
 test("a failed or incomplete read-only preview can be edited and retried", async () => {
