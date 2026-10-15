@@ -134,6 +134,71 @@ class PostedInvoiceCorrectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.recovery_status(doc, plan, key)).json()['outcome'], 'held')
         self.assertEqual(await self.correction_snapshot(), before)
 
+    async def test_submitted_correction_replay_requires_same_actor_version_and_body(self):
+        import purchase_corrections
+        from fastapi import HTTPException
+        doc, _ = await self.initial(); plan = (await self.plan(doc, received_quantity='3')).json(); key = str(uuid4())
+        saved = await self.correct(doc, plan, key); self.assertEqual(saved.status_code, 200, saved.text)
+        body = purchase_corrections.ConfirmCorrection(**self.correction_body(plan))
+        before = await self.correction_snapshot()
+        with self.assertRaises(HTTPException) as rejected:
+            await purchase_corrections.commit_correction(self.pool, 'berts', 'different-manager', UUID(doc['id']), body, key)
+        self.assertEqual(rejected.exception.status_code, 409)
+        changed = await self.correct(doc, plan, key, reason='Different submitted reason')
+        self.assertEqual(changed.status_code, 409)
+        wrong_batch = await self.correct(doc, plan, key, expected_initial_batch_id=str(uuid4()))
+        self.assertEqual(wrong_batch.status_code, 409)
+        replay = await self.correct(doc, plan, key)
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertEqual(replay.json()['correctionId'], saved.json()['correctionId'])
+        self.assertEqual(await self.correction_snapshot(), before)
+        # An identical body/key against another version of this same invoice
+        # must not return the first version's acknowledgement as a replay.
+        file, *_ = await self.capture(number=doc['header']['document_number'], amounts=('50.00',))
+        newer = file['documents'][0]; before = await self.correction_snapshot()
+        for endpoint in ('correct', 'correction-status'):
+            result = await self.client.post(f"/api/pg/purchases/berts/documents/{newer['id']}/{endpoint}",
+                json=self.correction_body(plan), headers={'Idempotency-Key': key})
+            self.assertEqual(result.status_code, 409, result.text)
+        self.assertEqual(await self.correction_snapshot(), before)
+
+    async def test_submitted_correction_foreign_invoice_key_is_refused_without_returning_foreign_details(self):
+        doc, _ = await self.initial(); plan = (await self.plan(doc, received_quantity='3')).json(); key = str(uuid4())
+        self.assertEqual((await self.correct(doc, plan, key)).status_code, 200)
+        other, _ = await self.initial(number='TEST ONLY separate correction invoice')
+        other_plan = (await self.plan(other, received_quantity='4')).json(); before = await self.correction_snapshot()
+        for endpoint in ('correct', 'correction-status'):
+            result = await self.client.post(f"/api/pg/purchases/berts/documents/{other['id']}/{endpoint}",
+                json=self.correction_body(other_plan), headers={'Idempotency-Key': key})
+            self.assertEqual(result.status_code, 409, result.text)
+            self.assertEqual(result.json(), {'detail': 'Retry key belongs to a different correction review or user'})
+        self.assertEqual(await self.correction_snapshot(), before)
+
+    async def test_submitted_correction_discard_race_only_first_stale_predecessor_command_applies(self):
+        # Discard is local only. Model both possible database arrival orders
+        # after two negative reads and a fresh preview using a new key.
+        for original_first in (True, False):
+            with self.subTest(original_first=original_first):
+                doc, _ = await self.initial(number='TEST ONLY discard order '+str(original_first))
+                original = (await self.plan(doc, received_quantity='3')).json(); old_key = str(uuid4())
+                for _ in range(2):
+                    self.assertEqual((await self.recovery_status(doc, original, old_key)).json()['outcome'], 'retry_available')
+                fresh = (await self.plan(doc, received_quantity='4')).json(); new_key = str(uuid4())
+                first, second = ((original, old_key), (fresh, new_key)) if original_first else ((fresh, new_key), (original, old_key))
+                winner = await self.correct(doc, *first); self.assertEqual(winner.status_code, 200, winner.text)
+                before = await self.correction_snapshot()
+                loser = await self.correct(doc, *second); self.assertEqual(loser.status_code, 409, loser.text)
+                replay = await self.correct(doc, *first); self.assertEqual(replay.status_code, 200, replay.text)
+                self.assertEqual(replay.json()['correctionId'], winner.json()['correctionId'])
+                self.assertEqual((await self.recovery_status(doc, original, old_key)).json()['outcome'],
+                                 'saved' if original_first else 'other_request')
+                self.assertEqual(await self.correction_snapshot(), before)
+                # A genuinely new preview after the winning commit can advance
+                # the chain. Discard does not promise permanent cancellation.
+                latest = (await self.plan(doc, received_quantity='5')).json()
+                self.assertEqual(latest['previousCorrectionId'], winner.json()['correctionId'])
+                followup = await self.correct(doc, latest); self.assertEqual(followup.status_code, 200, followup.text)
+
     async def assert_original_request_survives_correction(self, reissued):
         file,*_=await self.capture(number='TEST-RECOVERY-CORRECTION')
         original=file['documents'][0];body=self.body(original);key=str(uuid4())

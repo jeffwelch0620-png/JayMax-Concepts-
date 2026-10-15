@@ -1,19 +1,30 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local submitted-correction recovery — October 15, 2026
+## PR34 submitted-correction recovery — October 15, 2026
 
 The owner-approved local follow-up retains a submitted invoice correction's
 exact request before sending. A fresh read-only saved-status check distinguishes
 own saved/replaced, retryable, competing and held outcomes; retries remain
 explicit and retain the original body/key. See
 [submitted correction recovery](docs/SUBMITTED_CORRECTION_RECOVERY.md) for the
-contract, validation and limits. No migration, hosted test, deployment, credential
-rotation or PR push accompanies this local work. Hosted testing remains held.
-Local validation passes **741 frontend tests in 69 suites**, the strict production
-build, **741 offline cases** and **46 purchase/correction backend cases**, including
-the new read-only status and exact replay checks. Local role/database inventories
-are unchanged and the owned PostgreSQL server is stopped. CI awaits an approved
-draft push; these results do not claim live transport or full hosted acceptance.
+contract, validation and limits. [Draft PR34](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/34)
+is under independent review. Original-head CI passed all four jobs; amended-head
+CI is a separate gate before owner merge approval. Hosted testing remains held.
+
+The owner-approved review amendment adds confirmed local discard with fresh
+status reads both before and at confirmation. Saved outcomes refuse discard;
+the reason and before/after comparison remain visible. Discard clears only the
+matching tab record, never cancels an original command or overrides source/period
+holds, and requires reopening the current invoice for a fresh review. The API
+command/status routes now share actor/version/batch/fingerprint replay checks
+and invoice/location-scoped detail reads with a generic foreign-key conflict.
+
+Amendment validation passes **756 frontend tests in 69 suites**, the strict
+production build, **741 offline cases**, and **49 PostgreSQL tests plus two race
+subtests**. Local database/role inventories are unchanged and the owned server
+is stopped. The linked checkpoint records the evidence. No migration, hosted test,
+deployment, connection change or credential rotation accompanies this work;
+these results do not claim live transport or full hosted acceptance.
 
 ## Current workflow — October 15, 2026
 
@@ -32,9 +43,10 @@ reload verification. No deployment, API/Toast setting change or credential
 rotation accompanied that cleanup. Rotation is explicitly deferred.
 
 Use [the current workflow reconciliation](docs/WORKFLOW_RECONCILIATION_20261015.md)
-for the writer-review limits, original-finding scope matrix and proposed next
-local slice: submitted invoice-correction recovery across reload/sign-in.
-Implementation and a new draft PR require their respective owner approvals.
+for the writer-review limits and historical original-finding scope matrix.
+Submitted invoice-correction recovery and its review amendments are now
+owner-approved work in draft PR34. New PRs and merging retain their separate
+approval steps.
 Older entries below preserve their original evidence and next-step wording;
 they do not override the current hold or make completed work pending again.
 

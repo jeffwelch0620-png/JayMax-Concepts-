@@ -10,6 +10,13 @@ The matrix and proposal below preserve the reconciliation-time assessment;
 use that linked checkpoint for this slice's implementation and test status.
 Hosted testing remains held.
 
+Published as [draft PR34](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/34).
+Its original head `4ad1a9b` passed all four CI jobs. The owner subsequently
+approved the independent review's confirmed-discard, API replay-ownership and
+scoped key-lookup amendments. Use the linked implementation checkpoint for their
+current validation. The historical proposal below is not a new approval gate;
+merging and hosted execution remain separate approvals.
+
 ## Current decision and evidence boundaries
 
 **Hosted testing remains on owner hold.** No current maintenance window exists.

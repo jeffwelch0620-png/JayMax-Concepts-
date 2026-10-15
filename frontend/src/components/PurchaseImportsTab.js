@@ -14,6 +14,16 @@ const errorText = e => {
 };
 const empty = value => value === "" || value == null ? null : value;
 
+function RetainedCorrectionEvidence({ record: r }) {
+  return <>
+    <h4>{r.documentNumber || r.versionId}</h4><p>Reason: {r.body.reason}</p>
+    <p>Received date: {r.body.received_date || "Not stated"} · Previous correction: {r.body.expected_correction_id || "Initial invoice"}</p>
+    {r.body.lines.map(l => <p key={l.line_id}>Retained line {l.line_id}: {l.item_code || l.classification} · {l.received_quantity ?? "No quantity"} {l.received_unit} · conversion {l.base_units_per_received_unit ?? "Not applicable"} · {l.note}</p>)}
+    {["before", "after"].map(side => <div key={side}><p>{side === "before" ? "Original entries to reverse" : "Reviewed replacement entries"}</p>{r.comparison[side].map((l, i) => <p key={`${l.line_id}:${i}`}>{l.item_code || l.classification} · {l.base_quantity} {l.base_unit} · food amount {l.inventory_cost_amount} · {l.inventory_record_date}</p>)}</div>)}
+    <p>Separate fees: {r.comparison.feesBefore ?? "Not stated"} → {r.comparison.feesAfter ?? "Not stated"} · Separate tax: {r.comparison.taxBefore ?? "Not stated"} → {r.comparison.taxAfter ?? "Not stated"}</p>
+  </>;
+}
+
 export function PurchaseDocumentReview({ document, items, history, onPost, onCheckSaved, onInspectSaved, busy, correctionMode = false }) {
   const mappings = correctionMode ? document.currentMappings || [] : [];
   const retained = !correctionMode ? document.pendingRequest : null;
@@ -198,6 +208,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
   const correctionJournal = useMemo(() => pendingCorrectionJournal(actorId, restaurantId), [actorId, restaurantId]);
   const [pendingCorrections, setPendingCorrections] = useState([]), [correctionChecks, setCorrectionChecks] = useState({});
   const [correctionRecoveryUnavailable, setCorrectionRecoveryUnavailable] = useState(false);
+  const [correctionDiscard, setCorrectionDiscard] = useState(null);
   const [pendingPurchases, setPendingPurchases] = useState([]), [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
   const [discardReview, setDiscardReview] = useState(null);
   function refreshCorrections() {
@@ -241,6 +252,41 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
       await sendCorrection(current);
     });
   }
+  async function correctionDiscardStatus(record) {
+    const current = currentCorrection(record);
+    setCorrectionChecks(s => ({ ...s, [current.key]: null }));
+    const result = await api.checkCorrectionSavedStatus(restaurantId, current.versionId, current.body, current.key);
+    if (!scope.active) return null;
+    currentCorrection(current);
+    const outcome = correctionRecoveryOutcome(result, current, actorId);
+    // Preparing/confirming discard never grants retry permission from this read.
+    if (["saved", "saved_replaced"].includes(outcome.outcome)) {
+      throw new Error("Your original correction was saved. It was not discarded. Use Check saved correction status to inspect and resolve it.");
+    }
+    return { record: current, outcome };
+  }
+  async function prepareCorrectionDiscard(record) {
+    setCorrectionDiscard(null);
+    await action(async () => {
+      const choice = await correctionDiscardStatus(record);
+      if (choice) setCorrectionDiscard(choice);
+    });
+  }
+  async function confirmCorrectionDiscard() {
+    const choice = correctionDiscard;
+    if (!choice || !scope.active) return;
+    setCorrectionDiscard(null);
+    await action(async () => {
+      // The earlier read only opened the dialog. Check again at confirmation:
+      // the original request may have committed while the dialog was open.
+      const checked = await correctionDiscardStatus(choice.record);
+      if (!checked) return;
+      currentCorrection(checked.record);
+      clearCorrection(checked.record);
+      setSelected(null); setPreviewEpoch(n => n + 1); setSourceRows(null);
+      setMessage("Retained correction discarded from this tab only. Reopen the current invoice and preview again. No source, purchase or accounting history was deleted. Discard does not cancel the original request; it may still complete. Source and period holds still apply.");
+    });
+  }
   function refreshPending() {
     try { const records = journal.list(); if (scope.active) { setPendingPurchases(records); setRecoveryUnavailable(false); } return records; }
     catch (e) { if (scope.active) { setRecoveryUnavailable(true); setError(errorText(e)); } throw e; }
@@ -268,7 +314,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
     scope.active = true;
     setSelected(null); setPendingPurchases([]); setDiscardReview(null); setReady(false); setError(""); setMessage("");
     setBusy(false); setFiles([]); setItems([]); setHistory([]); setSourceRows(null); upload.current = null;
-    setPendingCorrections([]); setCorrectionChecks({});
+    setPendingCorrections([]); setCorrectionChecks({}); setCorrectionDiscard(null);
     try { setPendingCorrections(correctionJournal.list()); setCorrectionRecoveryUnavailable(false); }
     catch (e) { setCorrectionRecoveryUnavailable(true); setError(errorText(e)); }
     try { setPendingPurchases(journal.list()); setRecoveryUnavailable(false); }
@@ -544,16 +590,21 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
         <h3>Submitted invoice corrections retained in this tab</h3>
         <p>These frozen requests survive reload and sign-in by the same user in this tab. Check saved status before explicitly retrying. Nothing is sent automatically. New-tab or browser-restart recovery is not guaranteed.</p>
         {pendingCorrections.map(r => <div key={r.key} className="space-y-2 border border-slate-700 p-3">
-          <h4>{r.documentNumber || r.versionId}</h4><p>Reason: {r.body.reason}</p>
-          <p>Received date: {r.body.received_date || "Not stated"} · Previous correction: {r.body.expected_correction_id || "Initial invoice"}</p>
-          {r.body.lines.map(l => <p key={l.line_id}>Retained line {l.line_id}: {l.item_code || l.classification} · {l.received_quantity ?? "No quantity"} {l.received_unit} · conversion {l.base_units_per_received_unit ?? "Not applicable"} · {l.note}</p>)}
-          {["before", "after"].map(side => <div key={side}><p>{side === "before" ? "Original entries to reverse" : "Reviewed replacement entries"}</p>{r.comparison[side].map((l, i) => <p key={`${l.line_id}:${i}`}>{l.item_code || l.classification} · {l.base_quantity} {l.base_unit} · food amount {l.inventory_cost_amount} · {l.inventory_record_date}</p>)}</div>)}
-          <p>Separate fees: {r.comparison.feesBefore ?? "Not stated"} → {r.comparison.feesAfter ?? "Not stated"} · Separate tax: {r.comparison.taxBefore ?? "Not stated"} → {r.comparison.taxAfter ?? "Not stated"}</p>
+          <RetainedCorrectionEvidence record={r} />
           {correctionChecks[r.key]?.message && <p role="status">{correctionChecks[r.key].message}</p>}
-          <button className={btnGhost} disabled={busy || correctionRecoveryUnavailable} onClick={() => checkCorrection(r)}>Check saved correction status</button>
-          <button className={btnAcc} disabled={busy || correctionRecoveryUnavailable || correctionChecks[r.key]?.outcome !== "retry_available"} onClick={() => retryCorrection(r)}>Retry exact retained correction</button>
-          <p>No saved outcome in a read does not cancel an earlier request. A held or competing correction stays retained for manager review.</p>
+          <button className={btnGhost} disabled={busy || correctionRecoveryUnavailable || !!correctionDiscard} onClick={() => checkCorrection(r)}>Check saved correction status</button>
+          <button className={btnAcc} disabled={busy || correctionRecoveryUnavailable || !!correctionDiscard || correctionChecks[r.key]?.outcome !== "retry_available"} onClick={() => retryCorrection(r)}>Retry exact retained correction</button>
+          <button className={btnGhost} disabled={busy || correctionRecoveryUnavailable || !!correctionDiscard || !!discardReview} onClick={() => prepareCorrectionDiscard(r)}>Discard retained correction</button>
+          <p>No saved outcome in a read does not cancel an earlier request. Discard requires fresh status and confirmation and removes only this tab's retained copy.</p>
         </div>)}
+      </section>}
+      {correctionDiscard && <section aria-label="Confirm retained correction discard" className={`${cardCls} p-4 space-y-3`}>
+        <h3>Discard retained correction from this tab?</h3>
+        <p>The latest read showed {correctionDiscard.outcome.outcome.replaceAll("_", " ")}: {correctionDiscard.outcome.message}</p>
+        <RetainedCorrectionEvidence record={correctionDiscard.record} />
+        <p>This removes only the frozen request from this tab. It does not delete source files, purchases or accounting history and does not cancel the original request, which may still complete. Confirmation checks status again. Source and period holds still apply; reopen the current invoice and preview before any new correction.</p>
+        <button className={btnGhost} disabled={busy} onClick={() => setCorrectionDiscard(null)}>Keep retained correction</button>
+        <button className={btnAcc} disabled={busy || correctionRecoveryUnavailable} onClick={confirmCorrectionDiscard}>Confirm discard retained correction</button>
       </section>}
       {!!pendingPurchases.length && <section aria-label="Retained submitted purchases" className={`${cardCls} p-4 space-y-2`}>
         <h3>Submitted reviews retained in this tab</h3>
@@ -604,7 +655,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
           {sourceRows && <div className="overflow-auto max-h-96"><table className="text-xs"><thead><tr><th>Record</th>{sourceRows.headers.map((h, i) => <th className="px-2" key={i}>{h} [{i + 1}]</th>)}</tr></thead><tbody>{sourceRows.rows.map(row => <tr key={row.row_ordinal}><td>{row.row_ordinal}</td>{row.raw_values.map((v, i) => <td className="border border-slate-700 p-2 whitespace-nowrap" key={i}>{v}</td>)}</tr>)}</tbody></table>{sourceRows.nextOffset != null && <button className={btnGhost} disabled={busy} onClick={() => action(() => loadSourceRows(sourceRows.nextOffset))}>Next source records</button>}</div>}
         </div>
         {selected.documents.map(d => <PurchaseDocumentReview key={`${previewEpoch}:${selected.id}:${d.id}:${d.status}`} document={d} items={items} history={history} onPost={post} onCheckSaved={checkSaved} onInspectSaved={inspectSaved} busy={busy || recoveryUnavailable || !!discardReview} />)}
-        {selected.documents.filter(d => d.correctionAvailable && !pendingCorrections.some(r => r.documentId === d.header.document_id)).map(d => <PurchaseCorrectionReview key={`correction:${previewEpoch}:${scope.actorId}:${d.id}`} document={d} items={items} history={history} onPreview={previewCorrection} onCorrect={correct} onHistory={id => api.purchaseCorrections(restaurantId, id)} busy={busy || correctionRecoveryUnavailable} />)}
+        {selected.documents.filter(d => d.correctionAvailable && !pendingCorrections.some(r => r.documentId === d.header.document_id)).map(d => <PurchaseCorrectionReview key={`correction:${previewEpoch}:${scope.actorId}:${d.id}`} document={d} items={items} history={history} onPreview={previewCorrection} onCorrect={correct} onHistory={id => api.purchaseCorrections(restaurantId, id)} busy={busy || correctionRecoveryUnavailable || !!correctionDiscard} />)}
       </>}
       <div className={`${cardCls} p-4 overflow-auto`}><h3 className="font-semibold mb-2">Food purchase history</h3><table className="text-sm w-full"><thead><tr>{["Received / movement date", "Invoice", "Entry", "Item", "Quantity", "Inventory unit", "Food amount"].map(h => <th className="text-left p-2" key={h}>{h}</th>)}</tr></thead><tbody>{history.map(h => <tr key={h.fact_id || h.line_id}><td className="p-2">{h.inventory_record_date}</td><td>{h.document_number}</td><td>{h.fact_kind || "initial"}</td><td>{h.description_snapshot}</td><td>{h.base_quantity}</td><td>{h.base_unit}</td><td>{h.inventory_cost_amount}</td></tr>)}</tbody></table></div>
     </>}

@@ -130,6 +130,26 @@ async def build_plan(conn, store, version, body):
     return plan
 
 
+async def retained_correction(conn, store, actor, header, version, body, key, digest):
+    """Read only this invoice's replay; foreign key ownership is never returned."""
+    prior = await conn.fetchrow('''SELECT c.* FROM purchasing.corrections c
+        JOIN purchasing.posting_batches b ON b.id=c.initial_batch_id
+        JOIN purchasing.document_identities i ON i.id=b.document_id
+        WHERE c.idempotency_key=$1 AND i.store_id=$2 AND i.id=$3''', key, store, header['document_id'])
+    if prior is None:
+        # Preserve the global uniqueness guard without loading foreign details
+        # or claiming that an already-used key is available for a new command.
+        if await conn.fetchval('SELECT EXISTS(SELECT 1 FROM purchasing.corrections WHERE idempotency_key=$1)', key):
+            raise HTTPException(409, 'Retry key belongs to a different correction review or user')
+        return None
+    if (prior['initial_batch_id'] != header['posted_batch_id']
+            or prior['initial_batch_id'] != body.expected_initial_batch_id
+            or prior['replacement_version_id'] != version
+            or prior['corrected_by'] != actor or prior['request_fingerprint'] != digest):
+        raise HTTPException(409, 'Retry key belongs to a different correction review or user')
+    return prior
+
+
 async def commit_correction(pool, store, actor, version, body, key):
     payload=body.model_dump(mode='python');payload['lines']=sorted(payload['lines'],key=lambda r:str(r['line_id']))
     digest=fingerprint(serial(payload))
@@ -137,10 +157,9 @@ async def commit_correction(pool, store, actor, version, body, key):
         async with conn.transaction():
             await require_corrections(conn)
             header=await load_version(conn,store,version,lock=True)
-            prior=await conn.fetchrow('SELECT * FROM purchasing.corrections WHERE idempotency_key=$1',key)
+            prior=await retained_correction(conn,store,actor,header,version,body,key,digest)
             if prior:
-                if prior['initial_batch_id']==header['posted_batch_id'] and prior['request_fingerprint']==digest:return prior['id']
-                raise HTTPException(409,'Retry key belongs to a different correction review')
+                return prior['id']
             # Serialize with initial posting, credit validation, closing and reopening.
             await conn.execute("SELECT pg_advisory_xact_lock(hashtext('purchase-invoice'),hashtext(concat_ws('|',$1::text,$2::text,$3::text)))",store,header['vendor_id'],header['document_number'])
             await conn.execute('INSERT INTO public.store_state(store_id) VALUES($1) ON CONFLICT DO NOTHING',store)
@@ -176,13 +195,8 @@ async def correction_status(conn, store, actor, version, body, key):
                          initialBatchId=body.expected_initial_batch_id, requestKey=key,
                          actorId=actor, planHash=body.expected_plan_hash,
                          expectedCorrectionId=body.expected_correction_id))
-    prior = await conn.fetchrow('SELECT * FROM purchasing.corrections WHERE idempotency_key=$1', key)
+    prior = await retained_correction(conn, store, actor, header, version, body, key, digest)
     if prior:
-        if (prior['initial_batch_id'] != header['posted_batch_id']
-                or prior['initial_batch_id'] != body.expected_initial_batch_id
-                or prior['replacement_version_id'] != version
-                or prior['corrected_by'] != actor or prior['request_fingerprint'] != digest):
-            raise HTTPException(409, 'Retry key belongs to a different correction review or user')
         later = await conn.fetchval('SELECT EXISTS(SELECT 1 FROM purchasing.corrections WHERE previous_correction_id=$1)', prior['id'])
         return {**result, 'outcome': 'saved_replaced' if later else 'saved',
                 'correctionId': str(prior['id'])}

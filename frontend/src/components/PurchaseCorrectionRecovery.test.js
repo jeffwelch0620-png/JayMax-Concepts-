@@ -134,3 +134,96 @@ test.each(["document_id", "posted_batch_id", "current_correction_id"])("a foreig
   await render(); await click(button("Check saved correction status")); await click(button("Retry exact retained correction"));
   expect(journal().list()).toEqual([record()]); expect(container.textContent).toContain("Saved correction was not confirmed");
 });
+
+test.each(["held", "other_request", "retry_available"])("%s can be explicitly discarded after two fresh reads without sending a command", async outcome => {
+  journal().save(record()); journal().save({ ...record(), key: "00000000-0000-4000-8000-000000000002", versionId: "version-2", documentId: "identity-2" });
+  api.checkCorrectionSavedStatus.mockResolvedValue(status(outcome)); await render();
+  await click(button("TEST ONLY.csv · 2026-10-15")); expect(button("Review correction")).toBeUndefined();
+  await click(button("Discard retained correction"));
+  const dialog = container.querySelector('[aria-label="Confirm retained correction discard"]');
+  expect(dialog.textContent).toContain(body.reason); expect(dialog.textContent).toContain("Original entries to reverse");
+  expect(dialog.textContent).toContain("Reviewed replacement entries"); expect(dialog.textContent).toContain("does not cancel");
+  expect(journal().list()).toHaveLength(2); expect(button("Retry exact retained correction").disabled).toBe(true);
+  await click(button("Confirm discard retained correction"));
+  expect(api.checkCorrectionSavedStatus).toHaveBeenCalledTimes(2);
+  expect(api.checkCorrectionSavedStatus.mock.calls[0]).toEqual(api.checkCorrectionSavedStatus.mock.calls[1]);
+  expect(journal().list().map(r => r.documentId)).toEqual(["identity-2"]); expect(api.correctPurchase).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Source and period holds still apply");
+  await click(button("TEST ONLY.csv · 2026-10-15")); expect(button("Review correction")).toBeDefined();
+});
+
+test("discarding a held request allows a fresh review with a new key, not automatic reuse or retry", async () => {
+  journal().save(record()); api.checkCorrectionSavedStatus.mockResolvedValue(status("held")); await render();
+  await click(button("Discard retained correction")); await click(button("Confirm discard retained correction"));
+  const nextKey = "00000000-0000-4000-8000-000000000002";
+  global.crypto.randomUUID = () => nextKey;
+  api.correctPurchase.mockImplementation(async (_store, _version, sent, key) => {
+    expect(key).toBe(nextKey); expect(journal().list()[0].key).toBe(nextKey);
+    return { ...receipt(), correction: { ...receipt().correction, idempotency_key: nextKey } };
+  });
+  await preview(); await click(button("Confirm reversal and replacement"));
+  expect(api.previewPurchaseCorrection).toHaveBeenCalledTimes(1); expect(api.correctPurchase).toHaveBeenCalledTimes(1);
+  expect(journal().list()).toEqual([]);
+});
+
+test("cancelling discard preserves exact evidence and grants no retry permission", async () => {
+  journal().save(record()); await render(); await click(button("Check saved correction status"));
+  expect(button("Retry exact retained correction").disabled).toBe(false);
+  await click(button("Discard retained correction")); await click(button("Keep retained correction"));
+  expect(journal().list()).toEqual([record()]); expect(button("Retry exact retained correction").disabled).toBe(true);
+  expect(api.correctPurchase).not.toHaveBeenCalled();
+});
+
+test.each(["saved", "saved_replaced"])("%s refuses discard both before the dialog and after a late original commit", async outcome => {
+  journal().save(record()); api.checkCorrectionSavedStatus.mockResolvedValue(status(outcome)); await render();
+  await click(button("Discard retained correction")); expect(button("Confirm discard retained correction")).toBeUndefined();
+  expect(journal().list()).toEqual([record()]); expect(container.textContent).toContain("It was not discarded");
+  api.checkCorrectionSavedStatus.mockResolvedValueOnce(status("held")).mockResolvedValue(status(outcome));
+  await click(button("Discard retained correction")); await click(button("Confirm discard retained correction"));
+  expect(journal().list()).toEqual([record()]); expect(api.correctPurchase).not.toHaveBeenCalled();
+  expect(button("Retry exact retained correction").disabled).toBe(true);
+  await click(button("Check saved correction status")); expect(journal().list()).toEqual([]);
+});
+
+test.each(["failed", "malformed", "foreign"])("%s confirmation read never discards and removes any earlier retry permission", async kind => {
+  journal().save(record()); await render(); await click(button("Check saved correction status"));
+  await click(button("Discard retained correction"));
+  if (kind === "failed") api.checkCorrectionSavedStatus.mockRejectedValue(new Error("Read unavailable"));
+  else api.checkCorrectionSavedStatus.mockResolvedValue(kind === "foreign" ? { ...status(), actorId: "other" } : {});
+  await click(button("Confirm discard retained correction")); expect(journal().list()).toEqual([record()]);
+  expect(button("Retry exact retained correction").disabled).toBe(true); expect(api.correctPurchase).not.toHaveBeenCalled();
+});
+
+test.each(["prepare", "confirm"])("a late %s discard read after actor/location change cannot clear either journal", async phase => {
+  journal().save(record()); journal("other", "rudds").save(record()); await render();
+  if (phase === "confirm") await click(button("Discard retained correction"));
+  let resolve; api.checkCorrectionSavedStatus.mockImplementation(() => new Promise(r => { resolve = r; }));
+  await click(button(phase === "confirm" ? "Confirm discard retained correction" : "Discard retained correction"));
+  await render("other", "rudds"); await act(async () => resolve(status("held")));
+  expect(journal().list()).toEqual([record()]); expect(journal("other", "rudds").list()).toEqual([record()]);
+  expect(button("Confirm discard retained correction")).toBeUndefined(); expect(api.correctPurchase).not.toHaveBeenCalled();
+});
+
+test("a changed retained record during confirmation is preserved", async () => {
+  journal().save(record()); await render(); await click(button("Discard retained correction"));
+  let resolve; api.checkCorrectionSavedStatus.mockImplementation(() => new Promise(r => { resolve = r; }));
+  await click(button("Confirm discard retained correction"));
+  journal().clear(doc.id, KEY); const changed = { ...record(), body: { ...body, reason: "Another retained review" } }; journal().save(changed);
+  await act(async () => resolve(status("held"))); expect(journal().list()).toEqual([changed]);
+  expect(container.textContent).toContain("retained correction changed"); expect(api.correctPurchase).not.toHaveBeenCalled();
+});
+
+test("failed discard storage write keeps the evidence and holds retry", async () => {
+  journal().save(record()); await render(); await click(button("Discard retained correction"));
+  jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+  await click(button("Confirm discard retained correction")); expect(journal().list()).toEqual([record()]);
+  expect(container.textContent).toContain("storage is unavailable or full");
+  expect(button("Retry exact retained correction").disabled).toBe(true); expect(api.correctPurchase).not.toHaveBeenCalled();
+});
+
+test("the 32-request cap is shown in the correction form without sending or deleting older requests", async () => {
+  for (let n = 0; n < 32; n++) journal().save({ ...record(), documentId: `cap-${n}`, versionId: `cap-${n}`, key: `00000000-0000-4000-8000-${String(n + 2).padStart(12, "0")}` });
+  await preview(); await click(button("Confirm reversal and replacement"));
+  expect(container.textContent).toContain("32-request limit"); expect(journal().list()).toHaveLength(32);
+  expect(api.correctPurchase).not.toHaveBeenCalled();
+});
