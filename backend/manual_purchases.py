@@ -93,13 +93,14 @@ def project_record(body, vendor_name):
     return raw, result
 
 
+async def ready(pool):
+    async with pool.acquire() as conn:
+        if not await conn.fetchval("SELECT to_regclass('purchasing.manual_attachments') IS NOT NULL"):
+            raise HTTPException(503,'Manual purchase setup is awaiting enablement')
+
+
 def install_routes(router, context):
     import purchase_api as purchases
-
-    async def ready(pool):
-        async with pool.acquire() as conn:
-            if not await conn.fetchval("SELECT to_regclass('purchasing.manual_attachments') IS NOT NULL"):
-                raise HTTPException(503,'Manual purchase setup is awaiting enablement')
 
     @router.get('/{store_id}/vendors')
     async def vendors(store_id:str,request:Request):
@@ -130,9 +131,10 @@ def install_routes(router, context):
                 if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM purchasing.import_files WHERE id=$1 AND store_id=$2)',file_id,store_id):
                     raise HTTPException(422,'An attached source is not retained at this location')
         raw,projection=project_record(body,vendor_name)
-        original=json.dumps(raw,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode('utf-8')
+        from purchase_capture_recovery import manual_source
+        raw,original,filename=manual_source(body)
         if len(original)>purchases.MAX_SOURCE_BYTES: raise HTTPException(413,'Source record exceeds 12 MB')
-        file_id=await purchases.capture_file(pool,store_id,actor,original,'manual-source-'+fingerprint(raw).hex()[:16]+'.json',
+        file_id=await purchases.capture_file(pool,store_id,actor,original,filename,
             'application/json',str(idempotency_key),projection=projection)
         async with pool.acquire() as conn:
             async with conn.transaction():

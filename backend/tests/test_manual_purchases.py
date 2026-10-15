@@ -9,6 +9,10 @@ from uuid import UUID,uuid4
 import asyncpg
 import native_backup as backup
 import test_native_backup as recovery
+import purchase_api as purchases
+from purchase_capture_recovery import manual_source, capture_status
+import hashlib
+from manual_purchases import ManualRecord, project_record
 
 
 def record(number='MANUAL-TEST',amount='40',**patches):
@@ -55,6 +59,94 @@ class ManualPurchaseTests(unittest.IsolatedAsyncioTestCase):
         r=await self.client.post('/api/pg/purchases/berts/sources',files={'file':('synthetic.pdf',source,'application/pdf')},headers={'Idempotency-Key':str(uuid4())})
         self.assertEqual(r.status_code,200,r.text)
         return r.json()['id'],source
+
+    async def capture_status(self, body, key, store='berts'):
+        return await self.client.post(f'/api/pg/purchases/{store}/manual-records/status', json=body,
+                                      headers={'Idempotency-Key': key})
+
+    async def purchase_snapshot(self):
+        async with self.pool.acquire() as conn:
+            tables = await conn.fetch("SELECT schemaname,tablename FROM pg_tables WHERE schemaname='purchasing' ORDER BY tablename")
+            return {r['tablename']: await conn.fetchval(f'SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM purchasing."{r["tablename"]}" r') for r in tables}
+
+    async def test_capture_recovery_manual_absent_saved_and_partial_attachment_reads_are_readonly(self):
+        attachment,_ = await self.attachment()
+        body = record(attachment_ids=[attachment, attachment]); key = str(uuid4())
+        before = await self.purchase_snapshot()
+        absent = await self.capture_status(body, key)
+        self.assertEqual(absent.status_code, 200, absent.text)
+        self.assertEqual(absent.json()['outcome'], 'retry_available')
+        self.assertEqual(await self.purchase_snapshot(), before)
+        # Simulate loss after byte retention, then after projection, but before links.
+        model = ManualRecord(**body); raw, original, filename = manual_source(model)
+        file_id = await purchases.capture_source(self.pool, 'berts', 'synthetic-manager', original, filename, 'application/json', key)
+        for phase in ('bytes', 'projection'):
+            if phase == 'projection':
+                _, projection = project_record(model, 'Invented supplier')
+                await purchases.capture_file(self.pool, 'berts', 'synthetic-manager', original, filename, 'application/json', key, projection=projection)
+            before = await self.purchase_snapshot()
+            result = await self.capture_status(body, key)
+            self.assertEqual(result.json()['outcome'], 'retry_available', phase)
+            self.assertEqual(result.json()['manualRecord'], raw)
+            self.assertEqual(await self.purchase_snapshot(), before)
+        saved = await self.manual(body, key)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()['id'], str(file_id))
+        before = await self.purchase_snapshot()
+        outcome = await self.capture_status(body, key)
+        self.assertEqual(outcome.json()['outcome'], 'saved', outcome.text)
+        self.assertEqual(outcome.json()['fileId'], str(file_id))
+        self.assertEqual(outcome.json()['actorId'], 'synthetic-manager')
+        self.assertEqual(await self.purchase_snapshot(), before)
+        self.assertEqual((await self.manual(body, key)).json()['id'], str(file_id))
+        self.assertEqual(await self.purchase_snapshot(), before)
+        async with self.pool.acquire() as conn:
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.actual_purchase_facts'), 0)
+
+    async def test_capture_recovery_rejects_changed_manual_body_foreign_scope_and_replay_actor(self):
+        body = record(); key = str(uuid4()); saved = await self.manual(body, key)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        before = await self.purchase_snapshot()
+        for candidate, store in ((record(amount='41'), 'berts'), (body, 'rudds')):
+            result = await self.capture_status(candidate, key, store)
+            self.assertEqual(result.status_code, 409, result.text)
+            self.assertNotIn(saved.json()['id'], result.text)
+        denied = await self.client.post('/api/pg/purchases/berts/manual-records/status', json=body,
+            headers={'Authorization': 'Bearer not-authorized', 'Idempotency-Key': key})
+        self.assertEqual(denied.status_code, 401, denied.text)
+        raw, source, filename = manual_source(ManualRecord(**body))
+        with self.assertRaises(Exception) as foreign:
+            await capture_status(self.pool, 'berts', 'other-manager', key, 'manual', hashlib.sha256(source).digest(), len(source), filename)
+        self.assertEqual(foreign.exception.status_code, 409)
+        for actor, name in (('other-manager', filename), ('synthetic-manager', 'changed.json')):
+            with self.assertRaises(Exception) as caught:
+                await purchases.capture_source(self.pool, 'berts', actor, source, name, 'application/json', key)
+            self.assertEqual(caught.exception.status_code, 409)
+        self.assertEqual(await self.purchase_snapshot(), before)
+
+    async def test_capture_recovery_csv_requires_projection_and_raw_source_requires_only_bytes(self):
+        source, *_ = recovery.counts.native.sample('PFG', 'TEST-ONLY-CAPTURE-STATUS')
+        key = str(uuid4()); filename = 'synthetic.csv'
+        body = dict(kind='csv', sha256=hashlib.sha256(source).hexdigest(), byteCount=len(source), filename=filename)
+        async def probe(candidate=body):
+            return await self.client.post('/api/pg/purchases/berts/capture-status', json=candidate, headers={'Idempotency-Key': key})
+        before = await self.purchase_snapshot()
+        self.assertEqual((await probe()).json()['outcome'], 'retry_available')
+        self.assertEqual(await self.purchase_snapshot(), before)
+        await purchases.capture_source(self.pool, 'berts', 'synthetic-manager', source, filename, 'text/csv', key)
+        before = await self.purchase_snapshot()
+        self.assertEqual((await probe()).json()['outcome'], 'retry_available')
+        self.assertEqual((await probe({**body, 'kind': 'source'})).json()['outcome'], 'saved')
+        self.assertEqual(await self.purchase_snapshot(), before)
+        for patch in ({'sha256': '0'*64}, {'byteCount': len(source)+1}, {'filename': 'other.csv'}):
+            self.assertEqual((await probe({**body, **patch})).status_code, 409)
+        captured = await self.client.post('/api/pg/purchases/berts/files', files={'file': (filename, source, 'text/csv')}, headers={'Idempotency-Key': key})
+        self.assertEqual(captured.status_code, 200, captured.text)
+        before = await self.purchase_snapshot()
+        result = await probe()
+        self.assertEqual(result.json()['outcome'], 'saved', result.text)
+        self.assertEqual(result.json()['fileId'], captured.json()['id'])
+        self.assertEqual(await self.purchase_snapshot(), before)
 
     async def test_source_attachment_full_fields_and_received_date_accounting(self):
         _,a,b=await self.pair();file_id,source=await self.attachment()

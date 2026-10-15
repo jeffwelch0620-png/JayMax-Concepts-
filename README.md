@@ -20,6 +20,20 @@ accounting control verified. See the [backup/index window record](docs/HOSTED_IN
 Connections/credentials are unchanged. Earlier hold, draft and unapplied-index
 wording below describes earlier checkpoints; this entry supersedes it.
 
+## Local source-capture recovery follow-up — October 15, 2026
+
+The next local slice retains submitted manual entries and file-capture request
+identities across reload/sign-in in the same browser tab. Read-only status
+checks distinguish complete capture from an absent or partially completed request;
+retries require the original key/body or reselected matching file bytes. Source
+capture remains separate from inventory posting. See the
+[source-capture recovery contract and validation](docs/SOURCE_CAPTURE_RECOVERY.md).
+This follow-up is local; pushing a draft PR, merging and live acceptance remain
+separate steps. The completed hosted maintenance window stays closed.
+Local validation passes 776 frontend tests, 741 offline cases, the strict
+production build and 36 manual/native capture cases (32 PostgreSQL integration
+tests plus four parser tests). Local database and role inventories are unchanged.
+
 ## PR34 submitted-correction recovery — October 15, 2026
 
 The owner-approved local follow-up retains a submitted invoice correction's

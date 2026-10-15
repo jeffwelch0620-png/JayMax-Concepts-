@@ -20,6 +20,19 @@ afterAll(() => {
   }
 });
 
+test.each(["csv", "manual"])("source recovery %s reads are bounded and never call a capture command", async kind => {
+  axios.post.mockImplementation(() => new Promise(() => {}));
+  const record = { kind, key: "fictional-key", body: { fictional: true } };
+  const pending = api.checkCaptureSavedStatus("berts", record).catch(e => e);
+  jest.advanceTimersByTime(timeout); await flush();
+  expect((await pending).message).toContain("Source status loading timed out");
+  expect(axios.post).toHaveBeenCalledTimes(1);
+  const [url, body, options] = axios.post.mock.calls[0];
+  expect(url.endsWith(kind === "manual" ? "/manual-records/status" : "/capture-status")).toBe(true);
+  expect(body).toEqual(record.body); expect(options.headers["Idempotency-Key"]).toBe(record.key);
+  expect(options.signal.aborted).toBe(true); expect(jest.getTimerCount()).toBe(0);
+});
+
 test("the full native read shares cancellation and clears its deadline after success", async () => {
   await expect(api.fetchState("berts")).resolves.toMatchObject({ revision: 10, items: [], dishes: [], prepStock: null });
   expect(axios.get).toHaveBeenCalledTimes(4);

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { PageTitle, Field, cardCls, inpCls, btnAcc, btnGhost } from "./common";
-import { ManualPurchaseEntry } from "./ManualPurchaseEntry";
+import { PurchaseSourceCapture } from "./PurchaseSourceCapture";
 import { InventoryUnitSetup } from "./InventoryUnitSetup";
 import { purchaseRecoveryOutcome, validatePurchaseDocument } from "../lib/purchaseRecovery";
 import { pendingPurchaseJournal, pendingPurchaseRecord } from "../lib/pendingPurchases";
@@ -200,9 +200,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
   const [reportingReady, setReportingReady] = useState(false);
   const [previewEpoch, setPreviewEpoch] = useState(0);
   const [manualReady, setManualReady] = useState(false), [vendors, setVendors] = useState([]);
-  const [uploadKind, setUploadKind] = useState("csv"), [manualEpoch, setManualEpoch] = useState(0);
   const [unitsReady, setUnitsReady] = useState(false);
-  const upload = useRef(null);
   const scope = useMemo(() => ({ active: true, restaurantId, actorId }), [restaurantId, actorId]);
   const journal = useMemo(() => pendingPurchaseJournal(actorId, restaurantId), [actorId, restaurantId]);
   const correctionJournal = useMemo(() => pendingCorrectionJournal(actorId, restaurantId), [actorId, restaurantId]);
@@ -313,7 +311,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
   useEffect(() => {
     scope.active = true;
     setSelected(null); setPendingPurchases([]); setDiscardReview(null); setReady(false); setError(""); setMessage("");
-    setBusy(false); setFiles([]); setItems([]); setHistory([]); setSourceRows(null); upload.current = null;
+    setBusy(false); setFiles([]); setItems([]); setHistory([]); setSourceRows(null);
     setPendingCorrections([]); setCorrectionChecks({}); setCorrectionDiscard(null);
     try { setPendingCorrections(correctionJournal.list()); setCorrectionRecoveryUnavailable(false); }
     catch (e) { setCorrectionRecoveryUnavailable(true); setError(errorText(e)); }
@@ -340,29 +338,11 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
     setBusy(true); setError(""); setMessage("");
     try { await fn(); } catch (e) { if (scope.active) setError(errorText(e)); } finally { if (scope.active) setBusy(false); }
   }
-  async function capture() {
-    if (!upload.current) return;
-    await action(async () => {
-      const captureFn = upload.current.kind === "source" ? api.capturePurchaseSource : api.capturePurchase;
-      const result = await captureFn(restaurantId, upload.current.file, upload.current.key);
-      if (!result.id || result.captureStatus !== "captured" || !Array.isArray(result.documents)) throw new Error("Source capture was not confirmed. Retry the same file.");
-      if (!scope.active) return;
-      setSelected(result); setPreviewEpoch(n => n + 1); setSourceRows(null); setMessage("Original file retained. Review each invoice before posting.");
-      upload.current = null;
-      const f = await api.purchaseFiles(restaurantId); if (scope.active) { setFiles(f); setMore(f.length === 200); }
-    });
-  }
-  async function captureManual(body, key) {
-    setBusy(true); setError(""); setMessage("");
-    try {
-      const result = await api.captureManualPurchase(restaurantId, body, key);
-      if (!result?.id || result.captureStatus !== "captured" || !result.manualRecord || !Array.isArray(result.documents)) throw new Error("Source capture was not confirmed. Retry the same entry.");
-      if (!scope.active) return result;
-      setSelected(result); setPreviewEpoch(n => n + 1); setManualEpoch(n => n + 1); setSourceRows(null);
-      setMessage("Manual source retained. Review every purchase line before posting to inventory.");
-      api.purchaseFiles(restaurantId).then(f => { if (scope.active) { setFiles(f); setMore(f.length === 200); } }).catch(e => scope.active && setError(`Source retained; file-list refresh failed: ${errorText(e)}`));
-      return result;
-    } finally { if (scope.active) setBusy(false); }
+  function sourceCaptured(result, kind) {
+    if (!scope.active) return;
+    setSelected(result); setPreviewEpoch(n => n + 1); setSourceRows(null);
+    setMessage(kind === "manual" ? "Manual source retained. Review every purchase line before posting to inventory." : "Original file retained. Review each invoice before posting.");
+    api.purchaseFiles(restaurantId).then(f => { if (scope.active) { setFiles(f); setMore(f.length === 200); } }).catch(e => scope.active && setError(`Source retained; file-list refresh failed: ${errorText(e)}`));
   }
   function applyRecovery(id, outcome) {
     const own = ["saved", "saved_corrected"].includes(outcome.kind);
@@ -621,12 +601,7 @@ export function PurchaseImportsTab({ restaurantId, restaurantName, actorId, unit
         <button className={btnGhost} disabled={busy} onClick={() => setDiscardReview(null)}>Keep retained review</button>
         <button className={btnAcc} disabled={busy} onClick={confirmDiscard}>Confirm discard retained review</button>
       </section>}
-      <div className={`${cardCls} p-4 flex gap-3 flex-wrap items-center`}>
-        {manualReady && <select aria-label="Source upload type" className={inpCls} disabled={busy} value={uploadKind} onChange={e => { setUploadKind(e.target.value); upload.current = null; }}><option value="csv">PFG / US Foods CSV</option><option value="source">Other invoice / receipt source</option></select>}
-        <label className="text-sm">{uploadKind === "csv" ? "PFG or US Foods original CSV" : "Retain original receipt, PDF, photo or other supplier file"} <input key={uploadKind} aria-label="Invoice file" type="file" accept={uploadKind === "csv" ? ".csv,text/csv" : undefined} disabled={busy} onChange={e => { const f = e.target.files?.[0]; upload.current = f ? { file: f, key: crypto.randomUUID(), kind: uploadKind } : null; setMessage(f ? `Ready to capture ${f.name}` : ""); }} /></label>
-        <button className={btnAcc} disabled={busy} onClick={capture}>Capture / retry file</button>
-      </div>
-      {manualReady && <ManualPurchaseEntry key={`${restaurantId}:${manualEpoch}`} vendors={vendors} files={files} onCapture={captureManual} busy={busy} />}
+      <PurchaseSourceCapture key={`${restaurantId}:${actorId}`} restaurantId={restaurantId} actorId={actorId} manualReady={manualReady} vendors={vendors} files={files} busy={busy} onBusy={setBusy} onCaptured={sourceCaptured} />
       {unitsReady && <InventoryUnitSetup key={restaurantId} restaurantId={restaurantId} focus={unitReviewFocus} onSaved={onUnitReviewSaved} />}
       <div className={`${cardCls} p-4 space-y-2`}>
         <h3 className="font-semibold">Captured files</h3>
