@@ -10,6 +10,7 @@ jest.mock("../lib/api", () => ({
   purchaseHistory: jest.fn(), capturePurchase: jest.fn(), postPurchase: jest.fn(),
   previewPurchaseCorrection: jest.fn(), correctPurchase: jest.fn(), purchaseCorrections: jest.fn(),
   purchaseVendors: jest.fn(), captureManualPurchase: jest.fn(), capturePurchaseSource: jest.fn(),
+  checkCaptureSavedStatus: jest.fn(),
 }));
 
 const doc = {
@@ -22,11 +23,28 @@ const doc = {
 let container, root;
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  Object.defineProperty(global, "crypto", { configurable: true, value: { randomUUID: jest.fn(() => "00000000-0000-4000-8000-000000000001") } });
+  Object.defineProperty(global, "crypto", { configurable: true, value: { randomUUID: jest.fn(() => "00000000-0000-4000-8000-000000000001"), subtle: { digest: jest.fn(async () => new Uint8Array(32).fill(10).buffer) } } });
+  Object.defineProperty(File.prototype, "arrayBuffer", { configurable: true, value: async () => new Uint8Array([1]).buffer });
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
   sessionStorage.clear();
   jest.clearAllMocks();
+  api.checkCaptureSavedStatus.mockReset();
 });
+
+function confirmSourceCapture() {
+  let saved;
+  api.checkCaptureSavedStatus.mockImplementation(async (store, r) => {
+    let captured;
+    try { captured = await (r.kind === "manual" ? api.captureManualPurchase : r.kind === "source" ? api.capturePurchaseSource : api.capturePurchase).mock.results.slice(-1)[0].value; }
+    catch { /* Before-commit failure retains the same request. */ }
+    const sourceSha256 = "0a".repeat(32), fileId = "00000000-0000-4000-8000-000000000099";
+    saved = captured && { ...captured, id: fileId, source_sha256: sourceSha256 };
+    return { kind: r.kind, requestKey: r.key, actorId: "test-owner", storeId: store, sourceSha256,
+      outcome: captured ? "saved" : "retry_available", fileId: captured ? fileId : null,
+      ...(r.kind === "manual" ? { manualRecord: r.body } : {}) };
+  });
+  api.purchaseFile.mockImplementation(async () => saved);
+}
 
 const postedDoc = { ...doc, status: "posted", correctionAvailable: true, sourceErrors: [],
   currentMappings: [{ line_id: "line-1", classification: "food", movement_kind: "receipt", item_code: "food", base_unit: "lb",
@@ -98,6 +116,7 @@ test("a failed or incomplete read-only preview can be edited and retried", async
 });
 
 test("an incomplete correction acknowledgement cannot announce success", async () => {
+  confirmSourceCapture();
   api.purchaseCapabilities.mockResolvedValue({ enabled: true }); api.purchaseItems.mockResolvedValue([]);
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]);
   api.capturePurchase.mockResolvedValue({ id: "file-1", original_filename: "synthetic.csv", captureStatus: "captured", documents: [postedDoc], parse_errors: [], source_sha256: "abc", source_record_count: 1 });
@@ -154,6 +173,7 @@ test("a failed post retains the exact review and retries the same key", async ()
 });
 
 test("capture failure never displays success and retry uses the original upload key", async () => {
+  confirmSourceCapture();
   api.purchaseCapabilities.mockResolvedValue({ enabled: true }); api.purchaseItems.mockResolvedValue([]);
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]);
   api.capturePurchase.mockRejectedValueOnce(new Error("Capture interrupted")).mockResolvedValueOnce({ id: "file-1", original_filename: "synthetic.csv", captureStatus: "captured", documents: [], parse_errors: [], source_sha256: "abc", source_record_count: 0 });
@@ -165,12 +185,13 @@ test("capture failure never displays success and retry uses the original upload 
   await click(button);
   expect(container.textContent).toContain("Capture interrupted");
   expect(container.textContent).not.toContain("Original file retained.");
-  await click(button);
+  await click([...container.querySelectorAll("button")].find(b => b.textContent === "Retry retained source"));
   expect(api.capturePurchase.mock.calls[1]).toEqual(api.capturePurchase.mock.calls[0]);
   expect(container.textContent).toContain("Original file retained.");
 });
 
 test("an incomplete posting acknowledgement cannot announce success", async () => {
+  confirmSourceCapture();
   api.purchaseCapabilities.mockResolvedValue({ enabled: true }); api.purchaseItems.mockResolvedValue([]);
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]);
   api.capturePurchase.mockResolvedValue({ id: "file-1", original_filename: "synthetic.csv", captureStatus: "captured", documents: [doc], parse_errors: [], source_sha256: "abc", source_record_count: 1 });
@@ -484,6 +505,7 @@ async function selectValue(label, value) {
 }
 
 test("manual source capture opens retained details without posting inventory", async () => {
+  confirmSourceCapture();
   api.purchaseCapabilities.mockResolvedValue({ enabled: true, manualReady: true }); api.purchaseItems.mockResolvedValue([]);
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]);
   api.purchaseVendors.mockResolvedValue([{ id: "other", name: "Invented supplier" }]);
@@ -502,6 +524,7 @@ test("manual source capture opens retained details without posting inventory", a
 });
 
 test("other receipt upload retains source bytes without the vendor CSV parser route", async () => {
+  confirmSourceCapture();
   api.purchaseCapabilities.mockResolvedValue({ enabled: true, manualReady: true }); api.purchaseItems.mockResolvedValue([]);
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]); api.purchaseVendors.mockResolvedValue([]);
   api.capturePurchaseSource.mockResolvedValue({ id: "attachment", original_filename: "synthetic.pdf", captureStatus: "captured", documents: [] });
@@ -897,6 +920,7 @@ test("a full journal shows its 32-review limit and keeps all earlier reviews wit
 });
 
 test("a manual-captured document posts through the journal and restores its exact reviewed command", async () => {
+  confirmSourceCapture();
   api.purchaseCapabilities.mockResolvedValue({ enabled: true, manualReady: true }); api.purchaseItems.mockResolvedValue([]);
   api.purchaseFiles.mockResolvedValue([]); api.purchaseHistory.mockResolvedValue([]);
   api.purchaseVendors.mockResolvedValue([{ id: "pfg", name: "Invented supplier" }]);

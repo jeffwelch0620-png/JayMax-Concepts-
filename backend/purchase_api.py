@@ -207,9 +207,9 @@ async def capture_source(pool, store_id, actor, source, filename, mime_type, att
                 (file_id,attempt_key,supplied_filename,attempted_by) VALUES ($1,$2,$3,$4)
                 ON CONFLICT(attempt_key) DO NOTHING RETURNING file_id''', file_id, attempt_key, filename, actor)
             if attempt is None:
-                existing = await conn.fetchval('SELECT file_id FROM purchasing.upload_attempts WHERE attempt_key=$1', attempt_key)
-                if existing != file_id:
-                    raise HTTPException(409, 'Upload request key was already used for another file')
+                existing = await conn.fetchrow('SELECT file_id,attempted_by,supplied_filename FROM purchasing.upload_attempts WHERE attempt_key=$1', attempt_key)
+                if existing['file_id'] != file_id or existing['attempted_by'] != actor or existing['supplied_filename'] != filename:
+                    raise HTTPException(409, 'Upload request key was already used for another file, user or filename')
     return file_id
 
 
@@ -510,6 +510,8 @@ def create_router(pool_factory, store_check, authorize):
     install_routes(router,context)
     from manual_purchases import install_routes as install_manual_routes
     install_manual_routes(router,context)
+    from purchase_capture_recovery import install_routes as install_capture_recovery_routes
+    install_capture_recovery_routes(router,context)
     from native_units import install_routes as install_unit_routes
     install_unit_routes(router,context)
     from native_order_receiving import install_routes as install_receiving_routes

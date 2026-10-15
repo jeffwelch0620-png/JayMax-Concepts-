@@ -99,6 +99,10 @@ export const capturePurchaseSource = (rid, file, key) => {
   return axios.post(`${purchaseUrl(rid)}/sources`, form, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 };
 export const captureManualPurchase = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/manual-records`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const checkCaptureSavedStatus = (rid, record) => readStateWithDeadline(async options =>
+  (await axios.post(`${purchaseUrl(rid)}/${record.kind === "manual" ? "manual-records/status" : "capture-status"}`, record.body,
+    { ...options, headers: { "Idempotency-Key": record.key } })).data,
+  "Source status loading timed out. Check again; the original source request is retained.");
 export const nativeUnitSetup = rid => axios.get(`${purchaseUrl(rid)}/unit-setup`).then(r => r.data);
 export const saveNativeUnitProfile = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/unit-profiles`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const nativePrepSetup = rid => axios.get(`${purchaseUrl(rid)}/prep-setup`).then(r => r.data);

@@ -1,5 +1,30 @@
 # Inventory workflow checkpoint and remaining work
 
+**Current local slice:** [submitted source-capture recovery](SOURCE_CAPTURE_RECOVERY.md)
+now covers manual entries and file-upload identities. Local validation passes
+789 frontend tests, 741 offline cases, the strict build, and 38 manual/native
+capture cases. The owner approved publishing a draft PR after the requested
+prompt. Draft PR35's original head was independently reviewed with one required
+amendment; all four original-head CI jobs passed. The owner authorized filename
+and identity-conflict recovery and related small fixes. All amendment local
+checks passed; current-head GitHub CI and independent re-review must be assessed
+before separate merge approval. No new hosted window or deployment change is
+part of this slice.
+
+**Latest same-day result:** the separately approved hosted backup/index window
+completed and closed at 2:14 p.m. EDT. Fresh application backup/restore and the
+exact index application passed; all writers are restored and the accounting
+control remains $212. See [execution evidence and remaining gates](HOSTED_INDEX_WINDOW_20261015.md).
+The hold/window/index-next-step language below is historical.
+
+**Later same-day update:** PR34 merged as `ce7eb27`, both Render services were
+verified live, and the owner lifted the broad hosted-test hold. See the
+[hosted recovery checkpoint](PR34_HOSTED_RECOVERY_CHECKPOINT.md) for eight passed
+scoped database observations and remaining live-test limits. No maintenance
+window is active; writer suspension, fresh backup/restore and exact index
+application retain separate gates. The reconciliation below preserves the
+earlier assessment and hold, not the current execution status.
+
 October 15, 2026. Source baseline: `16e21c51cb9a1a60c59a5c2ec54765ecc5509692`
 (PR33 merge). This reconciliation is local documentation only. No application,
 SQL, test implementation, credential or deployment changes are included.

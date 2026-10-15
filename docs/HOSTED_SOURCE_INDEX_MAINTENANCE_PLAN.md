@@ -1,5 +1,11 @@
 # Hosted source-index maintenance plan — October 14, 2026
 
+**Superseding October 15 execution:** after fresh owner approvals, the backup
+and disposable restore passed, the exact source-index plan was installed and
+independently verified, and API/Toast writers were restored before early window
+closure. See the [completed window record](HOSTED_INDEX_WINDOW_20261015.md).
+No window is active. This older proposal and its holds are historical evidence.
+
 ## Owner hold and updated writer scope — October 15, 2026
 
 **Do not execute this historical plan while hosted testing is held.** PR33 is

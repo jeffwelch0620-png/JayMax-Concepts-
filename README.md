@@ -1,5 +1,45 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Current hosted checkpoint — October 15, 2026
+
+PR34 is merged at **ce7eb27** and verified live on both Render services. The
+owner lifted the broad hosted-test hold. Scoped fictional correction tests
+passed: stale-source/competing requests survive reload, stay blocked from retry,
+support confirmed local discard, and allow a fresh reviewed correction. Eight
+read-only database checkpoints preserved protected pre-existing rows and the
+historical **$212.00** Food Cost report. See the
+[hosted recovery checkpoint](docs/PR34_HOSTED_RECOVERY_CHECKPOINT.md) for exact
+evidence and limits. This is not dropped-response transport proof.
+
+The separately approved hosted maintenance window is now **completed and closed**.
+A fresh encrypted application backup and disposable restore matched **29,088
+rows, 120 relations and 13 catalog groups**. The owner-approved exact source-index
+plan was applied and independently verified; the ledger now has 55 rows and the
+index is present. API and both Toast jobs are restored, with health and the $212
+accounting control verified. See the [backup/index window record](docs/HOSTED_INDEX_WINDOW_20261015.md).
+Connections/credentials are unchanged. Earlier hold, draft and unapplied-index
+wording below describes earlier checkpoints; this entry supersedes it.
+
+## Draft PR35 source-capture recovery — October 15, 2026
+
+The next local slice retains submitted manual entries and file-capture request
+identities across reload/sign-in in the same browser tab. Read-only status
+checks distinguish complete capture from an absent or partially completed request;
+retries require the original key/body or reselected matching file bytes. Source
+capture remains separate from inventory posting. See the
+[source-capture recovery contract and validation](docs/SOURCE_CAPTURE_RECOVERY.md).
+The owner approved publishing [draft PR35](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/35)
+and its independent-review amendment: filename transport parity, a confirmed
+local exit from identity conflicts, authorization parity, and store-scoped
+status lookup. Merge and live acceptance remain separate steps; the completed hosted
+maintenance window stays closed.
+Amendment local validation passes 789 frontend tests in 71 suites, 741 offline
+cases, the strict production build and 38 manual/native capture cases (34
+PostgreSQL integration tests plus four parser tests). Local database and role
+inventories are unchanged and the owned test server is stopped. The linked
+recovery checkpoint records the evidence; original-head green CI is not an
+amended-head result.
+
 ## PR34 submitted-correction recovery — October 15, 2026
 
 The owner-approved local follow-up retains a submitted invoice correction's
