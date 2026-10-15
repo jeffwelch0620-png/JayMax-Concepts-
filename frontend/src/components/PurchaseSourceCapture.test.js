@@ -10,6 +10,8 @@ const body = () => ({ vendor_id: "fictional", document_type: "invoice", document
   lines: [{ fields: { vendor_sku_snapshot: "00001" }, extra_fields: [{ label: "Note", value: "" }, { label: "Note", value: "second" }] }],
   extra_fields: [], attachment_ids: [], verified_source: true, evidence_note: "Fictional only" });
 const record = () => captureRecord("manual", body(), key);
+const fileRecord = (filename = "synthetic.csv") => captureRecord("csv", { kind: "csv", filename, byteCount: 3, sha256: "01".repeat(32) }, key);
+const mismatch = () => ({ response: { status: 409, data: { detail: { code: "capture_identity_mismatch", message: "This capture request does not match the retained source and user" } } } });
 const status = (r, outcome = "saved") => ({ kind: r.kind, requestKey: r.key, actorId: "owner", storeId: "berts", sourceSha256: r.kind === "manual" ? "a".repeat(64) : r.body.sha256,
   outcome, fileId: outcome === "saved" ? fileId : null, ...(r.kind === "manual" ? { manualRecord: r.body } : {}) });
 let container, root, captured, props;
@@ -97,4 +99,49 @@ test("a mismatched saved file cannot clear the request or announce success", asy
   api.purchaseFile.mockResolvedValue({ id: fileId, source_sha256: "b".repeat(64), captureStatus: "captured", documents: [], manualRecord: r.body });
   await render(); await click(button("Check source saved status"));
   expect(retained().list()).toEqual([r]); expect(captured).not.toHaveBeenCalled(); expect(button("Retry retained source")).toBeUndefined();
+});
+test("a confirmed status conflict permits only local discard and restores file selection", async () => {
+  const r = fileRecord(); retained().save(r); api.checkCaptureSavedStatus.mockRejectedValue(mismatch()); await render();
+  expect(container.querySelector('[aria-label="Invoice file"]').disabled).toBe(true);
+  await click(button("Check source saved status"));
+  expect(container.textContent).toContain("A source may already be saved"); expect(button("Retry retained source")).toBeUndefined();
+  await input("Manual supplier", "fictional"); await input("Manual source evidence", "Unsubmitted unrelated draft");
+  await click(button("Discard retained source request")); await click(button("Confirm discard source request"));
+  expect(api.checkCaptureSavedStatus).toHaveBeenCalledTimes(2); expect(retained().list()).toEqual([]);
+  expect(container.querySelector('[aria-label="Invoice file"]').disabled).toBe(false);
+  expect(button("Capture / retry file").disabled).toBe(true); // A replacement file must be chosen explicitly.
+  expect(container.querySelector('[aria-label="Manual source evidence"]').value).toBe("Unsubmitted unrelated draft");
+  expect(api.capturePurchase).not.toHaveBeenCalled(); expect(api.captureManualPurchase).not.toHaveBeenCalled(); expect(captured).not.toHaveBeenCalled();
+});
+test.each(["saved", "retry_available"])("fresh %s after a mismatch is handled without another command", async outcome => {
+  const r = fileRecord(); retained().save(r); api.checkCaptureSavedStatus.mockRejectedValue(mismatch()); await render();
+  await click(button("Check source saved status")); await click(button("Discard retained source request"));
+  saved(r); api.checkCaptureSavedStatus.mockResolvedValue(status(r, outcome));
+  await click(button("Confirm discard source request"));
+  expect(retained().list()).toEqual([]); expect(captured).toHaveBeenCalledTimes(outcome === "saved" ? 1 : 0);
+  expect(api.capturePurchase).not.toHaveBeenCalled();
+});
+test.each([new Error("timeout"), { response: { status: 401 } }, { response: { status: 403 } }, { response: { status: 409, data: { detail: "Unrelated conflict" } } }])("failed confirmation %j keeps the frozen record and blocks retry", async failure => {
+  const r = fileRecord(); retained().save(r); api.checkCaptureSavedStatus.mockRejectedValue(mismatch()); await render();
+  await click(button("Check source saved status")); await click(button("Discard retained source request"));
+  api.checkCaptureSavedStatus.mockRejectedValue(failure); await click(button("Confirm discard source request"));
+  expect(retained().list()).toEqual([r]); expect(container.querySelector('[aria-label="Invoice file"]').disabled).toBe(true);
+  expect(button("Retry retained source")).toBeUndefined(); expect(captured).not.toHaveBeenCalled();
+  expect(api.capturePurchase).not.toHaveBeenCalled();
+});
+test("malformed saved status during discard does not remove recovery evidence", async () => {
+  const r = fileRecord(); retained().save(r); api.checkCaptureSavedStatus.mockRejectedValue(mismatch()); await render();
+  await click(button("Check source saved status")); await click(button("Discard retained source request"));
+  api.checkCaptureSavedStatus.mockResolvedValue({ ...status(r), requestKey: "wrong" }); await click(button("Confirm discard source request"));
+  expect(retained().list()).toEqual([r]); expect(captured).not.toHaveBeenCalled();
+});
+test("quoted filename capture keeps the raw identity and confirms saved status", async () => {
+  const r = fileRecord('Invoice "A".csv'), source = { name: r.body.filename, size: 3, arrayBuffer: async () => new Uint8Array([1, 0, 0]).buffer };
+  saved(r); api.capturePurchase.mockResolvedValue({}); await render();
+  const el = container.querySelector('[aria-label="Invoice file"]');
+  await act(async () => { Object.defineProperty(el, "files", { configurable: true, value: [source] }); el.dispatchEvent(new Event("change", { bubbles: true })); });
+  await click(button("Capture / retry file"));
+  expect(api.capturePurchase).toHaveBeenCalledWith("berts", source, key);
+  expect(api.checkCaptureSavedStatus).toHaveBeenCalledWith("berts", r);
+  expect(retained().list()).toEqual([]); expect(captured).toHaveBeenCalledTimes(1);
 });

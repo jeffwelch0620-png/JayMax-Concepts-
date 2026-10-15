@@ -20,7 +20,7 @@ accounting control verified. See the [backup/index window record](docs/HOSTED_IN
 Connections/credentials are unchanged. Earlier hold, draft and unapplied-index
 wording below describes earlier checkpoints; this entry supersedes it.
 
-## Local source-capture recovery follow-up — October 15, 2026
+## Draft PR35 source-capture recovery — October 15, 2026
 
 The next local slice retains submitted manual entries and file-capture request
 identities across reload/sign-in in the same browser tab. Read-only status
@@ -28,12 +28,17 @@ checks distinguish complete capture from an absent or partially completed reques
 retries require the original key/body or reselected matching file bytes. Source
 capture remains separate from inventory posting. See the
 [source-capture recovery contract and validation](docs/SOURCE_CAPTURE_RECOVERY.md).
-The owner approved publishing this follow-up as a draft PR for independent
-review. Merge and live acceptance remain separate steps; the completed hosted
+The owner approved publishing [draft PR35](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/35)
+and its independent-review amendment: filename transport parity, a confirmed
+local exit from identity conflicts, authorization parity, and store-scoped
+status lookup. Merge and live acceptance remain separate steps; the completed hosted
 maintenance window stays closed.
-Local validation passes 776 frontend tests, 741 offline cases, the strict
-production build and 36 manual/native capture cases (32 PostgreSQL integration
-tests plus four parser tests). Local database and role inventories are unchanged.
+Amendment local validation passes 789 frontend tests in 71 suites, 741 offline
+cases, the strict production build and 38 manual/native capture cases (34
+PostgreSQL integration tests plus four parser tests). Local database and role
+inventories are unchanged and the owned test server is stopped. The linked
+recovery checkpoint records the evidence; original-head green CI is not an
+amended-head result.
 
 ## PR34 submitted-correction recovery — October 15, 2026
 

@@ -67,8 +67,15 @@ export function pendingCaptureJournal(actorId, restaurantId, storage = () => win
 }
 export async function captureFileIdentity(file, kind) {
   if (!file || !file.size || file.size > 12 * 1024 * 1024) throw new Error("Select a nonempty source no larger than 12 MB.");
+  if (typeof file.name !== "string" || !file.name || file.name.length > 255 || /[/\\]/.test(file.name)) throw new Error("Rename the file using at most 255 characters without slashes or backslashes, then reselect it.");
   const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
   return { kind, filename: file.name, byteCount: file.size, sha256: Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("") };
+}
+export function isCaptureIdentityMismatch(error) {
+  const detail = error?.response?.data?.detail;
+  // Accept the exact pre-amendment message during staggered deployment too.
+  return error?.response?.status === 409 && (detail?.code === "capture_identity_mismatch"
+    || detail === "This capture request does not match the retained source and user");
 }
 export function captureRecoveryOutcome(result, record, actorId, restaurantId) {
   if (!result || result.kind !== record.kind || result.requestKey !== record.key || result.actorId !== actorId || result.storeId !== canonicalStoreId(restaurantId)

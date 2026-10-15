@@ -7,6 +7,78 @@ publishing a draft PR for independent review. It remains unmerged and undeployed
 GitHub CI is a separate check from the local results below. No hosted writes,
 connection changes, role changes or schema migrations accompany this slice.
 
+## Independent-review amendment
+
+The owner authorized amending draft [PR35](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/35)
+after review of published head `3c327ae`. The original-head CI passed all four
+jobs; amended-head CI remains a separate check.
+
+- Retain the raw filename for display, exact reselection and compatibility with
+  existing tab records. Only the server's file-status comparison applies HTML
+  multipart filename escaping: double quote becomes `%22`, LF `%0A`, CR `%0D`.
+  No percent decoding is performed, so literal `%22`/`%0A` filenames stay literal.
+  Source bytes, digests, request keys and the strict command replay guard are
+  unchanged. The fix applies to both CSV and raw-source capture; see the
+  [HTML multipart filename rules](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#multipart-form-data).
+- A recognized status identity conflict now exposes confirmed local discard,
+  with a warning that a source may already be saved. The server returns a typed
+  `capture_identity_mismatch` conflict; the client also recognizes the exact
+  original status message during staggered service deployment. Arbitrary 409s,
+  authentication errors, failed reads and malformed saved evidence do not grant
+  discard or retry permission.
+- Discard confirmation always checks again: fresh mismatch or `retry_available`
+  clears only the exact tab record; fresh `saved` opens the validated source;
+  timeout/authorization failure/malformed evidence leaves recovery intact. A
+  conflict never enables retry or claims that no source was saved. File discard
+  clears the selected file and preserves unrelated unsubmitted manual fields.
+- The status routes require the same owner/manager authorization as capture
+  commands while retaining read-only database transactions. SQL lookup filters
+  by store before inspecting an attempt: a foreign-location key is
+  indistinguishable from an absent key, and no foreign file details are returned.
+  Same-store actor/source mismatches retain the strict conflict response.
+- Unsupported filenames fail before hashing or submission with an explicit
+  rename/reselect instruction. Slashes/backslashes remain disallowed because
+  server basename handling differs between Windows and Linux. The journal schema
+  is unchanged; existing submitted records are neither rewritten nor given new keys.
+
+The route-kind column remains deferred. No schema/migration or login redesign
+is needed. Amendment local results are below; the older validation later in
+this document is historical. Merge and live acceptance remain separate owner
+decisions. Check the current head's [PR35 CI results](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/35/checks),
+not a green run from the original reviewed head.
+
+### Amendment local validation
+
+| Check | Result |
+| --- | --- |
+| Full frontend | 789/789 tests, 71/71 suites |
+| Strict production build | Passed, CI=true and ESLint enabled |
+| Offline review checks | 741/741 cases: 285 methods + 456 subtests; zero skipped |
+| Full manual-source/native-purchase suite | 38/38: 34 PostgreSQL integration tests + 4 parser tests |
+| Focused frontend | 208/208, overlapping the full suite |
+| Focused database recovery | 5/5, overlapping the full suite |
+| Local database/role inventories | Unchanged before/after both database runs; owned PostgreSQL 17 stopped |
+
+All fixtures are fictional and no hosted connection was used. The two added
+database methods cover twelve actual multipart filename combinations across
+CSV/raw routes, stored name assertions, literal-percent preservation, read-only
+saved lookup, exact replay, strict changed-name refusal, and the real app's
+owner/manager/readonly/staff/location/anonymous authorization for both routes.
+Purchasing-table snapshots around status reads remain exactly equal. Component
+cases cover the mismatch exit, fresh saved/negative reads, timeout/401/403/
+unrelated conflict/malformed evidence, raw quoted-name capture, and preservation
+of an unrelated manual draft. All five recovery database methods are selected
+by the repository's CI runner.
+
+Amendment receipts under the build workspace's `work` directory:
+
+- `source-capture-amend-frontend-20261015T190143340935Z.json`.
+- `source-capture-amend-build-20261015T190143180368Z.log`.
+- `source-capture-amend-offline-20261015T190143268177Z.xml`.
+- `source-capture-focused-20261015T190023698137Z.json`.
+- `source-capture-tests-20261015T190014473442Z/receipt.json` (focused database).
+- `source-capture-amend-tests-20261015T190219088745Z/receipt.json` and `database.xml` (full database).
+
 ## Behavior
 
 Invoice Master now retains a submitted manual source or file-capture request
@@ -51,9 +123,10 @@ Two POST endpoints carry lookup input but perform read-only database work:
 - `/api/pg/purchases/{store}/manual-records/status`: exact original manual body
   with that header; uses the command's shared canonical source serializer.
 
-The lookup checks the upload attempt's actor, store, supplied filename, digest
-and byte count. A mismatch returns a generic conflict without foreign file
-details. An absent attempt returns `retry_available`, never an invented file ID.
+The lookup first scopes the attempt to the store, then checks actor, multipart
+filename, digest and byte count. An in-store mismatch returns a typed generic
+conflict without foreign file details. An absent or foreign-store attempt returns
+`retry_available`, never an invented file ID.
 Lookups use a consistent read-only transaction.
 
 Raw-source completion needs retained bytes. CSV completion additionally needs
@@ -76,7 +149,7 @@ The normal capture and purchase commands retain their authorization and validati
 Actual inventory remains the accounting baseline; prep/sales are explanatory,
 and taxes/fees remain separate from food amounts.
 
-## Validation and remaining gates
+## Original-head validation and remaining gates
 
 Local frontend validation passes **776 tests in 71 suites**, including 11 capture
 component cases, seven capture-journal cases and bounded status-read coverage.

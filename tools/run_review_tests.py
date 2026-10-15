@@ -23,6 +23,8 @@ DATABASE_CASES = (
  ('manual_purchases','ManualPurchaseTests','test_capture_recovery_manual_absent_saved_and_partial_attachment_reads_are_readonly'),
  ('manual_purchases','ManualPurchaseTests','test_capture_recovery_rejects_changed_manual_body_foreign_scope_and_replay_actor'),
  ('manual_purchases','ManualPurchaseTests','test_capture_recovery_csv_requires_projection_and_raw_source_requires_only_bytes'),
+ ('manual_purchases','ManualPurchaseTests','test_capture_recovery_filename_transport_matches_raw_probe_without_decoding_literals'),
+ ('manual_purchases','ManualPurchaseTests','test_capture_recovery_status_requires_capture_role_and_location_without_writes'),
  ('backup_fingerprint','FingerprintDatabaseTests','test_server_cursor_fallback_and_legacy_fingerprints_are_equivalent'),
  ('apply_additive_migration','HostedBackupLocalDatabaseTests','test_export_deadline_and_operator_cancel_remove_only_owned_database_sessions'),
  ('apply_additive_migration','HostedBackupLocalDatabaseTests','test_encrypted_export_restore_and_close_failure_stay_disposable'),

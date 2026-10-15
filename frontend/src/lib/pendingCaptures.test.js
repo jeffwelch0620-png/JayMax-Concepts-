@@ -1,4 +1,4 @@
-import { captureRecord, captureRecoveryOutcome, normalizedManual, pendingCaptureJournal } from "./pendingCaptures";
+import { captureFileIdentity, captureRecord, captureRecoveryOutcome, isCaptureIdentityMismatch, normalizedManual, pendingCaptureJournal } from "./pendingCaptures";
 
 export const key = "00000000-0000-4000-8000-000000000001";
 export const manual = () => ({ vendor_id: "fictional", document_type: "invoice", documents: { document_number: "TEST ONLY", tax_source: "" }, parties: {},
@@ -51,6 +51,17 @@ test("the 32-request cap preserves all earlier records", () => {
   const before = journal.list();
   expect(() => journal.save({ ...file(), key: "ffffffff-ffff-4fff-8fff-ffffffffffff" })).toThrow();
   expect(journal.list()).toEqual(before);
+});
+test.each(['a\\b.csv', 'a/b.csv', 'x'.repeat(256)])("unsupported filename %s fails before hashing with a rename instruction", async name => {
+  const read = jest.fn();
+  await expect(captureFileIdentity({ name, size: 3, arrayBuffer: read }, "csv")).rejects.toThrow("Rename the file");
+  expect(read).not.toHaveBeenCalled();
+});
+test("only recognized identity conflicts permit mismatch recovery", () => {
+  const error = detail => ({ response: { status: 409, data: { detail } } });
+  expect(isCaptureIdentityMismatch(error({ code: "capture_identity_mismatch", message: "Does not match" }))).toBe(true);
+  expect(isCaptureIdentityMismatch(error("This capture request does not match the retained source and user"))).toBe(true);
+  for (const e of [error("Unrelated conflict"), error({ code: "other_conflict" }), { response: { status: 403 } }, new Error("timeout")]) expect(isCaptureIdentityMismatch(e)).toBe(false);
 });
 test("status requires request, user, location, kind, exact source and a valid saved file id", () => {
   const record = file(), status = { kind: "csv", requestKey: key, actorId: "owner", storeId: "berts", sourceSha256: record.body.sha256, outcome: "saved", fileId: key };

@@ -2,10 +2,14 @@
 
 **Current local slice:** [submitted source-capture recovery](SOURCE_CAPTURE_RECOVERY.md)
 now covers manual entries and file-upload identities. Local validation passes
-776 frontend tests, 741 offline cases, the strict build, and 36 manual/native
+789 frontend tests, 741 offline cases, the strict build, and 38 manual/native
 capture cases. The owner approved publishing a draft PR after the requested
-prompt. Independent review, GitHub CI and merge approval remain pending. No new
-hosted window or deployment change is part of this slice.
+prompt. Draft PR35's original head was independently reviewed with one required
+amendment; all four original-head CI jobs passed. The owner authorized filename
+and identity-conflict recovery and related small fixes. All amendment local
+checks passed; current-head GitHub CI and independent re-review must be assessed
+before separate merge approval. No new hosted window or deployment change is
+part of this slice.
 
 **Latest same-day result:** the separately approved hosted backup/index window
 completed and closed at 2:14 p.m. EDT. Fresh application backup/restore and the

@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import * as api from "../lib/api";
 import { ManualPurchaseEntry } from "./ManualPurchaseEntry";
 import { cardCls, inpCls, btnAcc, btnGhost } from "./common";
-import { captureFileIdentity, captureRecord, captureRecoveryOutcome, normalizedManual, pendingCaptureJournal, stableCaptureValue } from "../lib/pendingCaptures";
+import { captureFileIdentity, captureRecord, captureRecoveryOutcome, isCaptureIdentityMismatch, normalizedManual, pendingCaptureJournal, stableCaptureValue } from "../lib/pendingCaptures";
 
-const errorText = e => typeof e?.response?.data?.detail === "string" ? e.response.data.detail : e.message || "Source status could not be confirmed.";
+const errorText = e => typeof e?.response?.data?.detail === "string" ? e.response.data.detail : e?.response?.data?.detail?.message || e.message || "Source status could not be confirmed.";
 
 export function PurchaseSourceCapture({ restaurantId, actorId, manualReady, vendors, files, busy, onBusy, onCaptured }) {
   const journal = useMemo(() => pendingCaptureJournal(actorId, restaurantId), [actorId, restaurantId]);
@@ -35,7 +35,15 @@ export function PurchaseSourceCapture({ restaurantId, actorId, manualReady, vend
   async function check(record) {
     current(record);
     setChecks(s => ({ ...s, [record.key]: null }));
-    const outcome = captureRecoveryOutcome(await api.checkCaptureSavedStatus(restaurantId, record), record, actorId, restaurantId);
+    let result;
+    try { result = await api.checkCaptureSavedStatus(restaurantId, record); }
+    catch (e) {
+      current(record);
+      if (!isCaptureIdentityMismatch(e)) throw e;
+      setChecks(s => ({ ...s, [record.key]: { outcome: "mismatch" } }));
+      return null;
+    }
+    const outcome = captureRecoveryOutcome(result, record, actorId, restaurantId);
     current(record);
     if (outcome.outcome !== "saved") { setChecks(s => ({ ...s, [record.key]: outcome })); return null; }
     const saved = await api.purchaseFile(restaurantId, outcome.fileId);
@@ -93,18 +101,20 @@ export function PurchaseSourceCapture({ restaurantId, actorId, manualReady, vend
         <p>{r.kind === "manual" ? `Manual source: ${r.body.documents.document_number || "Unnumbered"}` : r.body.filename}</p>
         <button className={btnGhost} disabled={busy || !!discard} onClick={() => ignore(run(() => check(r)))}>Check source saved status</button>
         {r.kind !== "manual" && <label>Reselect original file for retry <input aria-label={`Reselect source ${r.key}`} type="file" disabled={busy || !!discard} onChange={e => { scope.selectedFiles.set(r.key, e.target.files?.[0]); }} /></label>}
+        {checks[r.key]?.outcome === "mismatch" && <p role="alert">The server reports this request doesn't match the retained source. A source may already be saved. You may discard only this tab's recovery record after another status check; retry is blocked.</p>}
         {checks[r.key]?.outcome === "retry_available" && <>
           <p>No complete capture was visible in this read. The original request may still complete. Retry uses its same key and exact source.</p>
           <button className={btnAcc} disabled={busy || !!discard} onClick={() => ignore(run(() => send(r, true)))}>Retry retained source</button>
-          <button className={btnGhost} disabled={busy || !!discard} onClick={() => setDiscard(r)}>Discard retained source request</button>
         </>}
+        {["retry_available", "mismatch"].includes(checks[r.key]?.outcome) && <button className={btnGhost} disabled={busy || !!discard} onClick={() => setDiscard(r)}>Discard retained source request</button>}
       </div>)}
       {discard && <div aria-label="Confirm source request discard">
         <p>This removes only this tab's recovery record. It does not delete retained sources or cancel the original request, which may still finish. Check the captured files before entering a replacement.</p>
         <button className={btnGhost} disabled={busy} onClick={() => setDiscard(null)}>Keep source request</button>
         <button className={btnGhost} disabled={busy} onClick={() => ignore(run(async () => {
           if (await check(discard)) return;
-          current(discard); journal.clear(discard); refresh(); scope.selectedFiles.delete(discard.key); setDiscard(null); setEpoch(n => n + 1);
+          current(discard); journal.clear(discard); refresh(); scope.selectedFiles.delete(discard.key); setDiscard(null);
+          if (discard.kind === "manual") setEpoch(n => n + 1); else setFile(null);
         }))}>Confirm discard source request</button>
       </div>}
     </section>}
