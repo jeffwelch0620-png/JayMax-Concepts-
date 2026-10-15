@@ -147,8 +147,28 @@ Original key: `ac62fff6-ff76-4f7a-aa99-716614546aa1`. The relay dropped the firs
 command before forwarding; the real status route returned HTTP 200 and the UI
 displayed its negative-read/same-request retry guidance. The recovery region
 is saved in `pr35-file-before-signout-dom.txt`. Normal sign-out reached the
-existing owner sign-in screen. Same-owner sign-in and exact reselection/retry
-remain pending at this checkpoint.
+existing owner sign-in screen. Same-owner sign-in subsequently completed in the
+same Chrome tab. Invoice Master recovered the same filename and original key;
+there was no automatic resend and no retry action before another explicit status
+read. That read returned the real negative result. An intentional retry without
+reselecting the file was refused locally with: "Reselect the original file with
+the same filename and exact bytes before retrying." The relay still records just
+one dropped file attempt and no forwarded file capture. Exact reselection/retry
+remains pending at this checkpoint.
+
+UI evidence: `pr35-file-after-owner-signin-dom.txt`,
+`pr35-file-reselection-required-dom.txt`, and
+`pr35-file-reselection-required-20261015.png`. The owner was asked to choose the
+original through the upper recovery-specific chooser, since the ordinary upload
+chooser correctly stays disabled while the earlier file request is retained.
+
+The first reselection after sign-in contained the earlier literal-percent CSV
+(`TEST-ONLY-PR35-%22A%22-20261015.csv`) rather than the BEFORE file. The app
+refused that different filename/bytes locally, preserving the original record
+and its negative status. Relay counters remained one dropped BEFORE attempt,
+zero forwarded file captures and no held transport error. This supplies live
+wrong-file refusal evidence. The owner was asked to paste the full BEFORE path
+into the file picker's File name box; a correct-file retry is still pending.
 
 The independent pre-retry observation passed:
 `pr35-live-file_before_unforwarded-20261015T232146787666Z.json`, SHA-256
