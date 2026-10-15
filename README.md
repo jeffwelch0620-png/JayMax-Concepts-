@@ -1,5 +1,25 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR32 merged; fingerprint path diagnostics follow-up
+
+[PR32](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/32) merged with
+owner approval at **7b61620**, from refreshed documentation head **3d1eacc**.
+[Exact-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38674779748)
+passed all four checks: 689 frontend tests/build, 728 offline cases and 79 full
+PostgreSQL cases. [Merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38675114565)
+also passed all four checks. The local follow-up adds export diagnostic counts for completed
+server aggregation, size-triggered fallback and cursor-only relations, without
+table names or changes to archived fingerprints and timeout budgets. See the
+[path diagnostic checkpoint](docs/FINGERPRINT_PATH_DIAGNOSTICS_CHECKPOINT.md) for
+validation and the future hosted measurement plan. The source-frozen local run
+passed **741 offline cases and all 79 PostgreSQL cases**, with zero
+failures/errors/skips, unchanged database/role inventory and the local server
+stopped. [PR33 CI at reviewed head 28fad50](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38679036355)
+passed all four checks: 689 frontend tests/build, 741 offline cases and 79
+PostgreSQL cases. Owner approval covers the small documentation/test polish
+and merge after amended-head CI. No new hosted maintenance window or index
+application is authorized.
+
 ## PR31 merged; bounded fingerprint follow-up — October 14, 2026
 
 [PR31](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/31) merged with

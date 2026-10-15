@@ -49,6 +49,7 @@ ROW_ALGORITHM = 'sha256-sorted-sha256-canonical-jsonb-utf8-v1'
 # This is not a bound on all PostgreSQL sorting/JSON workspace memory.
 MAX_FINGERPRINT_AGGREGATE_BYTES = 8 * 1024 * 1024
 ROW_HASH_LINE_BYTES = 65
+FINGERPRINT_PATHS = ('serverAggregateRelations', 'cursorFallbackRelations', 'cursorOnlyRelations')
 MAX_ARCHIVE = 64 * 1024 * 1024  # Bounded build tool; larger backups need streaming encryption.
 MAX_ENVELOPE = 3 * MAX_ARCHIVE
 FLAGS = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -103,6 +104,11 @@ def safe_export_diagnostics(value):
     safe['serverLimitsNotCaptured'] = [name for name in LIMIT_NAMES if name not in safe['serverLimits']]
     if isinstance(value.get('limitReadHeld'), bool):
         safe['limitReadHeld'] = value['limitReadHeld']
+    paths = value.get('fingerprintPaths')
+    if isinstance(paths, dict):
+        safe['fingerprintPaths'] = {name: paths[name] for name in FINGERPRINT_PATHS
+            if isinstance(paths.get(name), int) and not isinstance(paths[name], bool)
+            and 0 <= paths[name] <= 10**9}
     for name in ('deadlineExceeded', 'ownedConnectionTerminated', 'ownedConnectionClosed', 'progressReportingHeld'):
         if isinstance(value.get(name), bool):
             safe[name] = value[name]
@@ -133,6 +139,7 @@ class ExportDiagnostics:
         self.connection_closed = False
         self.progress_held = False
         self.export_reference = uuid4().hex
+        self.fingerprint_paths = dict.fromkeys(FINGERPRINT_PATHS, 0)
 
     def emit(self, phase, state):
         # Only fixed phase/state labels and monotonic elapsed time leave the tool.
@@ -182,6 +189,7 @@ class ExportDiagnostics:
     def report(self):
         return safe_export_diagnostics({'format':'jaymax-backup-diagnostics-v1',
             'exportReference':self.export_reference,
+            'fingerprintPaths':self.fingerprint_paths,
             'totalElapsedSeconds':round(time.monotonic()-self.started, 6),
             'phases':self.phases, 'serverLimits':self.server_limits, 'limitReadHeld':self.limit_read_held,
             'deadlineExceeded':self.deadline_exceeded, 'ownedConnectionTerminated':self.connection_terminated,
@@ -365,7 +373,15 @@ async def tool(executable, args, settings=None, remote=False):
     return stdout
 
 
+def record_fingerprint_path(path):
+    # Export-owned counters only: no names, rows or changes to archived facts.
+    control = EXPORT_CONTROL.get()
+    if control is not None:
+        control.diagnostics.fingerprint_paths[path] += 1
+
+
 async def relation_fingerprint(conn, quoted, kind, row_hashes=True, *, server_aggregation=True):
+    path = 'cursorOnlyRelations'
     if kind != 'S' and row_hashes and server_aggregation:
         probe_rows = MAX_FINGERPRINT_AGGREGATE_BYTES // ROW_HASH_LINE_BYTES
         if probe_rows < 1:
@@ -379,7 +395,9 @@ async def relation_fingerprint(conn, quoted, kind, row_hashes=True, *, server_ag
             FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value
                 FROM {quoted} t LIMIT $1::bigint) hashed""", probe_rows)
         if fact['rows'] < probe_rows:
+            record_fingerprint_path('serverAggregateRelations')
             return {'rows': fact['rows'], 'sha256': fact['sha256']}
+        path = 'cursorFallbackRelations'
     # Sequences and pre-row-hash archives retain their existing byte/order rules.
     sql = (f"SELECT jsonb_build_object('last_value',last_value,'is_called',is_called)::text AS value FROM {quoted}"
            if kind == 'S' else
@@ -389,6 +407,7 @@ async def relation_fingerprint(conn, quoted, kind, row_hashes=True, *, server_ag
     sha = hashlib.sha256()
     async for row in conn.cursor(sql, prefetch=100):
         sha.update(row['value'].encode()); sha.update(b'\n'); count += 1
+    record_fingerprint_path(path)
     return {'rows': count, 'sha256': sha.hexdigest()}
 
 
