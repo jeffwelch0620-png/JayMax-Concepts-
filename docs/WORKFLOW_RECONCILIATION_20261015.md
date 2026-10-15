@@ -3,9 +3,9 @@
 **Current local slice:** [submitted source-capture recovery](SOURCE_CAPTURE_RECOVERY.md)
 now covers manual entries and file-upload identities. Local validation passes
 776 frontend tests, 741 offline cases, the strict build, and 36 manual/native
-capture cases. Independent review remains pending; a new draft PR requires the
-owner's requested prompt before push. No new hosted window or deployment change
-is part of this slice.
+capture cases. The owner approved publishing a draft PR after the requested
+prompt. Independent review, GitHub CI and merge approval remain pending. No new
+hosted window or deployment change is part of this slice.
 
 **Latest same-day result:** the separately approved hosted backup/index window
 completed and closed at 2:14 p.m. EDT. Fresh application backup/restore and the

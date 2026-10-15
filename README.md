@@ -28,8 +28,9 @@ checks distinguish complete capture from an absent or partially completed reques
 retries require the original key/body or reselected matching file bytes. Source
 capture remains separate from inventory posting. See the
 [source-capture recovery contract and validation](docs/SOURCE_CAPTURE_RECOVERY.md).
-This follow-up is local; pushing a draft PR, merging and live acceptance remain
-separate steps. The completed hosted maintenance window stays closed.
+The owner approved publishing this follow-up as a draft PR for independent
+review. Merge and live acceptance remain separate steps; the completed hosted
+maintenance window stays closed.
 Local validation passes 776 frontend tests, 741 offline cases, the strict
 production build and 36 manual/native capture cases (32 PostgreSQL integration
 tests plus four parser tests). Local database and role inventories are unchanged.

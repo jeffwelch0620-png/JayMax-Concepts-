@@ -1,9 +1,11 @@
 # Submitted source-capture recovery
 
 October 15, 2026. Local follow-up from `5be2c20`, after PR34's hosted recovery
-acceptance and the completed backup/index maintenance window. This work has not
-been pushed, reviewed by CI, merged or deployed. No hosted writes, connection
-changes, role changes or schema migrations accompany this slice.
+acceptance and the completed backup/index maintenance window. Implementation and
+local validation are recorded at `278863e`; the owner subsequently approved
+publishing a draft PR for independent review. It remains unmerged and undeployed;
+GitHub CI is a separate check from the local results below. No hosted writes,
+connection changes, role changes or schema migrations accompany this slice.
 
 ## Behavior
 
@@ -113,7 +115,8 @@ cleanup receipt is preserved with the failed run; existing test databases and
 roles were left intact. Initial test-fixture and strict hook-lint failures were
 also corrected before the successful runs above. No hosted connection was used.
 
-Remaining: prompt the owner before a draft PR push; independent review and CI;
+The owner approved the requested draft-PR push after local validation.
+Remaining: independent review and CI;
 separate owner merge approval (main auto-deploys to the Render test app); then a
 scoped fictional live reload/sign-in and dropped-response acceptance test. Local
 mocked transport results are not live transport proof. UI redesign, product
