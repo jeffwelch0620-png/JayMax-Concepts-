@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { SetupTab } from "./SetupTab";
 import * as api from "../lib/api";
 import { resetComponentApiMock } from "../testHelpers/componentApiMock";
+import { useStoreState } from "../lib/useStoreState";
 jest.mock("../lib/api", () => require("../testHelpers/componentApiMock").createComponentApiMock());
 const item = { controlNumber: "F01", itemCode: "stable_food", name: "Invented food", storageArea: "Freezer", active: true, countActive: false, orderEnabled: true, salesTracked: true, par: 0,
   baseUnit: "lb", countUnit: "bag", basePerCountUnit: 25, lastCounted: "2026-10-01", lastCountedBy: "Invented counter", currentStock: 7,
@@ -44,6 +45,60 @@ test("the real editor preserves exact decimal metadata through an unrelated save
   expect(saved.par).toBe("2.123456789012345678");
   for (const key of ["packCount", "unitQty", "portionSize", "basePerCountUnit"]) expect(saved[key]).toBe(exact);
   for (const key of ["packCount", "unitQty", "basePerPurchaseUnit"]) expect(saved.vendorSkus[0][key]).toBe(exact);
+});
+
+test.each(["1e400", "1" + "0".repeat(400), "1e-400", "0E-10", "9".repeat(512) + "." + "1".repeat(512)])("all seven editable decimal fields retain %s through reopen and an unrelated save", async value => {
+  const precise = { ...item, par: value, packCount: value, unitQty: value, portionSize: value,
+    vendorSkus: [{ ...item.vendorSkus[0], packCount: value, unitQty: value, price: value }] };
+  await act(async () => root.render(<SetupTab {...revisionProps(10, [precise])} />));
+  await click("edit-item-F01");
+  const fields = find("item-name-input").closest("form").querySelectorAll('input[inputmode="decimal"]');
+  expect(fields).toHaveLength(7);
+  for (const field of fields) { expect(field.type).toBe("text"); expect(field.value).toBe(value); }
+  await changeInput(find("item-name-input"), "Unrelated fictional rename");
+  await click("item-submit-button");
+  const saved = persist.mock.calls[0][0][0];
+  for (const key of ["par", "packCount", "unitQty", "portionSize"]) expect(saved[key]).toBe(value);
+  for (const key of ["packCount", "unitQty", "price"]) expect(saved.vendorSkus[0][key]).toBe(value);
+  const body = jest.requireActual("../lib/api").mongoItemToPgBody(saved, "berts");
+  expect(body.par).toBe(value); expect(body.vendor_skus[0].price).toBe(value);
+  expect(body.base_per_count_unit).toBe("25"); expect(body.vendor_skus[0].base_per_purchase_unit).toBe("20");
+});
+
+test.each(['1e400','1e-400'])('preview marks unsafe price %s unavailable without losing exact input', async price => {
+  const unsafe={...item,vendorSkus:[{...item.vendorSkus[0],price}]};
+  await act(async()=>root.render(<SetupTab {...revisionProps(10,[unsafe])}/>));
+  await click('edit-item-F01');
+  expect(find('portion-preview').textContent).toContain('Outside supported calculation range');
+  expect(find('portion-preview').textContent).not.toMatch(/Infinity|NaN|∞|\$0\.00/);
+  await click('item-submit-button');
+  expect(persist.mock.calls[0][0][0].vendorSkus[0].price).toBe(price);
+});
+
+const localSession = {user:{id:"synthetic-owner"}};
+const localEmpty = {items:[],areas:[]};
+function StoreCatalog({onError}) {
+  const store = useStoreState("berts", localSession, localEmpty, onError);
+  return store.state ? <SetupTab {...revisionProps(store.state.revision, store.state.items)}
+    showError={onError} persistItems={(next,revision)=>store.save("items",next,revision)} /> : <p>Loading</p>;
+}
+
+test.each(["1e200000", "1e-513", "NaN", "-1"])("real store and editor retain invalid text %s and its specific error without a transport write", async value => {
+  const errors = jest.fn(), transport = jest.fn();
+  api.fetchState.mockResolvedValue({revision:10,items:[item]});
+  api.putCollection.mockImplementation((rid,name,next) => {
+    next.forEach(row => jest.requireActual("../lib/api").mongoItemToPgBody(row,rid));
+    return transport();
+  });
+  await act(async () => root.render(<StoreCatalog onError={errors}/>));
+  await click("edit-item-F01"); await changeInput(parInput(),value);
+  expect(parInput().value).toBe(value);
+  await click("item-submit-button");
+  expect(transport).not.toHaveBeenCalled(); expect(success).not.toHaveBeenCalled();
+  expect(parInput().value).toBe(value);
+  expect(container.querySelector('[role="alert"]').textContent).toContain("512 integer digits");
+  expect(errors).toHaveBeenLastCalledWith(expect.stringContaining("512 integer digits"));
+  expect(container.textContent).not.toContain("Save was not confirmed");
 });
 
 test("background refresh cannot rebase an open catalog editor; cancel and reopen uses latest data", async () => {
@@ -295,7 +350,7 @@ test("pack edits warn without rewriting a stored conversion and must be saved be
   const review = jest.fn();
   await act(async () => root.render(<SetupTab rid="berts" items={[item]} areas={[{name:"Freezer",prefix:"F"}]} persistItems={persist} persistAreas={persist} showToast={success} onVerifySupplier={review} />));
   await click("edit-item-F01"); expect(find("verify-supplier-0").disabled).toBe(false);
-  const pack = find("vendor-sku-row-0").querySelector('input[type="number"]');
+  const pack = [...find("vendor-sku-row-0").querySelectorAll("label")].find(label => label.textContent === "Pack Count").querySelector("input");
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(pack, "5"); pack.dispatchEvent(new Event("input", {bubbles:true})); });
   expect(container.textContent).toContain("Stored conversion differs from pack details: confirm or keep");
   expect(find("verify-supplier-0").disabled).toBe(true); await click("verify-supplier-0"); expect(review).not.toHaveBeenCalled();
@@ -308,7 +363,7 @@ test("editing a pack leaves an unknown conversion null and new supplier rows req
   const nullable = { ...item, vendorSkus: [{ ...item.vendorSkus[0], basePerPurchaseUnit: null }] };
   await act(async () => root.render(<SetupTab rid="berts" items={[nullable]} areas={[{name:"Freezer",prefix:"F"}]} persistItems={persist} persistAreas={persist} showToast={success} onVerifySupplier={jest.fn()} />));
   await click("edit-item-F01");
-  const pack = find("vendor-sku-row-0").querySelector('input[type="number"]');
+  const pack = [...find("vendor-sku-row-0").querySelectorAll("label")].find(label => label.textContent === "Pack Count").querySelector("input");
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(pack, "6"); pack.dispatchEvent(new Event("input", {bubbles:true})); });
   await click("add-vendor-sku-button"); expect(find("verify-supplier-1").disabled).toBe(true);
   await click("item-submit-button"); expect(persist.mock.calls[0][0][0].vendorSkus[0].basePerPurchaseUnit).toBeNull();

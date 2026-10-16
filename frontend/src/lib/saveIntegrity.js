@@ -7,12 +7,33 @@ export function confirmed(result) {
 
 export async function confirmSave(save, onError) {
   try {
-    if (!confirmed(await save())) throw new Error("Save was not confirmed. Your draft has been retained.");
+    const result = await save();
+    if (!confirmed(result)) throw new Error(saveFailureMessage(result, "Save was not confirmed. Your draft has been retained."));
     return true;
   } catch (error) {
-    onError(error?.response?.data?.detail || error.message || "Save failed. Your draft has been retained.");
+    onError(saveErrorText(error, "Save failed. Your draft has been retained."));
     return false;
   }
+}
+
+// Failed saves carry no revision and can never acknowledge a draft. Preserve
+// their specific explanation when a form checks the store's result.
+export function saveFailureMessage(result, fallback) {
+  return result?.ok === false && typeof result.errorMessage === "string" && result.errorMessage
+    ? result.errorMessage : fallback;
+}
+
+export function saveErrorText(error, fallback) {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.filter(entry => typeof entry?.msg === "string" && entry.msg).map(entry => {
+      const field = Array.isArray(entry.loc) ? entry.loc.filter(part => (typeof part === "string" || typeof part === "number") && part !== "body").join(".") : "";
+      return field ? `${field}: ${entry.msg}` : entry.msg;
+    });
+    if (messages.length) return messages.join("; ");
+  }
+  return typeof error?.message === "string" && error.message ? error.message : fallback;
 }
 
 // Focus markers share this cache but are navigation metadata, not unsaved forms.

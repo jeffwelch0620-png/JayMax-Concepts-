@@ -28,6 +28,19 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.useRealTimers(); });
 
+test('store and form report the same failed save with one scoped toast identity', async () => {
+  await act(async()=>root.render(<App/>));await click('nav-tab-setup');
+  api.putCollection.mockRejectedValueOnce(new Error('Fictional save failed'));
+  let result;await act(async()=>{result=await mockSetupProps.persistItems([item],10);});
+  expect(result).toMatchObject({ok:false,errorMessage:expect.any(String)});
+  await act(async()=>mockSetupProps.showError(result.errorMessage));
+  const errors=toast.error.mock.calls;
+  expect(errors).toHaveLength(2);
+  expect(errors[0]).toEqual(errors[1]);
+  expect(errors[0][1].id).toContain('berts');
+  expect(toast.success).not.toHaveBeenCalled();
+});
+
 test("supplier review navigation scopes focus to its restaurant and refreshes the saved revision", async () => {
   await act(async () => root.render(<App />)); await click("nav-tab-setup");
   await act(async () => mockSetupProps.onVerifySupplier({itemCode:"food",skuId:"sku"}));
@@ -44,7 +57,7 @@ test("App passes the catalog editor version through to the store after polling",
   api.fetchState.mockResolvedValueOnce(state("berts",11));
   await act(async () => jest.advanceTimersByTime(15000));
   expect(mockSetupProps.revision).toBe(11);
-  await act(async () => expect(mockSetupProps.persistItems([{...item,par:2}],openedRevision)).resolves.toBeNull());
+  await act(async () => expect(mockSetupProps.persistItems([{...item,par:2}],openedRevision)).resolves.toMatchObject({ok:false,errorMessage:expect.any(String)}));
   expect(api.putCollection).not.toHaveBeenCalled();
   api.putCollection.mockResolvedValueOnce({revision:12});
   await act(async () => mockSetupProps.persistItems([{...item,par:1}],11));
@@ -57,7 +70,7 @@ test("App passes recipe revision and refresh through to the guarded store", asyn
   api.fetchState.mockResolvedValueOnce(state("berts",11));
   await act(async () => expect(mockCostingProps.loadLatest()).resolves.toMatchObject({revision:11}));
   expect(mockCostingProps.revision).toBe(11);
-  await act(async () => expect(mockCostingProps.persist([{id:"dish",name:"Old draft"}],10)).resolves.toBeNull());
+  await act(async () => expect(mockCostingProps.persist([{id:"dish",name:"Old draft"}],10)).resolves.toMatchObject({ok:false,errorMessage:expect.any(String)}));
   expect(api.putCollection).not.toHaveBeenCalled();
   api.putCollection.mockResolvedValueOnce({revision:12});
   await act(async () => mockCostingProps.persist([{id:"dish",name:"Reviewed draft"}],11));
@@ -190,4 +203,23 @@ test("leaving during legacy restore stops further writes and suppresses old-loca
     expect(api.putCollection).toHaveBeenCalledTimes(1); expect(find("saved-items").textContent).toBe("rudds");
     expect(toast.success).not.toHaveBeenCalled(); expect(toast.error).not.toHaveBeenCalled();
   } finally { fileReader.mockRestore(); confirm.mockRestore(); }
+});
+
+test("legacy restore cannot count a detailed failure object as a saved collection", async () => {
+  const reader={readAsText:jest.fn(),result:JSON.stringify({items:[item],purchases:[]})};
+  const fileReader=jest.spyOn(window,"FileReader").mockImplementation(()=>reader);
+  const confirm=jest.spyOn(window,"confirm").mockReturnValue(true);
+  api.putCollection.mockReset();
+  api.putCollection.mockRejectedValueOnce({response:{status:422,data:{detail:"Fictional catalog value needs review"}}}).mockResolvedValue({revision:11});
+  try {
+    await act(async()=>root.render(<App/>));
+    await act(async()=>{
+      const field=container.querySelector('input[type="file"]');
+      Object.defineProperty(field,"files",{value:[new File(["fictional"],"test.json")]});
+      field.dispatchEvent(new Event("change",{bubbles:true}));
+    });
+    await act(async()=>reader.onload());
+    expect(toast.error).toHaveBeenLastCalledWith(expect.stringContaining("items"));
+    expect(toast.success).not.toHaveBeenCalled();
+  } finally {fileReader.mockRestore();confirm.mockRestore();}
 });

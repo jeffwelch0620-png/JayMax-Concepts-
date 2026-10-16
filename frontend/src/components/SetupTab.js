@@ -3,7 +3,7 @@ import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { equalEditorValue, snapshotEditorValue, mergeEditorFields } from "../lib/editorDraft";
 import { supplierConversionMismatch, supplierReviewSaved } from "../lib/supplierConversion";
 import { Plus, Trash2, Star, X } from "lucide-react";
-import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, nextControlNumber, itemDerived, isCountActive, isOrderEnabled, uid, fmtMoney, num } from "../lib/calc";
+import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, nextControlNumber, itemDerived, isCountActive, isOrderEnabled, uid, fmtPlanningCost, num } from "../lib/calc";
 import * as api from "../lib/api";
 import { NativeInventoryPosition } from "./NativeInventoryPosition";
 import { PreparedItemSetup } from "./PreparedItemSetup";
@@ -189,7 +189,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
     showToast("Storage area added");
   }
 
-  const previewBg = preview.mismatch ? "bg-red-500/10 text-red-400" : preview.needsPortion ? "bg-amber-500/10 text-amber-400" : "bg-[#0F1626] text-slate-300";
+  const previewBg = preview.rangeUnavailable ? "bg-amber-500/10 text-amber-400" : preview.mismatch ? "bg-red-500/10 text-red-400" : preview.needsPortion ? "bg-amber-500/10 text-amber-400" : "bg-[#0F1626] text-slate-300";
 
   return (
     <div className="fade-slide-in" data-testid="setup-tab">
@@ -234,26 +234,26 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
         <SectionLabel>Purchasing</SectionLabel>
         <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
           <Field label="Purchase Unit"><select className={inpCls} disabled={sharedProduct} value={form.purchaseUnit} onChange={(e) => update("purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-          <Field label="Par Level (purchase units)"><input type="number" step="any" className={inpCls} value={form.par ?? ""} onChange={(e) => update("par", e.target.value)} /></Field>
+          <Field label="Par Level (purchase units)"><input type="text" inputMode="decimal" className={inpCls} value={form.par ?? ""} onChange={(e) => update("par", e.target.value)} /></Field>
           {api.actualInventoryEnabled ? <p className="text-sm" data-testid="setup-native-count-note">Physical stock and explicit inventory values are recorded in Actual Inventory. Item Setup does not set on-hand quantities.</p> : <Field label="Current Stock (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.currentStock ?? ""} onChange={(e) => update("currentStock", e.target.value)} /></Field>}
         </div>
 
         <SectionLabel>Portion Breakdown (per Purchase Unit)</SectionLabel>
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
-          <Field label="Pack Count"><input type="number" step="any" className={inpCls} disabled={sharedProduct} value={form.packCount ?? ""} onChange={(e) => update("packCount", e.target.value)} placeholder="e.g. 4" /></Field>
-          <Field label="Size per Pack"><input type="number" step="any" className={inpCls} disabled={sharedProduct} value={form.unitQty ?? ""} onChange={(e) => update("unitQty", e.target.value)} placeholder="e.g. 5" /></Field>
+          <Field label="Pack Count"><input type="text" inputMode="decimal" className={inpCls} disabled={sharedProduct} value={form.packCount ?? ""} onChange={(e) => update("packCount", e.target.value)} placeholder="e.g. 4" /></Field>
+          <Field label="Size per Pack"><input type="text" inputMode="decimal" className={inpCls} disabled={sharedProduct} value={form.unitQty ?? ""} onChange={(e) => update("unitQty", e.target.value)} placeholder="e.g. 5" /></Field>
           <Field label="Size Unit"><select className={inpCls} disabled={sharedProduct} value={form.unitUOM} onChange={(e) => update("unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-          <Field label="Portion Size"><input type="number" step="any" className={inpCls} disabled={sharedProduct} value={form.portionSize ?? ""} onChange={(e) => update("portionSize", e.target.value)} placeholder="e.g. 6" /></Field>
+          <Field label="Portion Size"><input type="text" inputMode="decimal" className={inpCls} disabled={sharedProduct} value={form.portionSize ?? ""} onChange={(e) => update("portionSize", e.target.value)} placeholder="e.g. 6" /></Field>
           <Field label="Portion Unit"><select className={inpCls} disabled={sharedProduct} value={form.portionUOM} onChange={(e) => update("portionUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
         </div>
         {form.packCount ? (
           <div className={`mt-3 px-3.5 py-2.5 rounded-lg text-[13.5px] flex gap-5 flex-wrap ${previewBg}`} data-testid="portion-preview">
-            {preview.needsPortion ? (
+            {preview.rangeUnavailable ? <span>Outside supported calculation range. Portions and cost unavailable.</span> : preview.needsPortion ? (
               <span className="font-semibold">⚠ Portion Size isn't set — cost per portion will show $0.00 until it is</span>
             ) : (
               <>
                 <span><strong className="num">{num(preview.portionsPerUnit, 1)}</strong> portions per {form.purchaseUnit}</span>
-                <span><strong className="num">{fmtMoney(preview.costPerPortion)}</strong> cost per portion (preferred vendor)</span>
+                <span><strong className="num">{fmtPlanningCost(preview.costPerPortion)}</strong> cost per portion (preferred vendor)</span>
                 {preview.mismatch && <span className="font-semibold">⚠ size unit and portion unit aren't the same measure type</span>}
               </>
             )}
@@ -271,10 +271,10 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
               <Field label="Vendor SKU"><input className={`${inpCls} w-28`} disabled={sharedProduct} value={v.vendorSku} onChange={(e) => updateVendorRow(v.id, "vendorSku", e.target.value)} placeholder="—" /></Field>
               <Field label="Pack Description"><input className={`${inpCls} w-32`} disabled={sharedProduct} value={v.packDescription} onChange={(e) => updateVendorRow(v.id, "packDescription", e.target.value)} placeholder="e.g. 4/5lb" /></Field>
               <Field label="Purchase Unit"><select className={inpCls} disabled={sharedProduct} value={v.purchaseUnit || form.purchaseUnit} onChange={(e) => updateVendorRow(v.id, "purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-              <Field label="Pack Count"><input type="number" step="any" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.packCount ?? ""} onChange={(e) => updateVendorRow(v.id, "packCount", e.target.value)} /></Field>
-              <Field label="Qty / Pack"><input type="number" step="any" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.unitQty ?? ""} onChange={(e) => updateVendorRow(v.id, "unitQty", e.target.value)} /></Field>
+              <Field label="Pack Count"><input type="text" inputMode="decimal" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.packCount ?? ""} onChange={(e) => updateVendorRow(v.id, "packCount", e.target.value)} /></Field>
+              <Field label="Qty / Pack"><input type="text" inputMode="decimal" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.unitQty ?? ""} onChange={(e) => updateVendorRow(v.id, "unitQty", e.target.value)} /></Field>
               <Field label="Pack UOM"><select className={inpCls} disabled={sharedProduct} value={v.unitUOM || form.unitUOM} onChange={(e) => updateVendorRow(v.id, "unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-              <Field label="Price ($)"><input aria-label={`Supplier price ${v.id}`} type="number" step="any" className={`${inpCls} w-24`} value={v.price ?? ""} onChange={(e) => updateVendorRow(v.id, "price", e.target.value)} /></Field>
+              <Field label="Price ($)"><input aria-label={`Supplier price ${v.id}`} type="text" inputMode="decimal" className={`${inpCls} w-24`} value={v.price ?? ""} onChange={(e) => updateVendorRow(v.id, "price", e.target.value)} /></Field>
               <Field label="Price Recorded"><input type="date" className={inpCls} value={(v.priceUpdatedAt || "").slice(0, 10)} readOnly /></Field>
               <label className="text-xs flex items-center gap-1 pb-2 text-slate-400"><input type="checkbox" checked={v.available !== false} onChange={(e) => updateVendorRow(v.id, "available", e.target.checked)} /> Available</label>
               <button type="button" aria-label={`Remove vendor SKU${v.vendor ? ` for ${v.vendor}` : ""}`} className={`${btnDanger} mb-0.5`} onClick={() => removeVendorRow(v.id)} disabled={form.vendorSkus.length === 1}><Trash2 size={14} /></button>
@@ -348,7 +348,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
                       </td>
                       <td>{(it.vendorSkus || []).map((v) => v.vendor).join(", ")}</td>
                       <td className="num">
-                        {fmtMoney(d.costPerPortion)}
+                        {fmtPlanningCost(d.costPerPortion)}
                         {d.needsPortion && <Pill testId={`needs-portion-${it.controlNumber}`} color="#F59E0B" bg="rgba(245,158,11,0.12)">NO PORTION DATA</Pill>}
                       </td>
                       <td>{isCountActive(it) ? <Pill color="#10B981" bg="rgba(16,185,129,0.12)">Y</Pill> : <Pill color="#64748B" bg="#1E293B">N</Pill>}</td>

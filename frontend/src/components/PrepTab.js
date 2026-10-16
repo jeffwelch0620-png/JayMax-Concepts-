@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
+import { confirmed, confirmSave, saveFailureMessage, useRetainedDraft } from "../lib/saveIntegrity";
 import { ChefHat, Play, PackageCheck, Layers, X, Plus, Trash2, Check, Sparkles, ClipboardList, Send, Package } from "lucide-react";
 import { normalizeRecipeSchema, recipeCostSummary, fmtDate, fmtMoney, num, todayISO, FREQS, VESSELS } from "../lib/calc";
 import { ManualForecast } from "./ManualForecast";
@@ -990,7 +990,10 @@ function Planning({ drafts, showError, rid, dishes, prepItems, prepCapabilities,
     if (advisorHeld) return;
     try {
       const saved = await persistDishes(dishes.map((d) => d.id === rec.recipeId ? { ...d, prepPar: rec.recommendedPar } : d));
-      if (!saved) return;
+      if (!confirmed(saved)) {
+        showError(saveFailureMessage(saved, "The par save was not confirmed. Your recommendation is retained."));
+        return;
+      }
       await api.applyParRec(rid, rec.id);
       setRecs((l) => l.filter((x) => x.id !== rec.id));
       showToast(`Par for ${rec.recipeName} updated to ${num(rec.recommendedPar, 0)}`);

@@ -33,6 +33,15 @@ test.each([true, false, "NaN", "Infinity", "bad", "-1"])("invalid catalog metada
   expect(() => mongoItemToPgBody({ ...pgItemToMongoItem(item, "berts"), par: value }, "berts")).toThrow("catalog decimal");
 });
 
+test.each([true,false])('unsafe newly derived conversion cannot become a fallback factor (native %s)', native => {
+  load(native);
+  for(const value of ['1e400','1e-400']) {
+    const ui=pgItemToMongoItem(item,'berts');delete ui.basePerCountUnit;
+    ui.vendorSkus[0].packCount=value;
+    expect(()=>mongoItemToPgBody(ui,'berts')).toThrow(/conversion|physical pack/i);
+  }
+});
+
 test("catalog blank metadata remains null and an explicit zero remains text zero", () => {
   const ui = { ...pgItemToMongoItem(item, "berts"), packCount: "", unitQty: "0", portionSize: null, par: "0" };
   const saved = mongoItemToPgBody(ui, "berts");

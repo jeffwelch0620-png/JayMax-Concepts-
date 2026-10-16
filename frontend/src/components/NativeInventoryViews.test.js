@@ -89,6 +89,17 @@ test("native ownership rejects an old rollup instead of silently displaying lega
   await render(<OwnerDashboard />); expect(container.querySelector('[data-testid="owner-error"]')).not.toBeNull(); expect(container.textContent).not.toContain("9999");
 });
 
+test('unavailable planning costs stay unknown alongside confirmed native accounting values', async () => {
+  api.ownerSummary.mockResolvedValue({inventoryBasis:summary.basis,
+    stores:[{...store,planningCostsAvailable:false,avgFoodCost:null,waste30:null}],
+    totals:{inventoryValue:'145.00',spend30:'178.00',orderAlerts:null,waste30:null}});
+  await render(<OwnerDashboard/>);
+  expect(container.querySelector('[data-testid="owner-total-waste"]').textContent).toContain('Unknown');
+  expect(container.querySelector('[data-testid="owner-total-inv"]').textContent).toContain('$145.00');
+  expect(container.querySelector('[data-testid="owner-total-spend"]').textContent).toContain('$178.00');
+  expect(container.textContent).toContain('Some planning costs are unavailable');
+});
+
 test("retired and failed prep summaries cannot display zero cost or retain old prep pills", async () => {
   api.ownerPrepSummary.mockResolvedValue({ available: false, message: "Historical prep figures are retained for review.", stores: [{ id: "berts", tasksDone: null, tasksTotal: null, prepCost7d: null }] });
   await render(<OwnerDashboard />);

@@ -86,11 +86,11 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
 
       <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))" }}>
         <MetricCard testId="metric-purchases" label="Purchases" value={fmtMoney(report.purchaseSpend)} sub={`${report.periodPurchases.length} invoice lines`} />
-        <MetricCard testId="metric-actual-cogs" label="Actual COGS" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtMoney(report.actualCogs) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : `${countCoverage}% tracked-count coverage`} tone={noMatchForCustom || !report.usableRows.length ? "warn" : "normal"} />
-        <MetricCard testId="metric-theo-cogs" label="Theoretical COGS" value={noMatchForCustom ? "No saved period" : fmtMoney(report.theoreticalCogs)} sub={noMatchForCustom ? "for this custom range" : "from menu sales + recipes"} tone={noMatchForCustom ? "warn" : "normal"} />
-        <MetricCard testId="metric-variance" label="Unexplained Variance" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtMoney(report.unexplainedCost) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : "after known adjustments"} tone={noMatchForCustom ? "warn" : (!report.usableRows.length ? "warn" : (Math.abs(report.unexplainedCost) > 0 ? "warn" : "good"))} />
-        <MetricCard testId="metric-inv-value" label="Live Inventory Value" value={fmtMoney(report.liveInventoryValue)} sub="current stock × preferred price" />
-        <MetricCard testId="metric-order-exposure" label="Next Order Exposure" value={fmtMoney(report.orderExposure)} sub="preferred-vendor estimate" />
+        <MetricCard testId="metric-actual-cogs" label="Actual COGS" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtPlanningCost(report.actualCogs) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : `${countCoverage}% tracked-count coverage`} tone={noMatchForCustom || !report.usableRows.length ? "warn" : "normal"} />
+        <MetricCard testId="metric-theo-cogs" label="Theoretical COGS" value={noMatchForCustom ? "No saved period" : fmtPlanningCost(report.theoreticalCogs)} sub={noMatchForCustom ? "for this custom range" : "from menu sales + recipes"} tone={noMatchForCustom ? "warn" : "normal"} />
+        <MetricCard testId="metric-variance" label="Unexplained Variance" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtPlanningCost(report.unexplainedCost) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : "after known adjustments"} tone={noMatchForCustom ? "warn" : (!report.usableRows.length ? "warn" : (Math.abs(report.unexplainedCost) > 0 ? "warn" : "good"))} />
+        <MetricCard testId="metric-inv-value" label="Live Inventory Value" value={fmtPlanningCost(report.liveInventoryValue)} sub="current stock × preferred price" />
+        <MetricCard testId="metric-order-exposure" label="Next Order Exposure" value={fmtPlanningCost(report.orderExposure)} sub="preferred-vendor estimate" />
       </div>
 
       <DashboardPrepWindow items={items} dishes={dishes} rid={rid} />
@@ -120,7 +120,7 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
           {wasteRows.length === 0 ? <div className="text-slate-500 text-[13px]">No adjustments logged in this period.</div> : (
             <div>{wasteRows.map(([reason, value]) => (
               <div key={reason} className="flex justify-between gap-3 py-2 border-b border-[#22304A] text-sm">
-                <span className="text-slate-300">{reason}</span><b className="num">{fmtMoney(value)}</b>
+                <span className="text-slate-300">{reason}</span><b className="num">{fmtPlanningCost(value)}</b>
               </div>))}
             </div>
           )}

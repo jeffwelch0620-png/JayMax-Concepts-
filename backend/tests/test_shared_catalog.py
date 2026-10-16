@@ -67,6 +67,26 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
     async def put(self,body,revision,store='rudds'):
         return await self.catalog.put('/api/pg/items/'+store,json=[body],headers={'If-Match':str(revision)})
 
+    async def test_unsafe_planning_catalog_keeps_actual_report_and_reads_available(self):
+        self.assertEqual((await self.units())[0].status_code,200)
+        _, opening, closing = await self.pair()
+        captured, *_ = await self.capture()
+        self.assertEqual((await self.post(captured['documents'][0])).status_code,200)
+        baseline=(await self.report(opening,closing)).json()
+        for price in ('1e400','1e-400','0E-10'):
+            body=await self.payload('berts');body['vendor_skus'][0]['price']=price
+            async with self.pool.acquire() as conn:
+                revision=await conn.fetchval("SELECT revision FROM store_state WHERE store_id='berts'")
+            saved=await self.put(body,revision,'berts');self.assertEqual(saved.status_code,200,saved.text)
+            read=await self.catalog.get('/api/pg/items/berts');self.assertEqual(read.status_code,200,read.text)
+            row=next(r for r in read.json() if r['code']=='test_food')
+            self.assertEqual(Decimal(row['vendorSkus'][0]['price']),Decimal(price))
+            derived=server.item_derived(row)
+            self.assertEqual(derived['costPerPortion'],0 if price=='0E-10' else None)
+            json.dumps(derived,allow_nan=False)
+            after=(await self.report(opening,closing)).json()
+            self.assertEqual(after,baseline)
+
     async def test_explicit_link_reuses_one_identity_with_independent_alias_par_price_and_units(self):
         response=await self.link();self.assertEqual(response.status_code,200,response.text)
         a=(await self.catalog.get('/api/pg/items/berts')).json();b=(await self.catalog.get('/api/pg/items/rudds')).json()

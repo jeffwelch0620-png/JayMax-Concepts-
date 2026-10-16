@@ -1,3 +1,5 @@
+import { planningNumber, planningProduct, planningQuotient, planningSum } from "./planningNumbers";
+
 // Pure business logic ported from the audited BertsInventorySystem.jsx (UOM engine,
 // costing, variance, invoice import) — unchanged behavior, now shared by all locations.
 
@@ -105,10 +107,12 @@ export function fmtDate(iso) {
 }
 export function fmtMoney(n) {
   if (n === null || n === undefined || isNaN(n)) return "$0.00";
+  if (!Number.isFinite(Number(n))) return "Unknown";
   return "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 export function num(n, d = 2) {
   if (n === null || n === undefined || isNaN(n)) return "0";
+  if (!Number.isFinite(Number(n))) return "Unknown";
   return Number(n).toFixed(d).replace(/\.00$/, "");
 }
 export function uid(prefix = "id") { return prefix + "_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7); }
@@ -121,17 +125,21 @@ export function nextControlNumber(prefix, items) {
 }
 
 export function calcPortionsPerUnit(yieldQty, yieldUOM, portionSize, portionUOM) {
-  const yq = Number(yieldQty) || 0, ps = Number(portionSize) || 0;
+  const yq = planningNumber(yieldQty, 0), ps = planningNumber(portionSize, 0);
+  const unavailable = { value: null, mismatch: false, needsPortion: false, rangeUnavailable: true };
+  if (yq == null || ps == null) return unavailable;
   // Missing portion size/UOM is a data gap (silently yields $0 cost downstream),
   // distinct from `mismatch` below (portion size IS entered, but its unit doesn't
   // convert against the pack unit) — callers should flag these two cases differently.
   if (!yq || !ps) return { value: 0, mismatch: false, needsPortion: true };
   const famY = UOM_FAMILY[yieldUOM], famP = UOM_FAMILY[portionUOM];
   if (famY && famP && famY === famP) {
-    const totalBase = yq * CONV_TO_BASE[yieldUOM], portionBase = ps * CONV_TO_BASE[portionUOM];
-    return { value: portionBase > 0 ? totalBase / portionBase : 0, mismatch: false, needsPortion: false };
+    const totalBase = planningProduct(yq, CONV_TO_BASE[yieldUOM]), portionBase = planningProduct(ps, CONV_TO_BASE[portionUOM]);
+    const value = planningQuotient(totalBase, portionBase);
+    return value == null ? unavailable : { value, mismatch: false, needsPortion: false };
   }
-  return { value: yq / ps, mismatch: yieldUOM !== portionUOM, needsPortion: false };
+  const value = planningQuotient(yq, ps);
+  return value == null ? unavailable : { value, mismatch: yieldUOM !== portionUOM, needsPortion: false };
 }
 
 export function preferredSku(item) {
@@ -143,8 +151,8 @@ export function isOrderEnabled(item) { return item.orderEnabled !== false; }
 export function vendorPack(item, sku) {
   return {
     purchaseUnit: sku?.purchaseUnit || item.purchaseUnit || "case",
-    packCount: Number(sku?.packCount ?? item.packCount) || 0,
-    unitQty: Number(sku?.unitQty ?? item.unitQty) || 0,
+    packCount: planningNumber(sku?.packCount ?? item.packCount, 0),
+    unitQty: planningNumber(sku?.unitQty ?? item.unitQty, 0),
     unitUOM: sku?.unitUOM || item.unitUOM || "each",
   };
 }
@@ -165,11 +173,14 @@ export function normalizeItemSchema(item) {
 export function itemDerived(item) {
   const pref = preferredSku(item);
   const pack = vendorPack(item, pref);
-  const packTotal = pack.packCount * pack.unitQty;
-  const { value: portionsPerUnit, mismatch, needsPortion } = calcPortionsPerUnit(packTotal, pack.unitUOM, item.portionSize, item.portionUOM);
-  const price = pref ? Number(pref.price) || 0 : 0;
-  const costPerPortion = portionsPerUnit > 0 ? price / portionsPerUnit : 0;
-  return { portionsPerUnit, costPerPortion, mismatch, needsPortion, preferred: pref, price, pack };
+  const packTotal = planningProduct(pack.packCount, pack.unitQty);
+  const conversion = packTotal == null ? { value:null, mismatch:false, needsPortion:false, rangeUnavailable:true }
+    : calcPortionsPerUnit(packTotal, pack.unitUOM, item.portionSize, item.portionUOM);
+  const { value: portionsPerUnit, mismatch, needsPortion } = conversion;
+  const price = pref ? planningNumber(pref.price, 0) : 0;
+  const costPerPortion = portionsPerUnit > 0 ? planningQuotient(price, portionsPerUnit) : (portionsPerUnit === 0 && price != null ? 0 : null);
+  const rangeUnavailable = !!conversion.rangeUnavailable || price == null || costPerPortion == null;
+  return { portionsPerUnit, costPerPortion, mismatch, needsPortion, rangeUnavailable, preferred: pref, price, pack };
 }
 
 export const STATUS_COLORS = { out: "#EF4444", critical: "#EF4444", low: "#F59E0B", ok: "#10B981" };
@@ -184,11 +195,12 @@ export function statusOf(item) {
 export function adjustmentSignedPortions(adj, item) {
   const d = itemDerived(item);
   const qty = Number(adj.qty) || 0;
-  const portions = adj.qtyBasis === "portion" ? qty : qty * (Number(d.portionsPerUnit) || 0);
-  return adjustmentReason(adj.reason).direction === "add" ? -portions : portions;
+  const portions = adj.qtyBasis === "portion" ? qty : planningProduct(qty, d.portionsPerUnit);
+  return portions == null ? null : adjustmentReason(adj.reason).direction === "add" ? -portions : portions;
 }
 export function adjustmentValue(adj, item) {
-  return Math.abs(adjustmentSignedPortions(adj, item)) * (Number(itemDerived(item).costPerPortion) || 0);
+  const portions = adjustmentSignedPortions(adj, item);
+  return planningProduct(portions == null ? null : Math.abs(portions), itemDerived(item).costPerPortion);
 }
 
 export function downloadCSV(filename, rows) {
@@ -341,7 +353,7 @@ export function normalizeRecipeSchema(r) {
     lines: (r.lines || []).map((l) => l.sourceType ? l : ({ ...l, sourceType: "item", qty: l.qty ?? l.qtyPortions ?? 0 })),
   };
 }
-const recipeNumber = value => value == null || typeof value === "boolean" || String(value).trim() === "" || !Number.isFinite(Number(value)) ? null : Number(value);
+const recipeNumber = value => planningNumber(value);
 export function fmtPlanningCost(value) { const amount = recipeNumber(value); return amount == null ? "Unknown" : fmtMoney(amount); }
 
 // Planning only: never use these catalog/portion estimates to value actual counts.
@@ -355,9 +367,9 @@ export function itemPlanningCost(item) {
   if (!(packCount > 0) || !(unitQty > 0) || !(portionSize > 0) || !UOM_FAMILY[unit] || UOM_FAMILY[unit] !== UOM_FAMILY[portion]) {
     return { cost: null, issues: [`${item.name}: confirm compatible pack and portion quantities/units`] };
   }
-  const portions = packCount * unitQty * CONV_TO_BASE[unit] / (portionSize * CONV_TO_BASE[portion]);
-  const cost = price / portions;
-  return Number.isFinite(portions) && portions > 0 && Number.isFinite(cost) ? { cost, issues: [] } : { cost: null, issues: [`${item.name}: invalid portion conversion`] };
+  const portions = planningQuotient(planningProduct(packCount, unitQty, CONV_TO_BASE[unit]), planningProduct(portionSize, CONV_TO_BASE[portion]));
+  const cost = planningQuotient(price, portions);
+  return portions > 0 && cost != null ? { cost, issues: [] } : { cost: null, issues: [`${item.name}: outside supported calculation range`] };
 }
 
 export function recipeCostSummary(recipe, items, recipes, stack = new Set()) {
@@ -405,15 +417,16 @@ export function recipeCostSummary(recipe, items, recipes, stack = new Set()) {
       if (line.uom != null && line.uom !== "portion") invalid.push("Inventory recipe quantities are portions; review the explicit ingredient unit");
     } else invalid.push("Invalid ingredient source type");
     validationIssues.push(...invalid); problems.push(...invalid); issues.push(...problems);
-    const cost = unitCost != null && qty > 0 && !invalid.length ? unitCost * qty : null;
-    if (cost != null && !Number.isFinite(cost)) { issues.push("Ingredient cost exceeds supported numeric range"); return { ...line, qty, name, usageUOM, unitCost: null, cost: null }; }
+    const cost = unitCost != null && qty > 0 && !invalid.length ? planningProduct(unitCost, qty) : null;
+    if (unitCost != null && qty > 0 && cost == null && !invalid.length) { issues.push("Ingredient cost exceeds supported numeric range"); return { ...line, qty, name, usageUOM, unitCost: null, cost: null }; }
     return { ...line, qty, name, usageUOM, unitCost, cost };
   });
   issues.push(...validationIssues);
-  const sum = lines.reduce((total, line) => total + (line.cost ?? 0), 0);
-  if (!Number.isFinite(sum) || (yieldQty > 0 && !Number.isFinite(sum / yieldQty))) issues.push("Recipe cost exceeds supported numeric range");
+  const sum = planningSum(lines.map(line => line.cost));
+  const costPerYieldUnit = planningQuotient(sum, yieldQty);
+  if (sum == null || (yieldQty > 0 && costPerYieldUnit == null)) issues.push("Recipe cost exceeds supported numeric range");
   const complete = !issues.length && lines.every(line => line.cost != null);
-  return { totalCost: complete ? sum : null, costPerYieldUnit: complete ? sum / yieldQty : null, complete, valid: !validationIssues.length, cycle, issues: [...new Set(issues)], validationIssues: [...new Set(validationIssues)], lines };
+  return { totalCost: complete ? sum : null, costPerYieldUnit: complete ? costPerYieldUnit : null, complete, valid: !validationIssues.length, cycle, issues: [...new Set(issues)], validationIssues: [...new Set(validationIssues)], lines };
 }
 export function rawPortionsForRecipe(recipe, targetCN, items, recipes, stack = new Set()) {
   if (!recipe) return 0;
@@ -433,21 +446,27 @@ export function rawPortionsForRecipe(recipe, targetCN, items, recipes, stack = n
 
 /* ---------- Order generator helpers ---------- */
 export function canonicalCountPack(item) {
-  return { purchaseUnit: item.purchaseUnit || "case", packCount: Number(item.packCount) || 0, unitQty: Number(item.unitQty) || 0, unitUOM: item.unitUOM || "each" };
+  return { purchaseUnit: item.purchaseUnit || "case", packCount: planningNumber(item.packCount, 0), unitQty: planningNumber(item.unitQty, 0), unitUOM: item.unitUOM || "each" };
 }
 export function packBaseAmount(pack) {
-  const qty = (Number(pack.packCount) || 0) * (Number(pack.unitQty) || 0);
+  const qty = planningProduct(pack.packCount, pack.unitQty);
   const factor = CONV_TO_BASE[pack.unitUOM];
   const family = UOM_FAMILY[pack.unitUOM];
   if (!qty || !factor || !family) return null;
-  return { amount: qty * factor, family };
+  const amount = planningProduct(qty, factor);
+  return amount == null ? null : { amount, family };
 }
 export function vendorUnitsForShortfall(item, sku, shortfallCountUnits) {
-  const countBase = packBaseAmount(canonicalCountPack(item));
-  const vendorBase = packBaseAmount(vendorPack(item, sku));
+  const countPack = canonicalCountPack(item), supplierPack = vendorPack(item, sku);
+  const countBase = packBaseAmount(countPack), vendorBase = packBaseAmount(supplierPack);
+  const unavailable = { units: null, conversionKnown: false, neededBase: null, orderedBase: null, overageBase: null };
+  if (planningNumber(shortfallCountUnits) == null || [countPack, supplierPack].some(pack =>
+    pack.packCount == null || pack.unitQty == null || (pack.packCount > 0 && pack.unitQty > 0 && CONV_TO_BASE[pack.unitUOM] && !packBaseAmount(pack)))) return unavailable;
   if (countBase && vendorBase && countBase.family === vendorBase.family && vendorBase.amount > 0) {
-    const neededBase = shortfallCountUnits * countBase.amount;
-    const units = Math.ceil(neededBase / vendorBase.amount);
+    const neededBase = planningProduct(shortfallCountUnits, countBase.amount);
+    const quotient = planningQuotient(neededBase, vendorBase.amount);
+    const units = quotient == null ? null : Math.ceil(quotient);
+    if (units == null || planningProduct(units, vendorBase.amount) == null) return unavailable;
     return { units: Math.max(0, units), conversionKnown: true, neededBase, orderedBase: Math.max(0, units) * vendorBase.amount, overageBase: Math.max(0, units) * vendorBase.amount - neededBase };
   }
   return { units: Math.max(0, Math.ceil(shortfallCountUnits)), conversionKnown: false, neededBase: null, orderedBase: null, overageBase: null };
@@ -474,33 +493,33 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
     const beginning = counts.beginning !== undefined && counts.beginning !== "" ? Number(counts.beginning) : null;
     const ending = counts.ending !== undefined && counts.ending !== "" ? Number(counts.ending) : null;
     const actualUnits = beginning !== null && ending !== null ? beginning + purchaseQty - ending : null;
-    const actualPortions = actualUnits !== null ? actualUnits * d.portionsPerUnit : null;
+    const actualPortions = actualUnits !== null ? planningProduct(actualUnits, d.portionsPerUnit) : null;
     const rawDelta = actualPortions !== null ? actualPortions - theoreticalPortions : null;
     const itemAdjustments = periodAdjustmentsAll.filter((a) => a.controlNumber === it.controlNumber);
-    const explainedPortions = itemAdjustments.reduce((sum, a) => sum + adjustmentSignedPortions(a, it), 0);
-    const unexplainedPortions = rawDelta !== null ? rawDelta - explainedPortions : null;
+    const explainedPortions = planningSum(itemAdjustments.map(a => adjustmentSignedPortions(a, it)));
+    const unexplainedPortions = planningSum([rawDelta, explainedPortions == null ? null : -explainedPortions]);
     return {
       item: it, beginning, ending, purchaseQty, theoreticalPortions, actualPortions, explainedPortions, unexplainedPortions,
-      theoreticalCost: theoreticalPortions * d.costPerPortion,
-      actualCost: actualPortions !== null ? actualPortions * d.costPerPortion : null,
-      explainedCost: explainedPortions * d.costPerPortion,
-      unexplainedCost: unexplainedPortions !== null ? unexplainedPortions * d.costPerPortion : null,
+      theoreticalCost: planningProduct(theoreticalPortions, d.costPerPortion),
+      actualCost: actualPortions !== null ? planningProduct(actualPortions, d.costPerPortion) : null,
+      explainedCost: planningProduct(explainedPortions, d.costPerPortion),
+      unexplainedCost: unexplainedPortions !== null ? planningProduct(unexplainedPortions, d.costPerPortion) : null,
       hasCounts: beginning !== null && ending !== null,
     };
   });
 
   const usableRows = trackedRows.filter((r) => r.hasCounts);
-  const theoreticalCogs = trackedRows.reduce((sum, r) => sum + r.theoreticalCost, 0);
-  const actualCogs = usableRows.reduce((sum, r) => sum + (r.actualCost || 0), 0);
-  const explainedCost = trackedRows.reduce((sum, r) => sum + r.explainedCost, 0);
-  const unexplainedCost = usableRows.reduce((sum, r) => sum + (r.unexplainedCost || 0), 0);
+  const theoreticalCogs = planningSum(trackedRows.map(r => r.theoreticalCost));
+  const actualCogs = planningSum(usableRows.map(r => r.actualCost));
+  const explainedCost = planningSum(trackedRows.map(r => r.explainedCost));
+  const unexplainedCost = planningSum(usableRows.map(r => r.unexplainedCost));
 
   const wasteByReason = {};
   periodAdjustmentsAll.forEach((a) => {
     const it = items.find((i) => i.controlNumber === a.controlNumber);
     if (!it) return;
     const label = adjustmentReason(a.reason).label;
-    wasteByReason[label] = (wasteByReason[label] || 0) + adjustmentValue(a, it);
+    wasteByReason[label] = planningSum([Object.hasOwn(wasteByReason, label) ? wasteByReason[label] : 0, adjustmentValue(a, it)]);
   });
 
   const priceAlerts = [];
@@ -519,17 +538,17 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
   const menuProfitability = normalizedRecipes.filter((r) => r.recipeType !== "prep").map((r) => {
     const c = recipeCostSummary(r, items, normalizedRecipes);
     const price = recipeNumber(r.price);
-    return { recipe: r, cost: c.totalCost, costComplete: c.complete, costIssues: c.issues, price, foodCostPct: c.complete && price > 0 ? (c.totalCost / price) * 100 : null, contribution: c.complete && price != null ? price - c.totalCost : null };
+    return { recipe: r, cost: c.totalCost, costComplete: c.complete, costIssues: c.issues, price, foodCostPct: c.complete && price > 0 ? planningProduct(planningQuotient(c.totalCost, price), 100) : null, contribution: c.complete && price != null ? planningSum([price, -c.totalCost]) : null };
   }).sort((a, b) => a.foodCostPct == null ? (b.foodCostPct == null ? 0 : 1) : b.foodCostPct == null ? -1 : b.foodCostPct - a.foodCostPct);
 
-  const liveInventoryValue = items.reduce((sum, it) => sum + (Number(it.currentStock) || 0) * (Number(itemDerived(it).price) || 0), 0);
-  const orderExposure = items.filter((it) => isOrderEnabled(it) && (Number(it.currentStock) || 0) < (Number(it.par) || 0)).reduce((sum, it) => {
+  const liveInventoryValue = planningSum(items.map(it => planningProduct(planningNumber(it.currentStock, 0), itemDerived(it).price)));
+  const orderExposure = planningSum(items.filter((it) => isOrderEnabled(it) && (Number(it.currentStock) || 0) < (Number(it.par) || 0)).map(it => {
     const shortfall = Math.max(0, (Number(it.par) || 0) - (Number(it.currentStock) || 0));
     const sku = preferredSku(it);
-    if (!sku) return sum;
+    if (!sku) return 0;
     const calc = vendorUnitsForShortfall(it, sku, shortfall);
-    return sum + calc.units * (Number(sku.price) || 0);
-  }, 0);
+    return planningProduct(calc.units, planningNumber(sku.price, 0));
+  }));
 
   return { start, end, periodPurchases, periodAdjustmentsAll, purchaseSpend, trackedRows, usableRows, theoreticalCogs, actualCogs, explainedCost, unexplainedCost, wasteByReason, priceAlerts, menuProfitability, liveInventoryValue, orderExposure };
 }

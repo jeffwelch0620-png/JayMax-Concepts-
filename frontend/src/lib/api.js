@@ -1,5 +1,6 @@
 import axios from "axios";
 import { calcPortionsPerUnit, preferredSku } from "./calc";
+import { planningNumber, planningProduct, planningQuotient } from "./planningNumbers";
 import { readStateWithDeadline } from "./stateRead";
 import { canonicalStoreId as pgStoreId } from "./purchaseContract";
 import { checkedCatalogDecimal } from "./catalogDecimal";
@@ -476,10 +477,10 @@ export function pgItemToMongoItem(pgItem, rid) {
 }
 
 function packTotalFor(sourceObj, item) {
-  const packCount = Number(sourceObj?.packCount ?? item.packCount) || 0;
-  const unitQty = Number(sourceObj?.unitQty ?? item.unitQty) || 0;
+  const packCount = planningNumber(sourceObj?.packCount ?? item.packCount, 0);
+  const unitQty = planningNumber(sourceObj?.unitQty ?? item.unitQty, 0);
   const unitUOM = sourceObj?.unitUOM || item.unitUOM || "each";
-  return { packTotal: packCount * unitQty, unitUOM };
+  return { packTotal: planningProduct(packCount, unitQty), unitUOM };
 }
 
 const physicalUnits = { lb: ["mass", 453.59237], oz: ["mass", 28.349523125], kg: ["mass", 1000], g: ["mass", 1],
@@ -489,7 +490,15 @@ const physicalUnit = value => value === "fl oz" ? "fl_oz" : value === "ct" ? "ea
 function physicalPackFactor(packTotal, unit, base) {
   const from = physicalUnits[physicalUnit(unit)], to = physicalUnits[physicalUnit(base)];
   if (!(packTotal > 0) || !from || !to || from[0] !== to[0]) throw new Error("Confirm a physical pack quantity and compatible inventory unit before saving this item.");
-  return packTotal * from[1] / to[1]; // Catalog metadata only; native profiles require separate decimal review.
+  const factor = planningQuotient(planningProduct(packTotal, from[1]), to[1]);
+  if (!(factor > 0)) throw new Error("Physical conversion is outside supported calculation range; confirm an explicit stored conversion before saving.");
+  return factor; // Catalog metadata only; native profiles require separate decimal review.
+}
+function legacyPlanningFactor(packTotal, unit, item, fallback) {
+  if (packTotal == null) throw new Error("Conversion is outside supported calculation range; confirm an explicit stored conversion before saving.");
+  const result = calcPortionsPerUnit(packTotal, unit, item.portionSize, item.portionUOM);
+  if (result.rangeUnavailable) throw new Error("Conversion is outside supported calculation range; confirm an explicit stored conversion before saving.");
+  return result.value || fallback;
 }
 export function mongoItemToPgBody(item, rid) {
   const skus = item.vendorSkus || [];
@@ -498,7 +507,7 @@ export function mongoItemToPgBody(item, rid) {
   const nativeBase = physicalUnit(item.baseUnit || item.unitUOM || unitUOM);
   const basePerCountUnit = catalogDecimal(item.basePerCountUnit != null ? item.basePerCountUnit
     : nativePurchasesEnabled ? physicalPackFactor(packTotal, unitUOM, nativeBase)
-      : calcPortionsPerUnit(packTotal, unitUOM, item.portionSize, item.portionUOM).value || 1);
+      : legacyPlanningFactor(packTotal, unitUOM, item, 1));
   if (!basePerCountUnit || !/[1-9]/.test(basePerCountUnit.split(/[eE]/)[0])) throw new Error("Confirm a positive stored count conversion before saving this item.");
   const countActive = !!(item.countActive ?? item.active);
   return {
@@ -524,7 +533,7 @@ export function mongoItemToPgBody(item, rid) {
       // Only a new/changed supplier with no stored factor derives it from pack metadata.
       const basePerPurchaseUnit = s.basePerPurchaseUnit !== undefined ? s.basePerPurchaseUnit
         : nativePurchasesEnabled ? physicalPackFactor(skuPackTotal, skuUOM, nativeBase)
-          : calcPortionsPerUnit(skuPackTotal, skuUOM, item.portionSize, item.portionUOM).value || null;
+          : legacyPlanningFactor(skuPackTotal, skuUOM, item, null);
       return {
         vendor_id: s.vendorId || VENDOR_NAME_TO_ID[s.vendor] || "other", vendor_sku: s.vendorSku || s.id || "",
         vendor_description: s.packDescription === "" && s.vendorDescription === null ? null : s.packDescription ?? s.vendorDescription ?? null, purchase_unit: s.purchaseUnit || item.purchaseUnit || "case",

@@ -8,7 +8,7 @@ import { PrepTab } from "./PrepTab";
 import { InvoicesTab } from "./InvoicesTab";
 import * as api from "../lib/api";
 
-jest.mock("../lib/api", () => ({ __esModule: true, prepPlanningEnabled: false, listVendorContacts: jest.fn(() => Promise.resolve([])), putVendorContact: jest.fn(), listPrepItems: jest.fn(), getPrepList: jest.fn(), getCountSession: jest.fn(), deletePrepItem: jest.fn(), prepReport: jest.fn(), getProjections: jest.fn(), listOverrides: jest.fn(), getStaffPin: jest.fn(), getParRecs: jest.fn(), deleteOverride: jest.fn() }));
+jest.mock("../lib/api", () => ({ __esModule: true, prepPlanningEnabled: false, listVendorContacts: jest.fn(() => Promise.resolve([])), putVendorContact: jest.fn(), listPrepItems: jest.fn(), getPrepList: jest.fn(), getCountSession: jest.fn(), deletePrepItem: jest.fn(), prepReport: jest.fn(), getProjections: jest.fn(), listOverrides: jest.fn(), getStaffPin: jest.fn(), getParRecs: jest.fn(), applyParRec: jest.fn(), deleteOverride: jest.fn() }));
 const item = { controlNumber: "F01", name: "Invented food", storageArea: "Freezer", purchaseUnit: "case", packCount: 1, unitQty: 10, unitUOM: "lb", portionSize: 4, portionUOM: "oz", salesTracked: true, vendorSkus: [{ id: "sku", vendor: "PFG", price: 10, preferred: true }] };
 const period = { periodStart: "2026-10-01", periodEnd: "2026-10-07", dishSales: { dish: "2" }, itemCounts: {} };
 const recipe = { id: "dish", name: "Invented dish", recipeType: "menu", menuCategory: "Appetizers", menuCode: "A1", description: "", photoUrl: "", price: 0, targetPct: 30, procedure: "", equipment: "", shelfLife: "", portionNote: "", lines: [{ sourceType: "item", controlNumber: "F01", qty: 1 }] };
@@ -140,6 +140,18 @@ test("item form survives leaving and later successful save clears it", async () 
   await render(setup()); await input("item-name-input", "Draft food"); await render(<p>Other tab</p>); await render(setup());
   expect(find("item-name-input").value).toBe("Draft food"); await click(find("item-submit-button")); expect(find("item-name-input").value).toBe(""); expect(success).toHaveBeenCalledTimes(1);
 });
+
+test("a detailed failed receipt keeps the exact item draft until a confirmed retry", async () => {
+  const message="Supplier price exceeds the supported decimal range";
+  save.mockResolvedValueOnce({ok:false,errorMessage:message,revision:999}).mockResolvedValueOnce({revision:11});
+  await render(setup()); await input("item-name-input","Fictional retained item");
+  await click(find("item-submit-button"));
+  expect(find("item-name-input").value).toBe("Fictional retained item");
+  expect(container.querySelector('[role="alert"]').textContent).toBe(message);
+  expect(success).not.toHaveBeenCalled(); expect(drafts.has("item:berts")).toBe(true);
+  await click(find("item-submit-button"));
+  expect(find("item-name-input").value).toBe(""); expect(success).toHaveBeenCalledTimes(1);
+});
 test("item acknowledgement cannot clear typing performed after submission", async () => {
   const pending = deferred(); save.mockReturnValueOnce(pending.promise);
   await render(setup()); await input("item-name-input", "First"); await click(find("item-submit-button"));
@@ -209,6 +221,27 @@ test("partial legacy invoice failure is disclosed and cannot be resubmitted", as
 });
 
 const prep = () => <PrepTab rid="berts" drafts={drafts} showError={errors} showToast={success} items={[item]} dishes={[{ ...recipe, recipeType: "prep", yieldQty: 4, yieldUOM: "lb", prepPar: 0 }]} persistDishes={save} prepStock={[]} prepLogs={[]} salesPeriod={period} />;
+
+test("a failed par receipt cannot apply the recommendation; a confirmed retry can", async () => {
+  api.getParRecs.mockResolvedValue([{id:"suggestion",recipeId:"dish",recipeName:"Invented dish",currentPar:0,recommendedPar:8}]);
+  api.applyParRec.mockResolvedValue({});
+  save.mockResolvedValueOnce({ok:false,errorMessage:"Review the fictional par",revision:999}).mockResolvedValueOnce({revision:11});
+  await render(prep()); await click(find("prep-subtab-planning")); await click(find("par-apply-suggestion"));
+  expect(api.applyParRec).not.toHaveBeenCalled(); expect(find("par-apply-suggestion")).not.toBeNull();
+  expect(errors).toHaveBeenLastCalledWith("Review the fictional par"); expect(success).not.toHaveBeenCalled();
+  await click(find("par-apply-suggestion"));
+  expect(api.applyParRec).toHaveBeenCalledTimes(1); expect(find("par-apply-suggestion")).toBeNull();
+  expect(success).toHaveBeenCalledTimes(1);
+});
+
+test("sales failure details survive confirmation without clearing the retained entries", async () => {
+  save.mockResolvedValueOnce({ok:false,errorMessage:"Review fictional sales coverage"}).mockResolvedValueOnce({revision:11});
+  await render(sales()); await input("dish-sales-dish","17");
+  await act(async()=>jest.advanceTimersByTime(700));
+  expect(container.querySelector('[role="alert"]').textContent).toBe("Review fictional sales coverage");
+  expect(find("dish-sales-dish").value).toBe("17"); expect(success).not.toHaveBeenCalled();
+  await click(find("retry-sales-save")); expect(find("retry-sales-save")).toBeNull();
+});
 test("installed schema holds legacy count, list, overrides and advice screens with frontend flags off", async () => {
   await render(<PrepTab rid="berts" drafts={drafts} items={[item]} dishes={[]} prepCapabilities={{ countsAvailable: false, listsAvailable: false, reportingAvailable: false }} />);
   expect(find("prep-list-unavailable")).not.toBeNull(); expect(api.getPrepList).not.toHaveBeenCalled();

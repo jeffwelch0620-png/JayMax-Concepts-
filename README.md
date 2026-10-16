@@ -1,6 +1,48 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Draft PR36 — exact catalog decimals
+## PR37 — catalog decimal inputs, save feedback and finite planning costs (draft)
+
+The re-review S2 amendment makes permitted legacy batch completion atomic:
+validate the whole batch before writing, then commit stock, produced stock and
+its log in one transaction. The task route keeps its existing transaction.
+Regression tests cover early refusal, later SQL-error rollback and normal
+completion without reopening retired workflows. See the
+[current re-review record](docs/CATALOG_DECIMAL_INPUT_FEEDBACK.md).
+The `5b36e33` green CI is historical; the new amendment needs its own CI and
+separate owner merge approval.
+S2 local checks passed: 766 offline cases and 22 distinct PostgreSQL cases
+(13 methods plus nine subtests), confirmed across the broad run and corrected
+success-path rerun. The owned local server is stopped and its original
+database/role inventory is restored. Frontend source is unchanged in S2.
+
+The owner authorized the independent-review amendment to
+[draft PR37](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/37).
+Exact catalog decimals remain retained. Planning consumers reject overflow,
+positive underflow and unsafe arithmetic; unavailable costs propagate through
+recipe/period totals and ownership summaries instead of becoming infinity or
+zero. Setup shows a range notice, and duplicate save failures share one scoped
+toast identity. Native count values and received purchase accounting stay exact;
+retired prep workflows remain held. No SQL or hosted setting/data change is
+included. See the [amendment and validation record](docs/CATALOG_DECIMAL_INPUT_FEEDBACK.md).
+Final local checks passed: 861 frontend tests/74 suites, 765 offline cases,
+nine disposable PostgreSQL methods and the strict production build.
+New-head CI and owner merge approval remain separate gates; historical results
+below do not establish current-head acceptance.
+
+## Original PR37 local checkpoint
+
+PR36 is merged at **0e263ce**, with all four merged-main CI checks passed and
+both Render services Live. Its fictional precision save/name-edit/fresh-read
+checks preserved pre-existing protected data across 82 tables and the $212.00
+Food Cost control. That walkthrough identified browser number-input coercion
+and lost validation feedback. The owner authorized the two local fixes and
+testing, with a prompt before publishing the next draft PR. See the
+[input/failure contract, live evidence and validation](docs/CATALOG_DECIMAL_INPUT_FEEDBACK.md).
+Local validation passed: 849 frontend tests/73 suites, 746 offline cases and
+the strict production build. Publication and new-head CI remain pending.
+No schema, hosted data, credential, connection or hosting change is included.
+
+## PR36 — exact catalog decimals (merged)
 
 The owner-approved [PR36](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/36)
 follow-up preserves catalog conversion,
@@ -12,7 +54,7 @@ catalog/receiving test methods plus five subtests across the broad run and final
 targeted rerun. Local database/role inventories are unchanged and the owned test
 server is stopped. The owner authorized the review amendment: shared decimal
 resource limits, fixed-notation display preserving scale, and refreshing every
-Inventory tab after both services are Live. Amendment validation passes 826
+Inventory tab after both services are Live. Amendment validation passed 826
 frontend tests, 746 offline cases, the strict build and three final targeted
 PostgreSQL cases. The linked checkpoint distinguishes
 amended-head validation/CI from the original green head. No migration, hosted
