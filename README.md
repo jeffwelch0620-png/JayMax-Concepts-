@@ -1,15 +1,25 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local follow-up — unknown planning prices and supplier pack guidance
+## PR38 merged — live pricing and supplier-pack checks passed
 
-The two PR37 live findings have a local client-only fix: missing planning prices
-stay Unknown while explicit zero remains known, and the existing supplier-pack
-refusal displays its actionable review instruction without clearing or retrying
-anything automatically. Focused validation passes 138 tests; the full native
-profile passes all 879 frontend tests across 75 suites and the strict production
-build. See the [implementation and publication gates](docs/PLANNING_PRICE_AND_PACK_FEEDBACK.md).
-The owner must be prompted before a new draft PR is pushed; this candidate is
-not deployed and its hosted acceptance remains open.
+Owner-approved [PR38](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/38)
+merged as **3c58abd** from reviewed head **50e290d**. Approved-head and
+merged-main CI passed; the frontend is Live on the merge. The API remains Live
+on unchanged backend revision **91a89f7**; no manual deployment was needed.
+The labelled Bert's fixture saved a blank planning price as null/Unknown and
+explicit `0E-10` as known zero/$0.00, both verified in fresh documents. A
+supplier-pack edit with the price retained was refused with the intended
+instruction and retained draft. Seven read-only checkpoints preserved the
+protected accounting data across 82 relations and historical **$212.00** Food
+Cost; only two expected saves and price-history additions occurred. The refused
+draft was cancelled. In-place reload is not claimed. See the
+[live acceptance record](docs/PR38_LIVE_PLANNING_PRICE_ACCEPTANCE.md).
+
+Prior local validation passed 879 frontend tests/75 suites, including the 138
+focused tests, and the strict production build. Backend missing-price parity,
+structured error codes and the remaining field/unit mapping audit stay open;
+no additional production-code fix or PR publication is included in this live
+acceptance checkpoint.
 
 ## PR37 merged — scoped live catalog checks completed
 
