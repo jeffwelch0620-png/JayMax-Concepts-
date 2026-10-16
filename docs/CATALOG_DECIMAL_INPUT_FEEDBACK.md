@@ -1,5 +1,16 @@
 # Catalog decimal inputs and save feedback
 
+**Current checkpoint:** PR37 merged with owner approval as `91a89f7` from
+`64531d0`. Approved-head and merged-main CI passed all four checks. Both Render
+services were verified Live and a fresh page loaded the merged frontend asset.
+Scoped live precision, large/tiny storage, fresh-page/name-only preservation,
+specific input refusal with one notification, and restoration passed. Ten
+read-only checkpoints preserve protected rows and $212.00 Food Cost. Hidden
+supplier-pack refusal guidance and missing-price-as-zero display remain follow-up
+findings; in-place reload is not claimed. See the
+[live acceptance checkpoint](PR37_LIVE_CATALOG_ACCEPTANCE.md).
+Earlier draft/merge approval language below is historical.
+
 ## Re-review amendment — atomic legacy batch completion
 
 The owner authorized the S2 amendment, tests and push to existing draft PR37.
