@@ -2,6 +2,19 @@
 
 ## PR37 — catalog decimal inputs, save feedback and finite planning costs (draft)
 
+The re-review S2 amendment makes permitted legacy batch completion atomic:
+validate the whole batch before writing, then commit stock, produced stock and
+its log in one transaction. The task route keeps its existing transaction.
+Regression tests cover early refusal, later SQL-error rollback and normal
+completion without reopening retired workflows. See the
+[current re-review record](docs/CATALOG_DECIMAL_INPUT_FEEDBACK.md).
+The `5b36e33` green CI is historical; the new amendment needs its own CI and
+separate owner merge approval.
+S2 local checks passed: 766 offline cases and 22 distinct PostgreSQL cases
+(13 methods plus nine subtests), confirmed across the broad run and corrected
+success-path rerun. The owned local server is stopped and its original
+database/role inventory is restored. Frontend source is unchanged in S2.
+
 The owner authorized the independent-review amendment to
 [draft PR37](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/37).
 Exact catalog decimals remain retained. Planning consumers reject overflow,

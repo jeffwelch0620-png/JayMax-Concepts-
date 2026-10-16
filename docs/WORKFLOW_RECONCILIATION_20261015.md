@@ -1,5 +1,13 @@
 # Inventory workflow checkpoint and remaining work
 
+**PR37 re-review continuation:** the owner authorized the S2 atomic-batch fix,
+testing and push to the same draft PR. Direct legacy batch completion now has
+one transaction, and shared prevalidation precedes its first stock write. The
+task route's existing transaction and all schema/feature retirement holds remain.
+Tests distinguish preflight refusal from rollback after a later database error.
+The prior `5b36e33` CI is historical evidence; new-head CI and merge approval
+remain gates. See the [current review record](CATALOG_DECIMAL_INPUT_FEEDBACK.md).
+
 **October 16 review continuation:** PR37 is draft at original head `f827f15`,
 whose four CI checks passed. The owner authorized its finite-safe planning and
 toast-deduplication amendment, local tests and push to the same branch. The

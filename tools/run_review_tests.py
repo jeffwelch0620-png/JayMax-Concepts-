@@ -20,6 +20,13 @@ OFFLINE_CLASSES = ('catalog_integrity::CatalogValidationTests backup_fingerprint
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
+ ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_direct_later_invalid_cost_or_arithmetic_reaches_no_stock_writes'),
+ ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_task_later_invalid_cost_or_arithmetic_reaches_no_stock_writes'),
+ ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_direct_happy_path_deducts_both_and_writes_one_log'),
+ ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_task_happy_path_deducts_both_and_updates_progress_once'),
+ ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_direct_late_database_error_rolls_back_all_facts'),
+ ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_task_late_database_error_rolls_back_all_facts_and_progress'),
+ ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_unsafe_output_or_container_is_refused_before_any_stock_write'),
  ('shared_catalog','SharedCatalogTests','test_unsafe_planning_catalog_keeps_actual_report_and_reads_available'),
  ('legacy_prep_cutover','LegacyPrepCutoverTests','test_old_reads_work_before_cutover_then_flags_off_schema_holds_current_figures'),
  ('legacy_prep_cutover','LegacyPrepCutoverTests','test_flags_off_writers_cannot_restart_parallel_stock_after_batch_schema'),

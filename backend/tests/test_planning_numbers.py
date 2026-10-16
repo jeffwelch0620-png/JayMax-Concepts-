@@ -15,7 +15,7 @@ def item(**changes):
 
 class PlanningRangeTests(unittest.IsolatedAsyncioTestCase):
     def test_numbers_and_arithmetic_refuse_overflow_and_positive_underflow(self):
-        for value in ('1e400', '1e-400', 'Infinity', 'NaN', True):
+        for value in ('1e400', '1e-400', 'Infinity', 'NaN', 'N/A', True):
             with self.subTest(value=value): self.assertIsNone(numbers.number(value))
         for value in ('0', '0E-10', '1e-308', '1e308'):
             with self.subTest(value=value): self.assertEqual(numbers.number(value), float(value))

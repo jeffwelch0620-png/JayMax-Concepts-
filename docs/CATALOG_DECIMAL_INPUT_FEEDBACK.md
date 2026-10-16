@@ -1,5 +1,61 @@
 # Catalog decimal inputs and save feedback
 
+## Re-review amendment — atomic legacy batch completion
+
+The owner authorized the S2 amendment, tests and push to existing draft PR37.
+Head `5b36e33` passed all four
+[CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38850901412),
+but those tests did not cover a later ingredient failing after an earlier stock
+update in the legacy direct batch route. That ready-for-approval recommendation
+was withdrawn pending this focused correction. New-head CI and owner merge
+approval remain separate gates.
+
+Direct PostgreSQL batch completion now holds one transaction across the recipe
+read, locked stock reads, deductions, produced stock and log. The existing
+prep-task transaction is preserved. The shared batch helper prepares every
+ingredient update and validates quantities, costs, output, total cost and
+container numeric fields before its first mutation. A later database exception
+rolls back the complete operation; task completion also preserves its earlier
+progress on failure.
+
+This applies to the legacy/pre-cutover path when retirement guards permit it.
+Disabling `PREP_BATCHES_ENABLED` alone does not reopen legacy writes: installed
+native batch/container schemas still hold them, and native day-list guards
+still hold retired task completion. No retirement guard or feature setting is
+weakened. No production schema or migration is changed; test-only triggers are
+created solely inside disposable fictional databases.
+
+Malformed legacy strings such as `"N/A"` now become unavailable rather than
+silently becoming zero in the guarded planning consumers. Applicable legacy
+prep deductions return 422 and planning displays show Unknown. Exact catalog
+validation continues to reject malformed new input.
+
+Tests use an earlier valid ingredient and a later invalid/overflowing one.
+Database write tripwires prove a 422 happens before any stock-update attempt;
+separate log-insert failures prove rollback after deductions and produced-stock
+writes. Happy paths verify both ingredient deductions, one log and appropriate
+task progress. Native actual-purchase facts remain unchanged. The five existing
+legacy cutover tests and the actual-report protection case are included.
+Local results and source hashes are retained in
+`pr37-s2-validation-20261016.json`; current-head CI must be verified after push.
+Earlier validation counts below belong to their named historical checkpoints.
+
+Local S2 validation: 766 offline cases (293 methods plus 473 subtests) passed.
+Thirteen PostgreSQL methods and nine subtests are confirmed across the broad
+run and corrected success-path rerun. This includes the seven new atomicity
+methods, all five cutover methods and the actual-report protection method.
+The initial run's seven new methods stopped in fixture setup because a
+fictional supplier lacked its required purchase unit. The next run passed
+11 methods and all nine subtests; two success-path assertions omitted an
+existing unrelated fixture item. Those two assertions now explicitly confirm
+the unrelated stock remains unchanged, and both rerun methods passed. Initial
+evidence is retained; repeated cases are not added to the distinct-case count.
+Setup-failure cleanup was strengthened, only the seven databases owned by the
+failed initial run were removed using its recorded inventory difference, and
+the original database/role inventory was restored. Subsequent inventories
+matched and the owned loopback server is stopped. Frontend source is unchanged
+by S2; full frontend tests and strict build will run in new-head CI.
+
 ## PR37 review amendment — October 16, 2026
 
 PR37 is published as a draft. Original head `f827f15` passed all four

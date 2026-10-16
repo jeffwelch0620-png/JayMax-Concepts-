@@ -4362,10 +4362,16 @@ async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind
     store_items = await conn.fetch(
         "SELECT item_code, current_stock, count_unit FROM store_items WHERE store_id=$1 ORDER BY item_code FOR UPDATE",
         store_id)
-    yield_qty = float(recipe["yield_qty"] or 1) or 1
-    usage = []
+    yield_qty = planning.number(recipe["yield_qty"], 1)
+    batches = planning.number(batches)
+    if yield_qty is None or batches is None or batches <= 0:
+        raise HTTPException(422, "Prep quantities are outside the supported calculation range; no prep write is allowed")
+    yield_qty = yield_qty or 1
+    usage, stock_updates = [], []
     for si in store_items:
-        portions = await _pg_raw_portions(conn, recipe["id"], si["item_code"]) * batches
+        portions = planning.product(await _pg_raw_portions(conn, recipe["id"], si["item_code"]), batches)
+        if portions is None:
+            raise HTTPException(422, "Prep quantities are outside the supported calculation range; no prep write is allowed")
         if portions <= 0:
             continue
         item = await conn.fetchrow("SELECT name FROM items WHERE code = $1", si["item_code"])
@@ -4373,24 +4379,35 @@ async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind
         if derived.get("calculationUnavailable"):
             raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
         ppu = derived["portionsPerUnit"]
-        units = portions / ppu if ppu > 0 else 0
-        new_stock = max(0, round(float(si["current_stock"] or 0) - units, 3))
-        await conn.execute("UPDATE store_items SET current_stock=$1 WHERE store_id=$2 AND item_code=$3",
-                            new_stock, store_id, si["item_code"])
+        units = planning.quotient(portions, ppu) if ppu > 0 else 0
+        cost = planning.product(portions, derived["costPerPortion"])
+        remaining = planning.total([planning.number(si["current_stock"], 0), -units if units is not None else None])
+        if units is None or cost is None or remaining is None:
+            raise HTTPException(422, "Prep quantities/costs are outside the supported calculation range; no prep write is allowed")
+        stock_updates.append((max(0, round(remaining, 3)), store_id, si["item_code"]))
         usage.append({"controlNumber": si["item_code"], "name": (item["name"] if item else ""), "portions": round(portions, 2),
-                      "units": round(units, 3), "purchaseUnit": si["count_unit"], "cost": round(portions * derived["costPerPortion"], 2)})
-    produced = yield_qty * batches
+                      "units": round(units, 3), "purchaseUnit": si["count_unit"], "cost": round(cost, 2)})
+    produced = planning.product(yield_qty, batches)
+    total_cost = planning.total(u["cost"] for u in usage)
+    if produced is None or total_cost is None:
+        raise HTTPException(422, "Prep output/cost is outside the supported calculation range; no prep write is allowed")
+    if any(planning.number(c.get(field), 0) is None for c in containers for field in ("size", "count")):
+        raise HTTPException(422, "Container quantities are outside the supported calculation range; no prep write is allowed")
     new_containers = [dict(c, id="c_" + uuid.uuid4().hex[:8], createdAt=_pg_now_iso())
                        for c in containers if (c.get("count") or 0) > 0 and (c.get("size") or 0) > 0]
     await conn.fetchrow(
         "SELECT on_hand FROM prep_recipe_stock WHERE dish_id=$1 AND store_id=$2 FOR UPDATE", recipe["id"], store_id)
+    # Both callers hold a transaction. Validate the entire plan before the first
+    # mutation; later database/logging errors must roll back all effects too.
+    for update in stock_updates:
+        await conn.execute("UPDATE store_items SET current_stock=$1 WHERE store_id=$2 AND item_code=$3", *update)
     await conn.execute(
         """INSERT INTO prep_recipe_stock (dish_id, store_id, on_hand, containers) VALUES ($1,$2,$3,$4)
            ON CONFLICT (store_id, dish_id) WHERE dish_id IS NOT NULL
            DO UPDATE SET on_hand=prep_recipe_stock.on_hand + EXCLUDED.on_hand,
                          containers=prep_recipe_stock.containers || EXCLUDED.containers""",
         recipe["id"], store_id, round(produced, 3), new_containers)
-    total_cost = round(sum(u["cost"] for u in usage), 2)
+    total_cost = round(total_cost, 2)
     log_row = await conn.fetchrow(
         """INSERT INTO prep_logs (store_id, kind, dish_id, name, batches, produced, yield_uom, usage, containers, total_cost, date, created_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *""",
@@ -4455,11 +4472,12 @@ async def pg_complete_prep(store_id: str, body: PgPrepCompleteIn):
         raise HTTPException(400, "batches must be greater than zero")
     conn = await db_pg.pool().acquire()
     try:
-        await prep_containers.hold_legacy(conn)
-        recipe = await conn.fetchrow("SELECT * FROM dishes WHERE id=$1 AND store_id=$2 AND recipe_type='prep'", body.recipeId, store_id)
-        if not recipe:
-            raise HTTPException(404, "prep recipe not found")
-        return await _pg_deduct_and_stock(conn, store_id, recipe, body.batches, [c.model_dump() for c in body.containers], "batch", recipe["name"])
+        async with conn.transaction():
+            await prep_containers.hold_legacy(conn)
+            recipe = await conn.fetchrow("SELECT * FROM dishes WHERE id=$1 AND store_id=$2 AND recipe_type='prep'", body.recipeId, store_id)
+            if not recipe:
+                raise HTTPException(404, "prep recipe not found")
+            return await _pg_deduct_and_stock(conn, store_id, recipe, body.batches, [c.model_dump() for c in body.containers], "batch", recipe["name"])
     finally:
         await db_pg.pool().release(conn)
 
