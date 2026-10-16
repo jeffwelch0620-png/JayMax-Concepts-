@@ -1,5 +1,12 @@
 # Exact catalog decimal preservation
 
+**Subsequent checkpoint:** PR36 merged at `0e263ce` from amended head `aaef97f`.
+All four merged-main CI jobs passed and both Render services are Live on the
+merge. The labelled save/name-edit/fresh-page checks preserved exact tested
+decimals and the $212.00 accounting control. They also identified two UI gaps;
+the owner authorized the [local input/feedback follow-up](CATALOG_DECIMAL_INPUT_FEEDBACK.md).
+Draft and approval language below records earlier gates, not the current state.
+
 October 15, 2026. Local follow-up to PR35 and the remaining field/unit audit.
 The owner authorized the decimal fix and local testing, then approved publishing
 [draft PR36](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/36).

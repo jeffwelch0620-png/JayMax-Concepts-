@@ -1,6 +1,19 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Draft PR36 — exact catalog decimals
+## Local follow-up — catalog decimal inputs and save feedback
+
+PR36 is merged at **0e263ce**, with all four merged-main CI checks passed and
+both Render services Live. Its fictional precision save/name-edit/fresh-read
+checks preserved pre-existing protected data across 82 tables and the $212.00
+Food Cost control. That walkthrough identified browser number-input coercion
+and lost validation feedback. The owner authorized the two local fixes and
+testing, with a prompt before publishing the next draft PR. See the
+[input/failure contract, live evidence and validation](docs/CATALOG_DECIMAL_INPUT_FEEDBACK.md).
+Local validation passed: 849 frontend tests/73 suites, 746 offline cases and
+the strict production build. Publication and new-head CI remain pending.
+No schema, hosted data, credential, connection or hosting change is included.
+
+## PR36 — exact catalog decimals (merged)
 
 The owner-approved [PR36](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/36)
 follow-up preserves catalog conversion,
@@ -12,7 +25,7 @@ catalog/receiving test methods plus five subtests across the broad run and final
 targeted rerun. Local database/role inventories are unchanged and the owned test
 server is stopped. The owner authorized the review amendment: shared decimal
 resource limits, fixed-notation display preserving scale, and refreshing every
-Inventory tab after both services are Live. Amendment validation passes 826
+Inventory tab after both services are Live. Amendment validation passed 826
 frontend tests, 746 offline cases, the strict build and three final targeted
 PostgreSQL cases. The linked checkpoint distinguishes
 amended-head validation/CI from the original green head. No migration, hosted

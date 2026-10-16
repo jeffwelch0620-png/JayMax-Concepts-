@@ -1,5 +1,12 @@
 # Inventory workflow checkpoint and remaining work
 
+**Latest continuation:** PR36 merged as `0e263ce` from `aaef97f`; merged-main CI
+passed and both Render services are Live. Scoped fictional precision acceptance
+preserved the existing protected data and $212.00 Food Cost. The owner authorized
+the [decimal-input and specific-error follow-up](CATALOG_DECIMAL_INPUT_FEEDBACK.md),
+with testing and a prompt before a new draft PR is pushed. This is local work;
+no additional hosted change or merge is part of this authorization.
+
 **Current continuation:** the owner authorized exact catalog decimal preservation
 after the field/unit audit and approved draft PR36. The independent-review
 amendment adds bounded inputs, fixed display and explicit all-tab refresh steps;

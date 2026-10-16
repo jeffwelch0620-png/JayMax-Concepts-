@@ -1,6 +1,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { useStoreState } from "./useStoreState";
+import { confirmed, confirmSave } from "./saveIntegrity";
 import * as api from "./api";
 import { readStateWithDeadline, STATE_READ_TIMEOUT_MS, STATE_READ_TIMEOUT_MESSAGE } from "./stateRead";
 
@@ -52,11 +53,37 @@ test("acknowledged writes update saved totals and pass the restaurant revision",
 test.each([409, 422, 500, "offline"])("failure %s does not change saved totals", async status => {
   await render("berts"); api.putCollection.mockRejectedValue({ response: { status }, message: "Offline" });
   let result; await act(async () => { result = await controller.save("items", ["unsaved"]); });
-  expect(result).toBeNull(); expect(container.textContent).not.toContain("unsaved"); expect(container.textContent).toContain("berts"); expect(errors).toHaveBeenCalled();
+  expect(result).toEqual({ok:false,errorMessage:expect.any(String)}); expect(container.textContent).not.toContain("unsaved"); expect(container.textContent).toContain("berts"); expect(errors).toHaveBeenCalled();
+});
+
+test.each([
+  [422, "Confirm the fictional pack quantity", "Confirm the fictional pack quantity"],
+  [409, "Database conflict detail", "This data changed elsewhere. Your draft is retained; review the latest data before retrying."],
+  [500, "The fictional save is unavailable", "The fictional save is unavailable"],
+])("form confirmation keeps the specific current-store failure for HTTP %s", async (status,detail,message) => {
+  await render("berts");
+  api.putCollection.mockRejectedValueOnce({response:{status,data:{detail}}});
+  const formError = jest.fn(); let accepted;
+  await act(async () => { accepted=await confirmSave(()=>controller.save("items",["unsaved"]),formError); });
+  expect(accepted).toBe(false); expect(formError).toHaveBeenLastCalledWith(message);
+  expect(errors).toHaveBeenLastCalledWith(message); expect(controller.state.revision).toBe(10);
+  expect(controller.state.items).toEqual(["berts"]);
+  api.putCollection.mockResolvedValueOnce({revision:11});
+  await act(async () => expect(controller.save("items",["corrected"])).resolves.toMatchObject({revision:11}));
+  expect(controller.state.items).toEqual(["corrected"]);
+});
+
+test("detailed failures cannot advance a revision or leak from a replaced session", async () => {
+  await render("berts"); const saving=deferred(); api.putCollection.mockReturnValueOnce(saving.promise);
+  let request; act(()=>{request=controller.save("items",["old login"]);});
+  await act(async()=>root.render(<Screen auth={{user:{role:"manager"}}}/>));
+  await act(async()=>{saving.reject(new Error("Old login private error")); expect(await request).toBeNull();});
+  expect(errors).not.toHaveBeenCalled(); expect(controller.state.revision).toBe(10);
+  expect(confirmed({ok:false,errorMessage:"Refused",revision:100})).toBe(false);
 });
 test.each([null, {}, { ok: false, revision: 11 }, { revision: "11" }, { revision: 9 }, { revision: 11, items: "malformed" }])("unconfirmed acknowledgement %j cannot announce or apply a save", async result => {
   await render("berts"); api.putCollection.mockResolvedValue(result);
-  await act(async () => expect(controller.save("items", ["bad"])).resolves.toBeNull());
+  await act(async () => expect(controller.save("items", ["bad"])).resolves.toMatchObject({ok:false,errorMessage:expect.any(String)}));
   expect(container.textContent).not.toContain("bad"); expect(errors).toHaveBeenCalled();
 });
 test("pending writes cannot show optimistic stock or be replaced by polling", async () => {
@@ -77,7 +104,7 @@ test("a read started before a write cannot undo its acknowledgement", async () =
 test("overlapping whole-store saves are refused until the first finishes", async () => {
   await render("berts"); const saving = deferred(); api.putCollection.mockReturnValue(saving.promise);
   let first; act(() => { first = controller.save("items", ["first"]); });
-  await act(async () => expect(controller.save("items", ["second"])).resolves.toBeNull());
+  await act(async () => expect(controller.save("items", ["second"])).resolves.toMatchObject({ok:false,errorMessage:expect.any(String)}));
   expect(api.putCollection).toHaveBeenCalledTimes(1);
   await act(async () => { saving.resolve({ revision: 11 }); await first; });
 });
@@ -110,7 +137,7 @@ test("late A acknowledgement cannot change B's next If-Match revision", async ()
 test("dirty sales based on an older revision cannot overwrite a polled period", async () => {
   await render("berts"); api.fetchState.mockResolvedValueOnce({ revision: 11, salesPeriod: { dishSales: { toast: 20 } } });
   await act(async () => controller.refresh());
-  await act(async () => expect(controller.save("salesPeriod", { dishSales: { toast: 1 } }, 10)).resolves.toBeNull());
+  await act(async () => expect(controller.save("salesPeriod", { dishSales: { toast: 1 } }, 10)).resolves.toMatchObject({ok:false,errorMessage:expect.any(String)}));
   expect(api.putSalesPeriod).not.toHaveBeenCalled(); expect(controller.state.salesPeriod.dishSales.toast).toBe(20);
 });
 test("unmount discards late callbacks and clears the poll timer", async () => {

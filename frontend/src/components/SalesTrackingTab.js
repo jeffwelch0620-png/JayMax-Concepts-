@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { confirmed, useRetainedDraft } from "../lib/saveIntegrity";
+import { confirmed, saveFailureMessage, useRetainedDraft } from "../lib/saveIntegrity";
 import { mergeSalesDraft } from "../lib/salesDraft";
 import { Save, Plus } from "lucide-react";
 import { normalizeRecipeSchema, rawPortionsForRecipe, itemDerived, adjustmentSignedPortions, todayISO, fmtDate, num, workweekRange, shiftWorkweek } from "../lib/calc";
@@ -38,7 +38,7 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
         data = merged.data; expectedRevision = latest.revision;
       }
       const result = await persist(data, expectedRevision);
-      if (!confirmed(result)) throw new Error("Sales save was not confirmed. Your draft is retained; review and retry.");
+      if (!confirmed(result)) throw new Error(saveFailureMessage(result, "Sales save was not confirmed. Your draft is retained; review and retry."));
       if (!mounted.current) return false;
       const savedData = result.salesPeriod ?? data;
       const accepted = { data: savedData, base: savedData, revision: result.revision };
@@ -74,7 +74,8 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
       name: existing?.name || `${fmtDate(local.periodStart)} – ${fmtDate(local.periodEnd)}`, savedAt: new Date().toISOString(), status: "closed" };
     const next = existing ? reportingPeriods.map(p => p.id === existing.id ? snapshot : p) : [...reportingPeriods, snapshot];
     try {
-      if (!confirmed(await persistReportingPeriods(next))) throw new Error("Reporting period save was not confirmed. The working entries are retained.");
+      const result = await persistReportingPeriods(next);
+      if (!confirmed(result)) throw new Error(saveFailureMessage(result, "Reporting period save was not confirmed. The working entries are retained."));
       if (mounted.current) showToast(existing ? "Reporting period updated" : "Reporting period saved");
     } catch (e) { fail(e.message || "Couldn't save the reporting period"); }
   }
@@ -86,7 +87,7 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
     savingRef.current = true; setSaving(true);
     try {
       const saved = await persist(next, result.revision);
-      if (!confirmed(saved)) throw new Error("The new working period was not confirmed. Your previous entries are retained.");
+      if (!confirmed(saved)) throw new Error(saveFailureMessage(saved, "The new working period was not confirmed. Your previous entries are retained."));
       if (mounted.current) {
         acknowledge(prior, { data: next, base: next, revision: saved.revision });
         showToast(message);

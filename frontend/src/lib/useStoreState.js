@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as api from "./api";
-import { confirmed } from "./saveIntegrity";
+import { confirmed, saveErrorText } from "./saveIntegrity";
 
 export function useStoreState(rid, session, empty, onError) {
   const scope = useMemo(() => ({ rid, session, revision: null, loaded: false, reads: 0, pendingRead: null, readFailed: false }), [rid, session]);
@@ -60,13 +60,15 @@ export function useStoreState(rid, session, empty, onError) {
 
   const save = useCallback(async (name, next, expectedRevision) => {
     if (!isCurrent()) return null;
+    const refuse = message => {
+      errors.current(message);
+      return { ok: false, errorMessage: message };
+    };
     if (!scope.loaded || pending.current.has(rid)) {
-      errors.current("Another save or location load is pending. Your draft is retained; try again when it finishes.");
-      return null;
+      return refuse("Another save or location load is pending. Your draft is retained; try again when it finishes.");
     }
     if (expectedRevision != null && expectedRevision !== scope.revision) {
-      errors.current("This draft is based on older data. Review the latest saved data before replacing it.");
-      return null;
+      return refuse("This draft is based on older data. Review the latest saved data before replacing it.");
     }
     const revision = scope.revision;
     pending.current.set(rid, scope); writes.current.set(rid, (writes.current.get(rid) || 0) + 1);
@@ -85,9 +87,9 @@ export function useStoreState(rid, session, empty, onError) {
       } } : previous);
       return result;
     } catch (error) {
-      if (isCurrent()) errors.current(error?.response?.status === 409
+      if (isCurrent()) return refuse(error?.response?.status === 409
         ? "This data changed elsewhere. Your draft is retained; review the latest data before retrying."
-        : error?.response?.data?.detail || error.message || "Save failed. Your draft is retained.");
+        : saveErrorText(error, "Save failed. Your draft is retained."));
       return null;
     } finally {
       pending.current.delete(rid); writes.current.set(rid, (writes.current.get(rid) || 0) + 1);

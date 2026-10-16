@@ -8,7 +8,7 @@ import { RESTAURANTS, OWNER, isOrderEnabled, statusOf, downloadJSON, todayISO, w
 import * as api from "./lib/api";
 import { useStoreState } from "./lib/useStoreState";
 import { nativeStateMode, retainedAdjustments } from "./lib/stateCutover";
-import { hasUnsavedDrafts, useDraftUnloadWarning } from "./lib/saveIntegrity";
+import { confirmed, hasUnsavedDrafts, useDraftUnloadWarning } from "./lib/saveIntegrity";
 import { DashboardTab } from "./components/DashboardTab";
 import { CountsTab } from "./components/CountsTab";
 import { SetupTab } from "./components/SetupTab";
@@ -143,13 +143,10 @@ export default function App() {
         if (!Array.isArray(data.items) || !Array.isArray(data.purchases)) { toast.error("That file doesn't look like a backup"); return; }
         const ok = window.confirm(`Restoring will replace ALL current data for ${current.name}. This can't be undone. Continue?`);
         if (!ok) return;
-        // persistX()/persistSalesPeriod() each swallow their own network errors (showing
-        // a per-collection toast) and resolve to a falsy value on failure — so `await`
-        // alone never surfaces a partial failure here. Track which sections actually
-        // saved so the final message reflects what really happened, instead of always
-        // claiming success.
+        // Only a confirmed revision counts as saved. A detailed failure result
+        // is an object too; truthiness must not announce a successful restore.
         const failed = [];
-        const step = async (label, fn) => { if (!store.isCurrent() || !(await fn())) failed.push(label); };
+        const step = async (label, fn) => { if (!store.isCurrent() || !confirmed(await fn())) failed.push(label); };
         await step("items", () => persistItems(data.items || []));
         await step("purchases", () => persistPurchases(data.purchases || []));
         await step("dishes", () => persistDishes(data.dishes || []));
