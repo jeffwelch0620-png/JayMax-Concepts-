@@ -101,6 +101,41 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await c.fetchval("SELECT count(*) FROM purchasing.item_bases WHERE store_id='rudds'"),0)
             self.assertEqual(await c.fetchval("SELECT current_stock FROM store_items WHERE store_id='rudds' AND item_code='test_food'"),0)
 
+    async def test_backend_planning_prices_use_location_alias_and_never_change_actual_report(self):
+        self.assertEqual((await self.units())[0].status_code,200)
+        _, opening, closing = await self.pair()
+        captured, *_ = await self.capture()
+        self.assertEqual((await self.post(captured['documents'][0])).status_code,200)
+        actual_before = (await self.report(opening, closing)).json()
+        self.assertEqual((await self.link()).status_code,200)
+        async with self.pool.acquire() as c:
+            await c.execute("UPDATE items SET portion_size=1,portion_uom='lb' WHERE code='test_food'")
+            dish = await c.fetchval("""INSERT INTO dishes(store_id,name,recipe_type,price,yield_qty,yield_uom)
+                VALUES('rudds','Fictional alias plate','menu',10,1,'each') RETURNING id""")
+            await c.execute("INSERT INTO dish_lines(dish_id,source_type,item_code,qty) VALUES($1,'item','test_food',1)",dish)
+        for price, available, expected in ((None,True,None),('0E-10',True,0),('80',True,4),('80',False,None)):
+            with self.subTest(price=price,available=available):
+                body = await self.payload()
+                body['vendor_skus'][0].update(price=price,available=available)
+                async with self.pool.acquire() as c:
+                    revision = await c.fetchval("SELECT revision FROM store_state WHERE store_id='rudds'")
+                saved = await self.put(body,revision)
+                self.assertEqual(saved.status_code,200,saved.text)
+                items, purchases, dishes, prep_stock = await server._pg_owner_view('rudds')
+                self.assertEqual(items[0]['controlNumber'],'R01')
+                self.assertEqual(dishes[0]['lines'][0]['controlNumber'],'R01')
+                self.assertEqual(server.item_derived(items[0])['costPerPortion'],expected)
+                self.assertEqual(server.recipe_cost(dishes[0],{'R01':items[0]},{d['id']:d for d in dishes}),expected)
+                with patch.object(server,'ensure_seed',unittest.mock.AsyncMock()):
+                    summary = await server.store_summary({'id':'rudds'})
+                self.assertEqual(summary['planningCostsAvailable'],expected is not None)
+                self.assertEqual(summary['topCostDishes'][0]['cost'],expected)
+                context = server.build_ai_context('rudds',items,purchases,dishes,[],prep_stock,summary['nativeInventory'])
+                self.assertIn('plate cost '+('Unknown' if expected is None else f'${expected:.2f}'),context)
+                async with self.pool.acquire() as c:
+                    self.assertEqual(await c.fetchval('SELECT price FROM vendor_items WHERE id=$1',self.sku),Decimal('99.100000000000000001'))
+                self.assertEqual((await self.report(opening, closing)).json(),actual_before)
+
     async def test_catalog_extreme_decimals_are_422_without_changing_catalog_or_revision(self):
         async def snapshot():
             async with self.pool.acquire() as c:

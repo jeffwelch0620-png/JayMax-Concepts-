@@ -1,5 +1,19 @@
 # Inventory workflow checkpoint and remaining work
 
+**Current local continuation:** the owner authorized backend missing-price
+parity and testing. Unknown prices now propagate through backend planning
+calculations; shared location recipe aliases resolve to the same catalog
+identity. Legacy pre-cutover writers retain their existing holds and refuse
+unknown costs during preflight; native prep costing policy is unchanged.
+Validation: 60 focused offline cases and 33 disposable PostgreSQL cases passed.
+The full selected offline run passed 804/806; the two PowerShell-dependent ACL
+tests timed out and a separate shell-startup probe reproduces the environment
+failure. No bypass or hosted action was taken. Original local database/role
+inventory is restored and the owned server is stopped. See the
+[local implementation and remaining gates](BACKEND_PLANNING_PRICE_PARITY.md).
+Prompt before a new draft PR; independent review, exact-head CI, merge and live
+acceptance remain separate gates. JMAX Pages remain updated through PR37.
+
 **Latest PR38 checkpoint:** owner-approved merge `3c58abd` is verified from
 reviewed head `50e290d`; approved-head and merged-main CI passed. The frontend
 is Live on the merge and the unchanged API is Live on `91a89f7`. Fictional

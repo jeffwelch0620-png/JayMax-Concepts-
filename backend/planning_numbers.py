@@ -52,7 +52,7 @@ def total(values):
 
 def money(value, places=2):
     value = number(value)
-    return 'Unknown (outside supported calculation range)' if value is None else f'${value:,.{places}f}'
+    return 'Unknown' if value is None else f'${value:,.{places}f}'
 
 
 def rounded(value, places=2):

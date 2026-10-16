@@ -308,9 +308,11 @@ def item_derived(item):
     unit_uom = pref.get("unitUOM") or item.get("unitUOM") or "each"
     pack_total = planning.product(pack_count, unit_qty)
     ppu = calc_ppu(pack_total, unit_uom, item.get("portionSize"), item.get("portionUOM")) if pack_total is not None else None
-    price = planning.number(pref.get("price"), 0)
+    raw_price = pref.get("price")
+    price_missing = raw_price is None or isinstance(raw_price, str) and not raw_price.strip()
+    price = planning.number(raw_price)
     cost = planning.quotient(price, ppu) if ppu is not None and ppu > 0 else (0.0 if ppu == 0 and price is not None else None)
-    return {"portionsPerUnit": ppu, "costPerPortion": cost, "price": price,
+    return {"portionsPerUnit": ppu, "costPerPortion": cost, "price": price, "priceMissing": price_missing,
             "calculationUnavailable": ppu is None or price is None or cost is None}
 
 def raw_portions(recipe, target_cn, by_id, stack=()):
@@ -2391,13 +2393,15 @@ async def _pg_owner_view(rid):
         lines_by_dish = {}
         for line in dish_lines:
             lines_by_dish.setdefault(line["dish_id"], []).append(line)
+        controls_by_code = {it['code']: it['controlNumber'] for it in items}
         dishes = []
         for d in dish_rows:
             lines = []
             for l in lines_by_dish.get(d["id"], []):
                 cn = None
                 if l["item_code"]:
-                    cn = l["item_code"][len(prefix):] if l["item_code"].startswith(prefix) else l["item_code"]
+                    cn = controls_by_code.get(l["item_code"],
+                        l["item_code"][len(prefix):] if l["item_code"].startswith(prefix) else l["item_code"])
                 lines.append({"sourceType": l["source_type"], "controlNumber": cn,
                               "recipeId": str(l["prep_dish_id"]) if l["prep_dish_id"] else None,
                               "qty": float(l["qty"] or 0)})
@@ -4282,17 +4286,22 @@ def _pg_prep_items_track_where(track):
     return "made_at IS NOT NULL AND made_at != store_id" if track == "bulk" else "(made_at IS NULL OR made_at = store_id)"
 
 async def _pg_item_derived(conn, item_code):
-    # Mirrors item_derived(): cost/portions come from the item's PREFERRED vendor_item
-    # (falling back to any vendor_item), not from store_items.base_per_count_unit --
+    # Pre-cutover legacy prep only: both callers hold retired stock writes before
+    # reaching this helper. Active reports use _pg_owner_view's location catalog
+    # and item_derived(), not this legacy global-price/conversion projection.
+    # Cost/portions come from an available PREFERRED vendor_item
+    # (falling back to another available vendor_item), not store_items.base_per_count_unit --
     # purchase_unit and count_unit can differ even though they're equal for every item
     # in the currently-migrated data.
     sku = await conn.fetchrow(
-        "SELECT price, base_per_purchase_unit FROM vendor_items WHERE item_code = $1 ORDER BY preferred DESC, price NULLS LAST LIMIT 1",
+        "SELECT price, base_per_purchase_unit FROM vendor_items WHERE item_code = $1 AND available IS NOT FALSE ORDER BY preferred DESC, price NULLS LAST, id LIMIT 1",
         item_code)
     ppu = planning.number(sku["base_per_purchase_unit"], 0) if sku else 0.0
-    price = planning.number(sku["price"], 0) if sku else 0.0
+    raw_price = sku["price"] if sku else None
+    price_missing = raw_price is None or isinstance(raw_price, str) and not raw_price.strip()
+    price = planning.number(raw_price)
     cost = planning.quotient(price, ppu) if ppu is not None and ppu > 0 else (0.0 if ppu == 0 and price is not None else None)
-    return {"portionsPerUnit": ppu, "costPerPortion": cost, "price": price,
+    return {"portionsPerUnit": ppu, "costPerPortion": cost, "price": price, "priceMissing": price_missing,
             "calculationUnavailable": ppu is None or price is None or cost is None}
 
 async def _pg_raw_portions(conn, dish_id, target_item_code, stack=()):

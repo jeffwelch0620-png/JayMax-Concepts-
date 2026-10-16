@@ -1,5 +1,19 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local follow-up — backend unknown prices and location recipe aliases
+
+Backend planning calculations now preserve missing supplier prices as Unknown
+while retaining genuine zero, and recipe lines use the same location aliases
+as the catalog read. Native accounting stays independent. Focused validation
+passes 60 offline cases and 33 disposable PostgreSQL cases. The full selected
+offline profile passes 804/806; two unchanged Windows permission tests timed out
+starting PowerShell, also reproduced by simple startup probes. These are
+documented failures, not an all-green result. The original local database/role
+inventory is restored and the owned test server is stopped. See the
+[implementation, test evidence and review gates](docs/BACKEND_PLANNING_PRICE_PARITY.md).
+Prompt before publishing a new draft PR; no push, deployment, hosted test or
+persisted native prep-cost policy change is included in this checkpoint.
+
 ## PR38 merged — live pricing and supplier-pack checks passed
 
 Owner-approved [PR38](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/38)
