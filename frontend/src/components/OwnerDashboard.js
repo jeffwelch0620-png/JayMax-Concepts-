@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ArrowRight, AlertTriangle, TrendingDown, RefreshCw, Check, X, ClipboardCheck, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import * as api from "../lib/api";
-import { fmtMoney, num } from "../lib/calc";
+import { fmtMoney, fmtPlanningCost, num } from "../lib/calc";
 import { MetricCard, PageTitle, Pill, cardCls, btnGhost, btnAcc, btnDanger } from "./common";
 
 // up = getting worse (higher variance / slower), down = improving
@@ -66,10 +66,10 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
       <div className="text-xs text-slate-500 -mt-3 mb-5">Consolidated view across Bert's Hometown Grill & Pizzeria, Rudd's Pies and Fries, and Papa Leoni's Pizza · ~$8M combined annual sales.</div>
 
       <div className="grid gap-3 mb-6" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))" }}>
-        <MetricCard testId="owner-total-inv" label={native ? "Last Count Values" : "Total Inventory Value"} value={native ? inventoryMoney(totals.inventoryValue) : fmtMoney(totals.inventoryValue)} sub={native ? "Sum of dated counts; see each location" : "all three locations"} />
+        <MetricCard testId="owner-total-inv" label={native ? "Last Count Values" : "Total Inventory Value"} value={native ? inventoryMoney(totals.inventoryValue) : fmtPlanningCost(totals.inventoryValue)} sub={native ? "Sum of dated counts; see each location" : "all three locations"} />
         <MetricCard testId="owner-total-spend" label={native ? "Net Received Food — 30 Days" : "Purchases — Last 30 Days"} value={fmtMoney(totals.spend30)} sub={native ? "Credits/corrections included; tax/fees separate" : "group-wide"} />
         <MetricCard testId="owner-total-alerts" label="Items Below Par" value={native ? "Needs on-hand review" : totals.orderAlerts} sub={native ? "Dated counts do not establish live stock" : "need ordering"} tone={!native && totals.orderAlerts > 0 ? "warn" : "normal"} />
-        <MetricCard testId="owner-total-waste" label={native ? "Estimated Waste — 30 Days" : "Waste — Last 30 Days"} value={fmtMoney(totals.waste30)} sub={native ? "Explanation only; not an accounting deduction" : "logged removals"} tone={totals.waste30 > 0 ? "warn" : "good"} />
+        <MetricCard testId="owner-total-waste" label={native ? "Estimated Waste — 30 Days" : "Waste — Last 30 Days"} value={fmtPlanningCost(totals.waste30)} sub={native ? "Explanation only; not an accounting deduction" : "logged removals"} tone={totals.waste30 > 0 ? "warn" : "good"} />
       </div>
 
       {pending.length > 0 && (
@@ -162,11 +162,12 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
               <span className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: s.accent }} />
             </div>
             <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Last count value" : "Inventory"}</div><div className="num font-bold text-slate-200">{native ? inventoryMoney(s.inventoryValue) : fmtMoney(s.inventoryValue)}</div></div>
+              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Last count value" : "Inventory"}</div><div className="num font-bold text-slate-200">{native ? inventoryMoney(s.inventoryValue) : fmtPlanningCost(s.inventoryValue)}</div></div>
               <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "30d received food" : "30d Purchases"}</div><div className="num font-bold text-slate-200">{fmtMoney(s.spend30)}</div></div>
               <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Estimated recipe cost %" : "Avg Food Cost"}</div><div className="num font-bold" style={{ color: s.avgFoodCost !== null && s.avgFoodCost > 32 ? "#EF4444" : "#10B981" }}>{s.avgFoodCost !== null ? `${num(s.avgFoodCost, 1)}%` : "—"}</div></div>
               <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">Below Par</div><div className="num font-bold text-slate-200">{native ? "Review on-hand" : `${s.orderAlerts} items`}</div></div>
             </div>
+            {s.planningCostsAvailable === false && <p className="text-xs text-amber-300 mb-3">Some planning costs are unavailable. Review catalog pack, portion and price details.</p>}
             {native && <p className="text-xs mb-3" data-testid={`native-count-status-${s.id}`}>Count: {s.nativeInventory?.count?.count_date || "Not available"} · {s.nativeInventory?.countStatus?.replaceAll("_", " ")} · {s.nativeInventory?.count?.timing?.replaceAll("_", " ") || ""}. Received food window: {s.nativeInventory?.receivedFrom} to before {s.nativeInventory?.receivedBefore}. Counts are historical measurements; actual Food Cost is on the location's Actual Inventory dashboard.</p>}
             {prep?.available === false ? <p className="text-xs text-slate-400 mb-3" data-testid={`prep-unavailable-${s.id}`}>{prep.message || "Prep summary is unavailable. Use reviewed prep counts, production and period reports."}</p> : prep && (() => { const p = prep.stores.find((x) => x.id === s.id); return p ? (
               <div className="flex gap-1.5 flex-wrap mb-3" data-testid={`prep-summary-${s.id}`}>
@@ -179,7 +180,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
               <div className="flex gap-1.5 flex-wrap mb-3">
                 {s.orderAlerts > 0 && <Pill color="#F59E0B" bg="rgba(245,158,11,0.12)"><AlertTriangle size={10} className="inline -mt-0.5" /> {s.orderAlerts} to order</Pill>}
                 {s.prepLow > 0 && <Pill color="#3B82F6" bg="rgba(59,130,246,0.12)">{s.prepLow} prep below par</Pill>}
-                {s.waste30 > 0 && <Pill color="#EF4444" bg="rgba(239,68,68,0.12)"><TrendingDown size={10} className="inline -mt-0.5" /> {fmtMoney(s.waste30)} waste</Pill>}
+                {s.waste30 > 0 && <Pill color="#EF4444" bg="rgba(239,68,68,0.12)"><TrendingDown size={10} className="inline -mt-0.5" /> {fmtPlanningCost(s.waste30)} waste</Pill>}
               </div>
             )}
             {s.topCostDishes.length > 0 && (

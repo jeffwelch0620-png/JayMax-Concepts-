@@ -1,5 +1,15 @@
 # Inventory workflow checkpoint and remaining work
 
+**October 16 review continuation:** PR37 is draft at original head `f827f15`,
+whose four CI checks passed. The owner authorized its finite-safe planning and
+toast-deduplication amendment, local tests and push to the same branch. The
+[amendment record](CATALOG_DECIMAL_INPUT_FEEDBACK.md) distinguishes original CI,
+current local results and later live acceptance. Track 1 and retired prep holds
+remain intact; no SQL/hosted changes are included. Merge approval remains
+separate. The runtime-role cutover and remaining field/unit audit are still open.
+
+Earlier continuation entries below preserve their historical checkpoint.
+
 **Latest continuation:** PR36 merged as `0e263ce` from `aaef97f`; merged-main CI
 passed and both Render services are Live. Scoped fictional precision acceptance
 preserved the existing protected data and $212.00 Food Cost. The owner authorized

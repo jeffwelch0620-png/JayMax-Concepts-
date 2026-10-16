@@ -76,7 +76,8 @@ export default function App() {
   const drafts = useRef(new Map());
   useDraftUnloadWarning(drafts);
   useEffect(() => { drafts.current.clear(); }, [session]);
-  const store = useStoreState(loc, session, EMPTY_STATE, message => toast.error(message));
+  const reportSaveError = message => toast.error(message, { id: `save-error:${session?.user?.id || session?.user?.email}:${loc}:${message}` });
+  const store = useStoreState(loc, session, EMPTY_STATE, reportSaveError);
   const S = store.state;
   const nativeSharedState = nativeStateMode(S, api.nativePurchasesEnabled);
   const isOwner = !!session && loc === "owner" && session.user.role === "owner";
@@ -95,7 +96,7 @@ export default function App() {
   }, [loc, session]);
 
   const showToast = (msg) => { if (store.isCurrent()) toast.success(msg); };
-  const showError = (msg) => { if (store.isCurrent()) toast.error(msg); };
+  const showError = (msg) => { if (store.isCurrent()) reportSaveError(msg); };
   const persistItems = (next, revision) => store.save("items", next, revision);
   const persistPurchases = next => store.save("purchases", next);
   const persistDishes = (next, revision) => store.save("dishes", next, revision);

@@ -1,5 +1,72 @@
 # Catalog decimal inputs and save feedback
 
+## PR37 review amendment — October 16, 2026
+
+PR37 is published as a draft. Original head `f827f15` passed all four
+[Inventory CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38848164390).
+The owner authorized the review recommendations, amendment, testing and push
+to the existing branch. Merge approval and live acceptance remain separate.
+Earlier local-only and frontend-only statements below describe the original
+checkpoint; this amendment also changes backend planning consumers.
+
+The review's overflow finding was confirmed, including positive decimal
+underflow and the active owner-summary calculation path. Dedicated Python and
+JavaScript planning helpers reject non-finite conversions, nonzero decimals
+that become zero, and overflowing/underflowing products and quotients. Unknown
+inputs poison dependent totals. A genuine zero price remains a known zero.
+The generic backend `f()` fallback is unchanged; it is not suitable for optional
+planning costs.
+
+Guards cover catalog-derived portions/costs, nested recipe costs, adjustments,
+legacy period estimates, planning order exposure and owner/AI summaries. Setup
+shows "Outside supported calculation range"; monetary planning views show
+"Unknown". Newly inferred conversion factors cannot silently fall back to one
+after unsafe arithmetic. Existing exact stored factors and decimal metadata
+remain preserved. Missing metadata and incompatible-unit policies are separate
+audit work; this change does not certify them as verified conversions.
+
+The store and form use the same error-toast ID, scoped by user/location/message.
+Existing current-session/current-location guards still suppress stale callbacks.
+Specific failure messages, retained drafts and confirmed-revision requirements
+remain intact.
+
+Track 1 is unchanged: explicit purchased-item counts and received purchase costs
+remain the accounting basis, with taxes/fees separate. Tests compare the same
+actual period report before and after extreme planning-price edits. Native
+ownership totals retain their exact decimal strings even when linked recipe and
+waste estimates are unavailable. Legacy prep deduction entry points keep their
+existing retirement checks; no retired endpoint is reopened to return success.
+Disposable tests verify the existing read holds and 409 write refusals.
+
+Final amendment validation passed:
+
+- 861 frontend tests in 74 suites; strict production build passed.
+- 765 offline reported cases: 293 methods and 472 subtests; no failures,
+  errors or skips.
+- Nine disposable PostgreSQL methods: exact catalog/actual-report protection
+  and all five legacy prep cutover tests. Database/role inventories matched
+  before and after; the owned loopback server was stopped.
+
+The initial amendment run passed 858 frontend tests, the strict build and 762
+offline cases. A final rerun includes the additional unsafe-derived-factor and
+owner-display regressions plus three more backend decimal scenarios; counts
+above are final totals, not sums of repeated runs. Existing dependency and
+FastAPI lifecycle deprecations remain; compiler warnings still fail the build.
+
+Amendment validation and source hashes are recorded in the external
+`pr37-amend-validation-20261016.json` receipt. New-head CI must be checked after
+push; the original green run above is historical evidence only. No hosted
+database, migration, credential, connection or hosting changes accompany this
+amendment. Restricted runtime-role cutover remains open before operational use.
+
+After separate merge approval: verify both Render services Live, preserve drafts,
+refresh every Inventory tab, then run labelled normal/unsafe-input save and
+reload acceptance. Do not treat local fixtures as hosted proof. Continue the
+field/unit audit afterward: expected-sales completeness, missing/incompatible
+cost metadata, unit aliases, explicit par basis and historical portion meaning.
+
+## Original local checkpoint
+
 October 15, 2026, Eastern. Local follow-up to merged PR36 (`0e263ce`), whose
 amended head was `aaef97f`. The owner authorized these two fixes and testing,
 and requested a prompt before publishing a new draft PR. This slice is local;

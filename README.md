@@ -1,6 +1,22 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local follow-up — catalog decimal inputs and save feedback
+## PR37 — catalog decimal inputs, save feedback and finite planning costs (draft)
+
+The owner authorized the independent-review amendment to
+[draft PR37](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/37).
+Exact catalog decimals remain retained. Planning consumers reject overflow,
+positive underflow and unsafe arithmetic; unavailable costs propagate through
+recipe/period totals and ownership summaries instead of becoming infinity or
+zero. Setup shows a range notice, and duplicate save failures share one scoped
+toast identity. Native count values and received purchase accounting stay exact;
+retired prep workflows remain held. No SQL or hosted setting/data change is
+included. See the [amendment and validation record](docs/CATALOG_DECIMAL_INPUT_FEEDBACK.md).
+Final local checks passed: 861 frontend tests/74 suites, 765 offline cases,
+nine disposable PostgreSQL methods and the strict production build.
+New-head CI and owner merge approval remain separate gates; historical results
+below do not establish current-head acceptance.
+
+## Original PR37 local checkpoint
 
 PR36 is merged at **0e263ce**, with all four merged-main CI checks passed and
 both Render services Live. Its fictional precision save/name-edit/fresh-read

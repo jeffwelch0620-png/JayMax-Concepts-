@@ -3,7 +3,7 @@ import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { equalEditorValue, snapshotEditorValue, mergeEditorFields } from "../lib/editorDraft";
 import { supplierConversionMismatch, supplierReviewSaved } from "../lib/supplierConversion";
 import { Plus, Trash2, Star, X } from "lucide-react";
-import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, nextControlNumber, itemDerived, isCountActive, isOrderEnabled, uid, fmtMoney, num } from "../lib/calc";
+import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, nextControlNumber, itemDerived, isCountActive, isOrderEnabled, uid, fmtPlanningCost, num } from "../lib/calc";
 import * as api from "../lib/api";
 import { NativeInventoryPosition } from "./NativeInventoryPosition";
 import { PreparedItemSetup } from "./PreparedItemSetup";
@@ -189,7 +189,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
     showToast("Storage area added");
   }
 
-  const previewBg = preview.mismatch ? "bg-red-500/10 text-red-400" : preview.needsPortion ? "bg-amber-500/10 text-amber-400" : "bg-[#0F1626] text-slate-300";
+  const previewBg = preview.rangeUnavailable ? "bg-amber-500/10 text-amber-400" : preview.mismatch ? "bg-red-500/10 text-red-400" : preview.needsPortion ? "bg-amber-500/10 text-amber-400" : "bg-[#0F1626] text-slate-300";
 
   return (
     <div className="fade-slide-in" data-testid="setup-tab">
@@ -248,12 +248,12 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
         </div>
         {form.packCount ? (
           <div className={`mt-3 px-3.5 py-2.5 rounded-lg text-[13.5px] flex gap-5 flex-wrap ${previewBg}`} data-testid="portion-preview">
-            {preview.needsPortion ? (
+            {preview.rangeUnavailable ? <span>Outside supported calculation range. Portions and cost unavailable.</span> : preview.needsPortion ? (
               <span className="font-semibold">⚠ Portion Size isn't set — cost per portion will show $0.00 until it is</span>
             ) : (
               <>
                 <span><strong className="num">{num(preview.portionsPerUnit, 1)}</strong> portions per {form.purchaseUnit}</span>
-                <span><strong className="num">{fmtMoney(preview.costPerPortion)}</strong> cost per portion (preferred vendor)</span>
+                <span><strong className="num">{fmtPlanningCost(preview.costPerPortion)}</strong> cost per portion (preferred vendor)</span>
                 {preview.mismatch && <span className="font-semibold">⚠ size unit and portion unit aren't the same measure type</span>}
               </>
             )}
@@ -348,7 +348,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
                       </td>
                       <td>{(it.vendorSkus || []).map((v) => v.vendor).join(", ")}</td>
                       <td className="num">
-                        {fmtMoney(d.costPerPortion)}
+                        {fmtPlanningCost(d.costPerPortion)}
                         {d.needsPortion && <Pill testId={`needs-portion-${it.controlNumber}`} color="#F59E0B" bg="rgba(245,158,11,0.12)">NO PORTION DATA</Pill>}
                       </td>
                       <td>{isCountActive(it) ? <Pill color="#10B981" bg="rgba(16,185,129,0.12)">Y</Pill> : <Pill color="#64748B" bg="#1E293B">N</Pill>}</td>

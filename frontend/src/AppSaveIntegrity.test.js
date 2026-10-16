@@ -28,6 +28,19 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.useRealTimers(); });
 
+test('store and form report the same failed save with one scoped toast identity', async () => {
+  await act(async()=>root.render(<App/>));await click('nav-tab-setup');
+  api.putCollection.mockRejectedValueOnce(new Error('Fictional save failed'));
+  let result;await act(async()=>{result=await mockSetupProps.persistItems([item],10);});
+  expect(result).toMatchObject({ok:false,errorMessage:expect.any(String)});
+  await act(async()=>mockSetupProps.showError(result.errorMessage));
+  const errors=toast.error.mock.calls;
+  expect(errors).toHaveLength(2);
+  expect(errors[0]).toEqual(errors[1]);
+  expect(errors[0][1].id).toContain('berts');
+  expect(toast.success).not.toHaveBeenCalled();
+});
+
 test("supplier review navigation scopes focus to its restaurant and refreshes the saved revision", async () => {
   await act(async () => root.render(<App />)); await click("nav-tab-setup");
   await act(async () => mockSetupProps.onVerifySupplier({itemCode:"food",skuId:"sku"}));

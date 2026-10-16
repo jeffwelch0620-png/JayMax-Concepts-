@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-OFFLINE_MODULES = ('catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
+OFFLINE_MODULES = ('planning_numbers catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
  'managed_development rotate_build_connections provision_build_connections staff_response pg_routes pg_migrations '
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
@@ -20,6 +20,9 @@ OFFLINE_CLASSES = ('catalog_integrity::CatalogValidationTests backup_fingerprint
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
+ ('shared_catalog','SharedCatalogTests','test_unsafe_planning_catalog_keeps_actual_report_and_reads_available'),
+ ('legacy_prep_cutover','LegacyPrepCutoverTests','test_old_reads_work_before_cutover_then_flags_off_schema_holds_current_figures'),
+ ('legacy_prep_cutover','LegacyPrepCutoverTests','test_flags_off_writers_cannot_restart_parallel_stock_after_batch_schema'),
  ('shared_catalog','SharedCatalogTests','test_catalog_supported_decimal_boundaries_roundtrip_without_rounding'),
  ('shared_catalog','SharedCatalogTests','test_catalog_extreme_decimals_are_422_without_changing_catalog_or_revision'),
  ('shared_catalog','SharedCatalogTests','test_exact_catalog_roundtrip_keeps_shared_metadata_profiles_and_actual_report'),

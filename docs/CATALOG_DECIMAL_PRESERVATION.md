@@ -1,5 +1,11 @@
 # Exact catalog decimal preservation
 
+**PR37 follow-up:** exact storage is now paired with finite-safe planning
+consumers in the owner-authorized draft amendment. Unsupported calculations
+remain unavailable rather than becoming infinity or zero; actual counts and
+purchases are unchanged. See the [current amendment record](CATALOG_DECIMAL_INPUT_FEEDBACK.md).
+Merge and hosted acceptance remain separate gates.
+
 **Subsequent checkpoint:** PR36 merged at `0e263ce` from amended head `aaef97f`.
 All four merged-main CI jobs passed and both Render services are Live on the
 merge. The labelled save/name-edit/fresh-page checks preserved exact tested

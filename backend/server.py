@@ -21,6 +21,7 @@ import db_pg
 import db_auxiliary
 import catalog_mapping
 from catalog_decimals import CatalogDecimal, catalog_text
+import planning_numbers as planning
 import menu_contract
 import order_commands
 import supplier_contacts
@@ -285,14 +286,16 @@ def f(x, d=0.0):
         return d
 
 def calc_ppu(yq, yuom, ps, puom):
-    yq, ps = f(yq), f(ps)
+    yq, ps = planning.number(yq, 0), planning.number(ps, 0)
+    if yq is None or ps is None:
+        return None
     if not yq or not ps:
         return 0.0
     fy, fp = UOM_FAMILY.get(yuom), UOM_FAMILY.get(puom)
     if fy and fp and fy == fp:
-        pb = ps * CONV_TO_BASE[puom]
-        return (yq * CONV_TO_BASE[yuom]) / pb if pb > 0 else 0.0
-    return yq / ps
+        pb = planning.product(ps, CONV_TO_BASE[puom])
+        return planning.quotient(planning.product(yq, CONV_TO_BASE[yuom]), pb)
+    return planning.quotient(yq, ps)
 
 def preferred_sku(item):
     skus = [sku for sku in item.get("vendorSkus") or [] if sku.get("available") is not False]
@@ -300,12 +303,15 @@ def preferred_sku(item):
 
 def item_derived(item):
     pref = preferred_sku(item) or {}
-    pack_count = f(pref.get("packCount", item.get("packCount")))
-    unit_qty = f(pref.get("unitQty", item.get("unitQty")))
+    pack_count = planning.number(pref.get("packCount", item.get("packCount")), 0)
+    unit_qty = planning.number(pref.get("unitQty", item.get("unitQty")), 0)
     unit_uom = pref.get("unitUOM") or item.get("unitUOM") or "each"
-    ppu = calc_ppu(pack_count * unit_qty, unit_uom, item.get("portionSize"), item.get("portionUOM"))
-    price = f(pref.get("price"))
-    return {"portionsPerUnit": ppu, "costPerPortion": price / ppu if ppu > 0 else 0.0, "price": price}
+    pack_total = planning.product(pack_count, unit_qty)
+    ppu = calc_ppu(pack_total, unit_uom, item.get("portionSize"), item.get("portionUOM")) if pack_total is not None else None
+    price = planning.number(pref.get("price"), 0)
+    cost = planning.quotient(price, ppu) if ppu is not None and ppu > 0 else (0.0 if ppu == 0 and price is not None else None)
+    return {"portionsPerUnit": ppu, "costPerPortion": cost, "price": price,
+            "calculationUnavailable": ppu is None or price is None or cost is None}
 
 def raw_portions(recipe, target_cn, by_id, stack=()):
     if not recipe or recipe.get("id") in stack:
@@ -330,16 +336,22 @@ def recipe_cost(recipe, items_by_cn, by_id, stack=()):
     stack = stack + (recipe.get("id"),)
     total = 0.0
     for l in recipe.get("lines", []):
-        qty = f(l.get("qty", l.get("qtyPortions")))
+        qty = planning.number(l.get("qty", l.get("qtyPortions")), 0)
+        if qty is None:
+            return None
         if l.get("sourceType") == "prep":
             sub = by_id.get(l.get("recipeId"))
             sub_cost = recipe_cost(sub, items_by_cn, by_id, stack)
-            sy = f((sub or {}).get("yieldQty"), 1) or 1
-            total += (sub_cost / sy) * qty
+            sy = planning.number((sub or {}).get("yieldQty"), 1)
+            if sy is None:
+                return None
+            total = planning.total([total, planning.product(planning.quotient(sub_cost, sy or 1), qty)])
         else:
             it = items_by_cn.get(l.get("controlNumber"))
             if it:
-                total += item_derived(it)["costPerPortion"] * qty
+                total = planning.total([total, planning.product(item_derived(it)["costPerPortion"], qty)])
+        if total is None:
+            return None
     return total
 
 ADJ_DIRECTIONS = {"waste": "remove", "spoilage": "remove", "employee_meal": "remove", "comp": "remove",
@@ -347,9 +359,10 @@ ADJ_DIRECTIONS = {"waste": "remove", "spoilage": "remove", "employee_meal": "rem
                   "count_correction_remove": "remove", "count_correction_add": "add",
                   "other_remove": "remove", "other_add": "add"}
 def adj_value(adj, item):
-    qty = f(adj.get("qty"))
-    portions = qty if adj.get("qtyBasis") == "portion" else qty * item_derived(item)["portionsPerUnit"]
-    return abs(portions) * item_derived(item)["costPerPortion"]
+    qty = planning.number(adj.get("qty"), 0)
+    derived = item_derived(item)
+    portions = qty if adj.get("qtyBasis") == "portion" else planning.product(qty, derived["portionsPerUnit"])
+    return planning.product(abs(portions) if portions is not None else None, derived["costPerPortion"])
 
 # ---------------- Seed data ----------------
 def _vs(vendor, sku, pack, price, purchaseUnit="case", packCount=0, unitQty=0, unitUOM="each", preferred=True):
@@ -940,6 +953,8 @@ async def _deduct_and_stock(rid, recipe, batches, containers, kind, name):
         if portions <= 0:
             continue
         d = item_derived(it)
+        if d.get("calculationUnavailable"):
+            raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
         units = portions / d["portionsPerUnit"] if d["portionsPerUnit"] > 0 else 0
         it["currentStock"] = max(0, round(f(it.get("currentStock")) - units, 3))
         usage.append({"controlNumber": it["controlNumber"], "name": it.get("name", ""), "portions": round(portions, 2),
@@ -976,6 +991,8 @@ async def _deduct_item_and_stock(rid, pitem, vessels):
     if not item:
         raise HTTPException(404, f"inventory item {pitem.get('controlNumber')} not found")
     d = item_derived(item)
+    if d.get("calculationUnavailable"):
+        raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
     portions = vessels * f(pitem.get("vesselCapacity"))
     units = portions / d["portionsPerUnit"] if d["portionsPerUnit"] > 0 else 0
     cost = portions * d["costPerPortion"]
@@ -2413,11 +2430,11 @@ async def store_summary(r):
     if purchase_api.enabled():
         from native_inventory_views import read_operating_summary
         native_summary = await read_operating_summary(db_pg.pool(), RESTAURANT_TO_PG_STORE[rid])
-    inv_value = None if native_summary else sum(f(i.get("currentStock")) * item_derived(i)["price"] for i in items)
+    inv_value = None if native_summary else planning.total(planning.product(planning.number(i.get("currentStock"), 0), item_derived(i)["price"]) for i in items)
     alerts = None if native_summary else sum(1 for i in items if i.get("orderEnabled", True) and f(i.get("currentStock")) < f(i.get("par")))
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
     spend30 = native_summary['netFoodPurchases30'] if native_summary else round(sum(f(p.get("extendedCost")) for p in purchases if (p.get("invoiceDate") or "") >= cutoff), 2)
-    waste30 = sum(adj_value(a, items_by_cn[a["controlNumber"]]) for a in adjustments
+    waste30 = planning.total(adj_value(a, items_by_cn[a["controlNumber"]]) for a in adjustments
                   if (a.get("date") or "") >= cutoff and a.get("controlNumber") in items_by_cn
                   and ADJ_DIRECTIONS.get(a.get("reason"), "remove") == "remove")
     dish_rows = []
@@ -2425,18 +2442,20 @@ async def store_summary(r):
         if d.get("recipeType", "menu") == "prep":
             continue
         cost = recipe_cost(d, items_by_cn, by_id)
-        price = f(d.get("price"))
-        pct = (cost / price * 100) if price > 0 else None
-        dish_rows.append({"name": d.get("name", ""), "code": d.get("menuCode", ""), "cost": round(cost, 2),
-                          "price": price, "pct": round(pct, 1) if pct is not None else None,
+        price = planning.number(d.get("price"), 0)
+        pct = planning.product(planning.quotient(cost, price), 100) if price is not None and price > 0 else None
+        dish_rows.append({"name": d.get("name", ""), "code": d.get("menuCode", ""), "cost": planning.rounded(cost),
+                          "price": price, "pct": planning.rounded(pct, 1),
                           "target": f(d.get("targetPct"), 30)})
     pcts = [x["pct"] for x in dish_rows if x["pct"] is not None]
     stock_by_recipe = {s["recipeId"]: s for s in (prep_stock or [])}
     prep_low = None if prep_stock is None else sum(1 for d in dishes if d.get("recipeType") == "prep" and f(d.get("prepPar")) > 0
                    and f((stock_by_recipe.get(d["id"]) or {}).get("onHand")) < f(d.get("prepPar")))
-    return {**r, "inventoryValue": native_summary['inventoryValue'] if native_summary else round(inv_value, 2), "orderAlerts": alerts, "spend30": spend30,
+    costs_available = all(row['cost'] is not None for row in dish_rows)
+    return {**r, "inventoryValue": native_summary['inventoryValue'] if native_summary else planning.rounded(inv_value), "orderAlerts": alerts, "spend30": spend30,
             "nativeInventory": native_summary,
-            "waste30": round(waste30, 2), "avgFoodCost": round(sum(pcts) / len(pcts), 1) if pcts else None,
+            "waste30": planning.rounded(waste30), "avgFoodCost": planning.rounded(planning.quotient(planning.total(pcts), len(pcts)), 1) if pcts and costs_available else None,
+            "planningCostsAvailable": costs_available,
             "dishCount": len(dish_rows), "itemCount": len(items), "prepLow": prep_low,
             "topCostDishes": sorted(dish_rows, key=lambda x: -(x["pct"] or 0))[:3]}
 
@@ -2450,12 +2469,12 @@ async def owner_summary():
             values=[s['inventoryValue'] for s in stores]
             totals={"inventoryValue":str(sum((Decimal(v) for v in values),Decimal(0))) if all(v is not None for v in values) else None,
                     "orderAlerts":None,"spend30":str(sum((Decimal(s['spend30']) for s in stores),Decimal(0))),
-                    "waste30":round(sum(s['waste30'] for s in stores),2)}
+                    "waste30":planning.rounded(planning.total(s['waste30'] for s in stores))}
         return {"stores":stores,"totals":totals,"inventoryBasis":"native_received_purchases_and_explicit_counts"}
-    totals = {"inventoryValue": round(sum(s["inventoryValue"] for s in stores), 2),
+    totals = {"inventoryValue": planning.rounded(planning.total(s["inventoryValue"] for s in stores)),
               "orderAlerts": sum(s["orderAlerts"] for s in stores),
               "spend30": round(sum(s["spend30"] for s in stores), 2),
-              "waste30": round(sum(s["waste30"] for s in stores), 2)}
+              "waste30": planning.rounded(planning.total(s["waste30"] for s in stores))}
     return {"stores": stores, "totals": totals}
 
 # ---------------- AI assistant (OpenAI via Emergent universal key) ----------------
@@ -2475,21 +2494,22 @@ def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock, nat
         if native_summary['countStatus']=='complete':
             lines.append("DATED PHYSICAL COUNT: "+"; ".join(f"{r['item_code']} {r['base_quantity']} {r['base_unit']} explicit value {r['inventory_value']} USD" for r in native_summary['items'][:60]))
     else:
-        inv_value = sum(f(i.get("currentStock")) * item_derived(i)["price"] for i in items)
-        lines.append(f"Live inventory value: ${inv_value:,.2f} across {len(items)} items")
+        inv_value = planning.total(planning.product(planning.number(i.get("currentStock"), 0), item_derived(i)["price"]) for i in items)
+        lines.append(f"Live inventory value: {planning.money(inv_value)} across {len(items)} items")
     low = [] if native_summary else [i for i in items if i.get("orderEnabled", True) and f(i.get("currentStock")) < f(i.get("par"))]
     if low:
         lines.append("BELOW PAR: " + "; ".join(f"{i['controlNumber']} {i.get('name','')} stock {f(i.get('currentStock')):g}/{f(i.get('par')):g} {i.get('purchaseUnit','')}" for i in low[:25]))
     lines.append("ITEMS (cost per portion): " + "; ".join(
-        f"{i['controlNumber']} {i.get('name','')} ${item_derived(i)['costPerPortion']:.3f}/portion" for i in items[:60]))
+        f"{i['controlNumber']} {i.get('name','')} {planning.money(item_derived(i)['costPerPortion'], 3)}/portion" for i in items[:60]))
     menu_lines = []
     for d in dishes:
         if d.get("recipeType", "menu") == "prep":
             continue
         cost = recipe_cost(d, items_by_cn, by_id)
-        price = f(d.get("price"))
-        pct = f"{cost / price * 100:.1f}%" if price > 0 else "n/a"
-        menu_lines.append(f"{d.get('menuCode','')} {d.get('name','')}: price ${price:.2f}, plate cost ${cost:.2f}, FC {pct} (target {f(d.get('targetPct'), 30):g}%)")
+        price = planning.number(d.get("price"), 0)
+        ratio = planning.product(planning.quotient(cost, price), 100)
+        pct = f"{ratio:.1f}%" if ratio is not None else "unavailable"
+        menu_lines.append(f"{d.get('menuCode','')} {d.get('name','')}: price {planning.money(price)}, plate cost {planning.money(cost)}, FC {pct} (target {f(d.get('targetPct'), 30):g}%)")
     if menu_lines:
         lines.append("MENU COSTING: " + " | ".join(menu_lines[:40]))
     preps = [d for d in dishes if d.get("recipeType") == "prep"]
@@ -2503,10 +2523,10 @@ def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock, nat
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
     spend30 = sum(f(p.get("extendedCost")) for p in purchases if (p.get("invoiceDate") or "") >= cutoff)
     if not native_summary:lines.append(f"Purchases last 30 days: ${spend30:,.2f} ({len(purchases)} invoice lines total on file)")
-    waste30 = sum(adj_value(a, items_by_cn[a["controlNumber"]]) for a in adjustments
+    waste30 = planning.total(adj_value(a, items_by_cn[a["controlNumber"]]) for a in adjustments
                   if (a.get("date") or "") >= cutoff and a.get("controlNumber") in items_by_cn
                   and ADJ_DIRECTIONS.get(a.get("reason"), "remove") == "remove")
-    lines.append(f"{'Track 2 legacy estimated waste/removals (not accounting deductions)' if native_summary else 'Waste/removals'} last 30 days: ${waste30:,.2f}")
+    lines.append(f"{'Track 2 legacy estimated waste/removals (not accounting deductions)' if native_summary else 'Waste/removals'} last 30 days: {planning.money(waste30)}")
     return "\n".join(lines)
 
 class ChatIn(BaseModel):
@@ -4269,11 +4289,11 @@ async def _pg_item_derived(conn, item_code):
     sku = await conn.fetchrow(
         "SELECT price, base_per_purchase_unit FROM vendor_items WHERE item_code = $1 ORDER BY preferred DESC, price NULLS LAST LIMIT 1",
         item_code)
-    if not sku or not sku["base_per_purchase_unit"]:
-        return {"portionsPerUnit": 0.0, "costPerPortion": 0.0, "price": float(sku["price"]) if sku and sku["price"] else 0.0}
-    ppu = float(sku["base_per_purchase_unit"])
-    price = float(sku["price"] or 0)
-    return {"portionsPerUnit": ppu, "costPerPortion": (price / ppu) if ppu > 0 else 0.0, "price": price}
+    ppu = planning.number(sku["base_per_purchase_unit"], 0) if sku else 0.0
+    price = planning.number(sku["price"], 0) if sku else 0.0
+    cost = planning.quotient(price, ppu) if ppu is not None and ppu > 0 else (0.0 if ppu == 0 and price is not None else None)
+    return {"portionsPerUnit": ppu, "costPerPortion": cost, "price": price,
+            "calculationUnavailable": ppu is None or price is None or cost is None}
 
 async def _pg_raw_portions(conn, dish_id, target_item_code, stack=()):
     # Mirrors raw_portions(): recursively resolves how many portions of an item a
@@ -4350,6 +4370,8 @@ async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind
             continue
         item = await conn.fetchrow("SELECT name FROM items WHERE code = $1", si["item_code"])
         derived = await _pg_item_derived(conn, si["item_code"])
+        if derived.get("calculationUnavailable"):
+            raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
         ppu = derived["portionsPerUnit"]
         units = portions / ppu if ppu > 0 else 0
         new_stock = max(0, round(float(si["current_stock"] or 0) - units, 3))
@@ -4388,6 +4410,8 @@ async def _pg_deduct_item_and_stock(conn, store_id, pitem, vessels):
         raise HTTPException(404, f"inventory item {pitem['item_code']} not found")
     item = await conn.fetchrow("SELECT name FROM items WHERE code=$1", pitem["item_code"])
     derived = await _pg_item_derived(conn, pitem["item_code"])
+    if derived.get("calculationUnavailable"):
+        raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
     ppu = derived["portionsPerUnit"]
     portions = vessels * float(pitem["vessel_capacity"] or 0)
     units = portions / ppu if ppu > 0 else 0

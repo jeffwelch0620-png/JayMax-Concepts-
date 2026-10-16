@@ -1,3 +1,4 @@
+import { planningProduct, planningSum } from "../lib/planningNumbers";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { confirmed, saveFailureMessage, useRetainedDraft } from "../lib/saveIntegrity";
 import { mergeSalesDraft } from "../lib/salesDraft";
@@ -146,10 +147,10 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
     const ending = counts.ending !== undefined && counts.ending !== "" ? Number(counts.ending) : null;
     const purchased = periodPurchaseQty(it.controlNumber);
     const actualUnits = (beginning !== null && ending !== null) ? (beginning + purchased - ending) : null;
-    const actualPortions = actualUnits !== null ? actualUnits * d.portionsPerUnit : null;
+    const actualPortions = actualUnits !== null ? planningProduct(actualUnits, d.portionsPerUnit) : null;
     const delta = actualPortions !== null ? actualPortions - theoreticalPortions : null;
-    const explainedPortions = periodAdjustments(it.controlNumber).reduce((sum, a) => sum + adjustmentSignedPortions(a, it), 0);
-    const unexplainedDelta = delta !== null ? delta - explainedPortions : null;
+    const explainedPortions = planningSum(periodAdjustments(it.controlNumber).map(a => adjustmentSignedPortions(a, it)));
+    const unexplainedDelta = planningSum([delta, explainedPortions == null ? null : -explainedPortions]);
     const unexplainedPct = (unexplainedDelta !== null && theoreticalPortions > 0) ? (unexplainedDelta / theoreticalPortions) * 100 : null;
     return { it, theoreticalPortions, purchased, actualPortions, delta, explainedPortions, unexplainedDelta, unexplainedPct, hasCounts: beginning !== null && ending !== null };
   });
@@ -239,9 +240,9 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
                 <tr key={r.it.controlNumber}>
                   <td className="font-semibold text-slate-200">{r.it.controlNumber} — {r.it.name}</td>
                   <td className="num">{num(r.theoreticalPortions, 1)}</td>
-                  {!actualMode && <><td className="num">{r.hasCounts ? num(r.actualPortions, 1) : <span className="text-slate-500">enter counts</span>}</td>
+                  {!actualMode && <><td className="num">{r.hasCounts ? r.actualPortions == null ? "Unknown" : num(r.actualPortions, 1) : <span className="text-slate-500">enter counts</span>}</td>
                   <td className="num">{r.delta !== null ? num(r.delta, 1) : "—"}</td>
-                  <td className="num">{num(r.explainedPortions, 1)}</td>
+                  <td className="num">{r.explainedPortions == null ? "Unknown" : num(r.explainedPortions, 1)}</td>
                   <td className="num font-bold">{r.unexplainedDelta !== null ? num(r.unexplainedDelta, 1) : "—"}</td>
                   <td>
                     {r.unexplainedPct !== null ? (

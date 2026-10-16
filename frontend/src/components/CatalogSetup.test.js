@@ -65,6 +65,16 @@ test.each(["1e400", "1" + "0".repeat(400), "1e-400", "0E-10", "9".repeat(512) + 
   expect(body.base_per_count_unit).toBe("25"); expect(body.vendor_skus[0].base_per_purchase_unit).toBe("20");
 });
 
+test.each(['1e400','1e-400'])('preview marks unsafe price %s unavailable without losing exact input', async price => {
+  const unsafe={...item,vendorSkus:[{...item.vendorSkus[0],price}]};
+  await act(async()=>root.render(<SetupTab {...revisionProps(10,[unsafe])}/>));
+  await click('edit-item-F01');
+  expect(find('portion-preview').textContent).toContain('Outside supported calculation range');
+  expect(find('portion-preview').textContent).not.toMatch(/Infinity|NaN|∞|\$0\.00/);
+  await click('item-submit-button');
+  expect(persist.mock.calls[0][0][0].vendorSkus[0].price).toBe(price);
+});
+
 const localSession = {user:{id:"synthetic-owner"}};
 const localEmpty = {items:[],areas:[]};
 function StoreCatalog({onError}) {
