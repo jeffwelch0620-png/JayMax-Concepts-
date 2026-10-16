@@ -4,6 +4,12 @@ October 15, 2026. The owner explicitly approved merging PR35 and continuing live
 recovery acceptance on the existing Render/Supabase build deployment. Tests use
 labelled fictional sources in Bert's, without posting them into inventory.
 
+Current acceptance: normal CSV and all four scoped transport cases passed:
+manual loss/reload/retry, file BEFORE loss/sign-in/exact retry, file AFTER lost
+status/reload, and mismatch with failed-then-confirmed local discard. Final
+independent database validation passed and cleanup is complete within the
+verification limits below. No subsequent PR has been pushed.
+
 ## Merge and deployment
 
 - PR: https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/35
@@ -154,7 +160,7 @@ read. That read returned the real negative result. An intentional retry without
 reselecting the file was refused locally with: "Reselect the original file with
 the same filename and exact bytes before retrying." The relay still records just
 one dropped file attempt and no forwarded file capture. Exact reselection/retry
-remains pending at this checkpoint.
+was pending at that intermediate checkpoint; its completed outcome is below.
 
 UI evidence: `pr35-file-after-owner-signin-dom.txt`,
 `pr35-file-reselection-required-dom.txt`, and
@@ -168,7 +174,9 @@ refused that different filename/bytes locally, preserving the original record
 and its negative status. Relay counters remained one dropped BEFORE attempt,
 zero forwarded file captures and no held transport error. This supplies live
 wrong-file refusal evidence. The owner was asked to paste the full BEFORE path
-into the file picker's File name box; a correct-file retry is still pending.
+into the file picker's File name box. Byte-identical copies were later placed
+in one-file Downloads folders to simplify selection; original names/digests
+were unchanged.
 
 The independent pre-retry observation passed:
 `pr35-live-file_before_unforwarded-20261015T232146787666Z.json`, SHA-256
@@ -179,11 +187,129 @@ no server-side file/attempt/version. All pre-existing row hashes across 82
 protected relations, purchase facts, store-state payloads and the complete
 historical $212.00 Food Cost report remain unchanged; read-only sessions closed.
 
-Remaining cases: file loss before forwarding with same-owner sign-in and exact
-reselection; file commit with lost
-acknowledgement/status followed by reload; and a scoped fictional filename
-mismatch with failed-then-confirmed local discard. Each must preserve inventory
-facts and historical accounting, and no retry or rekey may occur automatically.
+### BEFORE exact retry and independent validation passed
+
+At 23:47:30 UTC, the explicit retry used the same key, filename and exact
+790-byte BEFORE source. The relay admitted its file part, forwarded one capture,
+received HTTP 200, and truncated the 3,982-byte acknowledgement after one byte.
+The real saved-status read then succeeded. The UI opened the correct BEFORE
+invoice and cleared the pending record without another capture or new key.
+Evidence: `pr35-file-before-recovered-dom.txt` and the completed relay receipt
+`pr35-capture-relay-20261015T231936261165Z.json`, stopped SHA-256
+`f5e0a741c0154a896bb715363771d1ead0613026e7bcecc9974875062a14d495`.
+
+Independent observation `pr35-live-file_before_completed-20261015T234927337844Z.json`
+passed, SHA-256 `2a9ba8e4eb0ab7afd9bf4be7ada3d2f45610da94240e3643fba140f53c907c75`.
+The BEFORE file is `9fe6ccd3-fef1-411b-aed4-ea38e3e72387`, with one upload
+attempt; version `79eecf4c-5ff7-4485-a43e-26f88b595d5d` is unposted. Exact
+new source-row counts match only the normal CSV, manual source and BEFORE
+capture. All pre-existing protected rows, purchase facts, store-state payloads
+and the complete historical $212.00 Food Cost report remain unchanged.
+
+### AFTER lost acknowledgement/status and reload passed
+
+The previous listener stopped cleanly. A pinned-prefix resume preserved both
+completed cases and opened `pr35-capture-relay-20261015T234938807659Z.json` at
+23:49:38 UTC. Fifteen offline relay guard tests passed, including refusal to
+repeat either completed capture. The browser override and hosted code are
+unchanged; the new listener has its own 30-minute expiry.
+
+`TEST-ONLY-PR35-AFTER-20261015.csv` used key
+`d46a1651-405f-4593-bc17-7631da0fd532`. The API committed one capture and returned
+HTTP 200; the relay delivered one acknowledgement byte, then also dropped the
+first automatic status response before forwarding that read. The app retained
+the request. Reload restored its original identity with no automatic capture
+and no retry action. One explicit status read opened the saved AFTER invoice
+and cleared the journal; no file reselection or resend was needed. The relay
+records one AFTER capture, two status attempts (one deliberately unforwarded,
+one actual HTTP 200), and no held transport error.
+
+Evidence: `pr35-file-after-response-loss-dom.txt`,
+`pr35-file-after-reload-dom.txt`, and `pr35-file-after-recovered-dom.txt`.
+Independent post-AFTER verification passed at
+`pr35-live-file_after_completed-20261015T235435927717Z.json`, SHA-256
+`305405c6c3fb21360c98049065df327feff6f4f15fca119dd6104cc86839cb9c`.
+File `3c0d8353-ff7f-43f7-9778-3045caed56a8` has one upload attempt; version
+`ffb72b68-0e3d-447a-b7da-1a6a89bd64be` is unposted. Exact row deltas match
+only the four named sources; all pre-existing protected rows, purchase facts,
+store-state payloads and the complete historical $212.00 report remain unchanged.
+Final-file table validation subsequently passed as recorded below.
+
+### MISMATCH conflict and local discard passed
+
+The original file `TEST-ONLY-PR35-MISMATCH-20261015.csv` used key
+`f4a3bd53-dbde-4974-b1ec-f7c4dcbe1f02`. The scoped relay forwarded its exact
+794 bytes once, changing only the multipart filename to
+`TEST-ONLY-PR35-MISMATCH-20261015-WIRE.csv`. SHA-256:
+`bb541f4d553905a2ea02fbc1512654f06577e490a6b50932f9039fd324b22d8b`.
+The API saved it and returned HTTP 200; the acknowledgement was truncated after
+one byte. The actual status read returned the typed identity conflict. The UI
+exposed review/discard with no retry action.
+
+An unrelated clearly labelled manual draft was present but never submitted.
+The first discard confirmation deliberately lost its status read before the
+API; both request and confirmation remained, as did the draft. A second
+confirmation performed a fresh actual status read, received the typed conflict,
+and cleared only the matching local recovery record. The file chooser became
+enabled and empty; Capture remained disabled. Both unrelated manual fields were
+unchanged. Only those two test draft fields were then cleared as cleanup.
+Evidence: `pr35-file-conflict-blocked-dom.txt`,
+`pr35-file-discard-read-failed-dom.txt`, `pr35-file-discard-confirmed-dom.txt`,
+and `pr35-discard-preserved-draft-20261015.png`.
+
+The saved source was retained: file `cbb9326a-9390-42ac-8b87-c454f533d2c5`,
+version `d11e4c76-c698-474f-95a9-270d06216fac`, one upload attempt and no
+posting batch. Reopening its captured-file entry after normal-browser cleanup
+is a separate read, not a retry or deletion.
+
+### Final independent database comparison and cleanup
+
+Read-only receipt `pr35-live-transport_completed-20261016T000027178417Z.json`
+passed at 00:00:27 UTC October 16 (8:00 p.m. EDT October 15). SHA-256:
+`05803caf31ad95f5b0034765648699cc2bf170a8dfb4bf9fe84499033bd16641`.
+All five exact fictional sources have one upload attempt each and no posting
+batch. Source deltas are exactly five rows in each of document identities,
+lines, source rows, versions, import files, parse runs, raw rows and upload
+attempts, plus four document parties (the manual source has none). All
+pre-existing row hashes across 82 protected tables remain present. All protected
+non-source relations, purchase facts, store-state payloads and the complete
+historical $212.00 Food Cost report are unchanged. The source index and 55-row
+ledger remain unchanged. All observer connections closed; observers made no
+hosted SQL writes.
+
+Final stopped relay receipt `pr35-capture-relay-20261015T234938807659Z.json`,
+SHA-256 `f526d0ff3f55990b2f7f3c88bc9e95716cfdc59794551fdc0d7509eee57aa532`,
+records four upstream captures, ten upstream status reads and zero purchase
+posts. Capture attempts were manual 2, BEFORE 2, AFTER 1, MISMATCH 1; the first
+manual/BEFORE attempts never reached the API. There is no held transport error
+and the listener is closed. A subsequent operating-system read found zero
+listeners on port 8774. Fifteen offline relay guard checks passed; these are
+operator-tool checks, separate from product test counts.
+
+The owner reported cleanup complete: Local Overrides disabled in participating
+tabs, temporary Apps on device access reset, test-enabled extension file-URL
+access disabled, and DevTools closed. An independent reload then verified
+`main.daae9d22.js`, no yellow test banner and no pending recovery record.
+Permission/settings cleanup is owner-confirmed; browser policy prevented
+independent extension-settings inspection, and no alternate access was used.
+No relay was restarted. Saved fictional sources remain available for review.
+The normal app reopened the WIRE source with the exact fingerprint above and
+purchase posting disabled. Cleanup DOM and screenshot evidence:
+`pr35-cleanup-verified-dom.txt` and
+`pr35-cleanup-saved-source-20261015.png` (operator workspace, outside Git).
+Raw-source/PDF live transport was not exercised; these results cover CSV and
+manual source capture only. No purchase confirmation was submitted.
+
+### Nonblocking UI follow-up
+
+During the AFTER loss case, the parent panel continued showing the prior
+"Original file retained" success message while the new request showed Network
+Error and its own retained recovery box. The original source identity, disabled
+upload controls and status guards remained correct. For the later UI workflow,
+clear the previous notice when a new capture starts or label it with the saved
+source name. `PurchaseImportsTab.js` sets this message in `sourceCaptured` and
+passes `setBusy` directly to the child; the live DOM evidence above captures the
+coexisting messages. No UI code was changed during acceptance.
 
 The in-app browser cannot intercept requests. Chrome Local Overrides were
 enabled by the operator for these cases. Chrome's extension refuses automated
@@ -193,12 +319,9 @@ verified. Browser security policy also blocked opening the extension settings
 page. No alternate browser/internal API was used to bypass that block. The owner
 was asked to select the exact fictional CSV through the app's own file control
 and confirm its visible filename; an earlier reported manual selection left the
-actual input empty and no file request was sent. Restore the temporary file-URL
-permission along with the other test settings during cleanup.
-Any temporary local-service permission
-must be handled by the owner, then reset after testing. Stop the owned relay,
-disable overrides, verify the normal deployed asset and record cleanup. Until
-then full controlled-file acceptance remains pending.
+actual input empty and no file request was sent. The owner later completed
+the exact selections and confirmed restoration of the temporary permissions;
+the cleanup verification limits are recorded above.
 
 ## Scope and next gate
 
@@ -208,6 +331,13 @@ is part of this work. UI redesign and integration remain separate workflows.
 Track 1 uses purchased-item counts and received purchases with explicit count
 values; prep/waste and sales explain it, and taxes/fees remain separate.
 
-Continue the controlled acceptance, record exact outcomes and any safe holds,
-then prepare a focused fix only if a defect is demonstrated. Prompt the owner
-before creating any subsequent draft PR.
+Scoped source-capture acceptance is complete. Preserve the nonblocking notice
+follow-up for the later UI workflow; raw/PDF transport and other deferred work
+retain their own acceptance requirements. This documentation update changes no
+application code, SQL or deployment configuration. Prompt the owner before
+creating any subsequent draft PR.
+
+Documentation validation: relative Markdown file links in all four updated
+documents resolve and `git diff --check` passes. Product suites were not rerun
+for this prose-only acceptance update; the implementation test counts and CI
+above belong to the reviewed PR35 code.

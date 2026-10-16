@@ -20,7 +20,7 @@ accounting control verified. See the [backup/index window record](docs/HOSTED_IN
 Connections/credentials are unchanged. Earlier hold, draft and unapplied-index
 wording below describes earlier checkpoints; this entry supersedes it.
 
-## PR35 merged; source-capture live acceptance in progress — October 15, 2026
+## PR35 merged; scoped source-capture acceptance passed — October 15, 2026
 
 The owner approved [PR35](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/35),
 merged at **edbf232** from amended head **7ae28da**. Amended-head and
@@ -33,7 +33,18 @@ The manual-source transport case also passed loss before forwarding, reload,
 explicit exact retry and loss of its successful acknowledgement: saved lookup
 recovered one retained manual source without another capture or purchase posting.
 Independent database verification preserved all protected accounting data.
-File transport-loss/reload/sign-in acceptance remains in progress. See the
+The BEFORE file case passed sign-in recovery, required exact reselection, refused
+a different file, and recovered the explicit retry after acknowledgement loss.
+The AFTER case passed acknowledgement/status loss and reload without resending.
+The final identity-conflict/discard case also passed: an unavailable read kept
+the request, a fresh confirmed conflict cleared only its local record, and an
+unrelated manual draft survived. Final independent checks confirm five retained
+test sources, one attempt each, zero purchase postings, all pre-existing rows
+across 82 protected tables retained and unchanged $212.00 Food Cost. The relay
+is stopped; the owner confirmed permission/override cleanup, and browser reload
+verified the normal deployed asset with no test banner or pending request.
+CSV/manual transport acceptance is complete; raw/PDF transport was not tested.
+See the
 [PR35 live checkpoint](docs/PR35_HOSTED_CAPTURE_CHECKPOINT.md). The completed
 maintenance window remains closed; this acceptance does not change connections,
 roles, credentials, migrations or deployment settings.

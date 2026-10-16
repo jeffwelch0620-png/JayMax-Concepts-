@@ -7,7 +7,13 @@ with one retained source/attempt, no purchase posting, 82 protected relations'
 pre-existing rows unchanged and the $212.00 Food Cost control preserved.
 The controlled manual loss/reload/exact-retry/lost-acknowledgement case also
 passed, with one retained manual source and unchanged protected accounting data.
-File transport-loss acceptance awaits successful file selection in Chrome. See
+File BEFORE sign-in/exact-retry and AFTER lost-status/reload recovery now pass;
+the identity-conflict/discard case also passed with unrelated-draft preservation.
+Final independent checks confirm five single-attempt sources, no purchase
+postings, unchanged pre-existing protected rows across 82 tables and the $212.00
+Food Cost control. Relay shutdown and normal-browser reload are verified; the
+owner confirmed temporary permission/override cleanup. Scoped CSV/manual
+transport acceptance is complete; raw/PDF transport is not covered. See
 [the current live checkpoint](PR35_HOSTED_CAPTURE_CHECKPOINT.md).
 The draft/re-review/merge gates below are historical. No new maintenance window
 is open, and no connection, credential, role or schema change is part of this work.
