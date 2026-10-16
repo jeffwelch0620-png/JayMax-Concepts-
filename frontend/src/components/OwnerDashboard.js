@@ -210,7 +210,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
               <CartesianGrid strokeDasharray="3 3" stroke="#22304A" />
               <XAxis dataKey="name" stroke="#64748B" tick={{ fill: "#94A3B8", fontSize: 12 }} />
               <YAxis stroke="#64748B" tick={{ fill: "#94A3B8", fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`} />
-              <Tooltip contentStyle={{ background: "#161F30", border: "1px solid #28354A", borderRadius: 8, fontSize: 12 }} formatter={(v) => fmtMoney(v)} />
+              <Tooltip contentStyle={{ background: "#161F30", border: "1px solid #28354A", borderRadius: 8, fontSize: 12 }} formatter={(v) => fmtPlanningCost(v)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               {!native && <Bar dataKey="Inventory Value" fill="#06B6D4" radius={[4, 4, 0, 0]} />}
               <Bar dataKey="30-Day Purchases" fill="#F97316" radius={[4, 4, 0, 0]} />

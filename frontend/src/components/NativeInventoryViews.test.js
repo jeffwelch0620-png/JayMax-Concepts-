@@ -5,11 +5,12 @@ import { OrderTab } from "./OrderTab";
 import { OwnerDashboard } from "./OwnerDashboard";
 import { SetupTab } from "./SetupTab";
 import * as api from "../lib/api";
+import { Tooltip } from "recharts";
 
 jest.mock("../lib/api", () => ({ __esModule: true, nativePurchasesEnabled: true, actualInventoryEnabled: true, nativeOperatingSummary: jest.fn(), createOrder: jest.fn(), currentSession: () => ({ user: { email: "invented@example.invalid" } }), ownerSummary: jest.fn(), ownerPrepSummary: jest.fn(), ownerOrders: jest.fn(), ownerDiscrepancies: jest.fn(), ownerVendorScorecard: jest.fn(), listVendorContacts: jest.fn() }));
 jest.mock("recharts", () => {
   const box = ({ children }) => <div>{children}</div>;
-  return { BarChart: box, ResponsiveContainer: box, Bar: ({ dataKey }) => <span data-chart-key={dataKey} />, XAxis: () => null, YAxis: () => null, Tooltip: () => null, CartesianGrid: () => null, Legend: () => null };
+  return { BarChart: box, ResponsiveContainer: box, Bar: ({ dataKey }) => <span data-chart-key={dataKey} />, XAxis: () => null, YAxis: () => null, Tooltip: jest.fn(() => null), CartesianGrid: () => null, Legend: () => null };
 });
 let root, container;
 const summary = { basis: "native_received_purchases_and_explicit_counts", items: [{ item_code: "global_food", counted_quantity: "2", counted_unit: "case", base_quantity: "40.000000000001", base_unit: "lb", inventory_value: "75.00" }], liveOnHandAvailable: false, countStatus: "complete", count: { count_date: "2026-10-04", timing: "before_receipts" }, inventoryValue: "75.00", netFoodPurchases30: "40", receivedFrom: "2026-09-06", receivedBefore: "2026-10-06" };
@@ -87,6 +88,20 @@ test("native ownership labels unknown counts and estimated recipe cost separatel
 test("native ownership rejects an old rollup instead of silently displaying legacy money", async () => {
   api.ownerSummary.mockResolvedValue({ stores: [store], totals: { inventoryValue: 9999 } });
   await render(<OwnerDashboard />); expect(container.querySelector('[data-testid="owner-error"]')).not.toBeNull(); expect(container.textContent).not.toContain("9999");
+});
+
+test("owner chart formatter preserves unknown inventory separately from genuine zero", async () => {
+  api.nativePurchasesEnabled = false;
+  api.ownerSummary.mockResolvedValue({ stores: [store], totals: { inventoryValue: null, spend30: 40, orderAlerts: 0, waste30: 0 } });
+  await render(<OwnerDashboard />);
+  expect(container.querySelector('[data-chart-key="Inventory Value"]')).not.toBeNull();
+  expect(container.querySelector('[data-testid="owner-total-inv"]').textContent).toContain("Unknown");
+  const { formatter } = Tooltip.mock.calls[Tooltip.mock.calls.length - 1][0];
+  expect(formatter(null)).toBe("Unknown");
+  expect(formatter(undefined)).toBe("Unknown");
+  expect(formatter(0)).toBe("$0.00");
+  expect(formatter("0E-10")).toBe("$0.00");
+  expect(formatter("40")).toBe("$40.00");
 });
 
 test('unavailable planning costs stay unknown alongside confirmed native accounting values', async () => {

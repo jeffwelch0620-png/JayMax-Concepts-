@@ -66,6 +66,9 @@ class LegacyPrepAtomicityTests(unittest.IsolatedAsyncioTestCase):
         before=await self.snapshot()
         result=await self.post(task)
         self.assertEqual(result.status_code,422,result.text)
+        self.assertIn('Supplier planning price is unknown for',result.text)
+        self.assertIn('No prep write was made.',result.text)
+        self.assertNotIn('supported calculation range',result.text)
         self.assertEqual(await self.snapshot(),before)
 
     async def test_direct_missing_later_price_is_refused_before_any_stock_write(self):
@@ -73,6 +76,19 @@ class LegacyPrepAtomicityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_task_missing_later_price_is_refused_before_any_stock_write(self):
         await self.missing_later_price(True)
+
+    async def test_direct_item_missing_price_has_specific_message_without_any_stock_write(self):
+        await self.write_tripwire()
+        async with self.pool.acquire() as conn:
+            await conn.execute("UPDATE vendor_items SET price=NULL WHERE item_code='test_food'")
+        before=await self.snapshot()
+        with self.assertRaises(server.HTTPException) as held:
+            async with self.pool.acquire() as conn, conn.transaction():
+                await server._pg_deduct_item_and_stock(conn,'berts',{'item_code':'test_food'},1)
+        self.assertEqual(held.exception.status_code,422)
+        self.assertIn('Supplier planning price is unknown for',held.exception.detail)
+        self.assertIn('No prep write was made.',held.exception.detail)
+        self.assertEqual(await self.snapshot(),before)
 
     async def test_legacy_helper_ignores_unavailable_supplier_and_keeps_selected_unknown(self):
         async with self.pool.acquire() as conn:
