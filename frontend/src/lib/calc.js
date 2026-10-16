@@ -177,10 +177,12 @@ export function itemDerived(item) {
   const conversion = packTotal == null ? { value:null, mismatch:false, needsPortion:false, rangeUnavailable:true }
     : calcPortionsPerUnit(packTotal, pack.unitUOM, item.portionSize, item.portionUOM);
   const { value: portionsPerUnit, mismatch, needsPortion } = conversion;
-  const price = pref ? planningNumber(pref.price, 0) : 0;
+  const rawPrice = pref?.price;
+  const priceMissing = rawPrice == null || (typeof rawPrice === "string" && rawPrice.trim() === "");
+  const price = planningNumber(rawPrice);
   const costPerPortion = portionsPerUnit > 0 ? planningQuotient(price, portionsPerUnit) : (portionsPerUnit === 0 && price != null ? 0 : null);
-  const rangeUnavailable = !!conversion.rangeUnavailable || price == null || costPerPortion == null;
-  return { portionsPerUnit, costPerPortion, mismatch, needsPortion, rangeUnavailable, preferred: pref, price, pack };
+  const rangeUnavailable = !!conversion.rangeUnavailable || (!priceMissing && (price == null || costPerPortion == null));
+  return { portionsPerUnit, costPerPortion, mismatch, needsPortion, rangeUnavailable, priceMissing, preferred: pref, price, pack };
 }
 
 export const STATUS_COLORS = { out: "#EF4444", critical: "#EF4444", low: "#F59E0B", ok: "#10B981" };
@@ -545,9 +547,9 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
   const orderExposure = planningSum(items.filter((it) => isOrderEnabled(it) && (Number(it.currentStock) || 0) < (Number(it.par) || 0)).map(it => {
     const shortfall = Math.max(0, (Number(it.par) || 0) - (Number(it.currentStock) || 0));
     const sku = preferredSku(it);
-    if (!sku) return 0;
+    if (!sku) return null;
     const calc = vendorUnitsForShortfall(it, sku, shortfall);
-    return planningProduct(calc.units, planningNumber(sku.price, 0));
+    return planningProduct(calc.units, planningNumber(sku.price));
   }));
 
   return { start, end, periodPurchases, periodAdjustmentsAll, purchaseSpend, trackedRows, usableRows, theoreticalCogs, actualCogs, explainedCost, unexplainedCost, wasteByReason, priceAlerts, menuProfitability, liveInventoryValue, orderExposure };

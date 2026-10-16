@@ -189,7 +189,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
     showToast("Storage area added");
   }
 
-  const previewBg = preview.rangeUnavailable ? "bg-amber-500/10 text-amber-400" : preview.mismatch ? "bg-red-500/10 text-red-400" : preview.needsPortion ? "bg-amber-500/10 text-amber-400" : "bg-[#0F1626] text-slate-300";
+  const previewBg = preview.rangeUnavailable || preview.priceMissing ? "bg-amber-500/10 text-amber-400" : preview.mismatch ? "bg-red-500/10 text-red-400" : preview.needsPortion ? "bg-amber-500/10 text-amber-400" : "bg-[#0F1626] text-slate-300";
 
   return (
     <div className="fade-slide-in" data-testid="setup-tab">
@@ -249,11 +249,12 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
         {form.packCount ? (
           <div className={`mt-3 px-3.5 py-2.5 rounded-lg text-[13.5px] flex gap-5 flex-wrap ${previewBg}`} data-testid="portion-preview">
             {preview.rangeUnavailable ? <span>Outside supported calculation range. Portions and cost unavailable.</span> : preview.needsPortion ? (
-              <span className="font-semibold">⚠ Portion Size isn't set — cost per portion will show $0.00 until it is</span>
+              <span className="font-semibold">⚠ Portion Size isn't set — review portion details before using cost per portion.</span>
             ) : (
               <>
                 <span><strong className="num">{num(preview.portionsPerUnit, 1)}</strong> portions per {form.purchaseUnit}</span>
                 <span><strong className="num">{fmtPlanningCost(preview.costPerPortion)}</strong> cost per portion (preferred vendor)</span>
+                {preview.priceMissing && <span>Supplier planning price is unknown.</span>}
                 {preview.mismatch && <span className="font-semibold">⚠ size unit and portion unit aren't the same measure type</span>}
               </>
             )}

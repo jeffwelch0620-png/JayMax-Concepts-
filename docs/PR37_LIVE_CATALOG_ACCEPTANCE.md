@@ -94,6 +94,11 @@ unresolved; the owner confirmed it was separate from the working in-app session.
 
 ## Follow-up findings
 
+The owner subsequently authorized the focused local fixes and testing in
+[Missing planning prices and supplier pack feedback](PLANNING_PRICE_AND_PACK_FEEDBACK.md).
+Local validation passed; publication and hosted acceptance remain separate.
+The findings below preserve what the deployed PR37 walkthrough established.
+
 1. **Supplier-pack refusal reason is hidden.** Every HTTP 409 currently becomes
    the generic collaborator-conflict message in `useStoreState`. The applicable
    supplier-pack guard instead needs the user to clear the price and review the

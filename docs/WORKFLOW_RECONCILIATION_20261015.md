@@ -1,5 +1,13 @@
 # Inventory workflow checkpoint and remaining work
 
+**Local follow-up:** the owner authorized fixes for the two PR37 live findings.
+Missing planning prices now remain unknown and the known supplier-pack refusal
+keeps its actionable guidance. The focused 138-test pass, full native-profile
+879-test/75-suite pass, strict production build and source-contract check are
+complete. See the
+[implementation and publication gates](PLANNING_PRICE_AND_PACK_FEEDBACK.md).
+Prompt before a new draft PR; no hosted changes are included in this slice.
+
 **Latest PR37 checkpoint:** owner-approved merge `91a89f7` is verified, all four
 merged-main CI checks passed, and both Render services were observed Live.
 The fresh frontend asset was `main.e7b26ed1.js`. Live catalog save/reload
