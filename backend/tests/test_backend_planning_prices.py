@@ -3,7 +3,7 @@ import copy
 import json
 import unittest
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import planning_numbers as planning
 import server
@@ -138,3 +138,38 @@ class BackendPlanningPriceTests(unittest.IsolatedAsyncioTestCase):
     def test_unknown_money_does_not_claim_all_missing_costs_are_range_errors(self):
         self.assertEqual(planning.money(None), 'Unknown')
         self.assertEqual(planning.money(0), '$0.00')
+
+    def test_prep_refusal_distinguishes_missing_price_from_range_and_keeps_identity(self):
+        for item, label in ((dict(name='Fictional food'), 'Fictional food'),
+                            (dict(controlNumber='TEST'), 'TEST'), (dict(code='test_code'), 'test_code'),
+                            ({}, 'this item')):
+            with self.subTest(item=item), self.assertRaises(server.HTTPException) as held:
+                server._require_prep_planning_cost(server.item_derived(food()), item)
+            self.assertEqual(held.exception.status_code, 422)
+            self.assertIn('Supplier planning price is unknown for '+label, held.exception.detail)
+            self.assertIn('No prep write was made.', held.exception.detail)
+            self.assertNotIn('supported calculation range', held.exception.detail)
+        with self.assertRaises(server.HTTPException) as held:
+            server._require_prep_planning_cost(server.item_derived(food('1e400')), {'name':'Fictional food'})
+        self.assertIn('supported calculation range', held.exception.detail)
+        self.assertNotIn('price is unknown', held.exception.detail)
+        server._require_prep_planning_cost(server.item_derived(food('0E-10')), {})
+
+    async def test_legacy_mongo_helpers_refuse_missing_and_range_costs_before_mutating(self):
+        recipe = dict(id='prep', yieldQty=1, lines=[dict(controlNumber='TEST',qty=1)])
+        for price in (None, '1e400'):
+            for single in (False, True):
+                with self.subTest(price=price,single=single):
+                    db = MagicMock()
+                    db.items.find.return_value.to_list = AsyncMock(return_value=[food(price)])
+                    db.dishes.find.return_value.to_list = AsyncMock(return_value=[recipe])
+                    with patch.object(server,'db',db), patch('prep_batches.reject_legacy_write'), \
+                         self.assertRaises(server.HTTPException) as held:
+                        if single:
+                            await server._deduct_item_and_stock('berts',dict(controlNumber='TEST',vesselCapacity=1),1)
+                        else:
+                            await server._deduct_and_stock('berts',recipe,1,[],'batch','Fictional prep')
+                    self.assertEqual(held.exception.status_code,422)
+                    self.assertIn('price is unknown' if price is None else 'supported calculation range',held.exception.detail)
+                    db.items.bulk_write.assert_not_called();db.items.update_one.assert_not_called()
+                    db.prep_stock.update_one.assert_not_called();db.prep_logs.insert_one.assert_not_called()

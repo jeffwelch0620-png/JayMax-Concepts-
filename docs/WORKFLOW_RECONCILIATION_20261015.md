@@ -1,5 +1,18 @@
 # Inventory workflow checkpoint and remaining work
 
+**Current continuation:** PR39 merged as `fafa95e`; both reviewed-head and
+merged-main CI passed, and the automatic API deployment is Live on that merge.
+The [scoped acceptance checkpoint](PR39_LIVE_BACKEND_ACCEPTANCE.md) distinguishes
+deployed summary reads, local merged-source context assembly and independent
+accounting comparisons. Baseline, blank, zero and restoration passed across 82
+protected relations; the original fictional price is restored and historical
+Food Cost remains $212.00.
+The two low review notes are fixed locally with 880 frontend tests, strict
+build, 70 focused backend cases and 34 PostgreSQL cases passing. The full
+offline profile passes 814/816, with the two existing local PowerShell ACL
+timeouts documented. See [the next local slice](PLANNING_COST_FEEDBACK_FOLLOWUP.md).
+Prompt before a new draft PR; current green CI does not cover that candidate.
+
 **Current local continuation:** the owner authorized backend missing-price
 parity and testing. Unknown prices now propagate through backend planning
 calculations; shared location recipe aliases resolve to the same catalog

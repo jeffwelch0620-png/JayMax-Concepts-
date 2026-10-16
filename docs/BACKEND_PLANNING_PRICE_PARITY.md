@@ -1,5 +1,13 @@
 # Backend planning prices and location recipe aliases
 
+## Merged checkpoint — October 16, 2026
+
+The owner approved PR39, merged as `fafa95e` from reviewed head `9298503`.
+Reviewed-head and merged-main CI passed, including the Windows ACL checks;
+the API is Live on the exact merge. See
+[live acceptance and evidence limits](PR39_LIVE_BACKEND_ACCEPTANCE.md).
+The wording below preserves the earlier local implementation and its failures.
+
 October 16, 2026. Local follow-up from PR38 merge `3c58abd` and local live
 acceptance checkpoint `5dc2450`. The owner authorized backend missing-price
 parity and testing, with a prompt before pushing a new draft PR.

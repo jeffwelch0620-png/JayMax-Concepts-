@@ -1,5 +1,24 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR39 merged; local feedback follow-up
+
+Owner-approved PR39 merged as **fafa95e** from **9298503**. Reviewed-head and
+merged-main CI passed, including the Windows ACL checks; the API was verified
+Live on the exact merge. Scoped blank/zero/restored-price acceptance passed;
+the original fictional price is restored and historical Food Cost stayed $212.00.
+See the
+[scoped live acceptance checkpoint](docs/PR39_LIVE_BACKEND_ACCEPTANCE.md).
+
+The two low review notes have a local follow-up: missing-price prep refusals
+name the missing supplier price, and the owner-chart formatter preserves unknown
+versus zero. Validation passes 880 frontend tests/75 suites, strict build,
+70 focused backend cases and 34 disposable PostgreSQL cases. The full selected
+offline run passes 814/816; two existing PowerShell-dependent permission checks
+still time out locally. Local database/role inventory is unchanged and the owned
+server is stopped. See the [implementation and gates](docs/PLANNING_COST_FEEDBACK_FOLLOWUP.md).
+Prompt before pushing a new draft PR. This follow-up has not been published or
+deployed; prior green CI applies to PR39, not this candidate.
+
 ## Local follow-up — backend unknown prices and location recipe aliases
 
 Backend planning calculations now preserve missing supplier prices as Unknown

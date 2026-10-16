@@ -332,6 +332,14 @@ def raw_portions(recipe, target_cn, by_id, stack=()):
             total += qty
     return total
 
+def _require_prep_planning_cost(derived, item):
+    if not derived.get("calculationUnavailable"):
+        return
+    if derived.get("priceMissing"):
+        name = item.get("name") or item.get("controlNumber") or item.get("code") or "this item"
+        raise HTTPException(422, f"Supplier planning price is unknown for {name}; enter or confirm it before recording this prep. No prep write was made.")
+    raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
+
 def recipe_cost(recipe, items_by_cn, by_id, stack=()):
     if not recipe or recipe.get("id") in stack:
         return 0.0
@@ -955,8 +963,7 @@ async def _deduct_and_stock(rid, recipe, batches, containers, kind, name):
         if portions <= 0:
             continue
         d = item_derived(it)
-        if d.get("calculationUnavailable"):
-            raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
+        _require_prep_planning_cost(d, it)
         units = portions / d["portionsPerUnit"] if d["portionsPerUnit"] > 0 else 0
         it["currentStock"] = max(0, round(f(it.get("currentStock")) - units, 3))
         usage.append({"controlNumber": it["controlNumber"], "name": it.get("name", ""), "portions": round(portions, 2),
@@ -993,8 +1000,7 @@ async def _deduct_item_and_stock(rid, pitem, vessels):
     if not item:
         raise HTTPException(404, f"inventory item {pitem.get('controlNumber')} not found")
     d = item_derived(item)
-    if d.get("calculationUnavailable"):
-        raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
+    _require_prep_planning_cost(d, item)
     portions = vessels * f(pitem.get("vesselCapacity"))
     units = portions / d["portionsPerUnit"] if d["portionsPerUnit"] > 0 else 0
     cost = portions * d["costPerPortion"]
@@ -4385,8 +4391,7 @@ async def _pg_deduct_and_stock(conn, store_id, recipe, batches, containers, kind
             continue
         item = await conn.fetchrow("SELECT name FROM items WHERE code = $1", si["item_code"])
         derived = await _pg_item_derived(conn, si["item_code"])
-        if derived.get("calculationUnavailable"):
-            raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
+        _require_prep_planning_cost(derived, item or {"code": si["item_code"]})
         ppu = derived["portionsPerUnit"]
         units = planning.quotient(portions, ppu) if ppu > 0 else 0
         cost = planning.product(portions, derived["costPerPortion"])
@@ -4436,8 +4441,7 @@ async def _pg_deduct_item_and_stock(conn, store_id, pitem, vessels):
         raise HTTPException(404, f"inventory item {pitem['item_code']} not found")
     item = await conn.fetchrow("SELECT name FROM items WHERE code=$1", pitem["item_code"])
     derived = await _pg_item_derived(conn, pitem["item_code"])
-    if derived.get("calculationUnavailable"):
-        raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
+    _require_prep_planning_cost(derived, item or {"code": pitem["item_code"]})
     ppu = derived["portionsPerUnit"]
     portions = vessels * float(pitem["vessel_capacity"] or 0)
     units = portions / ppu if ppu > 0 else 0

@@ -20,6 +20,7 @@ OFFLINE_CLASSES = ('catalog_integrity::CatalogValidationTests backup_fingerprint
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
+ ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_direct_item_missing_price_has_specific_message_without_any_stock_write'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_direct_missing_later_price_is_refused_before_any_stock_write'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_task_missing_later_price_is_refused_before_any_stock_write'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_legacy_helper_ignores_unavailable_supplier_and_keeps_selected_unknown'),
