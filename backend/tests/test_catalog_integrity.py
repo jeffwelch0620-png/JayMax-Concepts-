@@ -6,11 +6,29 @@ from unittest.mock import patch
 import httpx
 from pydantic import ValidationError
 import server
+import catalog_decimals
 import test_native_order_receiving as fixtures
 import test_native_backup as recovery
 
 
 class CatalogValidationTests(unittest.TestCase):
+    def test_decimal_resource_limits_match_browser_and_all_fields_reject_extremes(self):
+        import json
+        from pathlib import Path
+        browser_limits = Path(__file__).resolve().parents[2]/'frontend/src/lib/catalogDecimalLimits.json'
+        self.assertEqual(json.loads(browser_limits.read_text()), catalog_decimals.LIMITS)
+        for model, required, fields in (
+            (server.ItemIn, dict(code='SYNTHETIC', name='Invented'), ('pack_count', 'unit_qty', 'portion_size', 'base_per_count_unit', 'par')),
+            (server.VendorSkuIn, dict(vendor_id='pfg', vendor_sku='TEST'), ('base_per_purchase_unit', 'pack_count', 'unit_qty', 'price'))):
+            for key in fields:
+                for value in ('1e200000', '1e-20000', '0e200000', '0e-20000', '1e512', '1e-513', '9'*2049):
+                    with self.assertRaises(ValidationError):model(**required, **{key: value})
+                for value in ('1.123456789012345678', '12345678901234567890.000000000001', '1e511', '1e-512', '9'*512+'.'+'1'*512):
+                    self.assertEqual(getattr(model(**required, **{key: value}), key), Decimal(value))
+        for model, required, key in ((server.ItemIn, dict(code='TEST', name='Fictional'), 'base_per_count_unit'),
+                                     (server.VendorSkuIn, dict(vendor_id='pfg', vendor_sku='TEST'), 'base_per_purchase_unit')):
+            with self.assertRaises(ValidationError):model(**required, **{key: '0E-10'})
+
     def test_decimal_metadata_models_preserve_text_without_binary_rounding(self):
         exact = '1.123456789012345678'
         item = server.ItemIn(code='SYNTHETIC', name='Invented', **dict.fromkeys(

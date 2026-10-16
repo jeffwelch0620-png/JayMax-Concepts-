@@ -1,16 +1,22 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local follow-up — exact catalog decimals
+## Draft PR36 — exact catalog decimals
 
-The owner-approved field/unit audit follow-up preserves catalog conversion,
+The owner-approved [PR36](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/36)
+follow-up preserves catalog conversion,
 pack, portion and par decimals through API reads, Item Setup and saves. An
 unrelated edit no longer rounds retained metadata through binary floating point.
 See the [decimal contract and validation](docs/CATALOG_DECIMAL_PRESERVATION.md).
-Validation passed: 802 frontend tests, 744 offline cases, strict build, and 40
+Original-head validation passed: 802 frontend tests, 744 offline cases, strict build, and 40
 catalog/receiving test methods plus five subtests across the broad run and final
 targeted rerun. Local database/role inventories are unchanged and the owned test
-server is stopped. This remains local pending the requested prompt before a new
-draft PR. No migration, hosted data or connection change is included.
+server is stopped. The owner authorized the review amendment: shared decimal
+resource limits, fixed-notation display preserving scale, and refreshing every
+Inventory tab after both services are Live. Amendment validation passes 826
+frontend tests, 746 offline cases, the strict build and three final targeted
+PostgreSQL cases. The linked checkpoint distinguishes
+amended-head validation/CI from the original green head. No migration, hosted
+data or connection change is included; the compatibility profile was read-only.
 
 ## Current hosted checkpoint — October 15, 2026
 

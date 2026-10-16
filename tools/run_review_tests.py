@@ -20,6 +20,8 @@ OFFLINE_CLASSES = ('catalog_integrity::CatalogValidationTests backup_fingerprint
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
+ ('shared_catalog','SharedCatalogTests','test_catalog_supported_decimal_boundaries_roundtrip_without_rounding'),
+ ('shared_catalog','SharedCatalogTests','test_catalog_extreme_decimals_are_422_without_changing_catalog_or_revision'),
  ('shared_catalog','SharedCatalogTests','test_exact_catalog_roundtrip_keeps_shared_metadata_profiles_and_actual_report'),
  ('manual_purchases','ManualPurchaseTests','test_capture_recovery_manual_absent_saved_and_partial_attachment_reads_are_readonly'),
  ('manual_purchases','ManualPurchaseTests','test_capture_recovery_rejects_changed_manual_body_foreign_scope_and_replay_actor'),

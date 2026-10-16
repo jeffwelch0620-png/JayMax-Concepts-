@@ -2,6 +2,7 @@ import axios from "axios";
 import { calcPortionsPerUnit, preferredSku } from "./calc";
 import { readStateWithDeadline } from "./stateRead";
 import { canonicalStoreId as pgStoreId } from "./purchaseContract";
+import { checkedCatalogDecimal } from "./catalogDecimal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Supabase migration target -- see docs/SUPABASE_MIGRATION_PLAN.md. Store ids here
@@ -431,20 +432,13 @@ const numOrNull = v => {
   return value;
 };
 export function catalogPrice(v) {
-  if (v === "" || v == null) return null;
-  const value = String(v).trim();
-  if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) || !Number.isFinite(Number(value))) throw new Error("Enter a non-negative finite supplier price, or leave it unknown.");
-  return value; // Keep the entered decimal digits; catalog price is not a float.
+  return checkedCatalogDecimal(v, "supplier price");
 }
 
 // Catalog NUMERIC metadata crosses JSON as decimal text, just like supplier prices.
 // Numeric copies used by planning calculators must never replace retained values.
 export function catalogDecimal(value) {
-  if (value == null || value === "") return null;
-  if (!["string", "number"].includes(typeof value)) throw new Error("Enter a non-negative finite catalog decimal, or leave it unknown.");
-  const text = String(value).trim();
-  if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text)) throw new Error("Enter a non-negative finite catalog decimal, or leave it unknown.");
-  return text;
+  return checkedCatalogDecimal(value);
 }
 
 function pgSkuToMongoSku(s) {
