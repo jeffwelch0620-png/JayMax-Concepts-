@@ -1,5 +1,40 @@
 # Inventory workflow checkpoint and remaining work
 
+**Current local continuation:** the owner authorized backend missing-price
+parity and testing. Unknown prices now propagate through backend planning
+calculations; shared location recipe aliases resolve to the same catalog
+identity. Legacy pre-cutover writers retain their existing holds and refuse
+unknown costs during preflight; native prep costing policy is unchanged.
+Validation: 60 focused offline cases and 33 disposable PostgreSQL cases passed.
+The full selected offline run passed 804/806; the two PowerShell-dependent ACL
+tests timed out and a separate shell-startup probe reproduces the environment
+failure. No bypass or hosted action was taken. Original local database/role
+inventory is restored and the owned server is stopped. See the
+[local implementation and remaining gates](BACKEND_PLANNING_PRICE_PARITY.md).
+Prompt before a new draft PR; independent review, exact-head CI, merge and live
+acceptance remain separate gates. JMAX Pages remain updated through PR37.
+
+**Latest PR38 checkpoint:** owner-approved merge `3c58abd` is verified from
+reviewed head `50e290d`; approved-head and merged-main CI passed. The frontend
+is Live on the merge and the unchanged API is Live on `91a89f7`. Fictional
+blank/null versus explicit-zero pricing persisted in fresh documents. The
+known supplier-pack refusal retains exact draft values and shows its intended
+review instruction. Seven read-only checkpoints preserve accounting across
+82 relations and the $212.00 control; only two expected saves/price events
+were added, and the refused draft was cancelled. In-place reload is not claimed.
+See [PR38 live acceptance](PR38_LIVE_PLANNING_PRICE_ACCEPTANCE.md).
+
+The next recommended slice is backend missing-price parity: review both item
+derivation paths and their downstream recipe/AI consumers, preserve unavailable
+costs explicitly, and settle any persisted prep-cost policy before changing
+writers. Structured conflict codes and the remaining field/unit audit follow.
+These are recommendations, not completed changes. Runtime-role cutover remains
+open before operational release. Current connections/hosting and separate
+UI/authentication/integration workflows remain as agreed. JMAX Pages were last
+updated through PR37; this checkpoint updates repository documentation locally.
+
+Earlier entries below preserve the historical implementation/publication gates.
+
 **Local follow-up:** the owner authorized fixes for the two PR37 live findings.
 Missing planning prices now remain unknown and the known supplier-pack refusal
 keeps its actionable guidance. The focused 138-test pass, full native-profile

@@ -59,6 +59,36 @@ class LegacyPrepAtomicityTests(unittest.IsolatedAsyncioTestCase):
     async def test_task_later_invalid_cost_or_arithmetic_reaches_no_stock_writes(self):
         await self.invalid_later_ingredient(True)
 
+    async def missing_later_price(self,task):
+        await self.write_tripwire()
+        async with self.pool.acquire() as conn:
+            await conn.execute("UPDATE vendor_items SET price=NULL WHERE item_code='test_food'")
+        before=await self.snapshot()
+        result=await self.post(task)
+        self.assertEqual(result.status_code,422,result.text)
+        self.assertEqual(await self.snapshot(),before)
+
+    async def test_direct_missing_later_price_is_refused_before_any_stock_write(self):
+        await self.missing_later_price(False)
+
+    async def test_task_missing_later_price_is_refused_before_any_stock_write(self):
+        await self.missing_later_price(True)
+
+    async def test_legacy_helper_ignores_unavailable_supplier_and_keeps_selected_unknown(self):
+        async with self.pool.acquire() as conn:
+            await conn.execute("UPDATE vendor_items SET price=NULL,preferred=true WHERE item_code='test_food'")
+            await conn.execute("""INSERT INTO vendor_items(vendor_id,vendor_sku,item_code,purchase_unit,price,base_per_purchase_unit,preferred,available)
+                VALUES('synthetic_other','UNAVAILABLE-PRICE','test_food','case',999,1,true,false),
+                      ('synthetic_other','ALTERNATE-PRICE','test_food','case',12,1,false,true)""")
+            unknown=await server._pg_item_derived(conn,'test_food')
+            self.assertTrue(unknown['priceMissing']);self.assertIsNone(unknown['costPerPortion'])
+            await conn.execute("UPDATE vendor_items SET price=0 WHERE item_code='test_food' AND vendor_sku='00001'")
+            zero=await server._pg_item_derived(conn,'test_food')
+            self.assertFalse(zero['priceMissing']);self.assertEqual(zero['costPerPortion'],0)
+            await conn.execute("UPDATE vendor_items SET available=false WHERE item_code='test_food'")
+            unavailable=await server._pg_item_derived(conn,'test_food')
+            self.assertTrue(unavailable['priceMissing']);self.assertIsNone(unavailable['costPerPortion'])
+
     async def happy(self, task):
         result=await self.post(task)
         self.assertEqual(result.status_code,200,result.text)

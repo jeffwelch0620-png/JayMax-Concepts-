@@ -1,5 +1,18 @@
 # Missing planning prices and supplier pack feedback
 
+## Merged and live acceptance — October 16, 2026
+
+PR38 merged as `3c58abd` from reviewed head `50e290d`, with approved-head and
+merged-main CI successful. The frontend is Live on the merge; the API remains
+Live on unchanged backend revision `91a89f7`. Scoped fictional blank/zero,
+fresh-document persistence and retained pack-refusal checks passed. Seven
+read-only checkpoints preserve accounting and the historical $212.00 control.
+See [live acceptance evidence and remaining work](PR38_LIVE_PLANNING_PRICE_ACCEPTANCE.md).
+The candidate/publication/deployment wording below records the earlier local
+checkpoint, rather than current deployment status.
+
+## Original local implementation checkpoint
+
 October 16, 2026. Local follow-up to PR37 live catalog acceptance on merged
 `91a89f7`, continuing from documentation checkpoint `379891a`. The owner
 authorized these two fixes and testing, with a prompt before a new draft PR is
