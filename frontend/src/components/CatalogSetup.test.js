@@ -83,6 +83,46 @@ function StoreCatalog({onError}) {
     showError={onError} persistItems={(next,revision)=>store.save("items",next,revision)} /> : <p>Loading</p>;
 }
 
+test.each([null, '', '0E-10'])('editor and list distinguish missing price %p from explicit zero', async price => {
+  const priced={...item,vendorSkus:[{...item.vendorSkus[0],price}]};
+  await act(async()=>root.render(<SetupTab {...revisionProps(10,[priced])}/>));
+  await click('edit-item-F01');
+  const expected=price==='0E-10'?'$0.00':'Unknown';
+  expect(find('portion-preview').textContent).toContain('80.0 portions per case');
+  expect(find('portion-preview').textContent).toContain(`${expected} cost per portion`);
+  expect(find('portion-preview').textContent).not.toContain('Outside supported calculation range');
+  expect(find('setup-item-row-F01').textContent).toContain(expected);
+  await changeInput(find('item-name-input'),'Fictional unrelated rename');
+  await click('item-submit-button');
+  expect(persist.mock.calls[0][0][0].vendorSkus[0].price).toBe(price===''?null:price);
+});
+
+test('real store and editor retain a refused supplier-pack edit and save only an explicitly cleared price', async () => {
+  const detail='Clear the planning price when changing a supplier pack, then review its new price and physical conversion';
+  const errors=jest.fn();
+  api.fetchState.mockResolvedValue({revision:10,items:[item]});
+  api.putCollection.mockRejectedValueOnce({response:{status:409,data:{detail}}})
+    .mockResolvedValueOnce({revision:11});
+  await act(async()=>root.render(<StoreCatalog onError={errors}/>));
+  await click('edit-item-F01');
+  const pack=[...find('vendor-sku-row-0').querySelectorAll('label')]
+    .find(label=>label.textContent==='Pack Count').querySelector('input');
+  await changeInput(pack,'5');
+  await click('item-submit-button');
+  expect(container.querySelector('[role="alert"]').textContent).toContain(detail);
+  expect(container.querySelector('[role="alert"]').textContent).toContain('draft is retained');
+  expect(pack.value).toBe('5');
+  const price=container.querySelector('[aria-label="Supplier price sku"]');
+  expect(price.value).toBe(item.vendorSkus[0].price);
+  expect(api.putCollection).toHaveBeenCalledTimes(1);expect(success).not.toHaveBeenCalled();
+  await changeInput(price,''); await click('item-submit-button');
+  expect(api.putCollection).toHaveBeenCalledTimes(2);
+  expect(api.putCollection).toHaveBeenLastCalledWith('berts','items',[
+    expect.objectContaining({basePerCountUnit:25,vendorSkus:[expect.objectContaining({packCount:'5',price:null,basePerPurchaseUnit:20})]})
+  ],10);
+  expect(success).toHaveBeenCalledTimes(1);
+});
+
 test.each(["1e200000", "1e-513", "NaN", "-1"])("real store and editor retain invalid text %s and its specific error without a transport write", async value => {
   const errors = jest.fn(), transport = jest.fn();
   api.fetchState.mockResolvedValue({revision:10,items:[item]});

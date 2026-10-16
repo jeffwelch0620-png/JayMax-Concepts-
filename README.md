@@ -1,5 +1,33 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local follow-up — unknown planning prices and supplier pack guidance
+
+The two PR37 live findings have a local client-only fix: missing planning prices
+stay Unknown while explicit zero remains known, and the existing supplier-pack
+refusal displays its actionable review instruction without clearing or retrying
+anything automatically. Focused validation passes 138 tests; the full native
+profile passes all 879 frontend tests across 75 suites and the strict production
+build. See the [implementation and publication gates](docs/PLANNING_PRICE_AND_PACK_FEEDBACK.md).
+The owner must be prompted before a new draft PR is pushed; this candidate is
+not deployed and its hosted acceptance remains open.
+
+## PR37 merged — scoped live catalog checks completed
+
+The owner-approved PR37 is merged as **91a89f7** from reviewed head **64531d0**.
+Approved-head and merged-main CI passed all four checks; both Render services
+were verified Live on the merge. A fresh page loaded `main.e7b26ed1.js`, and
+the read-only baseline retained the historical **$212.00** Food Cost control.
+After a browser interruption, the working in-app owner session resumed and a
+fresh protected baseline passed. Fictional exact-decimal creation, large/tiny
+storage, fresh-page/name-only preservation, retained specific input refusal,
+single error notification and restoration passed. Ten read-only checkpoints
+preserved pre-existing protected rows across 82 relations and $212.00 Food Cost.
+Supplier-pack refusal guidance and missing-price-as-zero display remain recorded
+follow-up findings. In-place reload is not claimed. See the
+[live acceptance checkpoint](docs/PR37_LIVE_CATALOG_ACCEPTANCE.md) and updated
+[JMAX progress report](https://chatgpt.com/space/page_1e9f0baababc8191a6f628ce4799af7a).
+Draft and merge-gate wording below records earlier checkpoints.
+
 ## PR37 — catalog decimal inputs, save feedback and finite planning costs (draft)
 
 The re-review S2 amendment makes permitted legacy batch completion atomic:

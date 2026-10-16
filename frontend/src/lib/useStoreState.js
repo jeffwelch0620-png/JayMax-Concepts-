@@ -2,6 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as api from "./api";
 import { confirmed, saveErrorText } from "./saveIntegrity";
 
+const PACK_PRICE_REVIEW = "Clear the planning price when changing a supplier pack, then review its new price and physical conversion";
+function conflictMessage(collection, detail) {
+  // Only this known item-policy refusal is actionable here. Other conflicts
+  // retain revision recovery, without echoing arbitrary server details.
+  if (collection === "items" && detail === PACK_PRICE_REVIEW) return `${PACK_PRICE_REVIEW}. Your draft is retained.`;
+  return "This data changed elsewhere. Your draft is retained; review the latest data before retrying.";
+}
+
 export function useStoreState(rid, session, empty, onError) {
   const scope = useMemo(() => ({ rid, session, revision: null, loaded: false, reads: 0, pendingRead: null, readFailed: false }), [rid, session]);
   const active = useRef(scope); active.current = scope;
@@ -88,7 +96,7 @@ export function useStoreState(rid, session, empty, onError) {
       return result;
     } catch (error) {
       if (isCurrent()) return refuse(error?.response?.status === 409
-        ? "This data changed elsewhere. Your draft is retained; review the latest data before retrying."
+        ? conflictMessage(name, error?.response?.data?.detail)
         : saveErrorText(error, "Save failed. Your draft is retained."));
       return null;
     } finally {

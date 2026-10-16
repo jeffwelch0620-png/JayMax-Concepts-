@@ -1,5 +1,26 @@
 # Inventory workflow checkpoint and remaining work
 
+**Local follow-up:** the owner authorized fixes for the two PR37 live findings.
+Missing planning prices now remain unknown and the known supplier-pack refusal
+keeps its actionable guidance. The focused 138-test pass, full native-profile
+879-test/75-suite pass, strict production build and source-contract check are
+complete. See the
+[implementation and publication gates](PLANNING_PRICE_AND_PACK_FEEDBACK.md).
+Prompt before a new draft PR; no hosted changes are included in this slice.
+
+**Latest PR37 checkpoint:** owner-approved merge `91a89f7` is verified, all four
+merged-main CI checks passed, and both Render services were observed Live.
+The fresh frontend asset was `main.e7b26ed1.js`. Live catalog save/reload
+acceptance resumed after the in-app owner session and fresh baseline were
+restored. Scoped precision, large/tiny storage, fresh-page/name-only preservation,
+specific refusal/single notification and restoration passed. Ten read-only
+checkpoints preserve the pre-existing protected data and $212.00 control. The
+next field/unit audit findings are hidden supplier-pack refusal guidance and
+missing-price-as-zero planning display. In-place reload is not claimed. The
+[live checkpoint](PR37_LIVE_CATALOG_ACCEPTANCE.md) records completed evidence,
+browser limitations and the remaining sequence. The JMAX workflow progress report
+is refreshed through PR37; dated source records remain preserved.
+
 **PR37 re-review continuation:** the owner authorized the S2 atomic-batch fix,
 testing and push to the same draft PR. Direct legacy batch completion now has
 one transaction, and shared prevalidation precedes its first stock write. The

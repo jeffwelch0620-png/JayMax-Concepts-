@@ -59,6 +59,9 @@ test.each([409, 422, 500, "offline"])("failure %s does not change saved totals",
 test.each([
   [422, "Confirm the fictional pack quantity", "Confirm the fictional pack quantity"],
   [409, "Database conflict detail", "This data changed elsewhere. Your draft is retained; review the latest data before retrying."],
+  [409, {message:"Private unrelated detail"}, "This data changed elsewhere. Your draft is retained; review the latest data before retrying."],
+  [409, "Clear the planning price when changing a supplier pack, then review its new price and physical conversion",
+    "Clear the planning price when changing a supplier pack, then review its new price and physical conversion. Your draft is retained."],
   [500, "The fictional save is unavailable", "The fictional save is unavailable"],
 ])("form confirmation keeps the specific current-store failure for HTTP %s", async (status,detail,message) => {
   await render("berts");
@@ -71,6 +74,15 @@ test.each([
   api.putCollection.mockResolvedValueOnce({revision:11});
   await act(async () => expect(controller.save("items",["corrected"])).resolves.toMatchObject({revision:11}));
   expect(controller.state.items).toEqual(["corrected"]);
+});
+
+test.each(['dishes','salesPeriod'])('supplier-pack guidance is not applied to another collection: %s', async collection => {
+  await render('berts');
+  const failure={response:{status:409,data:{detail:'Clear the planning price when changing a supplier pack, then review its new price and physical conversion'}}};
+  api.putCollection.mockRejectedValueOnce(failure);api.putSalesPeriod.mockRejectedValueOnce(failure);
+  await act(async()=>expect(controller.save(collection,collection==='salesPeriod'?{}:[]))
+    .resolves.toEqual({ok:false,errorMessage:'This data changed elsewhere. Your draft is retained; review the latest data before retrying.'}));
+  expect(controller.state.revision).toBe(10);
 });
 
 test("detailed failures cannot advance a revision or leak from a replaced session", async () => {
