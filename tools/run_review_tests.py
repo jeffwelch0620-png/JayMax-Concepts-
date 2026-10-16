@@ -13,13 +13,14 @@ OFFLINE_MODULES = ('catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hos
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
+ ('shared_catalog','SharedCatalogTests','test_exact_catalog_roundtrip_keeps_shared_metadata_profiles_and_actual_report'),
  ('manual_purchases','ManualPurchaseTests','test_capture_recovery_manual_absent_saved_and_partial_attachment_reads_are_readonly'),
  ('manual_purchases','ManualPurchaseTests','test_capture_recovery_rejects_changed_manual_body_foreign_scope_and_replay_actor'),
  ('manual_purchases','ManualPurchaseTests','test_capture_recovery_csv_requires_projection_and_raw_source_requires_only_bytes'),

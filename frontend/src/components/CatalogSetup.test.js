@@ -31,6 +31,21 @@ const changeInput = async (field, value) => act(async () => {
 });
 const parInput = () => [...container.querySelectorAll("label")].find(label => label.textContent.includes("Par Level (purchase units)")).querySelector("input");
 
+test("the real editor preserves exact decimal metadata through an unrelated save and decimal input", async () => {
+  const exact = "1.123456789012345678";
+  const precise = { ...item, par: exact, packCount: exact, unitQty: exact, portionSize: exact, basePerCountUnit: exact,
+    vendorSkus: [{ ...item.vendorSkus[0], packCount: exact, unitQty: exact, basePerPurchaseUnit: exact }] };
+  await act(async () => root.render(<SetupTab {...revisionProps(10, [precise])} />));
+  await click("edit-item-F01");
+  await changeInput(parInput(), "2.123456789012345678");
+  await click("item-submit-button");
+  expect(persist).toHaveBeenCalledTimes(1);
+  const saved = persist.mock.calls[0][0][0];
+  expect(saved.par).toBe("2.123456789012345678");
+  for (const key of ["packCount", "unitQty", "portionSize", "basePerCountUnit"]) expect(saved[key]).toBe(exact);
+  for (const key of ["packCount", "unitQty", "basePerPurchaseUnit"]) expect(saved.vendorSkus[0][key]).toBe(exact);
+});
+
 test("background refresh cannot rebase an open catalog editor; cancel and reopen uses latest data", async () => {
   await act(async () => root.render(<SetupTab {...revisionProps(10)} />));
   await click("edit-item-F01");
@@ -44,7 +59,7 @@ test("background refresh cannot rebase an open catalog editor; cancel and reopen
   await click("edit-item-F01");
   expect(parInput().value).toBe("1");
   await click("item-submit-button");
-  expect(persist).toHaveBeenCalledWith([expect.objectContaining({par:1})],11);
+  expect(persist).toHaveBeenCalledWith([expect.objectContaining({par:"1"})],11);
 });
 
 test("retained editor keeps its original version across navigation and later typing", async () => {
@@ -99,7 +114,7 @@ test("409 then an unrelated refresh allows a guarded retry while preserving new 
   const other = {...item,controlNumber:"F02",itemCode:"other_food",par:9};
   await act(async () => root.render(<SetupTab {...revisionProps(11,[item,other])} />));
   await click("item-submit-button");
-  expect(persist).toHaveBeenLastCalledWith([expect.objectContaining({par:2}),other],11);
+  expect(persist).toHaveBeenLastCalledWith([expect.objectContaining({par:"2"}),other],11);
   expect(persist).toHaveBeenCalledTimes(2); expect(success).toHaveBeenCalledTimes(1);
 });
 
@@ -114,7 +129,7 @@ test("explicit item recovery preserves independent local and remote edits and ex
   await click("review-item-draft"); expect(persist).not.toHaveBeenCalled();
   await click("item-submit-button");
   const saved = persist.mock.calls[0][0][0];
-  expect(saved.par).toBe(2); expect(saved.notes).toBe("Remote metadata");
+  expect(saved.par).toBe("2"); expect(saved.notes).toBe("Remote metadata");
   expect(saved.vendorSkus[0].price).toBe(latest.vendorSkus[0].price);
   expect(saved.vendorSkus[0].basePerPurchaseUnit).toBeNull();
   expect(saved).not.toHaveProperty("draftBase"); expect(saved).not.toHaveProperty("draftRevision");
@@ -129,7 +144,7 @@ test("overlapping item changes are named and retained until explicitly resolved"
   expect(container.querySelector('[role="alert"]').textContent).toContain("Conflicting item changes: par");
   expect(parInput().value).toBe("2"); await click("item-submit-button"); expect(persist).not.toHaveBeenCalled();
   await changeInput(parInput(),"1"); await click("review-item-draft"); await click("item-submit-button");
-  expect(persist).toHaveBeenCalledWith([expect.objectContaining({par:1})],11);
+  expect(persist).toHaveBeenCalledWith([expect.objectContaining({par:"1"})],11);
 });
 
 test("recovery refuses coupled pack and supplier changes even across different fields", async () => {
@@ -285,7 +300,7 @@ test("pack edits warn without rewriting a stored conversion and must be saved be
   expect(container.textContent).toContain("Stored conversion differs from pack details: confirm or keep");
   expect(find("verify-supplier-0").disabled).toBe(true); await click("verify-supplier-0"); expect(review).not.toHaveBeenCalled();
   await click("item-submit-button"); expect(persist.mock.calls[0][0][0].vendorSkus[0].basePerPurchaseUnit).toBe(20);
-  expect(persist.mock.calls[0][0][0].vendorSkus[0].packCount).toBe(5);
+  expect(persist.mock.calls[0][0][0].vendorSkus[0].packCount).toBe("5");
 });
 
 test("editing a pack leaves an unknown conversion null and new supplier rows require a save", async () => {

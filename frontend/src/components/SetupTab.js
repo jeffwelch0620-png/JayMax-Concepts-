@@ -38,17 +38,17 @@ function itemForm(it, revision) {
   };
 }
 function itemFields(form) {
-  const optionalNumber = value => value === "" || value == null ? null : Number(value);
+  const optionalDecimal = value => value === "" || value == null ? null : String(value);
   return {
     name: form.name.trim(), storageArea: form.storageArea, active: form.active,
     countActive: form.countActive, orderEnabled: form.orderEnabled, salesTracked: form.salesTracked, itemType: form.itemType,
-    purchaseUnit: form.purchaseUnit, packCount: optionalNumber(form.packCount), unitQty: optionalNumber(form.unitQty), unitUOM: form.unitUOM,
-    portionSize: optionalNumber(form.portionSize), portionUOM: form.portionUOM,
-    par: Number(form.par) || 0, currentStock: Number(form.currentStock) || 0,
+    purchaseUnit: form.purchaseUnit, packCount: optionalDecimal(form.packCount), unitQty: optionalDecimal(form.unitQty), unitUOM: form.unitUOM,
+    portionSize: optionalDecimal(form.portionSize), portionUOM: form.portionUOM,
+    par: optionalDecimal(form.par) ?? "0", currentStock: Number(form.currentStock) || 0,
     vendorSkus: form.vendorSkus.map(v => ({ ...v, price: v.price === "" || v.price == null ? null : v.price,
       vendorSku: String(v.vendorSku || "").trim(), packDescription: String(v.packDescription ?? ""),
-      purchaseUnit: v.purchaseUnit || form.purchaseUnit || "case", packCount: optionalNumber(v.packCount),
-      unitQty: optionalNumber(v.unitQty), unitUOM: v.unitUOM || null })),
+      purchaseUnit: v.purchaseUnit || form.purchaseUnit || "case", packCount: optionalDecimal(v.packCount),
+      unitQty: optionalDecimal(v.unitQty), unitUOM: v.unitUOM || null })),
   };
 }
 const ITEM_GROUPS = [
@@ -234,16 +234,16 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
         <SectionLabel>Purchasing</SectionLabel>
         <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
           <Field label="Purchase Unit"><select className={inpCls} disabled={sharedProduct} value={form.purchaseUnit} onChange={(e) => update("purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-          <Field label="Par Level (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.par ?? ""} onChange={(e) => update("par", e.target.value)} /></Field>
+          <Field label="Par Level (purchase units)"><input type="number" step="any" className={inpCls} value={form.par ?? ""} onChange={(e) => update("par", e.target.value)} /></Field>
           {api.actualInventoryEnabled ? <p className="text-sm" data-testid="setup-native-count-note">Physical stock and explicit inventory values are recorded in Actual Inventory. Item Setup does not set on-hand quantities.</p> : <Field label="Current Stock (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.currentStock ?? ""} onChange={(e) => update("currentStock", e.target.value)} /></Field>}
         </div>
 
         <SectionLabel>Portion Breakdown (per Purchase Unit)</SectionLabel>
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
-          <Field label="Pack Count"><input type="number" step="1" className={inpCls} disabled={sharedProduct} value={form.packCount ?? ""} onChange={(e) => update("packCount", e.target.value)} placeholder="e.g. 4" /></Field>
-          <Field label="Size per Pack"><input type="number" step="0.01" className={inpCls} disabled={sharedProduct} value={form.unitQty ?? ""} onChange={(e) => update("unitQty", e.target.value)} placeholder="e.g. 5" /></Field>
+          <Field label="Pack Count"><input type="number" step="any" className={inpCls} disabled={sharedProduct} value={form.packCount ?? ""} onChange={(e) => update("packCount", e.target.value)} placeholder="e.g. 4" /></Field>
+          <Field label="Size per Pack"><input type="number" step="any" className={inpCls} disabled={sharedProduct} value={form.unitQty ?? ""} onChange={(e) => update("unitQty", e.target.value)} placeholder="e.g. 5" /></Field>
           <Field label="Size Unit"><select className={inpCls} disabled={sharedProduct} value={form.unitUOM} onChange={(e) => update("unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-          <Field label="Portion Size"><input type="number" step="0.01" className={inpCls} disabled={sharedProduct} value={form.portionSize ?? ""} onChange={(e) => update("portionSize", e.target.value)} placeholder="e.g. 6" /></Field>
+          <Field label="Portion Size"><input type="number" step="any" className={inpCls} disabled={sharedProduct} value={form.portionSize ?? ""} onChange={(e) => update("portionSize", e.target.value)} placeholder="e.g. 6" /></Field>
           <Field label="Portion Unit"><select className={inpCls} disabled={sharedProduct} value={form.portionUOM} onChange={(e) => update("portionUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
         </div>
         {form.packCount ? (
@@ -271,10 +271,10 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
               <Field label="Vendor SKU"><input className={`${inpCls} w-28`} disabled={sharedProduct} value={v.vendorSku} onChange={(e) => updateVendorRow(v.id, "vendorSku", e.target.value)} placeholder="—" /></Field>
               <Field label="Pack Description"><input className={`${inpCls} w-32`} disabled={sharedProduct} value={v.packDescription} onChange={(e) => updateVendorRow(v.id, "packDescription", e.target.value)} placeholder="e.g. 4/5lb" /></Field>
               <Field label="Purchase Unit"><select className={inpCls} disabled={sharedProduct} value={v.purchaseUnit || form.purchaseUnit} onChange={(e) => updateVendorRow(v.id, "purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-              <Field label="Pack Count"><input type="number" step="1" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.packCount ?? ""} onChange={(e) => updateVendorRow(v.id, "packCount", e.target.value)} /></Field>
-              <Field label="Qty / Pack"><input type="number" step="0.01" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.unitQty ?? ""} onChange={(e) => updateVendorRow(v.id, "unitQty", e.target.value)} /></Field>
+              <Field label="Pack Count"><input type="number" step="any" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.packCount ?? ""} onChange={(e) => updateVendorRow(v.id, "packCount", e.target.value)} /></Field>
+              <Field label="Qty / Pack"><input type="number" step="any" className={`${inpCls} w-20`} disabled={sharedProduct} value={v.unitQty ?? ""} onChange={(e) => updateVendorRow(v.id, "unitQty", e.target.value)} /></Field>
               <Field label="Pack UOM"><select className={inpCls} disabled={sharedProduct} value={v.unitUOM || form.unitUOM} onChange={(e) => updateVendorRow(v.id, "unitUOM", e.target.value)}>{UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-              <Field label="Price ($)"><input aria-label={`Supplier price ${v.id}`} type="number" step="0.01" className={`${inpCls} w-24`} value={v.price ?? ""} onChange={(e) => updateVendorRow(v.id, "price", e.target.value)} /></Field>
+              <Field label="Price ($)"><input aria-label={`Supplier price ${v.id}`} type="number" step="any" className={`${inpCls} w-24`} value={v.price ?? ""} onChange={(e) => updateVendorRow(v.id, "price", e.target.value)} /></Field>
               <Field label="Price Recorded"><input type="date" className={inpCls} value={(v.priceUpdatedAt || "").slice(0, 10)} readOnly /></Field>
               <label className="text-xs flex items-center gap-1 pb-2 text-slate-400"><input type="checkbox" checked={v.available !== false} onChange={(e) => updateVendorRow(v.id, "available", e.target.checked)} /> Available</label>
               <button type="button" aria-label={`Remove vendor SKU${v.vendor ? ` for ${v.vendor}` : ""}`} className={`${btnDanger} mb-0.5`} onClick={() => removeVendorRow(v.id)} disabled={form.vendorSkus.length === 1}><Trash2 size={14} /></button>

@@ -11,6 +11,19 @@ import test_native_backup as recovery
 
 
 class CatalogValidationTests(unittest.TestCase):
+    def test_decimal_metadata_models_preserve_text_without_binary_rounding(self):
+        exact = '1.123456789012345678'
+        item = server.ItemIn(code='SYNTHETIC', name='Invented', **dict.fromkeys(
+            ('pack_count', 'unit_qty', 'portion_size', 'base_per_count_unit', 'par'), exact))
+        sku = server.VendorSkuIn(vendor_id='pfg', vendor_sku='TEST', **dict.fromkeys(
+            ('base_per_purchase_unit', 'pack_count', 'unit_qty'), exact))
+        for model, fields in ((item, ('pack_count', 'unit_qty', 'portion_size', 'base_per_count_unit', 'par')),
+                              (sku, ('base_per_purchase_unit', 'pack_count', 'unit_qty'))):
+            for key in fields:
+                self.assertEqual(getattr(model, key), Decimal(exact))
+                with self.assertRaises(ValidationError):
+                    type(model)(**{**model.model_dump(), key: True})
+
     def test_invalid_numeric_catalog_metadata_is_rejected_and_missing_price_is_unknown(self):
         for field in ('par', 'pack_count', 'unit_qty', 'portion_size', 'base_per_count_unit'):
             for value in (-1, float('nan'), float('inf')):

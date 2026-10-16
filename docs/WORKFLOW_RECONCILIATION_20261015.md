@@ -1,5 +1,12 @@
 # Inventory workflow checkpoint and remaining work
 
+**Local continuation:** the owner authorized exact catalog decimal preservation
+after the field/unit audit, with a prompt before the next draft push. The
+[decimal checkpoint](CATALOG_DECIMAL_PRESERVATION.md) records the API/editor
+contract, validation and deployment limits. Expected-sales completeness, cost
+preview consistency, unit aliases, par basis and versioned historical portion
+meaning remain separate follow-ups. No hosted action accompanies this fix.
+
 **Current execution:** the owner-approved PR35 merge is `edbf232`, from amended
 head `7ae28da`. Amended-head and merged-main CI passed all four jobs; both Render
 services are Live on the merge. Normal fictional CSV capture/status/reload passed
