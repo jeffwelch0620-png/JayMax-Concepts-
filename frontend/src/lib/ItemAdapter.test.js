@@ -17,26 +17,53 @@ afterAll(() => {
 
 const item = { code: "papa_food", name: "Purchased food", baseUnit: "lb", countUnit: "case", basePerCountUnit: 20, active: true, countActive: false,
   packCount: 4, unitQty: 5, unitUOM: "lb", portionSize: 4, portionUOM: "oz", vendorSkus: [{ id: "sku", vendor: "special_supplier", vendorName: "Special supplier", vendorSku: "00001", purchaseUnit: "case", packCount: 4, unitQty: 5, unitUOM: "lb", basePerPurchaseUnit: 20 }] };
+
+test.each([true, false])("unrelated item edits preserve all retained decimal digits (native %s)", native => {
+  load(native);
+  const exact = "1.123456789012345678";
+  const source = { ...item, packCount: exact, unitQty: exact, portionSize: exact, basePerCountUnit: exact,
+    par: "0.000000000000000001", vendorSkus: [{ ...item.vendorSkus[0], packCount: exact, unitQty: exact, basePerPurchaseUnit: exact }] };
+  const saved = mongoItemToPgBody({ ...pgItemToMongoItem(source, "berts"), name: "Changed name only" }, "berts");
+  for (const key of ["pack_count", "unit_qty", "portion_size", "base_per_count_unit"]) expect(saved[key]).toBe(exact);
+  expect(saved.par).toBe(source.par);
+  for (const key of ["pack_count", "unit_qty", "base_per_purchase_unit"]) expect(saved.vendor_skus[0][key]).toBe(exact);
+});
+
+test.each([true, false, "NaN", "Infinity", "bad", "-1"])("invalid catalog metadata %p is held rather than changed to zero/null", value => {
+  expect(() => mongoItemToPgBody({ ...pgItemToMongoItem(item, "berts"), par: value }, "berts")).toThrow("catalog decimal");
+});
+
+test("catalog blank metadata remains null and an explicit zero remains text zero", () => {
+  const ui = { ...pgItemToMongoItem(item, "berts"), packCount: "", unitQty: "0", portionSize: null, par: "0" };
+  const saved = mongoItemToPgBody(ui, "berts");
+  expect(saved.pack_count).toBeNull(); expect(saved.portion_size).toBeNull();
+  expect(saved.unit_qty).toBe("0"); expect(saved.par).toBe("0");
+});
+
+test.each(["1E+400", "1E-400"])("retained finite decimal %s is not rejected or rounded through a planning Number", exact => {
+  const saved = mongoItemToPgBody({ ...pgItemToMongoItem(item, "berts"), basePerCountUnit: exact, packCount: exact, par: exact }, "berts");
+  expect(saved.base_per_count_unit).toBe(exact); expect(saved.pack_count).toBe(exact); expect(saved.par).toBe(exact);
+});
 test("catalog round trip retains canonical IDs, physical units and independent count activation", () => {
   const ui = pgItemToMongoItem(item, "papa_leonis"), saved = mongoItemToPgBody(ui, "papa_leonis");
-  expect(saved.code).toBe("papa_food"); expect(saved.base_unit).toBe("lb"); expect(saved.base_per_count_unit).toBe(20);
-  expect(saved.vendor_skus[0].vendor_id).toBe("special_supplier"); expect(saved.vendor_skus[0].base_per_purchase_unit).toBe(20);
+  expect(saved.code).toBe("papa_food"); expect(saved.base_unit).toBe("lb"); expect(saved.base_per_count_unit).toBe("20");
+  expect(saved.vendor_skus[0].vendor_id).toBe("special_supplier"); expect(saved.vendor_skus[0].base_per_purchase_unit).toBe("20");
   expect(ui.countActive).toBe(false);
 });
 test("editing recipe portions cannot rewrite physical case factors", () => {
   const ui = { ...pgItemToMongoItem(item, "berts"), portionSize: 8, portionUOM: "oz" };
-  expect(mongoItemToPgBody(ui, "berts").base_per_count_unit).toBe(20);
-  expect(mongoItemToPgBody(ui, "berts").vendor_skus[0].base_per_purchase_unit).toBe(20);
+  expect(mongoItemToPgBody(ui, "berts").base_per_count_unit).toBe("20");
+  expect(mongoItemToPgBody(ui, "berts").vendor_skus[0].base_per_purchase_unit).toBe("20");
 });
 test("new catalog case metadata uses physical pack quantity rather than portion count", () => {
   const ui = { controlNumber: "NEW", unitUOM: "lb", packCount: 4, unitQty: 5, portionSize: 4, portionUOM: "oz", vendorSkus: [] };
-  const saved = mongoItemToPgBody(ui, "berts"); expect(saved.base_unit).toBe("lb"); expect(saved.base_per_count_unit).toBe(20);
+  const saved = mongoItemToPgBody(ui, "berts"); expect(saved.base_unit).toBe("lb"); expect(saved.base_per_count_unit).toBe("20");
 });
 test.each([[4, 80], [8, 40]])("legacy adapter with native flags off retains portion factor for %s oz", (portionSize, expected) => {
   load(false);
   const saved = mongoItemToPgBody({ controlNumber: "LEGACY", unitUOM: "lb", packCount: 4, unitQty: 5, portionSize, portionUOM: "oz", vendorSkus: [] }, "berts");
   expect(saved.base_unit).toBe("oz");
-  expect(saved.base_per_count_unit).toBe(expected);
+  expect(saved.base_per_count_unit).toBe(String(expected));
 });
 test("unknown pack quantities and incompatible physical units cannot silently become one", () => {
   expect(() => mongoItemToPgBody({ controlNumber: "NEW", unitUOM: "lb", vendorSkus: [] }, "berts")).toThrow("Confirm a physical pack quantity");
@@ -83,14 +110,14 @@ test.each([null, 4])("an explicitly unknown supplier conversion stays unknown wi
     packCount, unitQty: packCount == null ? null : 5 }] };
   const saved = mongoItemToPgBody(pgItemToMongoItem(source, "berts"), "berts");
   expect(saved.vendor_skus[0].base_per_purchase_unit).toBeNull();
-  expect(saved.vendor_skus[0].pack_count).toBe(packCount);
+  expect(saved.vendor_skus[0].pack_count).toBe(packCount == null ? null : String(packCount));
 });
 test("a new supplier without a conversion still requires verified physical pack metadata", () => {
   const ui = pgItemToMongoItem(item, "berts");
   ui.vendorSkus = [{ vendor: "PFG", vendorSku: "NEW", packCount: "", unitQty: "", unitUOM: "lb" }];
   expect(() => mongoItemToPgBody(ui, "berts")).toThrow("Confirm a physical pack quantity");
   ui.vendorSkus[0] = { ...ui.vendorSkus[0], packCount: 4, unitQty: 5 };
-  expect(mongoItemToPgBody(ui, "berts").vendor_skus[0].base_per_purchase_unit).toBe(20);
+  expect(mongoItemToPgBody(ui, "berts").vendor_skus[0].base_per_purchase_unit).toBe("20");
 });
 
 test.each([true, false])("changing available supplier pack retains stored count conversion (native %s)", native => {
@@ -100,6 +127,6 @@ test.each([true, false])("changing available supplier pack retains stored count 
     { ...item.vendorSkus[0], id: "new", vendorSku: "NEW", preferred: false, available: true, packCount: 8, basePerPurchaseUnit: 40 }
   ] }, "berts");
   const saved = mongoItemToPgBody({ ...ui, portionSize: 8 }, "berts");
-  expect(saved.base_per_count_unit).toBe(80); expect(saved.count_unit).toBe("count-case"); expect(saved.base_unit).toBe("lb");
-  expect(saved.vendor_skus.map(sku => sku.base_per_purchase_unit)).toEqual([80, 40]);
+  expect(saved.base_per_count_unit).toBe("80"); expect(saved.count_unit).toBe("count-case"); expect(saved.base_unit).toBe("lb");
+  expect(saved.vendor_skus.map(sku => sku.base_per_purchase_unit)).toEqual(["80", "40"]);
 });

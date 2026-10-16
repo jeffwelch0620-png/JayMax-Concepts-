@@ -22,6 +22,21 @@ test("omitted items are explicit retirements and retained items are not rewritte
   await api.putCollection("berts", "items", [api.pgItemToMongoItem(item("one"), "berts")], 7);
   expect(axios.post.mock.calls[0][1]).toEqual({ upserts: [], retire_codes: ["two"] });
 });
+
+test("one unrelated edit preserves exact metadata and never submits another precise item", async () => {
+  const exact = "1.123456789012345678";
+  const current = [item("one"), item("two")].map(row => ({ ...row, packCount: exact, unitQty: exact,
+    portionSize: exact, basePerCountUnit: exact, par: exact, vendorSkus: [{ id: row.code + "_sku", vendor: "pfg",
+      vendorSku: row.code, purchaseUnit: "case", packCount: exact, unitQty: exact, unitUOM: "lb", basePerPurchaseUnit: exact }] }));
+  axios.get.mockResolvedValue({ data: current });
+  const edited = current.map(row => api.pgItemToMongoItem(row, "berts")).map(row => row.itemCode === "one" ? { ...row, name: "Renamed only" } : row);
+  await api.putCollection("berts", "items", edited, 7);
+  const body = axios.post.mock.calls[0][1];
+  expect(body.upserts).toHaveLength(1); expect(body.upserts[0].code).toBe("one");
+  expect(body.upserts[0]).toMatchObject({ pack_count: exact, unit_qty: exact, portion_size: exact, base_per_count_unit: exact, par: exact });
+  expect(body.upserts[0].vendor_skus[0]).toMatchObject({ pack_count: exact, unit_qty: exact, base_per_purchase_unit: exact });
+  expect(body.retire_codes).toEqual([]);
+});
 test("a stale or rejected acknowledgement is not replaced by a retry with a newer revision", async () => {
   axios.post.mockRejectedValue({ response: { status: 409 } });
   await expect(api.putCollection("berts", "items", [], 7)).rejects.toMatchObject({ response: { status: 409 } });
@@ -38,7 +53,7 @@ test("adding a verified item is not blocked by an unrelated stored unknown suppl
     api.pgItemToMongoItem(newItem, "berts")], 7);
   const [, body, options] = axios.post.mock.calls[0];
   expect(body.upserts.map(value => value.code)).toEqual(["new"]);
-  expect(body.upserts[0].vendor_skus[0].base_per_purchase_unit).toBe(20);
+  expect(body.upserts[0].vendor_skus[0].base_per_purchase_unit).toBe("20");
   expect(body.retire_codes).toEqual([]);
   expect(options.headers["If-Match"]).toBe('"7"');
   expect(axios.post).toHaveBeenCalledTimes(1);

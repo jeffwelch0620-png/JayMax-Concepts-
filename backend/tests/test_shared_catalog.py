@@ -73,13 +73,111 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
         a=next(i for i in a if i['code']=='test_food');b=b[0]
         self.assertEqual(a['code'],b['code']);self.assertEqual(a['vendorSkus'][0]['id'],b['vendorSkus'][0]['id'])
         self.assertEqual(a['controlNumber'],'test_food');self.assertEqual(b['controlNumber'],'R01')
-        self.assertEqual(b['par'],6);self.assertEqual(b['basePerCountUnit'],2);self.assertFalse(b['countActive'])
+        self.assertEqual(b['par'],'6');self.assertEqual(b['basePerCountUnit'],'2');self.assertFalse(b['countActive'])
         self.assertEqual(a['vendorSkus'][0]['price'],'99.100000000000000001');self.assertEqual(a['vendorSkus'][0]['priceSource'],'invoice')
         self.assertIsNone(b['vendorSkus'][0]['price']);self.assertIsNone(b['vendorSkus'][0]['priceSource'])
         async with self.pool.acquire() as c:
             self.assertEqual(await c.fetchval("SELECT count(*) FROM vendor_items WHERE vendor_id='synthetic_other' AND vendor_sku='00001'"),1)
             self.assertEqual(await c.fetchval("SELECT count(*) FROM purchasing.item_bases WHERE store_id='rudds'"),0)
             self.assertEqual(await c.fetchval("SELECT current_stock FROM store_items WHERE store_id='rudds' AND item_code='test_food'"),0)
+
+    async def test_catalog_extreme_decimals_are_422_without_changing_catalog_or_revision(self):
+        async def snapshot():
+            async with self.pool.acquire() as c:
+                return [await c.fetch(query) for query in (
+                    'SELECT * FROM public.items ORDER BY code',
+                    'SELECT * FROM public.store_items ORDER BY store_id,item_code',
+                    'SELECT * FROM public.vendor_items ORDER BY id',
+                    'SELECT * FROM purchasing.store_vendor_items ORDER BY store_id,vendor_item_id',
+                    'SELECT * FROM public.store_state ORDER BY store_id')]
+        before = await snapshot()
+        for key in ('pack_count', 'unit_qty', 'portion_size', 'base_per_count_unit', 'par',
+                    'supplier.base_per_purchase_unit', 'supplier.pack_count', 'supplier.unit_qty', 'supplier.price'):
+            for value in ('1e200000', '1e-20000'):
+                body = await self.payload('berts')
+                if key.startswith('supplier.'):body['vendor_skus'][0][key.split('.')[1]] = value
+                else:body[key] = value
+                response = await self.catalog.post('/api/pg/items/berts/changes',
+                    json={'upserts': [body], 'retire_codes': []}, headers={'If-Match': '0'})
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertIn('512 integer digits', response.text)
+                self.assertEqual(await snapshot(), before)
+
+    async def test_catalog_supported_decimal_boundaries_roundtrip_without_rounding(self):
+        body = await self.payload('berts')
+        largest = '9'*512+'.'+'1'*512
+        body['par'] = largest
+        body['vendor_skus'][0].update(price='1e-512', pack_count='0E-10')
+        response = await self.catalog.post('/api/pg/items/berts/changes',
+            json={'upserts': [body], 'retire_codes': []}, headers={'If-Match': '0'})
+        self.assertEqual(response.status_code, 200, response.text)
+        row = next(r for r in (await self.catalog.get('/api/pg/items/berts')).json() if r['code'] == 'test_food')
+        self.assertEqual(row['par'], largest)
+        self.assertEqual(row['vendorSkus'][0]['price'], '0.'+'0'*511+'1')
+        self.assertEqual(row['vendorSkus'][0]['packCount'], '0.0000000000')
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval("SELECT par FROM public.store_items WHERE store_id='berts' AND item_code='test_food'"), Decimal(largest))
+            self.assertEqual(await c.fetchval("SELECT price FROM purchasing.store_vendor_items WHERE store_id='berts' AND vendor_item_id=$1", self.sku), Decimal('1e-512'))
+
+    async def test_exact_catalog_roundtrip_keeps_shared_metadata_profiles_and_actual_report(self):
+        exact = '1.123456789012345678'
+        async with self.pool.acquire() as c:
+            await c.execute('''UPDATE items SET pack_count=$1,unit_qty=$1,portion_size=0.0000001 WHERE code='test_food' ''', Decimal(exact))
+            await c.execute('''UPDATE store_items SET base_per_count_unit=$1,par=$1 WHERE item_code='test_food' ''', Decimal(exact))
+            await c.execute('''UPDATE vendor_items SET base_per_purchase_unit=$1,pack_count=$1,unit_qty=$1 WHERE id=$2''', Decimal(exact), self.sku)
+            await c.execute((recovery.counts.native.ROOT/'migrations/20261006_supplier_price_history.sql').read_text())
+            price_history = await c.fetch("SELECT * FROM purchasing.supplier_price_events WHERE store_id='berts' ORDER BY event_sequence")
+            supplier_state = await c.fetchrow("SELECT * FROM purchasing.store_vendor_items WHERE store_id='berts' AND vendor_item_id=$1", self.sku)
+        self.assertEqual((await self.units())[0].status_code, 200)
+        _, opening, closing = await self.pair()
+        captured, *_ = await self.capture()
+        self.assertEqual((await self.post(captured['documents'][0])).status_code, 200)
+        baseline = (await self.report(opening, closing)).json()
+        setup = (await self.client.get('/api/pg/purchases/berts/unit-setup')).json()
+        self.assertTrue(setup['profiles']); self.assertTrue(all(not p['stale'] for p in setup['profiles']))
+
+        def from_api(row):
+            fields = dict(code='code', name='name', base_unit='baseUnit', category='category', item_type='itemType',
+                is_high_value='isHighValue', notes='notes', costing_type='costingType', pack_count='packCount',
+                unit_qty='unitQty', unit_uom='unitUOM', portion_size='portionSize', portion_uom='portionUOM',
+                count_unit='countUnit', base_per_count_unit='basePerCountUnit', control_number='controlNumber',
+                storage_area='storageArea', counted_nightly='countActive', par='par', active='active',
+                order_enabled='orderEnabled', sales_tracked='salesTracked', needs_review='needsReview')
+            supplier_fields = dict(vendor_id='vendor', vendor_sku='vendorSku', vendor_description='vendorDescription',
+                purchase_unit='purchaseUnit', base_per_purchase_unit='basePerPurchaseUnit', pack_count='packCount',
+                unit_qty='unitQty', unit_uom='unitUOM', price='price', preferred='preferred', available='available')
+            return {**{key: row[value] for key, value in fields.items()},
+                'vendor_skus': [{key: s[value] for key, value in supplier_fields.items()} for s in row['vendorSkus']]}
+
+        first = next(row for row in (await self.catalog.get('/api/pg/items/berts')).json() if row['code'] == 'test_food')
+        for key in ('packCount', 'unitQty', 'basePerCountUnit', 'par'):
+            self.assertEqual(first[key], exact)
+        self.assertEqual(first['portionSize'], '0.0000001')
+        body = from_api(first); body['name'] = 'Renamed only'
+        async with self.pool.acquire() as c:
+            revision = await c.fetchval("SELECT revision FROM store_state WHERE store_id='berts'")
+        response = await self.put(body, revision, 'berts')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual((await self.link()).status_code, 200)
+        shared = next(row for row in (await self.catalog.get('/api/pg/items/berts')).json() if row['code'] == 'test_food')
+        body = from_api(shared); body['par'] = '2.123456789012345678'
+        response = await self.put(body, response.json()['revision'], 'berts')
+        self.assertEqual(response.status_code, 200, response.text)
+        async with self.pool.acquire() as c:
+            product = await c.fetchrow("SELECT pack_count,unit_qty,portion_size FROM items WHERE code='test_food'")
+            supplier = await c.fetchrow('SELECT base_per_purchase_unit,pack_count,unit_qty,price,price_source FROM vendor_items WHERE id=$1', self.sku)
+            for key in ('pack_count', 'unit_qty'):self.assertEqual(product[key], Decimal(exact))
+            self.assertEqual(product['portion_size'], Decimal('0.0000001'))
+            for key in ('base_per_purchase_unit', 'pack_count', 'unit_qty'): self.assertEqual(supplier[key], Decimal(exact))
+            self.assertEqual(supplier['price'], Decimal('99.100000000000000001'))
+            self.assertEqual(supplier['price_source'], 'invoice')
+            self.assertEqual(await c.fetchval("SELECT base_per_count_unit FROM store_items WHERE store_id='berts' AND item_code='test_food'"), Decimal(exact))
+            self.assertEqual(await c.fetchval("SELECT par FROM store_items WHERE store_id='berts' AND item_code='test_food'"), Decimal(body['par']))
+            self.assertEqual(await c.fetch("SELECT * FROM purchasing.supplier_price_events WHERE store_id='berts' ORDER BY event_sequence"), price_history)
+            self.assertEqual(await c.fetchrow("SELECT * FROM purchasing.store_vendor_items WHERE store_id='berts' AND vendor_item_id=$1", self.sku), supplier_state)
+        after = (await self.client.get('/api/pg/purchases/berts/unit-setup')).json()
+        self.assertEqual(after['profiles'], setup['profiles'])
+        self.assertEqual((await self.report(opening, closing)).json(), baseline)
 
     async def test_location_supplier_edits_do_not_change_other_store_provenance_or_unit_profiles(self):
         self.assertEqual((await self.units())[0].status_code,200)

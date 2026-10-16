@@ -20,6 +20,7 @@ import anthropic
 import db_pg
 import db_auxiliary
 import catalog_mapping
+from catalog_decimals import CatalogDecimal, catalog_text
 import menu_contract
 import order_commands
 import supplier_contacts
@@ -3610,11 +3611,11 @@ class VendorSkuIn(BaseModel):
     vendor_sku: str
     vendor_description: Optional[str] = None
     purchase_unit: str = "case"
-    base_per_purchase_unit: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
-    pack_count: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    unit_qty: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    base_per_purchase_unit: Optional[CatalogDecimal] = Field(default=None, gt=0)
+    pack_count: Optional[CatalogDecimal] = None
+    unit_qty: Optional[CatalogDecimal] = None
     unit_uom: Optional[str] = None
-    price: Optional[Decimal] = Field(default=None, ge=0, allow_inf_nan=False)
+    price: Optional[CatalogDecimal] = None
     preferred: bool = False
     available: bool = True
 
@@ -3631,17 +3632,17 @@ class ItemIn(BaseModel):
     # which the frontend's itemDerived() needs to compute portionsPerUnit/costPerPortion the
     # same way it does today; see docs/SUPABASE_MIGRATION_PLAN.md)
     costing_type: str = "portion"  # "portion" | "usage" -- unrelated to item_type above
-    pack_count: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    unit_qty: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    pack_count: Optional[CatalogDecimal] = None
+    unit_qty: Optional[CatalogDecimal] = None
     unit_uom: Optional[str] = None
-    portion_size: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    portion_size: Optional[CatalogDecimal] = None
     portion_uom: Optional[str] = None
     # store_items fields
     count_unit: str = "case"
-    base_per_count_unit: float = Field(default=1, gt=0, allow_inf_nan=False)
+    base_per_count_unit: CatalogDecimal = Field(default=Decimal(1), gt=0)
     storage_area: Optional[str] = None
     counted_nightly: bool = False
-    par: float = Field(default=0, ge=0, allow_inf_nan=False)
+    par: CatalogDecimal = Decimal(0)
     active: bool = True
     order_enabled: bool = True
     sales_tracked: bool = True
@@ -3677,13 +3678,13 @@ async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None, 
         "baseUnit": item_row["base_unit"], "itemType": item_row["item_type"],
         "isHighValue": item_row["is_high_value"], "notes": item_row["notes"],
         "costingType": item_row["costing_type"],
-        "packCount": float(item_row["pack_count"]) if item_row["pack_count"] is not None else None,
-        "unitQty": float(item_row["unit_qty"]) if item_row["unit_qty"] is not None else None,
+        "packCount": catalog_text(item_row["pack_count"]),
+        "unitQty": catalog_text(item_row["unit_qty"]),
         "unitUOM": item_row["unit_uom"],
-        "portionSize": float(item_row["portion_size"]) if item_row["portion_size"] is not None else None,
+        "portionSize": catalog_text(item_row["portion_size"]),
         "portionUOM": item_row["portion_uom"],
         "countUnit": store_item_row["count_unit"] if store_item_row else None,
-        "basePerCountUnit": float(store_item_row["base_per_count_unit"]) if store_item_row else None,
+        "basePerCountUnit": catalog_text(store_item_row["base_per_count_unit"]) if store_item_row else None,
         "storageArea": store_item_row["storage_area"] if store_item_row else None,
         "countedNightly": store_item_row["counted_nightly"] if store_item_row else False,
         "catalogActive": item_row["active"],
@@ -3694,18 +3695,18 @@ async def _item_row_to_api(conn, store_id, item_row, store_item_row, skus=None, 
         "needsReview": store_item_row["needs_review"] if store_item_row else False,
         "currentStock": None if actual_inventory_api.enabled() else float(store_item_row["current_stock"]) if store_item_row else 0,
         "stockBasis": "native_dated_counts" if actual_inventory_api.enabled() else "legacy_on_hand",
-        "par": float(store_item_row["par"]) if store_item_row else 0,
+        "par": catalog_text(store_item_row["par"]) if store_item_row else "0",
         "lastCounted": None if actual_inventory_api.enabled() else store_item_row["last_counted"].isoformat() if store_item_row and store_item_row["last_counted"] else None,
         "lastCountedBy": None if actual_inventory_api.enabled() else store_item_row["last_counted_by"] if store_item_row else None,
         "vendorSkus": [{
             "id": str(s["id"]), "vendor": s["vendor_id"], "vendorName": s["vendor_name"],
             "vendorSku": s["vendor_sku"], "vendorDescription": s["vendor_description"],
             "purchaseUnit": s["purchase_unit"],
-            "basePerPurchaseUnit": float(s["base_per_purchase_unit"]) if s["base_per_purchase_unit"] is not None else None,
-            "packCount": float(s["pack_count"]) if s["pack_count"] is not None else None,
-            "unitQty": float(s["unit_qty"]) if s["unit_qty"] is not None else None,
+            "basePerPurchaseUnit": catalog_text(s["base_per_purchase_unit"]),
+            "packCount": catalog_text(s["pack_count"]),
+            "unitQty": catalog_text(s["unit_qty"]),
             "unitUOM": s["unit_uom"],
-            "price": str(s["price"]) if s["price"] is not None else None,
+            "price": catalog_text(s["price"]),
             "priceUpdatedAt": s["price_updated_at"].isoformat() if s["price_updated_at"] else None,
             "priceSource": s["price_source"], "preferred": s["preferred"], "available": s["available"],
             "priceIssues": s.get("price_issues", []),

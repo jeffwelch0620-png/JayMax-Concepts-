@@ -1,5 +1,24 @@
 # Submitted source-capture recovery
 
+## Current hosted checkpoint
+
+The owner-approved PR35 merge is **edbf2321769ce9a6343d28483af8dbcee903a885**,
+from amended head **7ae28dabb589075902d22d171baff910d1d12db4**. Amended-head
+and merged-main CI passed; both Render services are verified Live on the merge.
+Normal fictional CSV capture/status/reload and the manual-source loss/reload/exact
+retry/lost-acknowledgement recovery case passed, with no accounting changes.
+The file before-save/sign-in/exact-reselection case and after-save/lost-status/
+reload case also passed. The final identity-conflict/discard case passed both
+failed-read retention and fresh-conflict local clearing, preserving an unrelated
+manual draft. Final independent checks confirm five single-attempt sources,
+zero purchase postings, unchanged pre-existing protected data and $212.00 Food
+Cost. The relay is stopped, owner-reported permission cleanup is complete, and
+normal browser reload has no test banner or pending request. These are scoped
+CSV/manual results; raw/PDF transport remains untested. The
+[live checkpoint](PR35_HOSTED_CAPTURE_CHECKPOINT.md) distinguishes completed
+observations from prepared tests. Older unmerged/undeployed wording below is
+historical and superseded by this checkpoint; no new maintenance window is open.
+
 October 15, 2026. Local follow-up from `5be2c20`, after PR34's hosted recovery
 acceptance and the completed backup/index maintenance window. Implementation and
 local validation are recorded at `278863e`; the owner subsequently approved

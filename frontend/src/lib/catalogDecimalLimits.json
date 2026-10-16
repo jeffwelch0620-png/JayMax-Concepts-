@@ -1,0 +1,6 @@
+{
+  "integerDigits": 512,
+  "decimalPlaces": 512,
+  "coefficientDigits": 1024,
+  "inputCharacters": 2048
+}

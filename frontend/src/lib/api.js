@@ -2,6 +2,7 @@ import axios from "axios";
 import { calcPortionsPerUnit, preferredSku } from "./calc";
 import { readStateWithDeadline } from "./stateRead";
 import { canonicalStoreId as pgStoreId } from "./purchaseContract";
+import { checkedCatalogDecimal } from "./catalogDecimal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Supabase migration target -- see docs/SUPABASE_MIGRATION_PLAN.md. Store ids here
@@ -431,10 +432,13 @@ const numOrNull = v => {
   return value;
 };
 export function catalogPrice(v) {
-  if (v === "" || v == null) return null;
-  const value = String(v).trim();
-  if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) || !Number.isFinite(Number(value))) throw new Error("Enter a non-negative finite supplier price, or leave it unknown.");
-  return value; // Keep the entered decimal digits; catalog price is not a float.
+  return checkedCatalogDecimal(v, "supplier price");
+}
+
+// Catalog NUMERIC metadata crosses JSON as decimal text, just like supplier prices.
+// Numeric copies used by planning calculators must never replace retained values.
+export function catalogDecimal(value) {
+  return checkedCatalogDecimal(value);
 }
 
 function pgSkuToMongoSku(s) {
@@ -492,10 +496,10 @@ export function mongoItemToPgBody(item, rid) {
   const preferred = preferredSku(item);
   const { packTotal, unitUOM } = packTotalFor(preferred, item);
   const nativeBase = physicalUnit(item.baseUnit || item.unitUOM || unitUOM);
-  const basePerCountUnit = item.basePerCountUnit != null ? numOrNull(item.basePerCountUnit)
+  const basePerCountUnit = catalogDecimal(item.basePerCountUnit != null ? item.basePerCountUnit
     : nativePurchasesEnabled ? physicalPackFactor(packTotal, unitUOM, nativeBase)
-      : calcPortionsPerUnit(packTotal, unitUOM, item.portionSize, item.portionUOM).value || 1;
-  if (!(basePerCountUnit > 0)) throw new Error("Confirm a positive stored count conversion before saving this item.");
+      : calcPortionsPerUnit(packTotal, unitUOM, item.portionSize, item.portionUOM).value || 1);
+  if (!basePerCountUnit || !/[1-9]/.test(basePerCountUnit.split(/[eE]/)[0])) throw new Error("Confirm a positive stored count conversion before saving this item.");
   const countActive = !!(item.countActive ?? item.active);
   return {
     code: item.itemCode || `${rid}_${item.controlNumber}`, name: item.name, base_unit: item.baseUnit || (nativePurchasesEnabled ? nativeBase : item.portionUOM || "each"),
@@ -503,13 +507,13 @@ export function mongoItemToPgBody(item, rid) {
     category: item.category, item_type: item.classification,
     is_high_value: item.isHighValue, notes: item.notes,
     costing_type: item.itemType || "portion",
-    pack_count: numOrNull(item.packCount), unit_qty: numOrNull(item.unitQty), unit_uom: item.unitUOM || null,
-    portion_size: numOrNull(item.portionSize), portion_uom: item.portionUOM || null,
+    pack_count: catalogDecimal(item.packCount), unit_qty: catalogDecimal(item.unitQty), unit_uom: item.unitUOM || null,
+    portion_size: catalogDecimal(item.portionSize), portion_uom: item.portionUOM || null,
     count_unit: item.countUnit || item.purchaseUnit || preferred?.purchaseUnit || "case",
     base_per_count_unit: basePerCountUnit,
     storage_area: item.storageArea || null,
     counted_nightly: countActive,
-    par: Number(item.par) || 0,
+    par: catalogDecimal(item.par) ?? "0",
     active: !!(item.active ?? countActive),
     order_enabled: item.orderEnabled !== false,
     sales_tracked: item.salesTracked !== false,
@@ -524,8 +528,8 @@ export function mongoItemToPgBody(item, rid) {
       return {
         vendor_id: s.vendorId || VENDOR_NAME_TO_ID[s.vendor] || "other", vendor_sku: s.vendorSku || s.id || "",
         vendor_description: s.packDescription === "" && s.vendorDescription === null ? null : s.packDescription ?? s.vendorDescription ?? null, purchase_unit: s.purchaseUnit || item.purchaseUnit || "case",
-        base_per_purchase_unit: basePerPurchaseUnit,
-        pack_count: numOrNull(s.packCount), unit_qty: numOrNull(s.unitQty), unit_uom: s.unitUOM || null,
+        base_per_purchase_unit: catalogDecimal(basePerPurchaseUnit),
+        pack_count: catalogDecimal(s.packCount), unit_qty: catalogDecimal(s.unitQty), unit_uom: s.unitUOM || null,
         price: catalogPrice(s.price), preferred: !!s.preferred, available: s.available !== false,
       };
     }),

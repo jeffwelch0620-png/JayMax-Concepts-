@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Draft PR36 — exact catalog decimals
+
+The owner-approved [PR36](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/36)
+follow-up preserves catalog conversion,
+pack, portion and par decimals through API reads, Item Setup and saves. An
+unrelated edit no longer rounds retained metadata through binary floating point.
+See the [decimal contract and validation](docs/CATALOG_DECIMAL_PRESERVATION.md).
+Original-head validation passed: 802 frontend tests, 744 offline cases, strict build, and 40
+catalog/receiving test methods plus five subtests across the broad run and final
+targeted rerun. Local database/role inventories are unchanged and the owned test
+server is stopped. The owner authorized the review amendment: shared decimal
+resource limits, fixed-notation display preserving scale, and refreshing every
+Inventory tab after both services are Live. Amendment validation passes 826
+frontend tests, 746 offline cases, the strict build and three final targeted
+PostgreSQL cases. The linked checkpoint distinguishes
+amended-head validation/CI from the original green head. No migration, hosted
+data or connection change is included; the compatibility profile was read-only.
+
 ## Current hosted checkpoint — October 15, 2026
 
 PR34 is merged at **ce7eb27** and verified live on both Render services. The
@@ -20,7 +38,36 @@ accounting control verified. See the [backup/index window record](docs/HOSTED_IN
 Connections/credentials are unchanged. Earlier hold, draft and unapplied-index
 wording below describes earlier checkpoints; this entry supersedes it.
 
-## Draft PR35 source-capture recovery — October 15, 2026
+## PR35 merged; scoped source-capture acceptance passed — October 15, 2026
+
+The owner approved [PR35](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/35),
+merged at **edbf232** from amended head **7ae28da**. Amended-head and
+[merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38805231168)
+passed. Both Render services are verified Live on that merge. A normal fictional
+CSV capture, saved-status confirmation and reopening after reload passed; one
+source/attempt was retained, zero purchases posted, and pre-existing rows across
+82 protected relations and the historical $212.00 Food Cost report were unchanged.
+The manual-source transport case also passed loss before forwarding, reload,
+explicit exact retry and loss of its successful acknowledgement: saved lookup
+recovered one retained manual source without another capture or purchase posting.
+Independent database verification preserved all protected accounting data.
+The BEFORE file case passed sign-in recovery, required exact reselection, refused
+a different file, and recovered the explicit retry after acknowledgement loss.
+The AFTER case passed acknowledgement/status loss and reload without resending.
+The final identity-conflict/discard case also passed: an unavailable read kept
+the request, a fresh confirmed conflict cleared only its local record, and an
+unrelated manual draft survived. Final independent checks confirm five retained
+test sources, one attempt each, zero purchase postings, all pre-existing rows
+across 82 protected tables retained and unchanged $212.00 Food Cost. The relay
+is stopped; the owner confirmed permission/override cleanup, and browser reload
+verified the normal deployed asset with no test banner or pending request.
+CSV/manual transport acceptance is complete; raw/PDF transport was not tested.
+See the
+[PR35 live checkpoint](docs/PR35_HOSTED_CAPTURE_CHECKPOINT.md). The completed
+maintenance window remains closed; this acceptance does not change connections,
+roles, credentials, migrations or deployment settings.
+
+### Historical PR35 draft and local validation
 
 The next local slice retains submitted manual entries and file-capture request
 identities across reload/sign-in in the same browser tab. Read-only status

@@ -35,6 +35,45 @@ def sku(code):
 
 
 class CatalogReadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_catalog_decimals_are_exact_text_in_shared_and_legacy_reads(self):
+        exact = Decimal('1.123456789012345678')
+        product = item('precise')
+        for key in ('pack_count', 'unit_qty', 'portion_size'):
+            product[key] = exact
+        local = {**product, 'base_per_count_unit': exact, 'par': Decimal('0.000000000000000001')}
+        supplier = sku('precise')
+        for key in ('base_per_purchase_unit', 'pack_count', 'unit_qty'):
+            supplier[key] = exact
+        for shared in (False, True):
+            with patch('catalog_mapping.enabled', return_value=shared):
+                result = await server._item_row_to_api(None, 'berts', product, local, [supplier],
+                    catalog_checked=True, shared_meta={'control_number': 'P01', 'shared_store_count': 2})
+            for key in ('packCount', 'unitQty', 'portionSize', 'basePerCountUnit'):
+                self.assertEqual(result[key], str(exact))
+            self.assertEqual(result['par'], format(local['par'], 'f'))
+            for key in ('basePerPurchaseUnit', 'packCount', 'unitQty'):
+                self.assertEqual(result['vendorSkus'][0][key], str(exact))
+        product.update(pack_count=None, unit_qty=Decimal(0), portion_size=None)
+        supplier.update(base_per_purchase_unit=None, pack_count=None, unit_qty=Decimal(0))
+        with patch('catalog_mapping.enabled', return_value=False):
+            result = await server._item_row_to_api(None, 'berts', product, local, [supplier], catalog_checked=True)
+        self.assertIsNone(result['packCount']); self.assertIsNone(result['portionSize'])
+        self.assertEqual(result['unitQty'], '0')
+        self.assertIsNone(result['vendorSkus'][0]['basePerPurchaseUnit'])
+        self.assertIsNone(result['vendorSkus'][0]['packCount'])
+        self.assertEqual(result['vendorSkus'][0]['unitQty'], '0')
+
+    async def test_catalog_display_uses_fixed_notation_and_preserves_zero_scale(self):
+        product = item('fixed'); supplier = sku('fixed')
+        product.update(pack_count=Decimal('0.0000001'), portion_size=Decimal('0E-10'))
+        supplier.update(price=Decimal('1E-7'), pack_count=Decimal('0E-10'))
+        with patch('catalog_mapping.enabled', return_value=False):
+            result = await server._item_row_to_api(None, 'berts', product, product, [supplier], catalog_checked=True)
+        self.assertEqual(result['packCount'], '0.0000001')
+        self.assertEqual(result['portionSize'], '0.0000000000')
+        self.assertEqual(result['vendorSkus'][0]['price'], '0.0000001')
+        self.assertEqual(result['vendorSkus'][0]['packCount'], '0.0000000000')
+
     async def test_catalog_query_count_does_not_grow_with_items_in_either_mode(self):
         for shared in (False,True):
             budgets=[]
