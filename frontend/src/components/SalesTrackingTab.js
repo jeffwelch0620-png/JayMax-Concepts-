@@ -2,6 +2,7 @@ import { planningProduct, planningSum } from "../lib/planningNumbers";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { confirmed, saveFailureMessage, useRetainedDraft } from "../lib/saveIntegrity";
 import { mergeSalesDraft } from "../lib/salesDraft";
+import { expectedSalesUsage } from "../lib/expectedSalesUsage";
 import { Save, Plus } from "lucide-react";
 import { normalizeRecipeSchema, rawPortionsForRecipe, itemDerived, adjustmentSignedPortions, todayISO, fmtDate, num, workweekRange, shiftWorkweek } from "../lib/calc";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost } from "./common";
@@ -134,8 +135,13 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
   const periodAdjustments = (cn) => adjustments
     .filter((a) => a.controlNumber === cn && a.date >= local.periodStart && a.date <= local.periodEnd);
 
-  const normalizedRecipes = dishes.map(normalizeRecipeSchema);
+  const normalizedRecipes = actualMode ? [] : dishes.map(normalizeRecipeSchema);
+  const expected = actualMode ? expectedSalesUsage(items, dishes, local.dishSales) : null;
   const rows = trackedItems.map((it) => {
+    if (actualMode) {
+      const usage = expected.rows.find(row => row.item === it);
+      return { it, theoreticalPortions: usage.portions, usageIssues: usage.issues };
+    }
     const d = itemDerived(it);
     let theoreticalPortions = 0;
     normalizedRecipes.filter((dish) => dish.recipeType !== "prep").forEach((dish) => {
@@ -231,6 +237,10 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
       </div>}
 
       <SectionLabel>{actualMode ? "Expected usage from sales (portions)" : "Variance"}</SectionLabel>
+      {actualMode && !expected.complete && <div role="status" data-testid="expected-sales-incomplete" className="text-amber-400 text-sm mb-3">
+        Expected usage is incomplete. Blank quantities are unknown; enter zero only when confirmed. Review missing recipe mappings and quantities below.
+        <ul>{expected.issues.map(issue => <li key={issue}>{issue}</li>)}</ul>
+      </div>}
       <div className={`${cardCls} overflow-hidden`}>
         <div className="overflow-x-auto">
           <table className="ops-table" data-testid="variance-table">
@@ -239,7 +249,7 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
               {rows.map((r) => (
                 <tr key={r.it.controlNumber}>
                   <td className="font-semibold text-slate-200">{r.it.controlNumber} — {r.it.name}</td>
-                  <td className="num">{num(r.theoreticalPortions, 1)}</td>
+                  <td className="num" data-testid={`expected-usage-${r.it.controlNumber}`} title={(r.usageIssues || []).join("; ")}>{r.theoreticalPortions == null ? "Unknown" : num(r.theoreticalPortions, 1)}</td>
                   {!actualMode && <><td className="num">{r.hasCounts ? r.actualPortions == null ? "Unknown" : num(r.actualPortions, 1) : <span className="text-slate-500">enter counts</span>}</td>
                   <td className="num">{r.delta !== null ? num(r.delta, 1) : "—"}</td>
                   <td className="num">{r.explainedPortions == null ? "Unknown" : num(r.explainedPortions, 1)}</td>

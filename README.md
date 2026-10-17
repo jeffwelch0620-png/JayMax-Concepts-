@@ -1,22 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## PR42 — strict Setup estimates and field/unit audit
+## PR42 merged; expected-sales completeness follow-up local
 
-PR42 is draft at original head `592dbd9`, with all four CI checks passed. The
-owner authorized its review amendment and same-branch push: reachable measure-type
-guidance and an explicit frontend planning-read audit row (F03b). All 889
-amendment frontend tests and the strict production build passed; new-head CI
-and merge approval remain separate gates.
+Owner-approved [PR42](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/42)
+merged as **c926217** from reviewed head **b9b4f79**. Reviewed-head and merged-main
+CI passed; Render's automatic frontend deployment is Live on the merge. The
+unchanged API remains Live on **84cb381**. The fictional deployed editor check
+is pending owner sign-in; deployment evidence alone is not UI acceptance.
 
-PR41 merged with owner approval as **84cb381**; reviewed-head and merged-main
-CI passed. API automatic deployment is Live on the merge; unchanged frontend
-remains Live on **f33db6e**. The read-only dashboard smoke check passed.
-The [field/unit/reference audit](docs/FIELD_UNIT_REFERENCE_AUDIT.md) records
-remaining expected-sales completeness, backend planning-reader, par-basis,
-unit-alias and historical-version gaps. Its bounded Item Setup fix uses the
-existing strict recipe-cost contract; all 888 frontend tests in 75 suites and
-the strict production build passed. Stored values,
-physical profiles and Track 1 accounting are unchanged. Prompt before a new PR.
+The [local expected-sales follow-up](docs/EXPECTED_SALES_USAGE_COMPLETENESS.md)
+keeps blank quantities unknown, resolves canonical recipe identities and refuses
+incomplete or nonrepresentable usage. It calculates portions without requiring
+supplier prices and preserves the existing sales save contract. Track 1 remains
+independent. All 942 frontend tests in 77 suites and the strict production build
+passed. Prompt before pushing a new draft PR; review, fresh CI, merge and
+hosted acceptance remain separate gates. The
+[field/unit/reference audit](docs/FIELD_UNIT_REFERENCE_AUDIT.md) records remaining
+backend/frontend monetary completeness, par-basis, unit-alias and historical
+versioning work.
 
 ## PR40 merged; single-item arithmetic follow-up local
 
