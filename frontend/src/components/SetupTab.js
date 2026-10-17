@@ -3,7 +3,7 @@ import { confirmSave, useRetainedDraft } from "../lib/saveIntegrity";
 import { equalEditorValue, snapshotEditorValue, mergeEditorFields } from "../lib/editorDraft";
 import { supplierConversionMismatch, supplierReviewSaved } from "../lib/supplierConversion";
 import { Plus, Trash2, Star, X } from "lucide-react";
-import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, nextControlNumber, itemDerived, isCountActive, isOrderEnabled, uid, fmtPlanningCost, num } from "../lib/calc";
+import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, UOM_FAMILY, nextControlNumber, itemDerived, itemPlanningCost, isCountActive, isOrderEnabled, uid, fmtPlanningCost, num } from "../lib/calc";
 import * as api from "../lib/api";
 import { NativeInventoryPosition } from "./NativeInventoryPosition";
 import { PreparedItemSetup } from "./PreparedItemSetup";
@@ -140,7 +140,13 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
   }
 
   const previewCN = editingCN || (form.storageArea ? nextControlNumber(areas.find((a) => a.name === form.storageArea)?.prefix || "XX", items) : "");
-  const preview = itemDerived({ purchaseUnit: form.purchaseUnit, packCount: form.packCount, unitQty: form.unitQty, unitUOM: form.unitUOM, portionSize: form.portionSize, portionUOM: form.portionUOM, vendorSkus: form.vendorSkus });
+  const previewItem = { name: form.name || "This item", purchaseUnit: form.purchaseUnit, packCount: form.packCount, unitQty: form.unitQty, unitUOM: form.unitUOM, portionSize: form.portionSize, portionUOM: form.portionUOM, vendorSkus: form.vendorSkus };
+  const preview = itemDerived(previewItem);
+  const previewCost = itemPlanningCost(previewItem);
+  const previewSourceUnit = preview.preferred?.unitUOM || form.unitUOM;
+  const previewUnitsKnown = preview.pack.packCount > 0 && preview.pack.unitQty > 0 &&
+    Number(form.portionSize) > 0 && preview.portionsPerUnit > 0 && !preview.mismatch &&
+    !!UOM_FAMILY[previewSourceUnit] && UOM_FAMILY[previewSourceUnit] === UOM_FAMILY[form.portionUOM];
 
   async function submit(e) {
     e.preventDefault();
@@ -189,7 +195,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
     showToast("Storage area added");
   }
 
-  const previewBg = preview.rangeUnavailable || preview.priceMissing ? "bg-amber-500/10 text-amber-400" : preview.mismatch ? "bg-red-500/10 text-red-400" : preview.needsPortion ? "bg-amber-500/10 text-amber-400" : "bg-[#0F1626] text-slate-300";
+  const previewBg = preview.mismatch ? "bg-red-500/10 text-red-400" : previewCost.cost == null ? "bg-amber-500/10 text-amber-400" : "bg-[#0F1626] text-slate-300";
 
   return (
     <div className="fade-slide-in" data-testid="setup-tab">
@@ -250,10 +256,12 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
           <div className={`mt-3 px-3.5 py-2.5 rounded-lg text-[13.5px] flex gap-5 flex-wrap ${previewBg}`} data-testid="portion-preview">
             {preview.rangeUnavailable ? <span>Outside supported calculation range. Portions and cost unavailable.</span> : preview.needsPortion ? (
               <span className="font-semibold">⚠ Portion Size isn't set — review portion details before using cost per portion.</span>
+            ) : !previewUnitsKnown ? (
+              <span className="font-semibold">Portions and cost unavailable — confirm positive pack/portion quantities and compatible supported units.</span>
             ) : (
               <>
                 <span><strong className="num">{num(preview.portionsPerUnit, 1)}</strong> portions per {form.purchaseUnit}</span>
-                <span><strong className="num">{fmtPlanningCost(preview.costPerPortion)}</strong> cost per portion (preferred vendor)</span>
+                <span><strong className="num">{fmtPlanningCost(previewCost.cost)}</strong> cost per portion (preferred vendor)</span>
                 {preview.priceMissing && <span>Supplier planning price is unknown.</span>}
                 {preview.mismatch && <span className="font-semibold">⚠ size unit and portion unit aren't the same measure type</span>}
               </>
@@ -341,6 +349,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
               <tbody>
                 {items.filter((it) => !reviewOnly || it.needsReview).map((it) => {
                   const d = itemDerived(it);
+                  const planningCost = itemPlanningCost(it);
                   return (
                     <tr key={it.controlNumber} data-testid={`setup-item-row-${it.controlNumber}`}>
                       <td className="font-bold" style={{ color: "var(--acc)" }}>{it.controlNumber}</td>
@@ -348,8 +357,8 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
                         {it.name} {it.needsReview && <Pill testId={`review-pill-${it.controlNumber}`} color="#F59E0B" bg="rgba(245,158,11,0.12)">REVIEW</Pill>}
                       </td>
                       <td>{(it.vendorSkus || []).map((v) => v.vendor).join(", ")}</td>
-                      <td className="num">
-                        {fmtPlanningCost(d.costPerPortion)}
+                      <td className="num" data-testid={`setup-cost-${it.controlNumber}`} title={planningCost.issues.join("; ")}>
+                        {fmtPlanningCost(planningCost.cost)}
                         {d.needsPortion && <Pill testId={`needs-portion-${it.controlNumber}`} color="#F59E0B" bg="rgba(245,158,11,0.12)">NO PORTION DATA</Pill>}
                       </td>
                       <td>{isCountActive(it) ? <Pill color="#10B981" bg="rgba(16,185,129,0.12)">Y</Pill> : <Pill color="#64748B" bg="#1E293B">N</Pill>}</td>

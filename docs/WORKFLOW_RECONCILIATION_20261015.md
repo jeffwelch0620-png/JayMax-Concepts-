@@ -1,5 +1,15 @@
 # Inventory workflow checkpoint and remaining work
 
+**Current continuation:** PR41 merged as `84cb381` with owner approval. All
+reviewed-head and merged-main CI passed; API automatic deployment is Live on
+the merge and unchanged frontend remains at `f33db6e`. Read-only owner smoke
+passed. The [field/unit/reference audit](FIELD_UNIT_REFERENCE_AUDIT.md) identifies
+remaining analytical completeness, par/unit and versioning gaps. A bounded
+strict Item Setup cost-display fix passes 888 frontend tests and the strict
+production build; it preserves
+stored metadata and native accounting. Prompt before a new draft PR. The earlier
+continuations below are historical records, not current publication gates.
+
 **Current continuation:** PR40 merged as `f33db6e` with owner approval; all PR
 checks and merged-main CI passed. Both automatic Render deployments are Live
 on the merge, and a fresh read-only ownership smoke test passed. The retained

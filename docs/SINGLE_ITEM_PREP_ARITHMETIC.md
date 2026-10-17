@@ -1,5 +1,13 @@
 # Retained single-item prep arithmetic
 
+## Merged checkpoint
+
+PR41 merged with owner approval as `84cb381` from `ebdef34`. All reviewed-head
+and merged-main CI checks passed. API is Live on the merge; unchanged frontend
+remains at `f33db6e`. The [next audit and local slice](FIELD_UNIT_REFERENCE_AUDIT.md)
+records the read-only smoke check and continuing mapping work. The local/prompt
+wording below preserves the earlier checkpoint, not a current unpublished state.
+
 October 16, 2026. Owner-approved continuation after PR40 merge
 `f33db6ee8b677e0834c0dc468789807d3acaf33b`. The new follow-up stays local until
 the owner approves publishing a draft PR.
