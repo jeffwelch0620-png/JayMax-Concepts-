@@ -1,5 +1,13 @@
 # Planning-cost refusal and chart formatting follow-up
 
+## Merged checkpoint
+
+PR40 merged with owner approval as `f33db6e` from `4abf76e`. All four PR checks
+and merged-main CI passed, including Windows ACL checks. API and frontend are
+Live on the exact merge. The local wording below preserves the pre-publication
+record; the [next checkpoint](SINGLE_ITEM_PREP_ARITHMETIC.md) records deployment
+smoke coverage and the separately gated arithmetic follow-up.
+
 October 16, 2026. Local continuation from owner-approved PR39 merge `fafa95e`.
 The owner authorized proceeding after the merge. Publication of a new draft PR
 still requires the owner's requested prompt; merge/deployment remain separate.

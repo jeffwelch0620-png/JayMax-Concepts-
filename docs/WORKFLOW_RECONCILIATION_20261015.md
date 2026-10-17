@@ -1,5 +1,15 @@
 # Inventory workflow checkpoint and remaining work
 
+**Current continuation:** PR40 merged as `f33db6e` with owner approval; all PR
+checks and merged-main CI passed. Both automatic Render deployments are Live
+on the merge, and a fresh read-only ownership smoke test passed. The retained
+single-item arithmetic follow-up passes 78 focused offline cases and 34 disposable
+PostgreSQL cases after correcting the fictional test plan. It stays local pending
+the owner's requested prompt before a new draft PR. The local server is stopped
+and its database/role inventory is unchanged. See
+[scope and evidence](SINGLE_ITEM_PREP_ARITHMETIC.md). Native prep holds, Track 1
+boundaries and the open runtime-role cutover requirement remain unchanged.
+
 **Current continuation:** PR39 merged as `fafa95e`; both reviewed-head and
 merged-main CI passed, and the automatic API deployment is Live on that merge.
 The [scoped acceptance checkpoint](PR39_LIVE_BACKEND_ACCEPTANCE.md) distinguishes

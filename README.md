@@ -1,5 +1,17 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR40 merged; single-item arithmetic follow-up local
+
+Owner-approved PR40 merged as **f33db6e** from **4abf76e**. Reviewed-head and
+merged-main CI passed; API and frontend automatic deployments are Live on the
+exact merge. A fresh read-only ownership smoke test passed. The retained
+single-item prep arithmetic follow-up is local, with 78 focused offline cases
+and 34 disposable PostgreSQL cases passing. Its original fixture-limit failure
+and corrected rerun are retained. There are no
+frontend, schema, hosted data or Track 1 accounting changes. See the
+[deployment, scope and validation checkpoint](docs/SINGLE_ITEM_PREP_ARITHMETIC.md).
+Prompt before pushing a new draft PR; its review and CI remain separate.
+
 ## PR39 merged; local feedback follow-up
 
 Owner-approved PR39 merged as **fafa95e** from **9298503**. Reviewed-head and
