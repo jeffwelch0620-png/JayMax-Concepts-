@@ -75,6 +75,62 @@ test.each(['1e400','1e-400'])('preview marks unsafe price %s unavailable without
   expect(persist.mock.calls[0][0][0].vendorSkus[0].price).toBe(price);
 });
 
+test.each([
+  ['weight versus volume',{portionUOM:'fl oz'}],
+  ['unsupported matching unit',{unitUOM:'scoop',portionUOM:'scoop',vendorSkus:[{...item.vendorSkus[0],unitUOM:'scoop'}]}],
+  ['nonpositive portion',{portionSize:'-4'}],
+  ['missing unit must not default to each',{unitUOM:'',portionUOM:'each',vendorSkus:[{...item.vendorSkus[0],unitUOM:''}]}],
+  ['negative pack factors must not cancel',{vendorSkus:[{...item.vendorSkus[0],packCount:'-4',unitQty:'-5'}]}],
+])('setup refuses to display an invented portion conversion or cost: %s',async(label,changes)=>{
+  const incomplete={...item,...changes};
+  await act(async()=>root.render(<SetupTab {...revisionProps(10,[incomplete])}/>));
+  await click('edit-item-F01');
+  const preview=find('portion-preview').textContent;
+  expect(preview).toContain('Portions and cost unavailable');
+  expect(preview).not.toContain('portions per case');expect(preview).not.toMatch(/\$[0-9]/);
+  expect(find('setup-cost-F01').textContent).toContain('Unknown');
+  expect(find('setup-cost-F01').title).toContain('confirm compatible pack and portion');
+  expect(persist).not.toHaveBeenCalled();
+  await changeInput(find('item-name-input'),'Unrelated fictional rename');await click('item-submit-button');
+  const saved=persist.mock.calls[0][0][0];
+  expect(saved.itemCode).toBe(incomplete.itemCode);expect(saved.basePerCountUnit).toBe(incomplete.basePerCountUnit);
+  expect(saved.vendorSkus[0].basePerPurchaseUnit).toBe(incomplete.vendorSkus[0].basePerPurchaseUnit);
+  expect(saved.vendorSkus[0].price).toBe(incomplete.vendorSkus[0].price);
+  expect(saved.portionUOM).toBe(incomplete.portionUOM);expect(saved.portionSize).toBe(String(incomplete.portionSize));
+});
+
+test('missing portion metadata leaves setup cost unknown rather than a zero estimate',async()=>{
+  const incomplete={...item,portionSize:null};
+  await act(async()=>root.render(<SetupTab {...revisionProps(10,[incomplete])}/>));
+  await click('edit-item-F01');
+  expect(find('portion-preview').textContent).toContain("Portion Size isn't set");
+  expect(find('setup-cost-F01').textContent).toContain('Unknown');
+  expect(find('setup-cost-F01').textContent).not.toContain('$0.00');
+  expect(persist).not.toHaveBeenCalled();
+});
+
+test('a weight pack and volume portion show the specific mismatch guidance without a numeric estimate',async()=>{
+  const mismatched={...item,packCount:'1',unitQty:'5',portionSize:'4',portionUOM:'fl oz',
+    vendorSkus:[{...item.vendorSkus[0],packCount:'1',unitQty:'5',price:'20'}]};
+  await act(async()=>root.render(<SetupTab {...revisionProps(10,[mismatched])}/>));
+  await click('edit-item-F01');
+  const preview=find('portion-preview').textContent;
+  expect(preview).toContain("size unit and portion unit aren't the same measure type");
+  expect(preview).not.toContain('portions per case');
+  expect(preview).not.toMatch(/\$[0-9]|1\.25|16\.00/);
+  expect(find('setup-cost-F01').textContent).toContain('Unknown');
+  expect(persist).not.toHaveBeenCalled();
+});
+
+test.each(['20','0E-10'])('valid setup uses the recipe-cost contract with price %s',async price=>{
+  const valid={...item,vendorSkus:[{...item.vendorSkus[0],price}]};
+  await act(async()=>root.render(<SetupTab {...revisionProps(10,[valid])}/>));await click('edit-item-F01');
+  const expected=price==='0E-10'?'$0.00':'$0.25';
+  expect(find('portion-preview').textContent).toContain('80.0 portions per case');
+  expect(find('portion-preview').textContent).toContain(`${expected} cost per portion`);
+  expect(find('setup-cost-F01').textContent).toBe(expected);expect(persist).not.toHaveBeenCalled();
+});
+
 const localSession = {user:{id:"synthetic-owner"}};
 const localEmpty = {items:[],areas:[]};
 function StoreCatalog({onError}) {
