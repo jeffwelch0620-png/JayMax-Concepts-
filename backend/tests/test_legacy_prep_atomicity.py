@@ -105,6 +105,62 @@ class LegacyPrepAtomicityTests(unittest.IsolatedAsyncioTestCase):
             unavailable=await server._pg_item_derived(conn,'test_food')
             self.assertTrue(unavailable['priceMissing']);self.assertIsNone(unavailable['costPerPortion'])
 
+    async def single_item_task(self, capacity=2):
+        async with self.pool.acquire() as conn:
+            row=await conn.fetchrow("""INSERT INTO prep_items(store_id,name,item_code,container,vessel_capacity)
+                VALUES('berts','Fictional portioned food','test_food','bag',$1) RETURNING *""",capacity)
+            await conn.execute("UPDATE prep_list_lines SET recipe_id=NULL,prep_item_id=$1 WHERE id=$2",row['id'],self.task_id)
+        return dict(row)
+
+    async def test_single_item_extreme_quantities_refuse_before_any_stock_write(self):
+        item=await self.single_item_task()
+        await self.write_tripwire()
+        cases=(
+            ('portions overflow',1e308,2,1,3,10),
+            ('units overflow',1e308,1,Decimal('1e-308'),0,10),
+            ('cost overflow',1e308,1,1,3,10),
+            ('remaining overflow',1e308,1,1,0,Decimal('-1e308')),
+            ('portions underflow',1e-308,Decimal('1e-308'),1,3,10),
+        )
+        for label,vessels,capacity,factor,price,stock in cases:
+            with self.subTest(case=label):
+                async with self.pool.acquire() as conn:
+                    # Temporarily remove only the synthetic test tripwire to set
+                    # fixture stock; restore it before exercising the command.
+                    await conn.execute('ALTER TABLE store_items DISABLE TRIGGER reject_early_prep_write')
+                    await conn.execute("UPDATE store_items SET current_stock=$1 WHERE item_code='test_food'",stock)
+                    await conn.execute('ALTER TABLE store_items ENABLE TRIGGER reject_early_prep_write')
+                    await conn.execute("UPDATE vendor_items SET price=$1,base_per_purchase_unit=$2 WHERE item_code='test_food'",Decimal(price),Decimal(factor))
+                    await conn.execute('UPDATE prep_items SET vessel_capacity=$1 WHERE id=$2',capacity,item['id'])
+                    # Reach the arithmetic boundary rather than the existing
+                    # task-planning ceiling (the normal fixture permits three).
+                    await conn.execute('UPDATE prep_list_lines SET batches_planned=$1 WHERE id=$2',max(3,vessels),self.task_id)
+                before=await self.snapshot()
+                result=await self.post(True,batches=vessels)
+                self.assertEqual(result.status_code,422,result.text)
+                self.assertIn('supported calculation range',result.text)
+                self.assertEqual(await self.snapshot(),before)
+
+    async def test_single_item_finite_completion_and_zero_price_preserve_actual_facts(self):
+        item=await self.single_item_task()
+        for price in (3,0):
+            with self.subTest(price=price):
+                async with self.pool.acquire() as conn:
+                    await conn.execute("UPDATE vendor_items SET price=$1 WHERE item_code='test_food'",price)
+                result=await self.post(True)
+                self.assertEqual(result.status_code,200,result.text)
+        async with self.pool.acquire() as conn:
+            self.assertEqual(await conn.fetchval("SELECT current_stock FROM store_items WHERE item_code='test_food' AND store_id='berts'"),6)
+            self.assertEqual(await conn.fetchval('SELECT on_hand FROM prep_recipe_stock WHERE prep_item_id=$1',item['id']),2)
+            logs=await conn.fetch('SELECT total_cost FROM prep_logs ORDER BY created_at,id')
+            self.assertEqual(sorted(r['total_cost'] for r in logs),[0,6])
+            self.assertEqual(await conn.fetchval('SELECT batches_done FROM prep_list_lines WHERE id=$1',self.task_id),2)
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM purchasing.actual_purchase_facts'),0)
+
+    async def test_single_item_late_database_failure_rolls_back_stock_and_progress(self):
+        await self.single_item_task()
+        await self.later_database_failure(True)
+
     async def happy(self, task):
         result=await self.post(task)
         self.assertEqual(result.status_code,200,result.text)

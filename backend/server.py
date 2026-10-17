@@ -4443,10 +4443,16 @@ async def _pg_deduct_item_and_stock(conn, store_id, pitem, vessels):
     derived = await _pg_item_derived(conn, pitem["item_code"])
     _require_prep_planning_cost(derived, item or {"code": pitem["item_code"]})
     ppu = derived["portionsPerUnit"]
-    portions = vessels * float(pitem["vessel_capacity"] or 0)
-    units = portions / ppu if ppu > 0 else 0
-    cost = portions * derived["costPerPortion"]
-    new_stock = max(0, round(float(si["current_stock"] or 0) - units, 3))
+    vessels = planning.number(vessels)
+    if vessels is None or vessels <= 0:
+        raise HTTPException(422, "Prep quantities are outside the supported calculation range; no prep write is allowed")
+    portions = planning.product(vessels, planning.number(pitem["vessel_capacity"], 0))
+    units = planning.quotient(portions, ppu) if ppu > 0 else 0
+    cost = planning.product(portions, derived["costPerPortion"])
+    remaining = planning.total([planning.number(si["current_stock"], 0), -units if units is not None else None])
+    if portions is None or units is None or cost is None or remaining is None:
+        raise HTTPException(422, "Prep quantities/costs are outside the supported calculation range; no prep write is allowed")
+    new_stock = max(0, round(remaining, 3))
     await conn.execute("UPDATE store_items SET current_stock=$1 WHERE store_id=$2 AND item_code=$3", new_stock, store_id, pitem["item_code"])
     await conn.fetchrow(
         "SELECT on_hand FROM prep_recipe_stock WHERE store_id=$1 AND prep_item_id=$2 FOR UPDATE", store_id, pitem["id"])

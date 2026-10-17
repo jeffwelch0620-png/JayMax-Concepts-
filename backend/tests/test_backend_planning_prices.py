@@ -173,3 +173,28 @@ class BackendPlanningPriceTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIn('price is unknown' if price is None else 'supported calculation range',held.exception.detail)
                     db.items.bulk_write.assert_not_called();db.items.update_one.assert_not_called()
                     db.prep_stock.update_one.assert_not_called();db.prep_logs.insert_one.assert_not_called()
+
+    async def test_single_item_nonfinite_arithmetic_is_refused_before_write(self):
+        derived={'portionsPerUnit':1,'costPerPortion':3,'calculationUnavailable':False}
+        cases=(
+            ('vessels',float('inf'),1,1,3,10),
+            ('capacity',1,float('nan'),1,3,10),
+            ('portions',1e308,2,1,3,10),
+            ('units',1e308,1,1e-308,0,10),
+            ('cost',1e308,1,1,3,10),
+            ('remaining',1e308,1,1,0,-1e308),
+            ('underflow',1e-308,1e-308,1,3,10),
+        )
+        for label,vessels,capacity,factor,price,stock in cases:
+            with self.subTest(case=label):
+                conn=MagicMock()
+                conn.fetchrow=AsyncMock(side_effect=[{'current_stock':stock},{'name':'Fictional food'}])
+                conn.execute=AsyncMock()
+                with patch('prep_batches.reject_legacy_write'),patch('prep_containers.hold_legacy',new=AsyncMock()), \
+                     patch.object(server,'_pg_item_derived',new=AsyncMock(return_value={**derived,'portionsPerUnit':factor,'costPerPortion':price})), \
+                     self.assertRaises(server.HTTPException) as held:
+                    await server._pg_deduct_item_and_stock(conn,'berts',{'item_code':'TEST','vessel_capacity':capacity},vessels)
+                self.assertEqual(held.exception.status_code,422)
+                self.assertIn('supported calculation range',held.exception.detail)
+                conn.execute.assert_not_awaited()
+                self.assertEqual(conn.fetchrow.await_count,2)
