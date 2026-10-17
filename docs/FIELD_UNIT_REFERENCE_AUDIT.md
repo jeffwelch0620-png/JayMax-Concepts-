@@ -16,7 +16,8 @@ editor check [passed after owner sign-in](PR42_LIVE_SETUP_ACCEPTANCE.md): specif
 mismatch guidance, no numeric preview, cancellation and original values after
 reload. No save or hosted configuration change was submitted.
 
-F01 now has a [local native expected-sales implementation](EXPECTED_SALES_USAGE_COMPLETENESS.md).
+F01 now has a [native expected-sales implementation](EXPECTED_SALES_USAGE_COMPLETENESS.md)
+in owner-authorized [draft PR43](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/43).
 It resolves canonical item keys, distinguishes missing sales from confirmed zero,
 validates prep expansion and returns explicit unavailable quantities. This is
 current-period quantity planning only. F03/F03b monetary readers, legacy-mode
@@ -145,7 +146,7 @@ Evidence retained outside Git:
 ## Sequence from here
 
 F02 is merged in PR42; its scoped deployed fictional editor check passed.
-Finish review/publication/acceptance for the local F01 quantity slice, then address
+Finish review/CI/merge approval/acceptance for the draft F01 quantity slice, then address
 F03/F03b backend/frontend monetary completeness as focused slices. Resolve par/unit aliases and
 historical versions before integrating Toast analytics. O1 restricted deployed
 runtime roles remain required before operational use; current build connections,

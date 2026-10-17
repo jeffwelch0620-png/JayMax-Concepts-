@@ -3,8 +3,11 @@
 October 16, 2026 (EDT). Baseline: PR42 merge
 `c9262170ea5ff4817507f272e1b0d4686dd08d7c`.
 This is a follow-up for audit F01. After the requested prompt, the owner approved
-pushing a new draft PR for independent review. It does not import Toast data or
-establish historical sales completeness. Merge approval remains separate.
+pushing a new draft PR for independent review. Published as
+[draft PR43](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/43), initially
+at `775d1eb` (implementation `e003470` plus PR42 acceptance documentation).
+It does not import Toast data or establish historical sales completeness.
+Merge approval remains separate; assess fresh CI at the latest documentation head.
 
 ## PR42 merge and deployment
 
@@ -85,7 +88,7 @@ source-hash receipt. Evidence files and generated assets are not committed.
 
 ## Remaining sequence
 
-1. Publish the owner-approved draft PR; keep it draft for independent review.
+1. PR43 is published; keep it draft for independent review.
 2. Independent review and fresh exact-head CI, then separate merge approval.
 3. PR42's scoped fictional editor check is complete; later accept deployed
    expected-sales behavior independently of local component tests.

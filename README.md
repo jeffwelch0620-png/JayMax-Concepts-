@@ -1,6 +1,6 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## PR42 merged; expected-sales completeness follow-up local
+## PR42 accepted; expected-sales completeness in draft PR43
 
 Owner-approved [PR42](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/42)
 merged as **c926217** from reviewed head **b9b4f79**. Reviewed-head and merged-main
@@ -10,12 +10,13 @@ passed after owner sign-in: incompatible weight/volume shows its specific warnin
 without numeric estimates; cancellation and reload retain the original values.
 See the [scoped live acceptance](docs/PR42_LIVE_SETUP_ACCEPTANCE.md).
 
-The [local expected-sales follow-up](docs/EXPECTED_SALES_USAGE_COMPLETENESS.md)
+The [expected-sales follow-up](docs/EXPECTED_SALES_USAGE_COMPLETENESS.md) is published
+as [draft PR43](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/43). It
 keeps blank quantities unknown, resolves canonical recipe identities and refuses
 incomplete or nonrepresentable usage. It calculates portions without requiring
 supplier prices and preserves the existing sales save contract. Track 1 remains
 independent. All 942 frontend tests in 77 suites and the strict production build
-passed. Prompt before pushing a new draft PR; review, fresh CI, merge and
+passed. Independent review, fresh exact-head CI, merge approval and
 hosted acceptance remain separate gates. The
 [field/unit/reference audit](docs/FIELD_UNIT_REFERENCE_AUDIT.md) records remaining
 backend/frontend monetary completeness, par-basis, unit-alias and historical

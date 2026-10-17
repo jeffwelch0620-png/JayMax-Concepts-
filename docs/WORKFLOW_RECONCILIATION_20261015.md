@@ -8,7 +8,9 @@ specific mismatch guidance and cancellation/reload preservation. No fresh databa
 accounting comparison is claimed. The next [expected-sales slice](EXPECTED_SALES_USAGE_COMPLETENESS.md)
 addresses F01's quantity completeness without price requirements or accounting
 writeback; all 942 frontend tests in 77 suites and the strict build passed.
-Prompt before pushing its new draft PR. The earlier entries below
+The owner approved publishing [draft PR43](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/43).
+Independent review, fresh exact-head CI and separate merge approval remain.
+The earlier entries below
 preserve their historical publication and deployment gates.
 
 **Current continuation:** PR41 merged as `84cb381` with owner approval. All
