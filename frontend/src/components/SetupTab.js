@@ -257,13 +257,14 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
             {preview.rangeUnavailable ? <span>Outside supported calculation range. Portions and cost unavailable.</span> : preview.needsPortion ? (
               <span className="font-semibold">⚠ Portion Size isn't set — review portion details before using cost per portion.</span>
             ) : !previewUnitsKnown ? (
-              <span className="font-semibold">Portions and cost unavailable — confirm positive pack/portion quantities and compatible supported units.</span>
+              <span className="font-semibold">Portions and cost unavailable — {preview.mismatch
+                ? "⚠ size unit and portion unit aren't the same measure type"
+                : "confirm positive pack/portion quantities and compatible supported units."}</span>
             ) : (
               <>
                 <span><strong className="num">{num(preview.portionsPerUnit, 1)}</strong> portions per {form.purchaseUnit}</span>
                 <span><strong className="num">{fmtPlanningCost(previewCost.cost)}</strong> cost per portion (preferred vendor)</span>
                 {preview.priceMissing && <span>Supplier planning price is unknown.</span>}
-                {preview.mismatch && <span className="font-semibold">⚠ size unit and portion unit aren't the same measure type</span>}
               </>
             )}
           </div>

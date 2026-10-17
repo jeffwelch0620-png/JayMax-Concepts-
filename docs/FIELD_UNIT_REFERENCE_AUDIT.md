@@ -5,6 +5,27 @@ October 16, 2026 (EDT). Audited source baseline: PR41 merge
 recipe, sales-expansion and order-planning boundaries, not a declaration that
 every legacy field or future integration is complete.
 
+## PR42 review amendment
+
+Original draft head `592dbd9` passed all four Inventory CI checks. The owner
+authorized addressing both low review notes on the same branch. Incompatible
+units now show their specific measure-type warning in the unavailable preview
+branch; the unreachable warning inside the numeric branch is removed. A real
+Setup component case checks the exact fictional 5 lb / 4 fl oz example, no
+numeric portions/cost and no save. F03b below explicitly records the frontend
+counterpart of F03, including native-mode reachability limits.
+
+Amendment validation passed: **889 frontend tests across 75 suites**, with no
+failures/skips, and the strict production build with CI/ESLint enabled and
+compiler warnings treated as errors. Local asset `main.fb7f266b.js` is not
+deployed. Generated review contracts and whitespace checks passed. The existing
+Node `fs.F_OK` deprecation notice remains outside the compiler. The local build
+was slow but completed successfully without intervention. Original-head CI and
+the earlier 888-test run are prior evidence; fresh exact-head CI is required
+after the authorized push. This remains draft, with merge approval and hosted UI
+acceptance separate. No shared calculator, backend, schema or hosted data change
+is introduced by either amendment.
+
 ## PR41 deployment checkpoint
 
 PR41 merged with owner approval from reviewed head `ebdef34`. All four
@@ -21,7 +42,8 @@ historical report or exercise the held legacy prep writer.
 
 No hosted data, schema, connection, permission, credential or hosting setting
 was changed. No real invoice sample or employee data was imported. The local
-fix described below remains unpublished until a separately approved draft push.
+fix described below is in draft PR42; the owner separately authorized pushing
+the review amendment to that same branch.
 
 ## Confirmed ownership and mapping boundaries
 
@@ -49,6 +71,7 @@ whole-schema migration/restore test was performed for this audit.
 | F01 / medium | `rawPortionsForRecipe` matches local aliases only, skips missing prep references, returns zero on cycles and defaults zero/missing yield to one. The active expected-sales table sums this output without a completeness result. Broken definitions can look like low/zero theoretical usage. Very large usage can become Infinity. | Next implementation slice: canonical ingredient resolution and quantity-only completeness, finite arithmetic and explicit unavailable results. Do not require supplier price merely to compute portions. Preserve genuine zero sales separately from missing/invalid evidence. |
 | F02 / medium | Item Setup uses permissive `itemDerived` while the recipe editor uses strict `itemPlanningCost`. A fictional 5 lb pack, 4 fl oz portion and $20 price gives 1.25 portions/$16 in Setup despite incompatible families; strict recipe costing is Unknown. Missing portion data gives a misleading zero list cost. | Bounded client fix implemented locally: Setup list and preview use strict cost; unsupported/mismatched/missing unit and nonpositive pack/portion quantities cannot show an invented portion total. Valid zero prices remain zero. Shared calculators and writes are unchanged. |
 | F03 / medium | Backend `calc_ppu` has the same cross-family numeric fallback; `recipe_cost` returns/skips zero for missing items/prep/cycles. This can understate planning summaries/context for retained malformed definitions, despite write-time recipe validation. | Open. Follow F01 with a shared, explicit backend completeness contract across summaries/context. Keep unavailable estimates distinct from accounting and preserve held legacy writers; do not silently enable them. |
+| F03b / medium, frontend planning reads | Shared frontend `itemDerived` / `calcPortionsPerUnit` retain the cross-family numeric fallback outside Setup. `buildPeriodReport` cost fields, `adjustmentValue` / `wasteByReason` and the legacy sales actual-portion calculation can therefore use the fictional 1.25-portions/$16 estimate. | Open. Cover these frontend consumers alongside F03 with an explicit completeness contract: mismatched conversion is unavailable, genuine zero stays zero, and physical Track 1 remains untouched. This PR fixes Setup only; shared calculator behavior is unchanged. |
 | F04 / low, design | Setup labels par as purchase units, while native order planning labels the same par with `countUnit`; count bags and supplier cases may differ. Native quantities remain explicitly reviewed. | Select/document the intended par basis and show it consistently. Do not reinterpret existing numbers or convert them silently. |
 | F05 / low, compatibility | Planning uses `fl oz`/`ct`; native physical units use `fl_oz`/`each`, with an explicit adapter bridge. Unsupported catalog labels remain possible. | Define accepted aliases at explicit boundaries, retain original labels, and refuse ambiguous weight/volume conversions. Existing alias differences alone do not prove physical-profile drift. No bulk relabeling. |
 | F06 / future integration | Working sales store dish IDs/quantities, while expansion uses current recipe/portion definitions. Saved working entries are not versioned historical consumption evidence. | Before Toast variance history: retain recipe/portion version, location, business period, source identity and coverage/completeness. This is a separate design step; no historical rewrite or new integration is included here. |
@@ -59,6 +82,12 @@ matching alias. The missing-reference, cycle, zero-yield and range probes are
 also fictional/local; no assertion is made that current hosted rows contain
 those defects. Server write validation reduces new malformed definitions but
 does not justify silently accepting incomplete read evidence.
+
+F03b's reachability is narrower than an accounting defect: `App.js` selects
+`ActualInventoryTab` instead of the legacy `DashboardTab` in native accounting
+mode, and native sales hides the old actual/variance columns. The shared
+calculator gap remains relevant to legacy analytical consumers and future
+integration; it is not evidence of a changed native Food Cost or posted count.
 
 ## Local fix and verification limits
 
@@ -74,7 +103,7 @@ missing units, negative factors, missing/nonpositive portions, valid cost and
 known zero. They also assert no save on rendering and preservation of canonical
 identity, exact price and stored conversions through an unrelated rename.
 
-Final full native-profile validation passed: **888 tests across 75 suites**,
+Original-head full native-profile validation passed: **888 tests across 75 suites**,
 zero failures/skips, and the strict production build with CI/ESLint enabled and
 compiler warnings treated as errors. Local asset: `main.7084275c.js`; it is not
 deployed. An existing Node `fs.F_OK` deprecation notice was emitted outside the
@@ -91,14 +120,17 @@ Evidence retained outside Git:
   app/configuration is never imported and no database connection is used.
 - `field-unit-setup-final-*`: final frontend/build reports after strengthened
   unit/pack checks. These probes are observations, not 19 new passing tests.
+- `pr42-amend-full-*` and `pr42-amendment-validation-20261016.json`: separate
+  amendment test/build evidence and source hashes; original reports are retained.
 - `pr41-render-api-live-20261016.png` and `pr41-owner-smoke-20261016` text/image.
 
 ## Sequence from here
 
-Validation is complete. Commit the F02 fix and audit, then prompt before a draft PR.
-Independent review, exact-head CI, merge approval and later fictional UI
-acceptance remain separate. Then address F01 quantity completeness and F03
-backend read completeness as focused slices. Resolve par/unit aliases and
+The original F02 fix/audit is published in draft PR42. Review amendment and push
+are owner-authorized; independent review, exact-head CI, merge approval and later
+fictional UI
+acceptance remain separate. Then address F01 quantity completeness and F03/F03b
+backend/frontend read completeness as focused slices. Resolve par/unit aliases and
 historical versions before integrating Toast analytics. O1 restricted deployed
 runtime roles remain required before operational use; current build connections,
 credential rotation deferral, separate auth/UI workflows and native holds remain.

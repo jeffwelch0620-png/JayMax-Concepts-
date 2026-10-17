@@ -109,6 +109,19 @@ test('missing portion metadata leaves setup cost unknown rather than a zero esti
   expect(persist).not.toHaveBeenCalled();
 });
 
+test('a weight pack and volume portion show the specific mismatch guidance without a numeric estimate',async()=>{
+  const mismatched={...item,packCount:'1',unitQty:'5',portionSize:'4',portionUOM:'fl oz',
+    vendorSkus:[{...item.vendorSkus[0],packCount:'1',unitQty:'5',price:'20'}]};
+  await act(async()=>root.render(<SetupTab {...revisionProps(10,[mismatched])}/>));
+  await click('edit-item-F01');
+  const preview=find('portion-preview').textContent;
+  expect(preview).toContain("size unit and portion unit aren't the same measure type");
+  expect(preview).not.toContain('portions per case');
+  expect(preview).not.toMatch(/\$[0-9]|1\.25|16\.00/);
+  expect(find('setup-cost-F01').textContent).toContain('Unknown');
+  expect(persist).not.toHaveBeenCalled();
+});
+
 test.each(['20','0E-10'])('valid setup uses the recipe-cost contract with price %s',async price=>{
   const valid={...item,vendorSkus:[{...item.vendorSkus[0],price}]};
   await act(async()=>root.render(<SetupTab {...revisionProps(10,[valid])}/>));await click('edit-item-F01');

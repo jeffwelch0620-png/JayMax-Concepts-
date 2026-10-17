@@ -1,6 +1,12 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## PR41 merged; field/unit audit and strict Setup estimates local
+## PR42 — strict Setup estimates and field/unit audit
+
+PR42 is draft at original head `592dbd9`, with all four CI checks passed. The
+owner authorized its review amendment and same-branch push: reachable measure-type
+guidance and an explicit frontend planning-read audit row (F03b). All 889
+amendment frontend tests and the strict production build passed; new-head CI
+and merge approval remain separate gates.
 
 PR41 merged with owner approval as **84cb381**; reviewed-head and merged-main
 CI passed. API automatic deployment is Live on the merge; unchanged frontend
