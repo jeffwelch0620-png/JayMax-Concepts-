@@ -62,6 +62,15 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
     saveTimer.current = setTimeout(() => { saveTimer.current = null; commit(recordRef.current); }, 700);
   }
   function updateDishSales(dishId, val) { queuePersist({ ...local, dishSales: { ...local.dishSales, [dishId]: val } }); }
+  function removeUnmatchedSales(id) {
+    if (savingRef.current || periodChanging) return;
+    const current = recordRef.current.data;
+    if (!expectedSalesUsage(items, dishes, current.dishSales).unmatchedSales.some(entry => entry.id === id)) return;
+    if (!window.confirm(`Remove sales entry "${id}" from this working period? Its stored quantity will be discarded. Other sales entries and physical inventory are unchanged.`)) return;
+    const dishSales = { ...current.dishSales };
+    delete dishSales[id];
+    queuePersist({ ...current, dishSales });
+  }
   function updateItemCount(cn, field, val) {
     const current = local.itemCounts[cn] || {};
     queuePersist({ ...local, itemCounts: { ...local.itemCounts, [cn]: { ...current, [field]: val } } });
@@ -240,6 +249,13 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
       {actualMode && !expected.complete && <div role="status" data-testid="expected-sales-incomplete" className="text-amber-400 text-sm mb-3">
         Expected usage is incomplete. Blank quantities are unknown; enter zero only when confirmed. Review missing recipe mappings and quantities below.
         <ul>{expected.issues.map(issue => <li key={issue}>{issue}</li>)}</ul>
+        {expected.unmatchedSales.length > 0 && <div className="mt-2">
+          <p>These working sales entries have no current menu mapping. Review them before removing a quantity.</p>
+          {expected.unmatchedSales.map(entry => <div key={entry.id} data-testid={`unmatched-sales-${entry.id}`}>
+            <span>Menu ID: {entry.id} · Stored quantity: {typeof entry.quantity === "string" || typeof entry.quantity === "number" ? String(entry.quantity) : "Invalid quantity"} </span>
+            <button className={btnGhost} disabled={saving || periodChanging} aria-label={`Remove sales entry ${entry.id}`} onClick={() => removeUnmatchedSales(entry.id)}>Remove this sales entry</button>
+          </div>)}
+        </div>}
       </div>}
       <div className={`${cardCls} overflow-hidden`}>
         <div className="overflow-x-auto">

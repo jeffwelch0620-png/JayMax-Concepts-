@@ -9,6 +9,44 @@ at `775d1eb` (implementation `e003470` plus PR42 acceptance documentation).
 It does not import Toast data or establish historical sales completeness.
 Merge approval remains separate; assess fresh CI at the latest documentation head.
 
+## PR43 review amendment
+
+The owner authorized the October 17 review recommendations and a same-branch
+push, with merge approval still reserved. Reviewed head `5ccb30a` passed all four
+[CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39076929726).
+That is prior evidence; the amendment requires fresh exact-head CI.
+
+S1 is addressed by distinguishing absent unmatched quantities from meaningful
+unmatched evidence. Missing/null/blank/whitespace entries for an absent menu do
+not block totals, and calculation does not erase those keys. Current menus still
+require confirmed quantities; their blanks remain Unknown. Confirmed orphan zero
+still adds no usage. Nonzero, negative or malformed orphan values remain holds.
+
+Each held entry is identified by its stored menu ID and quantity in the native
+panel. Removing it requires confirmation, then deletes only that working key
+through the normal retained-draft, debounce and revisioned save path. No entry
+is automatically removed or changed to zero. Cancellation does nothing; failed
+saves retain the removal draft and original base evidence, including across a
+same-cache remount. Retry refuses a competing change to that entry. Removal is
+disabled while a sales save or period change is in progress.
+
+The low guidance note is also addressed. A broken recipe with blank sales
+explains that confirmed zero is appropriate only if that menu had no sales;
+otherwise its recipe needs repair. A positive sale gets repair guidance rather
+than a suggestion to erase its quantity.
+
+Tests use stale IDs in native working-period data. The legacy saved-report loader
+remains hidden in native mode; no legacy control is enabled for this amendment.
+There are no backend, SQL, hosted-write, connection or permission changes.
+
+Amendment native-profile validation passed **961 frontend tests across 77 suites**,
+with zero failures/skips, and the strict production build (`main.89dfd291.js`).
+CI/ESLint are enabled and compiler warnings fail the build. The existing Node
+`fs.F_OK` deprecation notice is outside the compiler; the slow build completed
+without intervention. Generated review contracts, relative documentation links
+and whitespace checks passed. Existing 942-test and original-head CI results
+below remain prior evidence rather than substitutes for amendment validation.
+
 ## PR42 merge and deployment
 
 The owner approved merging PR42 from reviewed head
@@ -48,9 +86,10 @@ revisioned saves and debounce behavior stay in place; rendering does not save.
 - A valid recipe with unknown sales invalidates only the tracked items it uses.
   Independently mapped items can retain known totals. A broken recipe graph
   cannot establish which items are affected, so it conservatively holds all
-  tracked totals rather than displaying partial totals. Nonzero/unknown sales
-  without a matching menu also hold the totals. An orphan confirmed zero adds
-  no usage.
+  tracked totals rather than displaying partial totals. Nonzero/malformed sales
+  without a matching menu also hold the totals, with confirmed removal available
+  for that working entry. Blank unmatched entries and confirmed orphan zero add
+  no usage; their stored keys are not automatically erased.
 - Finite arithmetic guards refuse overflow and nonzero underflow. These remain
   planning numbers, not exact monetary or historical inventory snapshots.
 - Native Sales Tracking displays Unknown plus review reasons and leaves its
@@ -65,7 +104,7 @@ Working manual quantities alone cannot prove a complete POS import.
 
 ## Validation
 
-The final native-profile run passed **942 frontend tests across 77 suites**,
+Before the review amendment, the native-profile run passed **942 frontend tests across 77 suites**,
 zero failures/skips, and the strict production build (`main.f27f8605.js`). CI and
 ESLint are enabled; compiler warnings fail the build. The existing Node
 `fs.F_OK` deprecation notice is outside the compiler. Generated review contracts
@@ -79,11 +118,12 @@ verify that native rendering bypasses the permissive legacy normalizer.
 
 All fixtures are fictional. No SQL migration, hosted database test/write,
 connection/hosting change or operational import is part of this slice.
-Backend/PostgreSQL checks will run in fresh CI after an approved draft push;
-PR42's green CI does not validate this new candidate.
+Backend/PostgreSQL checks passed in the reviewed-head PR43 CI above; fresh CI is
+required for the amendment. PR42's green CI does not validate this new candidate.
 
 External evidence is under the sibling work directory: `expected-sales-full-*`,
 `expected-sales-final-*`, PR42 Render text/image captures and the
+source-hash receipt. Amendment evidence uses `pr43-amend-full-*` and a separate
 source-hash receipt. Evidence files and generated assets are not committed.
 
 ## Remaining sequence

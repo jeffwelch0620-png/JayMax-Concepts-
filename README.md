@@ -15,8 +15,11 @@ as [draft PR43](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/43). 
 keeps blank quantities unknown, resolves canonical recipe identities and refuses
 incomplete or nonrepresentable usage. It calculates portions without requiring
 supplier prices and preserves the existing sales save contract. Track 1 remains
-independent. All 942 frontend tests in 77 suites and the strict production build
-passed. Independent review, fresh exact-head CI, merge approval and
+independent. All 961 amendment frontend tests in 77 suites and the strict
+production build passed. The owner-authorized amendment adds named
+unmatched-entry recovery with confirmed revisioned removal, ignores only truly
+blank unmatched evidence, and clarifies broken-recipe guidance. Independent
+review, fresh exact-head CI, merge approval and
 hosted acceptance remain separate gates. The
 [field/unit/reference audit](docs/FIELD_UNIT_REFERENCE_AUDIT.md) records remaining
 backend/frontend monetary completeness, par-basis, unit-alias and historical

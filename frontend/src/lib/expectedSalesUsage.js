@@ -3,6 +3,7 @@ import { planningNumber, planningProduct, planningQuotient, planningSum } from "
 
 const quantity = value => typeof value === "string" || typeof value === "number" ? planningNumber(value) : null;
 const supportedUnit = value => typeof value === "string" && Object.hasOwn(UOM_FAMILY, value);
+const blankQuantity = value => value == null || (typeof value === "string" && value.trim() === "");
 
 // Quantity-only planning for the current working period. No prices, physical
 // profiles, counts or writes; this is not versioned historical sales evidence.
@@ -75,9 +76,15 @@ export function expectedSalesUsage(items, recipes, dishSales) {
   }
   const menus = recipes.filter(recipe => recipe && (recipe.recipeType || "menu") !== "prep");
   const sales = dishSales && typeof dishSales === "object" && !Array.isArray(dishSales) ? dishSales : {};
+  const unmatchedSales = [];
   if (!menus.length) addGlobal("Menu definitions are unavailable; sales coverage is unconfirmed");
   for (const [id, sold] of Object.entries(sales)) {
-    if (!menus.some(menu => menu.id === id) && quantity(sold) !== 0) addGlobal("A sales entry has no matching menu definition; review its mapping");
+    // A blank key for a missing menu carries no quantity evidence. Keep the
+    // original record untouched; meaningful unmatched quantities need review.
+    if (!menus.some(menu => menu.id === id) && !blankQuantity(sold) && quantity(sold) !== 0) {
+      unmatchedSales.push({ id, quantity: sold });
+      addGlobal(`Sales entry ${id}: no matching menu definition; review or remove this working entry`);
+    }
   }
   for (const menu of menus) {
     const label = menu.name || menu.id || "Unnamed menu";
@@ -90,7 +97,10 @@ export function expectedSalesUsage(items, recipes, dishSales) {
     if (sold === 0) continue;
     const expanded = expand(menu);
     if (!expanded.usage) {
-      expanded.issues.forEach(issue => addGlobal(`${label}: ${issue}`)); continue;
+      const guidance = blankQuantity(sales[menu.id])
+        ? "If this menu had no sales, enter a confirmed 0; otherwise repair its recipe."
+        : "Repair this menu's recipe before using its expected usage.";
+      expanded.issues.forEach(issue => addGlobal(`${label}: ${issue}. ${guidance}`)); continue;
     }
     for (const item of tracked) {
       const amount = expanded.usage.get(item) ?? 0;
@@ -107,6 +117,6 @@ export function expectedSalesUsage(items, recipes, dishSales) {
     const issues = [...new Set(problems.get(item))];
     return { item, portions: issues.length ? null : totals.get(item), complete: !issues.length, issues };
   });
-  return { rows, complete: !globalIssues.length && rows.every(row => row.complete),
+  return { rows, unmatchedSales, complete: !globalIssues.length && rows.every(row => row.complete),
     issues: [...new Set([...globalIssues, ...rows.flatMap(row => row.issues)])] };
 }

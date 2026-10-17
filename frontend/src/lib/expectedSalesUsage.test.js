@@ -74,6 +74,24 @@ test('unmapped sales entries cannot be silently dropped, but confirmed orphan ze
   expect(portions(result([menu],{menu:2,orphan:0}))).toEqual([4]);
   expect(portions(result([],{}))).toEqual([null]);
 });
+test.each([['empty',''],['whitespace','  '],['null',null],['undefined',undefined]])('a %s unmatched quantity carries no evidence and is not erased',(_,value)=>{
+  const sales={menu:2,retired:value};const r=result([menu],sales);
+  expect(portions(r)).toEqual([4]);expect(r.complete).toBe(true);expect(r.unmatchedSales).toEqual([]);
+  expect(Object.hasOwn(sales,'retired')).toBe(true);expect(sales.retired).toBe(value);
+  expect(portions(result([menu],{menu:value}))).toEqual([null]);
+});
+test.each([['nonzero','5'],['negative',-1],['malformed','invalid'],['boolean',false],['array',[0]],['object',{}]])('%s unmatched quantities stay held and identify the stored entry',(_,value)=>{
+  const r=result([menu],{menu:2,retired:value});
+  expect(portions(r)).toEqual([null]);expect(r.complete).toBe(false);
+  expect(r.unmatchedSales).toEqual([{id:'retired',quantity:value}]);
+  expect(r.issues.join()).toContain('Sales entry retired:');
+});
+test('broken blank-menu guidance offers confirmed zero without suggesting zero for positive sales',()=>{
+  const broken={...menu,lines:[]};
+  expect(result([broken],{}).issues.join()).toContain('If this menu had no sales, enter a confirmed 0');
+  expect(result([broken],{menu:3}).issues.join()).not.toContain('enter a confirmed 0');
+  expect(result([broken],{menu:0}).complete).toBe(true);
+});
 test.each([
   ['product', [{...menu,lines:[{...line,qty:1e308}]}],{menu:2}],
   ['sum', [{...menu,lines:[{...line,qty:1e308},{...line,qty:1e308}]}],{menu:1}],

@@ -1,5 +1,16 @@
 # Inventory workflow checkpoint and remaining work
 
+**PR43 review continuation:** the owner authorized S1 unmatched-entry recovery,
+the low recipe-guidance note, tests and same-branch push, with merge approval
+reserved. Blank unmatched quantities no longer block estimates; current-menu
+blanks remain Unknown. Meaningful unmatched quantities are named and retained
+until confirmed removal through the normal draft/revision path. Cancellation,
+save failure and concurrent-change safety are tested. The legacy saved-report
+loader remains hidden in native mode. All 961 amendment frontend tests and the
+strict production build passed. Reviewed-head `5ccb30a` CI passed; new-head
+CI must be checked after the amendment push. See
+[the review and validation record](EXPECTED_SALES_USAGE_COMPLETENESS.md).
+
 **Current continuation:** owner-approved PR42 merged as `c926217` from reviewed
 head `b9b4f79`; exact-head and merged-main CI passed. Render's frontend is Live
 on the merge; unchanged API remains Live on `84cb381`. The deployed fictional

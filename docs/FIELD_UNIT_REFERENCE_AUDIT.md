@@ -18,6 +18,9 @@ reload. No save or hosted configuration change was submitted.
 
 F01 now has a [native expected-sales implementation](EXPECTED_SALES_USAGE_COMPLETENESS.md)
 in owner-authorized [draft PR43](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/43).
+Its owner-authorized review amendment adds confirmed recovery for meaningful
+unmatched sales entries and preserves the distinction between current-menu
+unknowns and blank orphan keys. New-head CI and merge approval remain separate.
 It resolves canonical item keys, distinguishes missing sales from confirmed zero,
 validates prep expansion and returns explicit unavailable quantities. This is
 current-period quantity planning only. F03/F03b monetary readers, legacy-mode
