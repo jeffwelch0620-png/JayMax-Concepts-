@@ -3,8 +3,9 @@
 **Current continuation:** owner-approved PR42 merged as `c926217` from reviewed
 head `b9b4f79`; exact-head and merged-main CI passed. Render's frontend is Live
 on the merge; unchanged API remains Live on `84cb381`. The deployed fictional
-editor check awaits owner sign-in, so no UI acceptance or fresh accounting
-comparison is claimed. The next [local expected-sales slice](EXPECTED_SALES_USAGE_COMPLETENESS.md)
+editor check [passed after owner sign-in](PR42_LIVE_SETUP_ACCEPTANCE.md), including
+specific mismatch guidance and cancellation/reload preservation. No fresh database
+accounting comparison is claimed. The next [expected-sales slice](EXPECTED_SALES_USAGE_COMPLETENESS.md)
 addresses F01's quantity completeness without price requirements or accounting
 writeback; all 942 frontend tests in 77 suites and the strict build passed.
 Prompt before pushing its new draft PR. The earlier entries below

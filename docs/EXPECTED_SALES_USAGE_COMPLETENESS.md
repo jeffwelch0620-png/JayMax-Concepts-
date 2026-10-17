@@ -2,9 +2,9 @@
 
 October 16, 2026 (EDT). Baseline: PR42 merge
 `c9262170ea5ff4817507f272e1b0d4686dd08d7c`.
-This is a local follow-up for audit F01, pending the owner's requested prompt
-before a new draft PR. It does not import Toast data or establish historical
-sales completeness.
+This is a follow-up for audit F01. After the requested prompt, the owner approved
+pushing a new draft PR for independent review. It does not import Toast data or
+establish historical sales completeness. Merge approval remains separate.
 
 ## PR42 merge and deployment
 
@@ -18,10 +18,11 @@ passed. No administrative bypass or manual deployment was used.
 Render frontend `dep-db9eb5dg1s2s73ace54g` is Live on the exact merge. The
 unchanged API remains Live on `84cb381`, deployment
 `dep-db9c61oae00c738np400`. No backend deployment was forced. The new Inventory
-tab reached normal sign-in; the owner reported an incorrect-login response.
-The fictional unit-mismatch editor check remains pending. No credential or
-authentication setting was changed, and neither editor acceptance nor a fresh
-accounting database comparison is claimed.
+tab initially reached normal sign-in; the owner reported a Chrome login rejection.
+On October 17, the owner confirmed in-app sign-in and the scoped fictional
+unit-mismatch editor check [passed](PR42_LIVE_SETUP_ACCEPTANCE.md). No credential
+or authentication setting was changed. The Chrome issue is not resolved by
+this check, and no fresh accounting database comparison is claimed.
 
 ## Behavior and boundaries
 
@@ -84,9 +85,9 @@ source-hash receipt. Evidence files and generated assets are not committed.
 
 ## Remaining sequence
 
-1. Finish local verification and source review; prompt before a new draft PR.
+1. Publish the owner-approved draft PR; keep it draft for independent review.
 2. Independent review and fresh exact-head CI, then separate merge approval.
-3. Resume the PR42 fictional editor check after sign-in; later accept deployed
+3. PR42's scoped fictional editor check is complete; later accept deployed
    expected-sales behavior independently of local component tests.
 4. Address backend/frontend monetary completeness (F03/F03b), par basis and
    explicit unit aliases. Retain current build connections and native holds.

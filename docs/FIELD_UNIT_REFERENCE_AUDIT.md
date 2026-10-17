@@ -12,7 +12,9 @@ PR42 merged with owner approval as `c926217` from reviewed head `b9b4f79`.
 and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38997332845)
 passed. Render frontend deployment `dep-db9eb5dg1s2s73ace54g` is Live on the exact
 merge; the unchanged API remains Live on PR41 `84cb381`. The deployed fictional
-editor check awaits owner sign-in. No hosted data or configuration changed.
+editor check [passed after owner sign-in](PR42_LIVE_SETUP_ACCEPTANCE.md): specific
+mismatch guidance, no numeric preview, cancellation and original values after
+reload. No save or hosted configuration change was submitted.
 
 F01 now has a [local native expected-sales implementation](EXPECTED_SALES_USAGE_COMPLETENESS.md).
 It resolves canonical item keys, distinguishes missing sales from confirmed zero,
@@ -142,7 +144,7 @@ Evidence retained outside Git:
 
 ## Sequence from here
 
-F02 is merged in PR42; its deployed fictional editor check awaits owner sign-in.
+F02 is merged in PR42; its scoped deployed fictional editor check passed.
 Finish review/publication/acceptance for the local F01 quantity slice, then address
 F03/F03b backend/frontend monetary completeness as focused slices. Resolve par/unit aliases and
 historical versions before integrating Toast analytics. O1 restricted deployed

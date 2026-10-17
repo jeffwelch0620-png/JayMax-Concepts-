@@ -6,7 +6,9 @@ Owner-approved [PR42](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull
 merged as **c926217** from reviewed head **b9b4f79**. Reviewed-head and merged-main
 CI passed; Render's automatic frontend deployment is Live on the merge. The
 unchanged API remains Live on **84cb381**. The fictional deployed editor check
-is pending owner sign-in; deployment evidence alone is not UI acceptance.
+passed after owner sign-in: incompatible weight/volume shows its specific warning
+without numeric estimates; cancellation and reload retain the original values.
+See the [scoped live acceptance](docs/PR42_LIVE_SETUP_ACCEPTANCE.md).
 
 The [local expected-sales follow-up](docs/EXPECTED_SALES_USAGE_COMPLETENESS.md)
 keeps blank quantities unknown, resolves canonical recipe identities and refuses
