@@ -1,5 +1,34 @@
 # Inventory workflow checkpoint and remaining work
 
+**PR44 review amendment:** the owner authorized S1 and N1–N3, tests and a
+same-branch push. Per-item sales completeness is shared across native/legacy
+readers; legacy conversion/portion refusals and Unknown display are tightened.
+Validation passes 1,008 frontend tests, 130 focused backend cases and all 52
+disposable PostgreSQL cases; broad offline checks pass 874/876 with two unchanged
+PowerShell/Windows ACL startup timeouts. The strict build passes (`main.b379d347.js`).
+Original head `32c6f85` passed all four CI jobs, including Windows ACL; fresh
+exact-head CI is required. Merge approval and hosted acceptance remain separate. See the
+[scope and evidence record](MONETARY_PLANNING_COMPLETENESS.md).
+
+**Original PR44 slice (historical):** the owner authorized the remaining backend/frontend
+[monetary completeness audit](MONETARY_PLANNING_COMPLETENESS.md) and local fixes.
+Incomplete conversions, recipe references and monetary evidence stay Unknown;
+valid zero and native accounting remain intact. All 994 frontend tests and the
+strict build pass. Offline checks pass 852/854 reported cases (two unchanged
+PowerShell/Windows ACL startup failures); corrected database fixtures pass 6/6
+after 47/49 in the initial run. No local failure is hidden or counted as passed.
+Prompt before a draft PR push; no new merge or hosted action is authorized.
+
+**Latest continuation:** PR43 merged with owner approval as `0cf5464`; all four
+reviewed-head and merged-main checks passed. The frontend is Live on the merge;
+unchanged API remains at `84cb381`. Core fictional expected-sales UI cases passed,
+including independent saved-document readback and price-independent portions.
+The [live checkpoint](PR43_LIVE_EXPECTED_SALES_ACCEPTANCE.md) records owner-approved
+deletion of only the new test menu, successful unmatched hold/removal/reload,
+unchanged $212 saved control and fingerprint, and failed direct database reads.
+Live cancellation remains unverified because the browser did not expose its dialog.
+No new PR push is authorized by this checkpoint. Earlier draft gates are history.
+
 **PR43 review continuation:** the owner authorized S1 unmatched-entry recovery,
 the low recipe-guidance note, tests and same-branch push, with merge approval
 reserved. Blank unmatched quantities no longer block estimates; current-menu

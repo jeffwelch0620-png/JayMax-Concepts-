@@ -104,12 +104,23 @@ test("owner chart formatter preserves unknown inventory separately from genuine 
   expect(formatter("40")).toBe("$40.00");
 });
 
+test.each([[false, null, 'Unknown'], [false, 0, '$0.00'], [true, null, 'Unknown'], [true, '0', '$0.00']])(
+  'owner purchase totals preserve unavailable versus zero (native=%s, amount=%s)', async (native, amount, expected) => {
+    api.nativePurchasesEnabled = native;
+    api.ownerSummary.mockResolvedValue({ ...(native ? { inventoryBasis: summary.basis } : {}),
+      stores: [{ ...store, spend30: amount }], totals: { inventoryValue: null, spend30: amount, orderAlerts: 0, waste30: 0 } });
+    await render(<OwnerDashboard />);
+    expect(container.querySelector('[data-testid="owner-total-spend"]').textContent).toContain(expected);
+    expect(container.querySelector('[data-testid="store-card-berts"]').textContent).toContain((native ? '30d received food' : '30d Purchases') + expected);
+  });
+
 test('unavailable planning costs stay unknown alongside confirmed native accounting values', async () => {
   api.ownerSummary.mockResolvedValue({inventoryBasis:summary.basis,
     stores:[{...store,planningCostsAvailable:false,avgFoodCost:null,waste30:null}],
     totals:{inventoryValue:'145.00',spend30:'178.00',orderAlerts:null,waste30:null}});
   await render(<OwnerDashboard/>);
   expect(container.querySelector('[data-testid="owner-total-waste"]').textContent).toContain('Unknown');
+  expect(['#f59e0b', 'rgb(245, 158, 11)']).toContain(container.querySelector('[data-testid="owner-total-waste"]').style.borderTopColor.toLowerCase());
   expect(container.querySelector('[data-testid="owner-total-inv"]').textContent).toContain('$145.00');
   expect(container.querySelector('[data-testid="owner-total-spend"]').textContent).toContain('$178.00');
   expect(container.textContent).toContain('Some planning costs are unavailable');

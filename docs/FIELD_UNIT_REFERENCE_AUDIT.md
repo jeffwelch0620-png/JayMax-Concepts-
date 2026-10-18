@@ -7,6 +7,32 @@ every legacy field or future integration is complete.
 
 ## Current continuation
 
+The owner authorized the [PR44 review amendment](MONETARY_PLANNING_COMPLETENESS.md):
+S1 now reuses per-item sales completeness in legacy reports/table, N1/N2 tighten
+legacy conversion refusal and guidance, and N3 exposes Unknown variance/waste.
+Amendment validation passes 1,008 frontend tests, 130 focused backend cases and
+52 disposable PostgreSQL cases. Broad offline checks pass 874/876 with two
+unchanged Windows ACL startup timeouts; the strict build passes (`main.b379d347.js`).
+Push is authorized, merge is not. The earlier original-head checkpoint follows.
+
+The owner-authorized [F03/F03b monetary follow-up](MONETARY_PLANNING_COMPLETENESS.md)
+is local: strict compatible conversion and positive metadata, explicit recipe
+completeness, preserved adapter evidence and nullable monetary aggregates.
+Validation passes 994 frontend tests and the strict build. The linked record
+retains the corrected database fixture rerun and two unchanged Windows ACL
+startup failures; publication requires the requested owner prompt and fresh CI.
+This does not qualify legacy reports as native accounting or resolve par basis,
+unit aliases, historical versions or Toast coverage.
+
+PR43 subsequently merged with owner approval as `0cf5464` from `79b40ad`, with
+reviewed-head and merged-main CI green. Its frontend is Live and the core
+[expected-sales UI checks](PR43_LIVE_EXPECTED_SALES_ACCEPTANCE.md) passed.
+Owner-approved deletion of only the new test menu enabled unmatched hold,
+removal and reload checks, which passed. Live cancellation was not observed;
+direct database fingerprints were not obtained. The displayed $212 saved control,
+usage lines and fingerprint match before/after. Earlier PR42/PR43 draft checkpoints below are
+historical; F03/F03b and later integration work remain open.
+
 PR42 merged with owner approval as `c926217` from reviewed head `b9b4f79`.
 [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38996499994)
 and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38997332845)
@@ -92,8 +118,8 @@ whole-schema migration/restore test was performed for this audit.
 | --- | --- | --- |
 | F01 / medium | `rawPortionsForRecipe` matches local aliases only, skips missing prep references, returns zero on cycles and defaults zero/missing yield to one. The active expected-sales table previously summed this output without completeness. | Native current-period table now uses the local explicit quantity-completeness helper; draft publication and hosted acceptance remain gates. Price is not required for portions. Legacy-mode callers and historical/source coverage remain open. |
 | F02 / medium | Item Setup uses permissive `itemDerived` while the recipe editor uses strict `itemPlanningCost`. A fictional 5 lb pack, 4 fl oz portion and $20 price gives 1.25 portions/$16 in Setup despite incompatible families; strict recipe costing is Unknown. Missing portion data gives a misleading zero list cost. | Bounded client fix implemented locally: Setup list and preview use strict cost; unsupported/mismatched/missing unit and nonpositive pack/portion quantities cannot show an invented portion total. Valid zero prices remain zero. Shared calculators and writes are unchanged. |
-| F03 / medium | Backend `calc_ppu` has the same cross-family numeric fallback; `recipe_cost` returns/skips zero for missing items/prep/cycles. This can understate planning summaries/context for retained malformed definitions, despite write-time recipe validation. | Open. Follow F01 with a shared, explicit backend completeness contract across summaries/context. Keep unavailable estimates distinct from accounting and preserve held legacy writers; do not silently enable them. |
-| F03b / medium, frontend planning reads | Shared frontend `itemDerived` / `calcPortionsPerUnit` retain the cross-family numeric fallback outside Setup. `buildPeriodReport` cost fields, `adjustmentValue` / `wasteByReason` and the legacy sales actual-portion calculation can therefore use the fictional 1.25-portions/$16 estimate. | Open. Cover these frontend consumers alongside F03 with an explicit completeness contract: mismatched conversion is unavailable, genuine zero stays zero, and physical Track 1 remains untouched. This PR fixes Setup only; shared calculator behavior is unchanged. |
+| F03 / medium | Backend `calc_ppu` has the same cross-family numeric fallback; `recipe_cost` returns/skips zero for missing items/prep/cycles. This can understate planning summaries/context for retained malformed definitions, despite write-time recipe validation. | Addressed locally in the monetary follow-up: strict compatible conversion, explicit recipe completeness/reasons, retained adapter evidence and nullable summary/context values. Independent review, new-head CI and merge/hosted acceptance remain gates. Held legacy writers and native accounting remain independent. |
+| F03b / medium, frontend planning reads | Shared frontend `itemDerived` / `calcPortionsPerUnit` retain the cross-family numeric fallback outside Setup. `buildPeriodReport` cost fields, `adjustmentValue` / `wasteByReason` and the legacy sales actual-portion calculation can therefore use the fictional 1.25-portions/$16 estimate. | Addressed locally in the monetary follow-up: unavailable conversion and missing monetary evidence propagate to planning totals/display; genuine zero stays zero. Legacy count-unit conventions, historical/source coverage and unmatched-sales recovery are not promoted to native accounting. See the linked scope and validation record. |
 | F04 / low, design | Setup labels par as purchase units, while native order planning labels the same par with `countUnit`; count bags and supplier cases may differ. Native quantities remain explicitly reviewed. | Select/document the intended par basis and show it consistently. Do not reinterpret existing numbers or convert them silently. |
 | F05 / low, compatibility | Planning uses `fl oz`/`ct`; native physical units use `fl_oz`/`each`, with an explicit adapter bridge. Unsupported catalog labels remain possible. | Define accepted aliases at explicit boundaries, retain original labels, and refuse ambiguous weight/volume conversions. Existing alias differences alone do not prove physical-profile drift. No bulk relabeling. |
 | F06 / future integration | Working sales store dish IDs/quantities, while expansion uses current recipe/portion definitions. Saved working entries are not versioned historical consumption evidence. | Before Toast variance history: retain recipe/portion version, location, business period, source identity and coverage/completeness. This is a separate design step; no historical rewrite or new integration is included here. |

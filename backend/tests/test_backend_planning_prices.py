@@ -62,14 +62,14 @@ class BackendPlanningPriceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result['costPerPortion'])
 
     def test_nested_recipe_and_adjustment_do_not_hide_missing_cost_in_partial_total(self):
-        prep = dict(id='prep', yieldQty=2, lines=[dict(controlNumber='TEST', qty=1)])
+        prep = dict(id='prep', recipeType='prep', yieldQty=2, yieldUOM='each', lines=[dict(controlNumber='TEST', qty=1)])
         dish = dict(id='dish', lines=[dict(controlNumber='KNOWN', qty=2),
                     dict(sourceType='prep', recipeId='prep', qty=3)])
         for price, expected in ((None, None), ('0E-10', 4), ('8', 7)):
             with self.subTest(price=price):
-                items = {'TEST': food(price), 'KNOWN': food('8')}
+                items = {'TEST': food(price), 'KNOWN': food('8', controlNumber='KNOWN')}
                 self.assertEqual(server.recipe_cost(dish, items, {'prep': prep}), expected)
-                self.assertEqual(server.adj_value(dict(qty=2, qtyBasis='portion'), items['TEST']),
+                self.assertEqual(server.adj_value(dict(qty=2, qtyBasis='portion', reason='waste'), items['TEST']),
                                  None if price is None else float(price) / 2)
 
     async def test_legacy_pg_helper_preserves_unknown_and_explicit_zero(self):

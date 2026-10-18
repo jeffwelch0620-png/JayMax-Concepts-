@@ -56,6 +56,28 @@ test('missing sales for an independently mapped item do not erase a confirmed it
   await render({menu:2},[menu,otherMenu],[item,other]);
   expect(usage().textContent).toBe('4.0');expect(usage('OTHER').textContent).toBe('Unknown');
 });
+test.each([undefined, '', -1, 'bad'])('legacy sales keeps independent known usage when another quantity is %p', async sold => {
+  const known = { ...item, packCount: 1, unitQty: 1, unitUOM: 'each', portionSize: 1, portionUOM: 'each', vendorSkus: [{ price: 2 }] };
+  const other = { ...known, itemCode: 'other_food', controlNumber: 'OTHER' };
+  const otherMenu = { ...menu, id: 'other', lines: [{ itemCode: 'other_food', qty: 1 }] };
+  const sales = { menu: '5', other: sold };
+  const saved = { ...period, dishSales: sales, itemCounts: { LOCAL: { beginning: 10, ending: 0 }, OTHER: { beginning: 5, ending: 0 } } };
+  await render(sales, [menu, otherMenu], [known, other], 'legacy', { actualMode: false, salesPeriod: saved });
+  expect(usage().textContent).toBe('10.0'); expect(usage('OTHER').textContent).toBe('Unknown');
+  const cells = [...usage().closest('tr').querySelectorAll('td')];
+  expect(cells[5].textContent).toBe('0.0');
+  expect(usage('OTHER').title).toContain('confirmed nonnegative');
+  expect(save).not.toHaveBeenCalled(); expect(close).not.toHaveBeenCalled();
+});
+test('legacy sales shares confirmed-zero and broken-graph holds without a write', async () => {
+  const other = { ...item, itemCode: 'other_food', controlNumber: 'OTHER' };
+  const broken = { id: 'other', name: 'Broken menu', lines: [{ sourceType: 'prep', recipeId: 'missing', qty: 1 }] };
+  await render({ menu: '5', other: '1' }, [menu, broken], [item, other], 'broken-legacy', { actualMode: false });
+  expect(usage().textContent).toBe('Unknown'); expect(usage('OTHER').textContent).toBe('Unknown');
+  await render({ menu: '5', other: '0' }, [menu, broken], [item, other], 'zero-legacy', { actualMode: false });
+  expect(usage().textContent).toBe('10.0'); expect(usage('OTHER').textContent).toBe('0.0');
+  expect(save).not.toHaveBeenCalled(); expect(close).not.toHaveBeenCalled();
+});
 test('editing an unknown sales quantity updates the estimate and preserves the existing debounced save contract',async()=>{
   await render();const field=container.querySelector('[data-testid="dish-sales-menu"]');
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(field,'3');field.dispatchEvent(new Event('input',{bubbles:true}));});

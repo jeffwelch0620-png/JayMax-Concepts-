@@ -1,5 +1,14 @@
 # Native expected-sales quantity completeness
 
+**Current status:** PR43 merged with owner approval as `0cf5464` from reviewed
+head `79b40ad`. Reviewed-head and merged-main CI passed and the frontend is Live.
+[Core live UI cases and unmatched hold/removal/reload](PR43_LIVE_EXPECTED_SALES_ACCEPTANCE.md)
+passed after owner approval to delete only the new test menu. Live cancellation
+was not observed because the browser did not expose the dialog. The displayed
+$212 saved control, usage lines and fingerprint match before/after; direct database
+fingerprints remain unverified after failed reads. Earlier draft gates below
+preserve the implementation and review chronology.
+
 October 16, 2026 (EDT). Baseline: PR42 merge
 `c9262170ea5ff4817507f272e1b0d4686dd08d7c`.
 This is a follow-up for audit F01. After the requested prompt, the owner approved

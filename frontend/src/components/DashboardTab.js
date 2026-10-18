@@ -44,7 +44,8 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
   }), [items, search, areaFilter, showInactive, flaggedOnly]);
   const areaNames = useMemo(() => [...new Set(items.map((it) => it.storageArea))].sort(), [items]);
   const topVariance = [...report.trackedRows].filter((r) => r.unexplainedCost !== null).sort((a, b) => Math.abs(b.unexplainedCost) - Math.abs(a.unexplainedCost)).slice(0, 8);
-  const wasteRows = Object.entries(report.wasteByReason).sort((a, b) => b[1] - a[1]);
+  const unknownVarianceCount = report.trackedRows.filter(r => r.unexplainedCost == null).length;
+  const wasteRows = Object.entries(report.wasteByReason).sort((a, b) => a[1] == null ? (b[1] == null ? 0 : 1) : b[1] == null ? -1 : b[1] - a[1]);
   const countCoverage = report.trackedRows.length ? Math.round((report.usableRows.length / report.trackedRows.length) * 100) : 0;
 
   if (items.length === 0) return <EmptyState text="No items yet. Head to Item Setup to add your first item." />;
@@ -85,10 +86,10 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
       )}
 
       <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))" }}>
-        <MetricCard testId="metric-purchases" label="Purchases" value={fmtMoney(report.purchaseSpend)} sub={`${report.periodPurchases.length} invoice lines`} />
+        <MetricCard testId="metric-purchases" label="Purchases" value={fmtPlanningCost(report.purchaseSpend)} sub={`${report.periodPurchases.length} invoice lines`} />
         <MetricCard testId="metric-actual-cogs" label="Actual COGS" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtPlanningCost(report.actualCogs) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : `${countCoverage}% tracked-count coverage`} tone={noMatchForCustom || !report.usableRows.length ? "warn" : "normal"} />
         <MetricCard testId="metric-theo-cogs" label="Theoretical COGS" value={noMatchForCustom ? "No saved period" : fmtPlanningCost(report.theoreticalCogs)} sub={noMatchForCustom ? "for this custom range" : "from menu sales + recipes"} tone={noMatchForCustom ? "warn" : "normal"} />
-        <MetricCard testId="metric-variance" label="Unexplained Variance" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtPlanningCost(report.unexplainedCost) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : "after known adjustments"} tone={noMatchForCustom ? "warn" : (!report.usableRows.length ? "warn" : (Math.abs(report.unexplainedCost) > 0 ? "warn" : "good"))} />
+        <MetricCard testId="metric-variance" label="Unexplained Variance" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtPlanningCost(report.unexplainedCost) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : "after known adjustments"} tone={noMatchForCustom || !report.usableRows.length || report.unexplainedCost == null ? "warn" : (Math.abs(report.unexplainedCost) > 0 ? "warn" : "good")} />
         <MetricCard testId="metric-inv-value" label="Live Inventory Value" value={fmtPlanningCost(report.liveInventoryValue)} sub="current stock × preferred price" />
         <MetricCard testId="metric-order-exposure" label="Next Order Exposure" value={fmtPlanningCost(report.orderExposure)} sub="preferred-vendor estimate" />
       </div>
@@ -104,6 +105,9 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
       <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(330px,1fr))" }}>
         <div className={`${cardCls} p-5`} data-testid="variance-card">
           <SectionLabel>Top Unexplained Variance</SectionLabel>
+          {!noMatchForCustom && unknownVarianceCount > 0 && <p role="status" data-testid="variance-unavailable" className="text-amber-400 text-sm mb-2">
+            {unknownVarianceCount} {unknownVarianceCount === 1 ? "item has" : "items have"} Unknown variance. Review sales quantities, recipe mappings, prices, conversions and beginning/ending counts.
+          </p>}
           {topVariance.length === 0 ? <div className="text-slate-500 text-[13px]">No completed variance rows for this period.</div> : (
             <table className="ops-table"><thead><tr><th>Item</th><th>Portions</th><th>$ Impact</th></tr></thead>
               <tbody>{topVariance.map((r) => (
