@@ -32,6 +32,15 @@ const changeInput = async (field, value) => act(async () => {
 });
 const parInput = () => [...container.querySelectorAll("label")].find(label => label.textContent.includes("Par Level (purchase units)")).querySelector("input");
 
+test('native setup retains the old par as a read-only unconfirmed reference during an unrelated save',async()=>{
+  api.actualInventoryEnabled=true;
+  await act(async()=>root.render(<SetupTab {...revisionProps(10)}/>));await click('edit-item-F01');
+  const legacy=[...container.querySelectorAll('label')].find(label=>label.textContent.includes('Previous par (unit unconfirmed)')).querySelector('input');
+  expect(legacy.readOnly).toBe(true);expect(legacy.value).toBe('0');
+  await changeInput(find('item-name-input'),'Unrelated fictional rename');await click('item-submit-button');
+  expect(persist.mock.calls[0][0][0].par).toBe('0');expect(api.reviewInventoryPar).not.toHaveBeenCalled();
+});
+
 test("the real editor preserves exact decimal metadata through an unrelated save and decimal input", async () => {
   const exact = "1.123456789012345678";
   const precise = { ...item, par: exact, packCount: exact, unitQty: exact, portionSize: exact, basePerCountUnit: exact,

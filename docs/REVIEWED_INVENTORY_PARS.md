@@ -1,0 +1,172 @@
+# Reviewed purchased-inventory par units
+
+The owner authorized explicit par units/review status, aligned screens and manual
+ordering, with local tests and a prompt before a draft PR push. Baseline is PR44
+merge `1729ecf`, plus its locally committed live checkpoint `41f2a9f`.
+
+## Contract
+
+A par is a location's target stock level for a stated coverage period. It is
+planning metadata, not a physical measurement, reorder trigger, Food Cost value
+or automatically generated purchase quantity. Prep targets remain separate in
+the existing versioned Track 2 planner. Sales expectations can inform later
+recommendations; they do not independently deduct or revalue purchased stock.
+
+The reviewer enters an explicit nonnegative decimal quantity, including zero,
+and selects the item's current verified count-unit profile. The server derives
+the fixed physical target with exact decimal arithmetic. The saved input
+quantity, source unit, profile, factor, fixed base unit/quantity, coverage note,
+actor and timestamp are retained together as one immutable review version.
+Input quantities/factors are bounded below 10^16 with up to 12 decimal places;
+the base product is not rounded through binary floating point. Insignificant
+trailing zeros do not create an unsupported precision or a database failure.
+
+For example, six verified 5-lb bags establish a 30-lb target. A different supplier
+case changes the purchasing equivalent, not that target. This slice does not
+calculate the purchasing equivalent or round an order. Supplier selection and
+order quantities remain manually reviewed.
+
+## Existing values and review states
+
+`public.store_items.par` is retained unchanged. There is no automatic backfill,
+unit inference or conversion of those numbers, including existing default zeros.
+Native Item Setup shows the old value as a read-only, unit-unconfirmed reference.
+The separate Purchased inventory targets panel requires a new quantity and
+explicit review; it does not prefill an old ambiguous number.
+
+- **Unconfirmed:** no explicit target has been reviewed, or its confirmation was
+  withdrawn. A default zero never becomes a confirmed zero by itself.
+- **Confirmed:** the saved target refers to the current, non-stale verified count
+  profile for this product/location.
+- **Needs review:** the count profile/source has changed. The former target and
+  fixed physical quantity remain visible; there is no automatic reinterpretation.
+
+The same reference renderer is used in Item Setup and Reviewed Order Planning.
+Changing supplier does not replace a target or fill an order quantity. Review
+can be withdrawn without deleting history or changing stock.
+
+## Persistence and rollout
+
+`20261018_reviewed_inventory_pars.sql` adds only
+`purchasing.inventory_par_versions` and its history/security guards. It follows
+the existing native chain in the generated [apply order](../migrations/APPLY_ORDER.md).
+Its LF checkout format is pinned in `.gitattributes` so its raw checksum remains
+stable across Windows and Linux, without changing historical SQL fingerprints.
+The base reference `supabase/schema.sql` remains the historical public-schema
+input, consistent with the repository's migration model.
+
+The purchase API exposes authenticated, location-scoped read/history routes and
+a revisioned, idempotent review command. The server obtains the actor from the
+session and derives units/factors from the retained physical profile. Readers
+use read-only transactions. Writes preserve the current predecessor and append
+one version; the associated store revision changes atomically. Changed bodies,
+actors, locations, stale revisions and stale/wrong-kind profiles are refused.
+
+The new table is append-only (including a truncate guard), has RLS enabled and
+revokes direct PUBLIC/anon/authenticated access. Runtime permissions remain the
+separate operational-release workflow. No extra deployment feature toggle is
+introduced: this capability inherits native catalog review, and writes also
+require its migration. When storage is absent, reads explicitly return
+`available:false`; both screens retain unconfirmed references and manual order
+entry. Application startup never applies SQL.
+
+The original 29-file installation receipt and the 30-file runtime candidate stay
+pinned to their historical baselines. The index-only installer explicitly checks
+the `source_index_v1` migration baseline; default readiness checks still require
+the full current chain, including this new par table. The historical inspector
+continues checking permissions, disabled triggers and constraints across all
+present objects. Its report identifies the selected baseline. No old receipt or
+grant profile silently gains the new table/function. Restricted runtime access
+to the new capability requires a later, separately reviewed permission update.
+
+The form retains an uncertain command and its exact retry key across navigation
+within the current signed-in app instance. This slice does not add durable
+reload/sign-in recovery for par drafts. On a stale revision, the typed quantity
+is retained, and an explicit latest read plus reconfirmation is required.
+
+No hosted migration, flag/credential change or deployment is authorized as part
+of this local slice. Hosted schema application and acceptance follow independent
+review and approval. Existing item saves cannot confirm the separate par record.
+After a confirmed par save, Setup refreshes the shared location/catalog revision;
+a failed refresh is reported as a read problem without retrying the saved write.
+The existing source-index-only installer cannot apply this table migration. Its
+eventual hosted installation needs its own reviewed additive plan, backup and
+approval; merging application code alone leaves confirmations awaiting storage.
+
+## Validation
+
+Local validation is complete, with the Windows startup limitation below. Draft
+push approval is pending. Tests cover unconfirmed defaults, explicit zero,
+exact conversion, supplier/count-profile changes, authorization, concurrent
+edits, exact retries, failed-write rollback, immutable history, disposable
+backup/restore, manual order entry and Track 1 independence. A retained uncertain
+write remains retryable even if the reference read fails on navigation back to
+the form. A confirmed save refreshes the shared catalog revision; a subsequent
+read failure never turns that confirmed write into a new command.
+
+Initial failures are retained as evidence:
+
+- The first PostgreSQL run passed 17/19 reported cases. Two assertions compared
+  decimal text `30` and `30.0`; corrected assertions compare exact decimal values.
+  The strengthened rerun passed 20/20, including full backup/restore and a direct
+  restored-pool accounting comparison.
+- The initial offline run exposed older tools assuming their pinned migration
+  chain would always be the complete current chain. Historical receipt/runtime
+  baselines are now explicit and separate from current readiness; source/body
+  checksum checks and full permission guards remain in place.
+- The first strict build refused an effect-cleanup lint warning. The reader now
+  retains the generation explicitly; the subsequent strict build passed. Later
+  decimal/recovery/revision tests and final-build evidence follow below.
+- The final broad offline run passed **884/886 reported cases** (311 methods plus
+  573 subtests). Two unchanged Windows ACL tests timed out starting bundled
+  PowerShell; neither is counted as passed. Fresh CI, including the Windows ACL
+  job, is required after an approved push and before merge approval.
+- The extended database run passed 107/145 reported cases, with 10 failures and
+  28 setup errors. Nine failures and the 28 cascading fixture errors came from
+  missing local IANA timezone data; the repository already pins `tzdata==2026.3`.
+  The isolated runner now supplies that exact package. The remaining failure was
+  a new test nesting a repeatable-read snapshot inside a read-committed fixture;
+  its outer fixture now explicitly uses repeatable read. Production timezone
+  validation and snapshot isolation were not weakened. The corrected run passed
+  **62/62 reported cases** (49 methods and 13 subtests), including every failed
+  case and the final par/runtime guards. It verifies exact boundary decimals and
+  harmless trailing zeros, full par backup/restore, the historical runtime order
+  flow, refusal to inherit old grants for the new table, and all local/hosted-
+  adapter index guards. Inventories were unchanged and the owned server stopped.
+- Windows reached 99% memory use during overlapping local checks. The superseded
+  build and a later frontend/offline run were stopped, with logs preserved. That
+  interrupted frontend run reported three 5-second timeouts in unchanged
+  PreparedItemSetup cases; it is not a passing full run. The owner freed memory,
+  and remaining heavy runs were serialized. The final full frontend run below
+  supersedes those interrupted timing results.
+
+Final evidence:
+
+| Check | Result | Retained artifact |
+| --- | --- | --- |
+| Full frontend, native feature profile | **1,026/1,026**, 80 suites, no failures/skips | `inventory-par-full-20261018T045715933633Z.json` and frontend log |
+| Strict CI/ESLint production build | Passed; `main.912099cf.js` | Same prefix, `-build.log` |
+| Corrected PostgreSQL selection | **62/62**, 49 methods plus 13 subtests; all prior failed cases resolved | `inventory-par-corrected-db-20261018T043407636283Z` XML/log/receipt |
+| Broad offline selection | **884/886**; two Windows ACL startup timeouts | `inventory-par-backend-offline-20261018T041100142392Z.xml` and log |
+| Final offline guards, serialized | **37/39**, 10 methods plus 27 subtests; same two Windows ACL startup timeouts | `inventory-par-final-backend-targeted-20261018T050235874451Z.xml` and log |
+
+These are separate executions, not additive unique test counts. Original broad
+database evidence is retained in `inventory-par-full-db-20261018T040621168521Z`;
+it is not labelled a passing full run. All 38 failed/error methods are included
+in the passing corrected selection, alongside final par and runtime guards.
+The known Node `fs.F_OK`, multipart and FastAPI lifespan deprecation notices are
+outside the strict compiler and remain unchanged. Documentation links, Python
+syntax, generated review contracts, SQL checkout attributes and whitespace are
+checked before the local commit. Fresh exact-head CI remains a merge gate.
+
+Migration raw SHA-256:
+`84814517f75bb58940a36facdbf5a7934036ff5b388e97a820038e837416506e`.
+
+All database runs use fictional data and an owned, loopback-only PostgreSQL 17
+server. Their receipts compare database/role inventories and stop that owned
+server. No hosted connection, migration or live acceptance is claimed.
+
+Remaining scope: delivery/calendar-specific target policies, reorder points,
+current available-stock evidence, incoming-order coverage, supplier rounding and
+automatic suggestions. Aliases (F05), versioned Toast evidence (F06), credential
+rotation and the later UI rework retain their separate workflows.

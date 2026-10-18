@@ -18,6 +18,11 @@ class RuntimeProfileTests(unittest.TestCase):
         profile = candidate.manifest()
         reference = candidate.contract(profile)
         matrix = candidate.table_privileges(profile)
+        self.assertEqual(len(profile['migrationSha256']),30)
+        self.assertNotIn('20261018_reviewed_inventory_pars.sql',profile['migrationSha256'])
+        self.assertNotIn('purchasing.inventory_par_versions',matrix)
+        with patch.object(candidate.readiness,'RUNTIME_CANDIDATE_MIGRATIONS',candidate.readiness.MIGRATIONS):
+            with self.assertRaisesRegex(ValueError,'migration list drift'):candidate.manifest()
         self.assertEqual(len(reference['functions']), 94)
         self.assertEqual(len(reference['relations']), 123)
         for name in candidate.READ_ONLY_TABLES:
@@ -52,8 +57,10 @@ class RuntimeFixtureSafetyTests(unittest.IsolatedAsyncioTestCase):
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'), 'Disposable PostgreSQL required')
 class RuntimePermissionTests(installed.NativeInstallTests):
     async def asyncSetUp(self):
-        await super().asyncSetUp()
-        await self.run_install()
+        # This suite assesses the frozen candidate, not later feature grants.
+        with patch.object(candidate.readiness,'MIGRATIONS',candidate.readiness.RUNTIME_CANDIDATE_MIGRATIONS):
+            await super().asyncSetUp()
+            await self.run_install()
         self.role = 'native_runtime_test_' + uuid4().hex
         await self.admin.execute('CREATE ROLE ' + self.role + ' NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION')
         self.roles = [self.role]
@@ -106,6 +113,15 @@ class RuntimePermissionTests(installed.NativeInstallTests):
         async with self.conn.transaction():
             with self.assertRaisesRegex(ValueError, 'outside a transaction'):
                 await self.report()
+
+    async def test_later_par_schema_is_held_without_inheriting_candidate_access(self):
+        self.assertEqual((await self.report())['status'],'passed_local_candidate')
+        await self.conn.execute((candidate.readiness.ROOT/'migrations/20261018_reviewed_inventory_pars.sql').read_bytes().decode())
+        report=await self.report()
+        self.assertEqual(report['status'],'held')
+        self.assertTrue(any(i['kind']=='catalog_relations_drift' and i['object']=='purchasing.inventory_par_versions' for i in report['issues']))
+        self.assertFalse(await self.conn.fetchval("SELECT has_table_privilege($1,'purchasing.inventory_par_versions','SELECT,INSERT,UPDATE,DELETE')",self.role))
+        self.assertFalse(await self.conn.fetchval("SELECT has_function_privilege($1,'purchasing.guard_inventory_par()','EXECUTE')",self.role))
 
     async def test_permissions_missing_and_excess_table_function_and_sequence_access(self):
         await self.conn.execute('REVOKE INSERT ON purchasing.posting_batches FROM ' + self.role)

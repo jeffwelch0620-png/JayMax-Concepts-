@@ -75,7 +75,7 @@ def checked_delivery(receipt):
     """Verify the historical delivery mapping, not a regenerated 30-file bundle."""
     if (receipt.get('status') != 'passed_durable_native_install'
             or receipt.get('sqlCommitted') is not True
-            or len(readiness.MIGRATIONS) != 30 or readiness.MIGRATIONS[-1] != SOURCE):
+            or len(readiness.ORIGINAL_NATIVE_MIGRATIONS) != 29 or readiness.RUNTIME_CANDIDATE_MIGRATIONS[-1] != SOURCE):
         raise ValueError('A completed original 29-file installation receipt is required')
     entries = receipt.get('delivery', [])
     historical = receipt.get('historicalLedgerFingerprints', {})
@@ -85,7 +85,7 @@ def checked_delivery(receipt):
         raise ValueError('Invalid historical ledger fingerprint')
     previous = max(historical)
     reviewed = []
-    for order, (entry, source) in enumerate(zip(entries, readiness.MIGRATIONS[:-1]), 1):
+    for order, (entry, source) in enumerate(zip(entries, readiness.ORIGINAL_NATIVE_MIGRATIONS), 1):
         version = entry['deliveryVersion']
         if not re.fullmatch(r'\d{14}', version) or version <= previous:
             raise ValueError('Original delivery versions must follow the complete earlier history')
@@ -167,7 +167,7 @@ async def snapshot(conn):
 
 
 async def require_readiness(conn, roles, *, before=False):
-    check = await readiness.inspect(conn, client_roles=roles)
+    check = await readiness.inspect(conn, client_roles=roles, migration_baseline='source_index_v1')
     issues = check['issues']
     if before:
         expected = [

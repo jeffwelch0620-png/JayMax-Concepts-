@@ -69,7 +69,7 @@ def manifest():
     value = json.loads(MANIFEST.read_text())
     if value['publication'] != 'candidate; local test only':
         raise ValueError('Unreviewed profile')
-    if set(value['migrationSha256']) != set(readiness.MIGRATIONS):
+    if set(value['migrationSha256']) != set(readiness.RUNTIME_CANDIDATE_MIGRATIONS):
         raise ValueError('Reviewed runtime migration list drift')
     for name, expected in value['migrationSha256'].items():
         if hashlib.sha256((readiness.ROOT / 'migrations' / name).read_bytes()).hexdigest() != expected:

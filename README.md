@@ -1,5 +1,24 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Reviewed par units — local implementation, manual ordering
+
+The owner authorized explicit purchased-inventory par units and review status.
+The new local slice retains quantity, verified stocking/count profile, fixed
+physical target, coverage note, reviewer and timestamp in immutable history.
+Existing ambiguous numbers remain unconfirmed; native Item Setup and Reviewed
+Order Planning use the same reference. Supplier pack changes do not reinterpret
+the target, and count-profile changes require re-review. Order quantities stay
+manual; no stock or Food Cost deduction is introduced.
+
+See [contract, migration and validation](docs/REVIEWED_INVENTORY_PARS.md).
+Validation passes **1,026 frontend tests**, **62/62 corrected PostgreSQL cases**
+and the strict build. Broad offline checks pass **884/886**; two unchanged Windows
+ACL startup timeouts remain after a serialized guard rerun. Evidence and initial
+failures are recorded in the linked document. Prompt before pushing the draft
+PR; fresh CI and merge approval remain separate. This adds one separately applied
+migration, which has not been applied to hosted Supabase.
+Earlier deployment checkpoints below are historical.
+
 ## PR44 merged and deployed; monetary acceptance recorded
 
 Owner-approved [PR44](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/44)
@@ -11,7 +30,7 @@ with only the expected Bert's analytical state change in the 82-table set.
 The historical **$212.00** accounting control and its hashes are unchanged.
 The new labelled GR-002 recipe remains with unknown price and zero test sales.
 See [live evidence and limits](docs/PR44_LIVE_MONETARY_ACCEPTANCE.md).
-Next: resolve the par unit basis before changing labels or interpreting values.
+The next par-unit decision was subsequently approved; see the local slice above.
 
 ## PR44 monetary planning completeness — historical review amendment
 

@@ -6,6 +6,7 @@ const readDefaults = {
   nativeOperatingSummary: () => ({ basis: "native_received_purchases_and_explicit_counts", items: [], liveOnHandAvailable: false, countStatus: "scope_missing" }),
   supplierContacts: () => ({ contacts: [], legacy_contacts: [] }),
   nativeUnitSetup: () => ({ items: [], profiles: [], baseUnits: [] }),
+  inventoryPars: () => ({store_id:'berts',available:false,items:[]}),
 };
 export function resetComponentApiMock(mock) {
   for (const [name, value] of Object.entries(mock)) {

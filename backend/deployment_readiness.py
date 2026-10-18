@@ -36,7 +36,11 @@ MIGRATIONS=(
  '20261007_prep_progress.sql','20261007_staff_prep_counts.sql','20261007_prep_containers.sql',
  '20261007_staff_prep_tasks.sql','20261007_container_waste.sql','20261007_staff_prep_production.sql',
  '20261008_container_waste_corrections.sql','20261007_native_private_access.sql',
- '20261013_purchase_source_lookup_index.sql')
+ '20261013_purchase_source_lookup_index.sql','20261018_reviewed_inventory_pars.sql')
+# Historical installation receipts and the unapproved runtime candidate retain
+# their reviewed baselines. Later feature DDL never becomes part of those receipts.
+ORIGINAL_NATIVE_MIGRATIONS=MIGRATIONS[:MIGRATIONS.index('20261013_purchase_source_lookup_index.sql')]
+RUNTIME_CANDIDATE_MIGRATIONS=ORIGINAL_NATIVE_MIGRATIONS+('20261013_purchase_source_lookup_index.sql',)
 FEATURES={
  'PURCHASE_IMPORT':('NATIVE_PURCHASES',()),'ACTUAL_INVENTORY':('ACTUAL_INVENTORY',('PURCHASE_IMPORT',)),
  'CATALOG_MAPPING':('CATALOG_MAPPING',('ACTUAL_INVENTORY',)),
@@ -112,8 +116,14 @@ async def inspect_index_contracts(conn):
             if differences:issues.append({'kind':'index_contract','object':name,'reason':'definition_or_state','fields':differences})
     return issues
 
-async def inspect(conn,client_roles=('anon','authenticated'),stores=()):
+async def inspect(conn,client_roles=('anon','authenticated'),stores=(),*,migration_baseline='current'):
     plan=migration_plan();issues=[];warnings=[];installed=[]
+    if migration_baseline == 'source_index_v1':
+        # The index-only installer verifies its historical 30-file contract.
+        # Permission/trigger/constraint checks below still inspect every object.
+        plan['migrations']=[e for e in plan['migrations'] if e['file'] in RUNTIME_CANDIDATE_MIGRATIONS]
+    elif migration_baseline != 'current':
+        raise ValueError('Unknown reviewed migration baseline')
     async with readonly_snapshot(conn):
         await conn.execute("SET LOCAL statement_timeout='20s'")
         await conn.execute("SET LOCAL search_path=pg_catalog")
@@ -185,6 +195,7 @@ async def inspect(conn,client_roles=('anon','authenticated'),stores=()):
         foreign=await conn.fetch('SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=ANY($1::text[]) AND c.relowner<>(SELECT oid FROM pg_roles WHERE rolname=current_user)',list(PRIVATE))
         if foreign and not role['rolsuper']:issues.append({'kind':'backend_owner_access_not_proven','reason':'Configured backend must own the native objects or have an explicitly reviewed role grant model'})
     return {'status':'held' if issues else 'passed','issues':issues,'warnings':warnings,'migrations':installed,'readOnly':True,
+        'migrationBaseline':migration_baseline,
         'operationalReleaseApproved':False,'externalChecksPending':['Hosted Data API exposed schemas/configuration','Reviewed applied migration checksums','Operational backup and isolated hosted restore','Application connection recycle and browser walkthrough'],
         'limits':'Catalog/ACL checks only; no business rows, credentials, migration or restore performed.'}
 

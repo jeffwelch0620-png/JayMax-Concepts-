@@ -66,7 +66,7 @@ class RuntimeRoleMixin:
                 encoding=kwargs.get('encoding') or (args[0] if args else None) or 'utf-8'
                 return path.read_bytes().decode(encoding,errors=kwargs.get('errors') or 'strict')
             return original_read(path,*args,**kwargs)
-        with patch.object(Path,'read_text',exact_sql):
+        with patch.object(Path,'read_text',exact_sql),patch.object(readiness,'MIGRATIONS',readiness.RUNTIME_CANDIDATE_MIGRATIONS):
             await super().asyncSetUp()
         try:
             await self.prepare_runtime()
@@ -88,7 +88,8 @@ class RuntimeRoleMixin:
         async with self.pool.acquire() as conn:
             # Existing fixture classes install only their own workflow chain.
             # Complete the reviewed native chain as administrator before grants.
-            for entry in readiness.migration_plan()['migrations'][:-1]:
+            for entry in readiness.migration_plan()['migrations']:
+                if entry['file'] not in readiness.ORIGINAL_NATIVE_MIGRATIONS:continue
                 present=[bool(await conn.fetchval('SELECT to_regclass($1) IS NOT NULL',name)) for name in entry['tables']]
                 if present and any(present) and not all(present):raise ValueError('Partially installed fixture migration')
                 if present:installed=all(present)

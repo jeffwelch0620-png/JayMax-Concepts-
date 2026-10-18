@@ -1,5 +1,17 @@
 # Inventory workflow checkpoint and remaining work
 
+**Reviewed par units, local:** the owner approved explicit units/review status,
+aligned native screens and manual ordering. The implementation preserves old
+numbers as unconfirmed and retains each reviewed physical target independently
+of supplier packs. New confirmations use the current verified count profile;
+changed profiles require re-review. One new append-only migration is local only.
+See [scope, rollout and validation](REVIEWED_INVENTORY_PARS.md). All 1,026 frontend
+tests, the strict build and 62 corrected PostgreSQL cases pass; broad offline
+checks pass 884/886 with two unchanged Windows ACL startup timeouts. Prompt
+before a new draft PR push. Fresh CI, hosted application, merge and live
+acceptance require later approvals. Unit aliases, historical Toast evidence,
+runtime permissions and the later UI rework remain separate work.
+
 **PR44 merged/live acceptance:** owner-approved merge `1729ecf` from `8cb8886`,
 with reviewed-head and merged-main CI green. Both automatic Render deployments
 are Live on the merge. Fictional missing-price, null/zero price, decimal quantity,
@@ -7,8 +19,8 @@ saved expected-sales and fresh-document cases pass. The SELECT-only comparison
 verifies 81 protected relations unchanged and the expected Bert's analytical
 state change; the $212.00 historical control and both report hashes are unchanged.
 The new GR-002 fixture remains with unknown price and zero test sales. See
-[evidence and scope limits](PR44_LIVE_MONETARY_ACCEPTANCE.md). Next is par unit
-basis selection; aliases, historical Toast evidence, runtime roles and UI rework
+[evidence and scope limits](PR44_LIVE_MONETARY_ACCEPTANCE.md). Par unit
+basis selection was subsequently approved; aliases, historical Toast evidence, runtime roles and UI rework
 remain separate. Earlier publication/merge gates below are historical.
 
 **PR44 review amendment:** the owner authorized S1 and N1–N3, tests and a

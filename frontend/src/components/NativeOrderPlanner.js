@@ -4,8 +4,11 @@ import { isOrderEnabled, fmtMoney } from "../lib/calc";
 import { PageTitle, cardCls, inpCls, btnAcc } from "./common";
 import { NativeInventoryPosition } from "./NativeInventoryPosition";
 import { sameOrderDecimal } from "../lib/orderIntegrity";
+import {useInventoryPars} from "../lib/inventoryPars";
+import {InventoryParReference} from "./InventoryParSetup";
 
 export function NativeOrderPlanner({ items, rid, showToast, onCreatedPO }) {
+  const pars=useInventoryPars(rid);
   const [choices, setChoices] = useState({}), [note, setNote] = useState("");
   const [verified, setVerified] = useState(false), [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false), [error, setError] = useState("");
   const pending=useRef(null),epoch=useRef(0);
@@ -51,10 +54,12 @@ export function NativeOrderPlanner({ items, rid, showToast, onCreatedPO }) {
     <PageTitle>Reviewed Order Planning</PageTitle>
     <NativeInventoryPosition restaurantId={rid} />
     <p>Enter the quantity you intend to order in the selected supplier's purchase unit. Pars and catalog prices are planning references. No shortfall or order quantity is inferred from old stock, recipe portions or a dated count.</p>
+    <button type="button" className={btnAcc} disabled={pars.reading} onClick={pars.refresh}>Refresh par references</button>
+    {pars.error&&<p className="text-amber-300">Reviewed par references unavailable. Review targets in Item Setup; order quantities remain manual.</p>}
     <div className={`${cardCls} overflow-auto`}><table className="ops-table"><thead><tr><th>Item</th><th>Supplier / SKU</th><th>Par reference</th><th>Order quantity</th><th>Catalog price estimate</th></tr></thead><tbody>{rows.map(r => <tr key={r.item.itemCode}>
       <td>{r.item.name} ({r.item.controlNumber})</td>
       <td><select aria-label={`Order supplier ${r.item.itemCode}`} className={inpCls} value={r.sku?.id || ""} disabled={frozen} onChange={e => change(r.item.itemCode, { sku: e.target.value, qty: "" })}><option value="">No available supplier</option>{r.skus.map(s => <option key={s.id} value={s.id}>{s.vendor} · {s.vendorSku} · {s.purchaseUnit}</option>)}</select></td>
-      <td>{r.item.par} {r.item.countUnit || "unconfirmed unit"}</td>
+      <td><InventoryParReference row={pars.data?.items.find(p=>p.code===r.item.itemCode)} legacy={r.item.par}/></td>
       <td><input aria-label={`Order quantity ${r.item.itemCode}`} className={inpCls} inputMode="decimal" value={r.qty} disabled={frozen || !r.sku?.purchaseUnit} onChange={e => change(r.item.itemCode, { qty: e.target.value })} /> {r.sku?.purchaseUnit}</td>
       <td>{r.sku?.price!=null && Number.isFinite(Number(r.sku.price)) && Number(r.sku.price)>=0 ? `${fmtMoney(r.sku.price)} / ${r.sku.purchaseUnit}` : "Price unconfirmed"}</td>
     </tr>)}</tbody></table></div>

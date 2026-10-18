@@ -6,6 +6,7 @@ import { Plus, Trash2, Star, X } from "lucide-react";
 import { DEFAULT_STORAGE_AREAS, VENDORS, PURCHASE_UNITS, ITEM_TYPES, UOM_OPTIONS, UOM_FAMILY, nextControlNumber, itemDerived, itemPlanningCost, isCountActive, isOrderEnabled, uid, fmtPlanningCost, num } from "../lib/calc";
 import * as api from "../lib/api";
 import { NativeInventoryPosition } from "./NativeInventoryPosition";
+import { InventoryParSetup } from "./InventoryParSetup";
 import { PreparedItemSetup } from "./PreparedItemSetup";
 import { PreparedBatchLedger } from "./PreparedBatchLedger";
 import { PrepObservations } from "./PrepObservations";
@@ -203,6 +204,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
       {api.catalogMappingEnabled && <SharedCatalogLink key={`catalog-${rid}`} restaurantId={rid} drafts={drafts} onLinked={onCatalogLinked} showToast={showToast} />}
       {error && <p role="alert">{error}</p>}
       {api.actualInventoryEnabled && <NativeInventoryPosition key={`inventory-position-${rid}`} restaurantId={rid} />}
+      {api.actualInventoryEnabled && <InventoryParSetup rid={rid} drafts={drafts} onSaved={onCatalogLinked} showToast={showToast}/>}
       {api.prepSetupEnabled && <PreparedItemSetup key={`prep-${rid}`} restaurantId={rid} />}
       {api.prepPlanningEnabled && <PrepPlanning rid={rid} drafts={drafts} showToast={showToast}/>}
       {api.prepBatchesEnabled && <PreparedBatchLedger key={`prep-batches-${rid}`} restaurantId={rid} />}
@@ -240,7 +242,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
         <SectionLabel>Purchasing</SectionLabel>
         <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
           <Field label="Purchase Unit"><select className={inpCls} disabled={sharedProduct} value={form.purchaseUnit} onChange={(e) => update("purchaseUnit", e.target.value)}>{PURCHASE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></Field>
-          <Field label="Par Level (purchase units)"><input type="text" inputMode="decimal" className={inpCls} value={form.par ?? ""} onChange={(e) => update("par", e.target.value)} /></Field>
+          {api.actualInventoryEnabled ? <Field label="Previous par (unit unconfirmed)"><input type="text" className={inpCls} value={form.par ?? ""} readOnly/><span>Retained reference only. Review the explicit target in Purchased inventory targets above.</span></Field> : <Field label="Par Level (purchase units)"><input type="text" inputMode="decimal" className={inpCls} value={form.par ?? ""} onChange={(e) => update("par", e.target.value)} /></Field>}
           {api.actualInventoryEnabled ? <p className="text-sm" data-testid="setup-native-count-note">Physical stock and explicit inventory values are recorded in Actual Inventory. Item Setup does not set on-hand quantities.</p> : <Field label="Current Stock (purchase units)"><input type="number" step="0.5" className={inpCls} value={form.currentStock ?? ""} onChange={(e) => update("currentStock", e.target.value)} /></Field>}
         </div>
 

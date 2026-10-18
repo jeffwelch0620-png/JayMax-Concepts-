@@ -47,8 +47,12 @@ class ReadinessConfigurationTests(unittest.TestCase):
         expected={p.name for p in (readiness.ROOT/'migrations').glob('*.sql')} - {'20260930_recurring_prep_items.sql'}
         plan=readiness.migration_plan();self.assertEqual({e['file'] for e in plan['migrations']},expected)
         self.assertEqual(len(readiness.MIGRATIONS),len(expected));self.assertEqual(len(set(readiness.MIGRATIONS)),len(expected))
-        self.assertEqual(readiness.MIGRATIONS[-1],'20261013_purchase_source_lookup_index.sql')
-        self.assertEqual(readiness.MIGRATIONS[-2],'20261007_native_private_access.sql')
+        self.assertEqual(readiness.MIGRATIONS[-1],'20261018_reviewed_inventory_pars.sql')
+        self.assertEqual(readiness.MIGRATIONS[-2],'20261013_purchase_source_lookup_index.sql')
+        self.assertEqual(readiness.MIGRATIONS[-3],'20261007_native_private_access.sql')
+        self.assertEqual(len(readiness.ORIGINAL_NATIVE_MIGRATIONS),29)
+        self.assertEqual(len(readiness.RUNTIME_CANDIDATE_MIGRATIONS),30)
+        self.assertNotIn('20261018_reviewed_inventory_pars.sql',readiness.RUNTIME_CANDIDATE_MIGRATIONS)
         for e in plan['migrations']:
             self.assertRegex(e['sha256'],r'^[a-f0-9]{64}$')
             for name,table in e['triggers']:self.assertNotIn('%',table)
@@ -105,7 +109,7 @@ class DeploymentReadinessTests(fixtures.NativeBackupTests):
             await conn.execute((readiness.ROOT/'migrations/20261007_native_private_access.sql').read_text())
         report=await self.probe();self.assertEqual(report['status'],'passed',report['issues'])
         self.assertTrue(report['readOnly']);self.assertFalse(report['operationalReleaseApproved'])
-        self.assertEqual(len(report['migrations']),30)
+        self.assertEqual(len(report['migrations']),31)
         # The inspector itself cannot write, and captures no operational row data.
         async with self.pool.acquire() as conn:
             before=await conn.fetchval('SELECT count(*) FROM purchasing.posting_batches')
@@ -122,6 +126,17 @@ class DeploymentReadinessTests(fixtures.NativeBackupTests):
         async with self.pool.acquire() as conn:
             await conn.execute((readiness.ROOT/'migrations/20261007_native_private_access.sql').read_text())
             self.assertEqual((await self.probe())['status'],'passed')
+            tx=conn.transaction(isolation='repeatable_read');await tx.start()
+            try:
+                await conn.execute('DROP TABLE purchasing.inventory_par_versions')
+                current=await readiness.inspect(conn,(self.client_role,))
+                self.assertEqual(current['status'],'held')
+                self.assertTrue(any(i.get('file')=='20261018_reviewed_inventory_pars.sql' for i in current['issues']))
+                historical=await readiness.inspect(conn,(self.client_role,),migration_baseline='source_index_v1')
+                self.assertEqual(historical['status'],'passed',historical['issues'])
+                self.assertEqual(len(historical['migrations']),30)
+                self.assertEqual(historical['migrationBaseline'],'source_index_v1')
+            finally:await tx.rollback()
             await conn.execute('DROP INDEX purchasing.document_source_rows_version_run_idx')
             report=await self.probe()
             self.assertTrue(any(i['kind']=='index_contract' and i['reason']=='missing' for i in report['issues']))
