@@ -1,5 +1,16 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
+**Local implementation follow-up:** the owner subsequently authorized building
+the guarded installer and rehearsing it locally, with prompts before draft PR
+publication and every Supabase application. See the
+[par-specific installer/runbook](HOSTED_REVIEWED_PAR_INSTALLER.md). Local acceptance
+now covers 69 reported cases across selection and corrected restore rerun, including
+real encrypted export/restore, with all 945 offline-profile cases passing. Draft
+publication approval and independent review/CI are still pending. These results
+do not create an active window or approve an executable hosted plan. The original
+preparation requirements below remain the reference; unimplemented-tool statements
+describe that earlier stage.
+
 Status: **prepared for review; not an executable hosted application plan**.
 The owner approved merging PR45 and preparing this plan, and reserved hosted
 application for a separate prompt. No maintenance window is active. No service,

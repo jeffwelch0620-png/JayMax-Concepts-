@@ -19,6 +19,7 @@ OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrit
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
+OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests']
 DATABASE_CASES = (
  ('runtime_permissions','RuntimePermissionTests','test_later_par_schema_is_held_without_inheriting_candidate_access'),
  ('inventory_pars','InventoryParTests','test_unconfirmed_legacy_default_and_missing_installation_are_not_zero_targets'),
@@ -125,6 +126,20 @@ DATABASE_CASES += tuple(('hosted_additive_index', 'HostedAdapterDatabaseTests', 
  'test_activity_refresh_sees_new_session_in_same_transaction',
  'test_new_login_after_preflight_is_refused_by_locked_guard',
  'test_restricted_observer_cannot_claim_other_sessions_are_drained'))
+DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name) for name in (
+ 'test_readonly_plan_atomic_install_exact_delta_and_food_cost_preserved',
+ 'test_changed_source_plan_reference_flags_or_backup_binding_are_refused',
+ 'test_prior_missing_changed_extra_history_and_wrong_index_are_held',
+ 'test_ledger_failure_rolls_back_table_function_and_store_state',
+ 'test_lost_commit_ack_reconciles_and_reapply_is_refused',
+ 'test_unresolved_transaction_blocks_false_unapplied_result_until_disconnect',
+ 'test_partial_object_and_postcommit_security_tampering_are_refused',
+ 'test_default_grant_and_unexpected_policy_cannot_hide_in_new_delta',
+ 'test_hosted_guards_preserve_backed_up_rows_and_new_empty_table',
+ 'test_drift_late_writer_and_precommit_guard_failure_roll_back',
+ 'test_known_and_unknown_writer_guards_and_hidden_activity_fail_closed',
+ 'test_write_committing_during_lock_wait_invalidates_plan',
+ 'test_real_encrypted_export_and_restore_retain_installed_par_history_and_food_cost'))
 
 
 def main():

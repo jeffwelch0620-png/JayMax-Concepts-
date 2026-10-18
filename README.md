@@ -1,5 +1,25 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Guarded par installer — local follow-up, publication pending
+
+The owner authorized the par-specific installer and disposable local rehearsal,
+with a prompt before a new draft PR push and before any Supabase application.
+The [installer runbook](docs/HOSTED_REVIEWED_PAR_INSTALLER.md) records exact
+source/catalog bindings, original-plus-index history verification, atomic DDL
+and one ledger row, fresh backup/window requirements and independent uncertain-
+outcome reconciliation. Existing index-only tools and SQL remain unchanged.
+
+Local acceptance covers all 24 new methods plus 45 subtests (69 reported cases)
+across the selected run and corrected restore rerun. Real encrypted export and
+disposable restore preserved two par-history rows and the $55 fictional Food Cost
+control. The full offline profile passed 328 methods plus 617 subtests (945 cases).
+The [validation record](docs/HOSTED_REVIEWED_PAR_INSTALLER.md#validation-record)
+retains earlier failed/incomplete attempts and the non-overlapping count basis.
+No hosted connection, service/job pause, migration, grant, credential or application-
+connection change is part of this local work. Publication, independent review/CI,
+merge and a new hosted window/exact-plan approval remain separate gates.
+Ordering remains manual; the accepted par-editing freeze stays in place.
+
 ## PR45 merged; hosted reviewed-par migration plan prepared
 
 Owner-approved PR45 merged from tested head `93941d4` as
