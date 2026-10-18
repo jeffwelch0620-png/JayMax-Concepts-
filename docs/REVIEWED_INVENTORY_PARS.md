@@ -1,5 +1,14 @@
 # Reviewed purchased-inventory par units
 
+**October 18 merge checkpoint:** owner-approved PR45 merged as `9dac63e` from
+reviewed head `93941d4`, whose four exact-head CI checks passed. The owner
+authorized preparing the [hosted migration plan](HOSTED_REVIEWED_PAR_MIGRATION_PLAN.md)
+and reserved SQL application for a separate prompt. The new table is unapplied
+by this workflow; no maintenance window, grant or connection change is included.
+The existing index-only adapter cannot install it; par-specific guarded tooling,
+fresh backup/restore and exact-plan approval remain prerequisites. Earlier local
+and amendment statuses below retain their historical dates and validation limits.
+
 The owner authorized explicit par units/review status, aligned screens and manual
 ordering, with local tests and a prompt before a draft PR push. Baseline is PR44
 merge `1729ecf`, plus its locally committed live checkpoint `41f2a9f`.

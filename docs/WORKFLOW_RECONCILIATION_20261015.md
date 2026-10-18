@@ -1,5 +1,19 @@
 # Inventory workflow checkpoint and remaining work
 
+**October 18 PR45 merge / hosted-plan checkpoint:** owner approved merging
+reviewed head `93941d4` after all four CI checks passed. The squash merge is
+`9dac63e659945aae3b68b613c13785af6a4ea658`; all four merged-main checks passed
+in run `39165819254`. Read-only Render inspection verifies both services Live
+on that merge. The next bounded slice is the
+[hosted reviewed-par migration plan](HOSTED_REVIEWED_PAR_MIGRATION_PLAN.md):
+no hosted DDL, writer pause, grants, credentials or connection changes. A new
+table-capable additive adapter needs independent review and local testing; the
+old index-only adapter must not be repurposed by swapping its SQL constant.
+Then seek a fresh window, backup/restore and separate exact-plan approval before
+application. Manual ordering and the accepted temporary par-editing freeze remain.
+Earlier unapproved/draft statements below are historical; merged-main CI,
+deployment verification and hosted acceptance are distinct gates.
+
 **PR45 review amendment:** owner accepted the temporary hosted par-editing freeze
 and authorized tested updates to the existing draft, with merge approval still
 separate. Original-head frontend/build and Windows CI passed; database CI failed

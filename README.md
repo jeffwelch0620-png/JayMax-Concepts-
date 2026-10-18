@@ -1,6 +1,27 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Reviewed par units — local implementation, manual ordering
+## PR45 merged; hosted reviewed-par migration plan prepared
+
+Owner-approved PR45 merged from tested head `93941d4` as
+**`9dac63e659945aae3b68b613c13785af6a4ea658`**. All four reviewed-head CI
+checks passed: 1,026 frontend tests/strict build, 151 reported backend cases and
+906 reported Windows cases. All four merged-main checks also passed in
+[run 39165819254](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39165819254).
+Read-only Render inspection verifies the frontend and API Live on `9dac63e`.
+Hosted par installation and live acceptance remain separate gates.
+
+The [hosted par migration plan](docs/HOSTED_REVIEWED_PAR_MIGRATION_PLAN.md)
+records the exact migration/hash, new-table security, fresh backup/restore,
+writer drain, atomic ledger/catalog checks, reconciliation and approval sequence.
+It is planning documentation, not an executable plan: the current index-only
+adapter cannot install this table. A separately reviewed/tested par adapter is
+required. **No hosted migration, maintenance pause, grants or connection changes
+are authorized by this plan. Prompt the owner before applying the final exact plan.**
+Temporary par-editing freeze remains accepted; ordering stays manual.
+
+Earlier PR45 review and test details below are historical checkpoints.
+
+## Reviewed par units — original local implementation, manual ordering
 
 **PR45 amendment:** the owner accepted the temporary par-editing freeze on the
 test deployment while the new table awaits separate hosted approval/application.
