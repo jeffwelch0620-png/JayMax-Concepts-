@@ -1,6 +1,16 @@
 # Inventory workflow checkpoint and remaining work
 
-**Latest local slice:** the owner authorized the remaining backend/frontend
+**PR44 review amendment:** the owner authorized S1 and N1–N3, tests and a
+same-branch push. Per-item sales completeness is shared across native/legacy
+readers; legacy conversion/portion refusals and Unknown display are tightened.
+Validation passes 1,008 frontend tests, 130 focused backend cases and all 52
+disposable PostgreSQL cases; broad offline checks pass 874/876 with two unchanged
+PowerShell/Windows ACL startup timeouts. The strict build passes (`main.b379d347.js`).
+Original head `32c6f85` passed all four CI jobs, including Windows ACL; fresh
+exact-head CI is required. Merge approval and hosted acceptance remain separate. See the
+[scope and evidence record](MONETARY_PLANNING_COMPLETENESS.md).
+
+**Original PR44 slice (historical):** the owner authorized the remaining backend/frontend
 [monetary completeness audit](MONETARY_PLANNING_COMPLETENESS.md) and local fixes.
 Incomplete conversions, recipe references and monetary evidence stay Unknown;
 valid zero and native accounting remain intact. All 994 frontend tests and the

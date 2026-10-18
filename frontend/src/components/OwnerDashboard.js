@@ -69,7 +69,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
         <MetricCard testId="owner-total-inv" label={native ? "Last Count Values" : "Total Inventory Value"} value={native ? inventoryMoney(totals.inventoryValue) : fmtPlanningCost(totals.inventoryValue)} sub={native ? "Sum of dated counts; see each location" : "all three locations"} />
         <MetricCard testId="owner-total-spend" label={native ? "Net Received Food — 30 Days" : "Purchases — Last 30 Days"} value={fmtPlanningCost(totals.spend30)} sub={native ? "Credits/corrections included; tax/fees separate" : "group-wide"} />
         <MetricCard testId="owner-total-alerts" label="Items Below Par" value={native ? "Needs on-hand review" : totals.orderAlerts} sub={native ? "Dated counts do not establish live stock" : "need ordering"} tone={!native && totals.orderAlerts > 0 ? "warn" : "normal"} />
-        <MetricCard testId="owner-total-waste" label={native ? "Estimated Waste — 30 Days" : "Waste — Last 30 Days"} value={fmtPlanningCost(totals.waste30)} sub={native ? "Explanation only; not an accounting deduction" : "logged removals"} tone={totals.waste30 > 0 ? "warn" : "good"} />
+        <MetricCard testId="owner-total-waste" label={native ? "Estimated Waste — 30 Days" : "Waste — Last 30 Days"} value={fmtPlanningCost(totals.waste30)} sub={native ? "Explanation only; not an accounting deduction" : "logged removals"} tone={totals.waste30 == null || totals.waste30 > 0 ? "warn" : "good"} />
       </div>
 
       {pending.length > 0 && (

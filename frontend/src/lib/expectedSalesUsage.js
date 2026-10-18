@@ -1,4 +1,4 @@
-import { UOM_FAMILY } from "./calc";
+import { UOM_FAMILY } from "./planningUnits";
 import { planningNumber, planningProduct, planningQuotient, planningSum } from "./planningNumbers";
 
 const quantity = value => typeof value === "string" || typeof value === "number" ? planningNumber(value) : null;

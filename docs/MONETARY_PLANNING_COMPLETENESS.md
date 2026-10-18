@@ -7,6 +7,69 @@ remaining F03/F03b monetary readers, local testing, and preparation of a draft
 PR. Prompt before publishing that PR. Review, CI, merge and hosted acceptance
 remain later gates.
 
+## PR44 review amendment
+
+The owner authorized addressing S1 and N1–N3, running tests and pushing updates
+to [draft PR44](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/44).
+Merge approval remains reserved. Reviewed head `32c6f85` passed all four
+[CI jobs](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39090709119),
+including Windows ACL checks that timed out locally. That is original-head
+evidence; the amendment needs fresh exact-head CI.
+
+- **S1:** `buildPeriodReport` and both Sales Tracking modes use the same
+  `expectedSalesUsage` helper. Unknown sales hold only the items used by a valid
+  recipe; an independent known row remains available. The aggregate remains
+  Unknown when any contributing row is incomplete. Broken graphs hold every
+  row when expansion is needed; an explicitly confirmed zero can still bypass
+  an unused broken definition. Blank or omitted sales never imply zero.
+- Existing unit constants move unchanged into `planningUnits.js`, breaking the
+  former helper-to-calculator dependency so reuse introduces no circular import.
+  `calc.js` re-exports the same constants for existing consumers.
+- **N1:** `_pg_item_derived` refuses missing/nonpositive supplier conversion and
+  negative supplier price. A known free price remains valid with a positive
+  conversion. Mocked zero/negative-factor checks supplement a disposable-PG NULL
+  factor test covering direct batch, task and single-item refusal before writes.
+  The database's positive-factor constraint is not relaxed for a test fixture.
+- **N2:** incomplete/nonpositive/incompatible portion or pack metadata has a
+  specific named refusal; missing supplier conversion has its own message.
+  Missing price and finite-range failures keep their separate explanations.
+  Legacy Mongo prep now explicitly refuses incomplete portion metadata instead
+  of recording a silent zero deduction. No legacy writer is enabled.
+- **N3:** the dashboard names the count of unavailable variance rows while
+  preserving known rows. Unknown waste sorts after known amounts. Unknown
+  variance/waste metrics use a warning appearance rather than a green success.
+
+Amendment validation:
+
+- All **1,008 frontend tests across 79 suites** pass, with zero failures/skips.
+  The corrected focused run passes **175 tests across eight suites**.
+- Focused backend checks pass **130 reported cases** (22 tests plus 108 subtests).
+  The broad offline run passes **874/876 reported cases** (310 tests and 564
+  successful subtests). The two unchanged Windows ACL checks listed below still
+  time out starting PowerShell; neither is skipped or counted as passed.
+- Disposable PostgreSQL passes **52/52 reported cases** (26 tests plus 26
+  subtests), including the new unknown-conversion refusal, legacy cutover guards
+  and explicit-value accounting isolation. Database/role inventories remain
+  unchanged and the owned loopback server is stopped. No hosted connection is used.
+- The strict production build passes (`main.b379d347.js`), with CI and ESLint
+  enabled and compiler warnings treated as errors. The existing Node `fs.F_OK`
+  deprecation notice is outside the compiler. Exact amended-head CI must still
+  be checked after pushing; original-head CI is separate evidence.
+
+Initial amendment frontend failures remain in the external evidence. Two new
+color assertions expected RGB while JSDOM returned hex; the corrected assertions
+accept either representation, and a fixture now supplies its storage-area key.
+The first full run then exposed three price-only assertions whose fixture lacked
+menu/sales coverage. That fixture now supplies an explicit valid menu and sales
+quantity; a separate test verifies that a free price never establishes missing
+sales coverage. No production completeness rule was weakened to satisfy a test.
+
+Evidence is kept outside Git under `pr44-amend-*` in the sibling work directory.
+The final receipt is `pr44-amend-validation-20261017.json`; counts include
+successful subtests and are not distinct methods or a full database CI profile.
+Original-head results below remain historical. Merge and live acceptance are
+separate gates.
+
 ## Findings and resulting behavior
 
 | Evidence at the baseline | Local correction |
@@ -45,11 +108,11 @@ F06 versioned Toast evidence, restricted operational runtime roles, and the late
 UI/integration workflows remain separate. Existing build connections and the
 credential-rotation deferral remain unchanged.
 
-No hosted connection, database write, migration, deployment or new PR push was
-used for this slice. PostgreSQL validation uses a dedicated disposable loopback
+No hosted connection, hosted database write, migration or deployment was used
+for this slice. PostgreSQL validation uses a dedicated disposable loopback
 database with fictional data only.
 
-## Validation and evidence
+## Original-head validation and evidence
 
 The final native-profile frontend run passed **994 tests across 79 suites**,
 zero failures/skips. The strict production build passed (`main.f040d5a1.js`). CI

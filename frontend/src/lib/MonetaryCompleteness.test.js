@@ -81,3 +81,22 @@ test('explicit zero extended price is not replaced; missing purchase evidence is
   expect(report({ ...purchase, extendedCost: null }).purchaseSpend).toBe(40);
   expect(report({ ...purchase, extendedCost: null, unitCost: null }).purchaseSpend).toBeNull();
 });
+
+const independentItems = ['A1', 'B1'].map(code => food({ itemCode: code, controlNumber: code }));
+const independentMenus = ['Pizza', 'Salad'].map((name, i) => plate({ id: name, name, lines: [{ itemCode: independentItems[i].itemCode, qty: 1 }] }));
+const independentPeriod = sales => ({ ...period, dishSales: sales, itemCounts: { A1: { beginning: 10, ending: 5 }, B1: { beginning: 10, ending: 5 } } });
+test.each([undefined, null, '', ' ', -1, 'bad'])('unrelated incomplete sales %p cannot erase known item usage or variance', sold => {
+  const report = buildPeriodReport(independentPeriod({ Pizza: '5', Salad: sold }), independentItems, [], independentMenus, []);
+  expect(report.trackedRows[0]).toMatchObject({ theoreticalPortions: 5, theoreticalCost: 5, unexplainedCost: 95 });
+  expect(report.trackedRows[1]).toMatchObject({ theoreticalPortions: null, unexplainedCost: null });
+  expect(report.trackedRows[1].usageIssues.join(' ')).toContain('Salad');
+  expect(report.theoreticalCogs).toBeNull(); expect(report.unexplainedCost).toBeNull();
+});
+test('confirmed zero is known and a broken graph holds every row until its sale is confirmed zero', () => {
+  const zero = buildPeriodReport(independentPeriod({ Pizza: '5', Salad: '0' }), independentItems, [], independentMenus, []);
+  expect(zero.trackedRows.map(row => row.theoreticalPortions)).toEqual([5, 0]);
+  const broken = { ...independentMenus[1], lines: [{ sourceType: 'prep', recipeId: 'missing', qty: 1 }] };
+  const report = sales => buildPeriodReport(independentPeriod(sales), independentItems, [], [independentMenus[0], broken], []);
+  expect(report({ Pizza: '5', Salad: '1' }).trackedRows.every(row => row.theoreticalPortions === null)).toBe(true);
+  expect(report({ Pizza: '5', Salad: '0' }).trackedRows.map(row => row.theoreticalPortions)).toEqual([5, 0]);
+});

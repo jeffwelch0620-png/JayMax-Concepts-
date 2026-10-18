@@ -7,6 +7,14 @@ every legacy field or future integration is complete.
 
 ## Current continuation
 
+The owner authorized the [PR44 review amendment](MONETARY_PLANNING_COMPLETENESS.md):
+S1 now reuses per-item sales completeness in legacy reports/table, N1/N2 tighten
+legacy conversion refusal and guidance, and N3 exposes Unknown variance/waste.
+Amendment validation passes 1,008 frontend tests, 130 focused backend cases and
+52 disposable PostgreSQL cases. Broad offline checks pass 874/876 with two
+unchanged Windows ACL startup timeouts; the strict build passes (`main.b379d347.js`).
+Push is authorized, merge is not. The earlier original-head checkpoint follows.
+
 The owner-authorized [F03/F03b monetary follow-up](MONETARY_PLANNING_COMPLETENESS.md)
 is local: strict compatible conversion and positive metadata, explicit recipe
 completeness, preserved adapter evidence and nullable monetary aggregates.

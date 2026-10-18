@@ -1,6 +1,17 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Monetary planning completeness — local follow-up
+## PR44 monetary planning completeness — review amendment
+
+The owner authorized amending [draft PR44](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/44)
+for S1 and N1–N3 and pushing the tested updates. Legacy and native readers now
+share per-item expected-sales completeness; missing supplier conversions are
+refused, portion guidance is specific, and Unknown variance/waste is visible.
+Amendment validation passes **1,008 frontend tests**, **130 focused backend
+cases**, and **52 disposable PostgreSQL cases**. Broad offline checks pass
+**874/876 cases**; two unchanged Windows ACL checks time out starting PowerShell.
+The strict build passed (`main.b379d347.js`). Original head **32c6f85** passed all four CI jobs,
+including Windows ACL; fresh exact-head CI is required for the amendment.
+Merge approval and hosted acceptance remain separate. Historical results follow.
 
 The owner-authorized [backend/frontend monetary audit](docs/MONETARY_PLANNING_COMPLETENESS.md)
 addresses F03/F03b: incompatible conversions, broken recipe references, missing

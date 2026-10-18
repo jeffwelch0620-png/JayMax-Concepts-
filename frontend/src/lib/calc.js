@@ -1,4 +1,7 @@
 import { planningNumber, planningProduct, planningQuotient, planningSum } from "./planningNumbers";
+import { UOM_FAMILY, CONV_TO_BASE } from "./planningUnits";
+import { expectedSalesUsage } from "./expectedSalesUsage";
+export { UOM_FAMILY, CONV_TO_BASE } from "./planningUnits";
 
 // Shared planning logic. Catalog estimates never value native physical counts.
 
@@ -57,16 +60,6 @@ export const VENDORS = ["US Foods", "PFG", "Sysco", "Webstaurant", "Other"];
 export const PURCHASE_UNITS = ["case", "box", "bag", "each", "gal", "bucket", "tub", "ct", "flat", "lb"];
 export const ITEM_TYPES = [{ id: "portion", label: "Portion-based" }, { id: "usage", label: "Usage-based" }];
 
-export const UOM_FAMILY = {
-  lb: "weight", oz: "weight", kg: "weight", g: "weight",
-  gal: "volume", qt: "volume", pt: "volume", cup: "volume", "fl oz": "volume", l: "volume", ml: "volume",
-  each: "count", ct: "count", dozen: "count",
-};
-export const CONV_TO_BASE = {
-  lb: 16, oz: 1, kg: 35.27396195, g: 0.03527396195,
-  gal: 128, qt: 32, pt: 16, cup: 8, "fl oz": 1, l: 33.814, ml: 0.033814,
-  each: 1, ct: 1, dozen: 12,
-};
 export const UOM_OPTIONS = Object.keys(UOM_FAMILY);
 const supportedPlanningUnit = unit => typeof unit === "string" && Object.hasOwn(UOM_FAMILY, unit);
 
@@ -496,6 +489,7 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
   const start = period?.periodStart || todayISO();
   const end = period?.periodEnd || todayISO();
   const normalizedRecipes = dishes.map(normalizeRecipeSchema);
+  const salesUsage = expectedSalesUsage(items, dishes, period?.dishSales);
   const periodPurchases = purchases.filter((p) => p.invoiceDate >= start && p.invoiceDate <= end);
   const periodAdjustmentsAll = adjustments.filter((a) => a.date >= start && a.date <= end);
   const purchaseSpend = planningSum(periodPurchases.map(p => p.extendedCost != null && String(p.extendedCost).trim() !== ""
@@ -504,10 +498,8 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
   const trackedRows = items.filter((it) => it.salesTracked).map((it) => {
     const d = itemDerived(it);
     const purchaseQty = planningSum(periodPurchases.filter(p => p.controlNumber === it.controlNumber).map(p => planningNumber(p.qty)));
-    const theoreticalPortions = planningSum(normalizedRecipes.filter(r => r.recipeType !== "prep").map(recipe => {
-      const sold = planningNumber(period?.dishSales?.[recipe.id]);
-      return sold === 0 ? 0 : sold == null || sold < 0 ? null : planningProduct(rawPortionsForRecipe(recipe, it.controlNumber, items, normalizedRecipes), sold);
-    }));
+    const usage = salesUsage.rows.find(row => row.item === it);
+    const theoreticalPortions = usage.portions;
     const counts = period?.itemCounts?.[it.controlNumber] || {};
     const beginning = planningNumber(counts.beginning);
     const ending = planningNumber(counts.ending);
@@ -518,7 +510,7 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
     const explainedPortions = planningSum(itemAdjustments.map(a => adjustmentSignedPortions(a, it)));
     const unexplainedPortions = planningSum([rawDelta, explainedPortions == null ? null : -explainedPortions]);
     return {
-      item: it, beginning, ending, purchaseQty, theoreticalPortions, actualPortions, explainedPortions, unexplainedPortions,
+      item: it, beginning, ending, purchaseQty, theoreticalPortions, usageIssues: usage.issues, actualPortions, explainedPortions, unexplainedPortions,
       theoreticalCost: planningProduct(theoreticalPortions, d.costPerPortion),
       actualCost: actualPortions !== null ? planningProduct(actualPortions, d.costPerPortion) : null,
       explainedCost: planningProduct(explainedPortions, d.costPerPortion),

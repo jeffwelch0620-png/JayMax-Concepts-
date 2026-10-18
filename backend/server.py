@@ -301,10 +301,23 @@ def preferred_sku(item):
     skus = [sku for sku in rows if isinstance(sku, dict) and sku.get("available") is not False] if isinstance(rows, list) else []
     return next((s for s in skus if s.get("preferred")), skus[0] if skus else None)
 
+
+def _portion_details_unavailable(raw_quantities, unit, portion_unit):
+    # Keep absent/nonpositive metadata distinct from finite-range failures.
+    for raw in raw_quantities:
+        value = planning.number(raw)
+        if raw is None or isinstance(raw, bool) or isinstance(raw, str) and not raw.strip() or value is not None and value <= 0:
+            return True
+    return (not isinstance(unit, str) or not isinstance(portion_unit, str) or
+            unit not in UOM_FAMILY or portion_unit not in UOM_FAMILY or
+            UOM_FAMILY[unit] != UOM_FAMILY[portion_unit])
+
+
 def item_derived(item):
     pref = preferred_sku(item) or {}
-    pack_count = planning.number(pref.get("packCount") if pref.get("packCount") is not None else item.get("packCount"))
-    unit_qty = planning.number(pref.get("unitQty") if pref.get("unitQty") is not None else item.get("unitQty"))
+    raw_pack_count = pref.get("packCount") if pref.get("packCount") is not None else item.get("packCount")
+    raw_unit_qty = pref.get("unitQty") if pref.get("unitQty") is not None else item.get("unitQty")
+    pack_count, unit_qty = planning.number(raw_pack_count), planning.number(raw_unit_qty)
     unit_uom = pref.get("unitUOM") or item.get("unitUOM")
     pack_total = planning.product(pack_count, unit_qty) if pack_count is not None and pack_count > 0 and unit_qty is not None and unit_qty > 0 else None
     ppu = calc_ppu(pack_total, unit_uom, item.get("portionSize"), item.get("portionUOM")) if pack_total is not None else None
@@ -315,6 +328,7 @@ def item_derived(item):
         price = None
     cost = planning.quotient(price, ppu)
     return {"portionsPerUnit": ppu, "costPerPortion": cost, "price": price, "priceMissing": price_missing,
+            "portionDetailsUnavailable": _portion_details_unavailable((raw_pack_count, raw_unit_qty, item.get('portionSize')), unit_uom, item.get('portionUOM')),
             "calculationUnavailable": ppu is None or price is None or cost is None}
 
 def raw_portions(recipe, target_cn, by_id, stack=()):
@@ -337,9 +351,13 @@ def raw_portions(recipe, target_cn, by_id, stack=()):
 def _require_prep_planning_cost(derived, item):
     if not derived.get("calculationUnavailable"):
         return
+    name = item.get("name") or item.get("controlNumber") or item.get("code") or "this item"
     if derived.get("priceMissing"):
-        name = item.get("name") or item.get("controlNumber") or item.get("code") or "this item"
         raise HTTPException(422, f"Supplier planning price is unknown for {name}; enter or confirm it before recording this prep. No prep write was made.")
+    if derived.get('portionDetailsUnavailable'):
+        raise HTTPException(422, f"Portion size/units or pack quantities are missing, nonpositive or incompatible for {name}; complete them before recording this prep. No prep write was made.")
+    if derived.get('conversionMissing'):
+        raise HTTPException(422, f"Supplier conversion is missing or nonpositive for {name}; confirm it before recording this prep. No prep write was made.")
     raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
 
 def _planning_rows(rows):
@@ -4374,12 +4392,16 @@ async def _pg_item_derived(conn, item_code):
     sku = await conn.fetchrow(
         "SELECT price, base_per_purchase_unit FROM vendor_items WHERE item_code = $1 AND available IS NOT FALSE ORDER BY preferred DESC, price NULLS LAST, id LIMIT 1",
         item_code)
-    ppu = planning.number(sku["base_per_purchase_unit"], 0) if sku else 0.0
+    raw_factor = sku["base_per_purchase_unit"] if sku else None
+    ppu = planning.number(raw_factor)
     raw_price = sku["price"] if sku else None
     price_missing = raw_price is None or isinstance(raw_price, str) and not raw_price.strip()
     price = planning.number(raw_price)
-    cost = planning.quotient(price, ppu) if ppu is not None and ppu > 0 else (0.0 if ppu == 0 and price is not None else None)
+    if price is not None and price < 0:
+        price = None
+    cost = planning.quotient(price, ppu) if ppu is not None and ppu > 0 else None
     return {"portionsPerUnit": ppu, "costPerPortion": cost, "price": price, "priceMissing": price_missing,
+            "conversionMissing": raw_factor is None or isinstance(raw_factor, str) and not raw_factor.strip() or ppu is not None and ppu <= 0,
             "calculationUnavailable": ppu is None or price is None or cost is None}
 
 async def _pg_raw_portions(conn, dish_id, target_item_code, stack=()):

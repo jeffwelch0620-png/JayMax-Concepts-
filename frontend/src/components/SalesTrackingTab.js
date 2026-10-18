@@ -4,7 +4,7 @@ import { confirmed, saveFailureMessage, useRetainedDraft } from "../lib/saveInte
 import { mergeSalesDraft } from "../lib/salesDraft";
 import { expectedSalesUsage } from "../lib/expectedSalesUsage";
 import { Save, Plus } from "lucide-react";
-import { normalizeRecipeSchema, rawPortionsForRecipe, itemDerived, adjustmentSignedPortions, todayISO, fmtDate, num, workweekRange, shiftWorkweek } from "../lib/calc";
+import { itemDerived, adjustmentSignedPortions, todayISO, fmtDate, num, workweekRange, shiftWorkweek } from "../lib/calc";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 
 export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => {}, actualMode = false, items, dishes, purchases, adjustments, salesPeriod, persist, loadLatestSales, reportingPeriods, persistReportingPeriods, showToast }) {
@@ -144,18 +144,14 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
   const periodAdjustments = (cn) => adjustments
     .filter((a) => a.controlNumber === cn && a.date >= local.periodStart && a.date <= local.periodEnd);
 
-  const normalizedRecipes = actualMode ? [] : dishes.map(normalizeRecipeSchema);
-  const expected = actualMode ? expectedSalesUsage(items, dishes, local.dishSales) : null;
+  const expected = expectedSalesUsage(items, dishes, local.dishSales);
   const rows = trackedItems.map((it) => {
+    const usage = expected.rows.find(row => row.item === it);
     if (actualMode) {
-      const usage = expected.rows.find(row => row.item === it);
       return { it, theoreticalPortions: usage.portions, usageIssues: usage.issues };
     }
     const d = itemDerived(it);
-    const theoreticalPortions = planningSum(normalizedRecipes.filter(dish => dish.recipeType !== "prep").map(dish => {
-      const qtySold = planningNumber(local.dishSales[dish.id]);
-      return qtySold === 0 ? 0 : qtySold == null || qtySold < 0 ? null : planningProduct(rawPortionsForRecipe(dish, it.controlNumber, items, normalizedRecipes), qtySold);
-    }));
+    const theoreticalPortions = usage.portions;
     const counts = local.itemCounts[it.controlNumber] || {};
     const beginning = planningNumber(counts.beginning);
     const ending = planningNumber(counts.ending);
@@ -166,7 +162,7 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
     const explainedPortions = planningSum(periodAdjustments(it.controlNumber).map(a => adjustmentSignedPortions(a, it)));
     const unexplainedDelta = planningSum([delta, explainedPortions == null ? null : -explainedPortions]);
     const unexplainedPct = theoreticalPortions > 0 ? planningProduct(planningQuotient(unexplainedDelta, theoreticalPortions), 100) : null;
-    return { it, theoreticalPortions, purchased, actualPortions, delta, explainedPortions, unexplainedDelta, unexplainedPct, hasCounts: beginning !== null && ending !== null };
+    return { it, theoreticalPortions, usageIssues: usage.issues, purchased, actualPortions, delta, explainedPortions, unexplainedDelta, unexplainedPct, hasCounts: beginning !== null && ending !== null };
   });
 
   if (trackedItems.length === 0) return <EmptyState text="No items are flagged for sales tracking yet. Toggle 'Track against Toast sales' on an item in Item Setup." />;

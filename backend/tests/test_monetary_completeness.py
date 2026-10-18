@@ -2,7 +2,7 @@
 import copy
 import json
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import server
 from test_backend_planning_prices import food
@@ -14,6 +14,56 @@ def plate(**changes):
 
 
 class MonetaryCompletenessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_legacy_conversion_is_never_free_when_missing_or_nonpositive(self):
+        for factor in (None, '', 0, -1):
+            for price in (0, 8):
+                with self.subTest(factor=factor, price=price):
+                    conn = AsyncMock()
+                    conn.fetchrow.return_value = dict(price=price, base_per_purchase_unit=factor)
+                    derived = await server._pg_item_derived(conn, 'TEST')
+                    self.assertTrue(derived['calculationUnavailable'])
+                    self.assertTrue(derived['conversionMissing'])
+                    self.assertIsNone(derived['costPerPortion'])
+                    with self.assertRaises(server.HTTPException) as held:
+                        server._require_prep_planning_cost(derived, dict(name='Fictional conversion'))
+                    self.assertEqual(held.exception.status_code, 422)
+                    self.assertIn('Supplier conversion is missing or nonpositive', held.exception.detail)
+                    conn.execute.assert_not_awaited()
+        conn = AsyncMock(); conn.fetchrow.return_value = dict(price=0, base_per_purchase_unit=2)
+        self.assertEqual((await server._pg_item_derived(conn, 'TEST'))['costPerPortion'], 0)
+
+    async def test_legacy_single_item_conversion_refusal_reaches_no_write(self):
+        for factor in (None, 0, -1):
+            with self.subTest(factor=factor):
+                conn = MagicMock()
+                conn.fetchrow = AsyncMock(side_effect=[dict(current_stock=10), dict(name='Fictional food'),
+                    dict(price=8, base_per_purchase_unit=factor)])
+                conn.execute = AsyncMock()
+                with patch('prep_batches.reject_legacy_write'), patch('prep_containers.hold_legacy', AsyncMock()), \
+                     self.assertRaises(server.HTTPException) as held:
+                    await server._pg_deduct_item_and_stock(conn, 'berts', dict(item_code='TEST'), 1)
+                self.assertEqual(held.exception.status_code, 422)
+                conn.execute.assert_not_awaited()
+
+    async def test_missing_or_incompatible_portions_have_specific_refusal_before_mongo_writes(self):
+        recipe = dict(id='prep', yieldQty=1, lines=[dict(controlNumber='TEST', qty=1)])
+        for changes in (dict(portionSize=None), dict(portionSize=0), dict(portionUOM=None), dict(portionUOM='fl oz')):
+            for single in (False, True):
+                with self.subTest(changes=changes, single=single):
+                    db = MagicMock()
+                    db.items.find.return_value.to_list = AsyncMock(return_value=[food(8, **changes)])
+                    db.dishes.find.return_value.to_list = AsyncMock(return_value=[recipe])
+                    with patch.object(server, 'db', db), patch('prep_batches.reject_legacy_write'), \
+                         self.assertRaises(server.HTTPException) as held:
+                        if single: await server._deduct_item_and_stock('berts', dict(controlNumber='TEST'), 1)
+                        else: await server._deduct_and_stock('berts', recipe, 1, [], 'batch', 'Fictional prep')
+                    self.assertEqual(held.exception.status_code, 422)
+                    self.assertIn('Portion size/units or pack quantities are missing', held.exception.detail)
+                    self.assertIn('Fictional food', held.exception.detail)
+                    self.assertNotIn('supported calculation range', held.exception.detail)
+                    db.items.bulk_write.assert_not_called(); db.items.update_one.assert_not_called()
+                    db.prep_stock.update_one.assert_not_called(); db.prep_logs.insert_one.assert_not_called()
+
     def test_pack_and_portion_families_and_positive_metadata_are_required(self):
         for pack, unit, portion, portion_unit in [
             (5, 'lb', 4, 'fl oz'), (5, 'unknown', 1, 'unknown'),

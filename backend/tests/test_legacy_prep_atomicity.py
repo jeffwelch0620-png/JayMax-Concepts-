@@ -77,6 +77,23 @@ class LegacyPrepAtomicityTests(unittest.IsolatedAsyncioTestCase):
     async def test_task_missing_later_price_is_refused_before_any_stock_write(self):
         await self.missing_later_price(True)
 
+    async def test_unknown_supplier_conversion_is_refused_before_any_prep_write(self):
+        await self.write_tripwire()
+        async with self.pool.acquire() as conn:
+            await conn.execute("UPDATE vendor_items SET base_per_purchase_unit=NULL,price=3 WHERE item_code='test_food'")
+        before = await self.snapshot()
+        for task in (False, True):
+            with self.subTest(task=task):
+                result = await self.post(task)
+                self.assertEqual(result.status_code, 422, result.text)
+                self.assertIn('Supplier conversion is missing or nonpositive', result.text)
+                self.assertEqual(await self.snapshot(), before)
+        with self.assertRaises(server.HTTPException) as held:
+            async with self.pool.acquire() as conn, conn.transaction():
+                await server._pg_deduct_item_and_stock(conn, 'berts', dict(item_code='test_food'), 1)
+        self.assertEqual(held.exception.status_code, 422)
+        self.assertEqual(await self.snapshot(), before)
+
     async def test_direct_item_missing_price_has_specific_message_without_any_stock_write(self):
         await self.write_tripwire()
         async with self.pool.acquire() as conn:

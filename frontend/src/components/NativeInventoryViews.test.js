@@ -120,6 +120,7 @@ test('unavailable planning costs stay unknown alongside confirmed native account
     totals:{inventoryValue:'145.00',spend30:'178.00',orderAlerts:null,waste30:null}});
   await render(<OwnerDashboard/>);
   expect(container.querySelector('[data-testid="owner-total-waste"]').textContent).toContain('Unknown');
+  expect(['#f59e0b', 'rgb(245, 158, 11)']).toContain(container.querySelector('[data-testid="owner-total-waste"]').style.borderTopColor.toLowerCase());
   expect(container.querySelector('[data-testid="owner-total-inv"]').textContent).toContain('$145.00');
   expect(container.querySelector('[data-testid="owner-total-spend"]').textContent).toContain('$178.00');
   expect(container.textContent).toContain('Some planning costs are unavailable');
