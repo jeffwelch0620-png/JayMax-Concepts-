@@ -12,6 +12,18 @@ formats response decimals in fixed notation without changing retry fingerprints,
 and documents shared-revision conflicts and O1 permission follow-up. See the
 linked record below for amendment validation and remaining approval gates.
 
+At `2e583de`, fresh CI passed all **1,026 frontend tests**, the strict build,
+**151 database cases** and **906 Windows offline cases**. The extra local run
+reported failures and reached its 40-minute runner limit; it is not counted as
+passing. Its runtime suite also inherited incompatible fresh-installer tests.
+Fixture helpers are now reused without inheriting those test methods. Corrected
+local validation passed **48/48 cases** (23 methods and 25 subtests), including
+all par/runtime tests and the restricted-role order/receiving/Food Cost case;
+its inventories are unchanged and its server is stopped. Final-head CI remains
+required. The exact invented leftovers
+from the timed run were removed after inventory verification, restoring the
+original database/role inventory and stopping the owned server.
+
 The owner authorized explicit purchased-inventory par units and review status.
 The new local slice retains quantity, verified stocking/count profile, fixed
 physical target, coverage note, reviewer and timestamp in immutable history.

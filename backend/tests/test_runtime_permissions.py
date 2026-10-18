@@ -91,11 +91,16 @@ class RuntimeFixtureSafetyTests(unittest.IsolatedAsyncioTestCase):
 
 
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'), 'Disposable PostgreSQL required')
-class RuntimePermissionTests(installed.NativeInstallTests):
+class RuntimePermissionTests(unittest.IsolatedAsyncioTestCase):
+    # Reuse fixture operations, not standalone installer test methods: this
+    # suite already installs its candidate during setup before assessing ACLs.
+    run_install=installed.NativeInstallTests.run_install
+    asyncTearDown=installed.NativeInstallTests.asyncTearDown
+
     async def asyncSetUp(self):
         # This suite assesses the frozen candidate, not later feature grants.
         with patch.object(candidate.readiness,'MIGRATIONS',candidate.readiness.RUNTIME_CANDIDATE_MIGRATIONS):
-            await super().asyncSetUp()
+            await installed.NativeInstallTests.asyncSetUp(self)
             await self.run_install()
         self.role = 'native_runtime_test_' + uuid4().hex
         await self.admin.execute('CREATE ROLE ' + self.role + ' NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION')

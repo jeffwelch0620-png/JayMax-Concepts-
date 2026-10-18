@@ -11,6 +11,17 @@ and the future O1 par permissions are documented in
 [the par record](REVIEWED_INVENTORY_PARS.md). No hosted SQL, grants, connection or
 deployment changes are included. Original local counts below remain historical.
 
+Amendment `2e583de` passed fresh CI: 1,026 frontend tests, strict build,
+151 database cases and 906 Windows offline cases. The extra local run timed out
+at 40 minutes after reporting failures; its selection included standalone
+installer tests inherited by the already-installed runtime fixture. Fixture
+helpers are now reused without inheriting those incompatible test methods.
+Original inventory was restored after deleting only the two recorded invented
+leftovers; the owned server was stopped. The corrected full par/runtime selection
+passed **48/48 cases** (23 methods and 25 subtests), preserving the database/role
+inventory and stopping its owned server. Final-head CI is recorded in the par
+reference/PR45 before merge approval is requested.
+
 **Reviewed par units, local:** the owner approved explicit units/review status,
 aligned native screens and manual ordering. The implementation preserves old
 numbers as unconfirmed and retains each reviewed physical target independently

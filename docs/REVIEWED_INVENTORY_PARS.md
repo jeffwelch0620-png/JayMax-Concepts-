@@ -220,9 +220,34 @@ cluster/database/address/port refusal with probe cleanup. Evidence prefix:
 generated contracts and whitespace checks pass; migration bytes remain unchanged.
 The broader local database follow-up is retained under
 `pr45-amend-db-20261018T052146412985Z`; it was still running at amendment push.
-GitHub's isolated runner verifies the full frontend/build, Windows safety and
-disposable Docker database selections. Completed amended-head CI and any local
-rerun results are recorded on PR45 before merge approval is requested.
+At `2e583de`, [GitHub CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39101905424)
+passed **1,026 frontend tests in 80 suites**, the strict build, **151 database
+cases** (108 methods and 43 subtests), and **906 Windows offline cases** (317
+methods and 589 subtests), with no failures/errors/skips. This includes the real
+Docker runtime-fixture proof and the new decimal/history/replay regression.
+
+The expanded local run reported failures and reached its 40-minute runner limit
+before writing a complete JUnit result. It is not a passed run. Its selection
+also collected standalone installer tests inherited by `RuntimePermissionTests`,
+whose setup already installs the candidate; those fresh-install methods are
+incompatible with that preinstalled fixture. Runtime tests now explicitly reuse
+the fixture's setup, teardown and install helpers without inheriting its test
+methods. Canonical installer tests remain in their original module.
+
+After the timeout, the recorded inventory identified exactly one new invented
+database and role. An owned-server cleanup verified the inventory against that
+snapshot, refused other clients, removed only those two exact run-owned objects,
+proved the original database/role inventory restored, and stopped its server.
+Receipt: `pr45-amend-db-20261018T052146412985Z/owned-timeout-cleanup.json`.
+No hosted connection was used. The corrected local par/runtime selection is
+retained under `pr45-amend-runtime-corrected-20261018T060248399335Z` and passed
+**48/48 reported cases** (23 methods and 25 subtests), with no failures, errors
+or skips. It includes the full par module, the complete now-independent runtime
+permission module, and the restricted-role order/receiving/Food Cost regression.
+Its receipt verifies unchanged database/role inventories and a stopped owned
+server. Fresh CI for the final test-discovery head remains required and is
+recorded on PR45 before merge approval is requested. Counts from separate runs
+are not added as unique coverage.
 
 All database runs use fictional data and an owned, loopback-only PostgreSQL 17
 server. Their receipts compare database/role inventories and stop that owned
