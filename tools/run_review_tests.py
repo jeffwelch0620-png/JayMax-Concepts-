@@ -29,6 +29,7 @@ DATABASE_CASES = (
  ('inventory_pars','InventoryParTests','test_history_guards_and_failed_insert_roll_back_review_and_store_revision'),
  ('inventory_pars','InventoryParTests','test_review_history_exact_retry_and_accounting_survive_disposable_restore'),
  ('inventory_pars','InventoryParTests','test_small_and_large_exact_targets_roundtrip_without_float_rounding'),
+ ('inventory_pars','InventoryParTests','test_fixed_decimal_save_replay_reads_and_history_preserve_exact_request_identity'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_single_item_extreme_quantities_refuse_before_any_stock_write'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_single_item_finite_completion_and_zero_price_preserve_actual_facts'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_single_item_late_database_failure_rolls_back_stock_and_progress'),

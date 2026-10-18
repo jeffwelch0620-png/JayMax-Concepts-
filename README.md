@@ -2,6 +2,16 @@
 
 ## Reviewed par units — local implementation, manual ordering
 
+**PR45 amendment:** the owner accepted the temporary par-editing freeze on the
+test deployment while the new table awaits separate hosted approval/application.
+Merge remains unapproved. The original head `a239429` passed frontend/build and
+Windows CI (including the two locally timed-out ACL checks), but its database CI
+failed on the Docker service's server-address fixture guard. The amendment
+verifies the disposable database through the dedicated localhost connection,
+formats response decimals in fixed notation without changing retry fingerprints,
+and documents shared-revision conflicts and O1 permission follow-up. See the
+linked record below for amendment validation and remaining approval gates.
+
 The owner authorized explicit purchased-inventory par units and review status.
 The new local slice retains quantity, verified stocking/count profile, fixed
 physical target, coverage note, reviewer and timestamp in immutable history.
@@ -14,8 +24,9 @@ See [contract, migration and validation](docs/REVIEWED_INVENTORY_PARS.md).
 Validation passes **1,026 frontend tests**, **62/62 corrected PostgreSQL cases**
 and the strict build. Broad offline checks pass **884/886**; two unchanged Windows
 ACL startup timeouts remain after a serialized guard rerun. Evidence and initial
-failures are recorded in the linked document. Prompt before pushing the draft
-PR; fresh CI and merge approval remain separate. This adds one separately applied
+failures are recorded in the linked document. These are the original local
+results; draft PR45 is published and its tested amendment push is authorized.
+Fresh CI and merge approval remain separate. This adds one separately applied
 migration, which has not been applied to hosted Supabase.
 Earlier deployment checkpoints below are historical.
 

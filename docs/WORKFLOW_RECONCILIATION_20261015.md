@@ -1,5 +1,16 @@
 # Inventory workflow checkpoint and remaining work
 
+**PR45 review amendment:** owner accepted the temporary hosted par-editing freeze
+and authorized tested updates to the existing draft, with merge approval still
+separate. Original-head frontend/build and Windows CI passed; database CI failed
+in the runtime fixture's container-side address guard. The amendment verifies
+the same disposable target through the dedicated localhost DSN, retains refusal
+of remote/mismatched targets, and formats all par response decimals without
+changing stored evidence or retry fingerprints. Store-wide revision conflicts
+and the future O1 par permissions are documented in
+[the par record](REVIEWED_INVENTORY_PARS.md). No hosted SQL, grants, connection or
+deployment changes are included. Original local counts below remain historical.
+
 **Reviewed par units, local:** the owner approved explicit units/review status,
 aligned native screens and manual ordering. The implementation preserves old
 numbers as unconfirmed and retains each reviewed physical target independently

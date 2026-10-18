@@ -3,7 +3,7 @@ import os
 import unittest
 import hashlib
 from uuid import uuid4
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import asyncpg
 import runtime_permissions as candidate
@@ -36,6 +36,42 @@ class RuntimeProfileTests(unittest.TestCase):
 
 
 class RuntimeFixtureSafetyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_loopback_probe_proves_native_and_docker_forwarded_targets(self):
+        database='native_purchase_test_'+uuid4().hex
+        for address in ('127.0.0.1/32','172.18.0.2/32'):
+            with self.subTest(address=address):
+                identity=dict(cluster_id='synthetic-cluster',database_id=12345,server_address=address,server_port=5432)
+                conn=Mock(fetchval=AsyncMock(return_value=database),fetchrow=AsyncMock(return_value=identity))
+                probe=Mock(fetchrow=AsyncMock(return_value=identity),close=AsyncMock(),transaction=Mock(return_value=AsyncMock()))
+                with patch.dict(os.environ,NATIVE_PURCHASE_TEST_DSN='postgresql://purchase_implementation_test@127.0.0.1:55439/native_purchase_test_control'),patch.object(fixture.asyncpg,'connect',AsyncMock(return_value=probe)) as connect:
+                    await fixture.verify_disposable_target(conn)
+                connect.assert_awaited_once_with('postgresql://purchase_implementation_test@127.0.0.1:55439/'+database,timeout=5)
+                probe.transaction.assert_called_once_with(readonly=True)
+                probe.close.assert_awaited_once()
+
+    async def test_loopback_probe_refuses_untrusted_configuration_and_non_disposable_names(self):
+        local='postgresql://purchase_implementation_test@127.0.0.1:55439/native_purchase_test_control'
+        for dsn in ('',local.replace('127.0.0.1','db.example.invalid'),local.replace('127.0.0.1','172.18.0.2'),
+                    local.replace('purchase_implementation_test@','other@'),local.replace('native_purchase_test_control','operational'),
+                    local+'?host=db.example.invalid',local+'#other'):
+            with self.subTest(dsn=dsn),patch.dict(os.environ,NATIVE_PURCHASE_TEST_DSN=dsn),patch.object(fixture.asyncpg,'connect',AsyncMock()) as connect:
+                with self.assertRaises(ValueError):await fixture.verify_disposable_target(Mock())
+                connect.assert_not_awaited()
+        for database in ('native_purchase_test_control','operational','native_purchase_test_'+('a'*31)):
+            conn=Mock(fetchval=AsyncMock(return_value=database))
+            with self.subTest(database=database),patch.dict(os.environ,NATIVE_PURCHASE_TEST_DSN=local),patch.object(fixture.asyncpg,'connect',AsyncMock()) as connect:
+                with self.assertRaisesRegex(ValueError,'Unique disposable'):await fixture.verify_disposable_target(conn)
+                connect.assert_not_awaited()
+
+    async def test_loopback_probe_refuses_different_database_identity_and_closes_on_failure(self):
+        identity=dict(cluster_id='synthetic-cluster',database_id=12345,server_address='172.18.0.2/32',server_port=5432)
+        conn=Mock(fetchval=AsyncMock(return_value='native_purchase_test_'+uuid4().hex),fetchrow=AsyncMock(return_value=identity))
+        for field,value in dict(cluster_id='other',database_id=54321,server_address='172.18.0.3/32',server_port=5433).items():
+            probe=Mock(fetchrow=AsyncMock(return_value=identity|{field:value}),close=AsyncMock(),transaction=Mock(return_value=AsyncMock()))
+            with self.subTest(field=field),patch.dict(os.environ,NATIVE_PURCHASE_TEST_DSN='postgresql://purchase_implementation_test@127.0.0.1:55439/native_purchase_test_control'),patch.object(fixture.asyncpg,'connect',AsyncMock(return_value=probe)):
+                with self.assertRaisesRegex(ValueError,'differs from loopback'):await fixture.verify_disposable_target(conn)
+            probe.close.assert_awaited_once()
+
     async def test_fixture_safety_preserves_exact_sql_and_cleans_failed_setup(self):
         source = candidate.readiness.ROOT / 'migrations' / candidate.readiness.MIGRATIONS[0]
         class Parent:

@@ -6,6 +6,7 @@ from fastapi import Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 import catalog_mapping
 import native_units
+from catalog_decimals import catalog_text
 from purchase_api import serial
 from purchase_parser import fingerprint
 
@@ -46,6 +47,14 @@ async def current(conn,store,code):
     return dict(row) if row else None
 
 
+def par_response(value):
+    """Fixed decimal display only; never use for stored/request fingerprints."""
+    if isinstance(value,Decimal):return catalog_text(value)
+    if isinstance(value,dict):return {k:par_response(v) for k,v in value.items()}
+    if isinstance(value,(list,tuple)):return [par_response(v) for v in value]
+    return serial(value)
+
+
 async def setup(conn,store):
     items=await conn.fetch('''SELECT i.code,i.name,si.par AS legacy_quantity,si.active FROM public.items i
         JOIN public.store_items si ON si.item_code=i.code WHERE si.store_id=$1 AND i.item_type='raw' ORDER BY i.code''',store)
@@ -62,7 +71,7 @@ async def setup(conn,store):
         if saved and saved['confirmed']:
             status='confirmed' if profile and not profile['stale'] and profile['id']==saved['unit_profile_id'] else 'needs_review'
         result.append(dict(item,review=saved,status=status,count_profile=profile if profile and not profile['stale'] else None))
-    return serial(dict(store_id=store,available=available,items=result))
+    return par_response(dict(store_id=store,available=available,items=result))
 
 
 async def save(pool,store,code,actor,body,key,expected):
@@ -73,7 +82,7 @@ async def save(pool,store,code,actor,body,key,expected):
         prior=await conn.fetchrow('SELECT * FROM purchasing.inventory_par_versions WHERE request_key=$1',key)
         if prior:
             if prior['request_fingerprint']!=digest:raise HTTPException(409,'Par review key belongs to another request')
-            return serial(dict(request_key=key,review=dict(prior),current_review=await current(conn,store,code),replayed=True))
+            return par_response(dict(request_key=key,review=dict(prior),current_review=await current(conn,store,code),replayed=True))
         await conn.execute('LOCK TABLE public.items,public.store_items IN SHARE MODE')
         item=await conn.fetchrow('''SELECT i.item_type,si.active FROM public.items i JOIN public.store_items si ON si.item_code=i.code
             WHERE si.store_id=$1 AND i.code=$2''',store,code)
@@ -101,7 +110,7 @@ async def save(pool,store,code,actor,body,key,expected):
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *''',store,code,expected+1,
             previous['id'] if previous else None,values['unit_profile_id'],values['source_unit'],values['quantity'],values['factor'],
             values['base_unit'],values['base_quantity'],body.action=='confirm',body.coverage_note,actor,key,digest)
-        return serial(dict(request_key=key,review=dict(row),current_review=dict(row),replayed=False))
+        return par_response(dict(request_key=key,review=dict(row),current_review=dict(row),replayed=False))
 
 
 def install_routes(router,context):
@@ -123,4 +132,4 @@ def install_routes(router,context):
         async with pool.acquire() as conn,conn.transaction(isolation='repeatable_read',readonly=True):
             if not await installed(conn):raise HTTPException(503,'Reviewed inventory par setup is awaiting installation')
             if not await conn.fetchval('SELECT 1 FROM public.store_items WHERE store_id=$1 AND item_code=$2',store_id,item_code):raise HTTPException(404,'Product is not at this location')
-            return serial([dict(r) for r in await conn.fetch('SELECT * FROM purchasing.inventory_par_versions WHERE store_id=$1 AND item_code=$2 ORDER BY revision',store_id,item_code)])
+            return par_response([dict(r) for r in await conn.fetch('SELECT * FROM purchasing.inventory_par_versions WHERE store_id=$1 AND item_code=$2 ORDER BY revision',store_id,item_code)])

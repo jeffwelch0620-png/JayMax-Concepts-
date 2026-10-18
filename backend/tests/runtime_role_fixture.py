@@ -7,6 +7,7 @@ import os,re
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
+from urllib.parse import urlsplit
 import asyncpg,db_pg,deployment_readiness as readiness
 
 import runtime_permissions as candidate
@@ -15,11 +16,32 @@ PRIVATE_UPDATES=candidate.PRIVATE_UPDATES
 PUBLIC=candidate.PUBLIC
 manifest=candidate.manifest
 
-async def apply(conn,role,reference='local'):
-    address=await conn.fetchval('SELECT inet_server_addr()::text')
+async def verify_disposable_target(conn):
+    # A Docker-published localhost port can have a non-loopback server address.
+    # Prove the target against a fresh connection through the dedicated local
+    # control DSN instead of admitting arbitrary private-network addresses.
+    control=urlsplit(os.environ.get('NATIVE_PURCHASE_TEST_DSN',''))
+    if (control.scheme not in ('postgres','postgresql') or control.hostname!='127.0.0.1'
+            or control.username!='purchase_implementation_test' or control.port is None
+            or control.path!='/native_purchase_test_control' or control.query or control.fragment):
+        raise ValueError('Runtime fixture requires dedicated loopback control')
     database=await conn.fetchval('SELECT current_database()')
-    if address!='127.0.0.1/32' and address!='127.0.0.1':raise ValueError('Runtime fixture requires loopback')
     if not re.fullmatch(r'native_purchase_test_[a-f0-9]{32}',database):raise ValueError('Unique disposable database required')
+    identity='''SELECT system_identifier::text AS cluster_id, d.oid AS database_id,
+        inet_server_addr()::text AS server_address, inet_server_port() AS server_port
+        FROM pg_control_system(), pg_database d WHERE d.datname=current_database()'''
+    expected=await conn.fetchrow(identity)
+    probe=await asyncpg.connect(control._replace(path='/'+database).geturl(),timeout=5)
+    try:
+        async with probe.transaction(readonly=True):
+            if dict(await probe.fetchrow(identity))!=dict(expected):
+                raise ValueError('Runtime fixture target differs from loopback disposable database')
+    finally:
+        await probe.close()
+
+
+async def apply(conn,role,reference='local'):
+    await verify_disposable_target(conn)
     if not re.fullmatch(r'native_runtime_test_[a-f0-9]{32}',role):raise ValueError('Unique invented role required')
     flags=await conn.fetchrow('SELECT rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication FROM pg_roles WHERE rolname=$1',role)
     if not flags or any(flags.values()):raise ValueError('Unprivileged role required')

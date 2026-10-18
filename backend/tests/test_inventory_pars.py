@@ -12,6 +12,15 @@ import test_native_backup as recovery
 
 
 class InventoryParValidationTests(unittest.TestCase):
+    def test_response_decimals_are_fixed_without_mutating_evidence_or_fingerprints(self):
+        value=dict(legacy_quantity=Decimal('0E-10'),review=dict(quantity=Decimal('1E-7'),factor=Decimal('1E-7'),base_quantity=Decimal('1E-14')))
+        before=pars.fingerprint(pars.serial(value))
+        result=pars.par_response(value)
+        self.assertEqual(result,dict(legacy_quantity='0.0000000000',review=dict(quantity='0.0000001',factor='0.0000001',base_quantity='0.00000000000001')))
+        self.assertEqual(pars.par_response([value]),[result])
+        self.assertIsInstance(value['review']['quantity'],Decimal)
+        self.assertEqual(pars.fingerprint(pars.serial(value)),before)
+
     def test_confirmation_quantities_and_notes_are_explicit(self):
         body=dict(unit_profile_id=str(uuid4()),quantity='0',coverage_note='Through the next fictional delivery',verified=True)
         self.assertEqual(pars.Review(**body).quantity,Decimal(0))
@@ -165,3 +174,30 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
                 ctx.prec=80;expected=Decimal(quantity)*Decimal(20)
             self.assertEqual(Decimal(value['base_quantity']),expected)
             self.assertEqual(next(r for r in (await self.read())['items'] if r['code']=='test_food')['status'],'confirmed')
+
+    async def test_fixed_decimal_save_replay_reads_and_history_preserve_exact_request_identity(self):
+        async with self.pool.acquire() as c:
+            await c.execute("UPDATE store_items SET par=0.0000001 WHERE store_id='berts' AND item_code='test_food'")
+        profile,_=await self.units('count',factor='0.0000001')
+        self.assertEqual(profile.status_code,200,profile.text);self.profile=profile.json()['profile']
+        first_key=str(uuid4());first_body=self.review(quantity='0.0000001')
+        for index,quantity in enumerate(('0.0000001','0E-10')):
+            key=first_key if index==0 else str(uuid4());body=self.review(quantity=quantity)
+            saved=await self.edit(body,version=index,key=key);self.assertEqual(saved.status_code,200,saved.text)
+            expected=dict(quantity=format(Decimal(quantity),'f'),factor='0.0000001',base_quantity=format(Decimal(quantity)*Decimal('0.0000001'),'f'))
+            for field,text in expected.items():self.assertEqual(saved.json()['review'][field],text)
+            row=next(r for r in (await self.read())['items'] if r['code']=='test_food')
+            self.assertEqual(row['legacy_quantity'],'0.0000001')
+            for field,text in expected.items():self.assertEqual(row['review'][field],text)
+            replay=await self.edit(body,version=index,key=key);self.assertEqual(replay.status_code,200,replay.text)
+            self.assertEqual(replay.json()['review'],saved.json()['review'])
+            digest=pars.fingerprint(pars.serial(dict(store='berts',item='test_food',actor='synthetic-catalog-reviewer',expected=index,body=pars.Review(**body).model_dump())))
+            async with self.pool.acquire() as c:
+                stored=await c.fetchrow('SELECT quantity,request_fingerprint FROM purchasing.inventory_par_versions WHERE request_key=$1',UUID(key))
+            self.assertEqual(stored['quantity'],Decimal(quantity));self.assertEqual(stored['request_fingerprint'],digest)
+        history=await self.catalog.get('/api/pg/purchases/berts/inventory-pars/test_food/history')
+        self.assertEqual(history.status_code,200,history.text)
+        self.assertEqual([p['quantity'] for p in history.json()],['0.0000001','0.0000000000'])
+        replay=await self.edit(first_body,key=first_key);self.assertEqual(replay.status_code,200,replay.text)
+        self.assertEqual(replay.json()['review']['quantity'],'0.0000001')
+        self.assertEqual(replay.json()['current_review']['quantity'],'0.0000000000')

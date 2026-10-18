@@ -45,6 +45,13 @@ The same reference renderer is used in Item Setup and Reviewed Order Planning.
 Changing supplier does not replace a target or fill an order quantity. Review
 can be withdrawn without deleting history or changing stock.
 
+Each confirmation or withdrawal also advances the location-wide
+`public.store_state.revision`. The successful Setup save refreshes that shared
+revision. Other open catalog, sales or recipe drafts may then receive a stale
+revision 409 on their next save; retain their entries, reload the latest state
+and explicitly review before saving again. This coordination does not change
+their business values or authorize retrying a different command automatically.
+
 ## Persistence and rollout
 
 `20261018_reviewed_inventory_pars.sql` adds only
@@ -93,10 +100,53 @@ The existing source-index-only installer cannot apply this table migration. Its
 eventual hosted installation needs its own reviewed additive plan, backup and
 approval; merging application code alone leaves confirmations awaiting storage.
 
+### Owner-approved deployment sequence (October 18, 2026)
+
+The owner explicitly accepted the temporary par-editing freeze on the build
+deployment. After a separately approved merge auto-deploys, native Setup keeps
+the previous par read-only and new confirmations remain unavailable until this
+table migration is separately reviewed, approved and installed. Read failures
+do not unlock the old ambiguous field. Existing values remain unchanged and
+manual ordering remains available. The legacy shortfall/dashboard calculators
+are not the active native order/accounting screens; this change does not make
+their old numbers verified targets.
+
+This acceptance is not merge approval or permission to apply hosted SQL.
+Prepare a separate additive installation plan, fresh backup/restore evidence,
+post-flight checks and a labelled live par review after independent review.
+
+### O1 restricted runtime-role cutover remains open
+
+The current frozen candidate already includes UPDATE ACLs on `public.items` and
+`public.store_items`; validate their SHARE locks under the eventual role rather
+than adding broader write privileges. The par guard also reads verified unit
+profiles/item bases and inserts or updates `public.store_state`. The future
+per-object candidate must explicitly include SELECT/INSERT for the new history
+table, explicit trusted-backend RLS policies, and validation of invoker-trigger
+dependencies. Table ACLs alone do not enable an RLS-protected route. Do not grant
+UPDATE/DELETE/TRUNCATE on par history or direct client access. Test list/history,
+confirm/withdraw, stale profiles, location/actor denial, replay and Track 1
+independence under the restricted role before hosted cutover. No runtime grant,
+manifest or connection change is included in this amendment; see the
+[runtime permission assessment](RUNTIME_ROLE_PERMISSION_ASSESSMENT.md).
+
+Par response decimals use fixed notation across setup, save, replay and history,
+including small values and scaled zero. Only response formatting changes;
+database values, profile snapshots and request fingerprints retain their
+original exact decimal representation.
+
 ## Validation
 
-Local validation is complete, with the Windows startup limitation below. Draft
-push approval is pending. Tests cover unconfirmed defaults, explicit zero,
+The original local validation is recorded below, with its Windows startup
+limitation. Draft PR45 was pushed at `a239429`; its frontend/build and Windows
+safety jobs passed, including the two locally timed-out ACL tests. Its database
+job failed during the runtime fixture's server-address check (106 methods and
+43 subtests passed, one setup failure). The disposable Docker service is reached
+through localhost but reports its container-side address. The amendment proves
+the same cluster/database/server identity through a fresh dedicated localhost
+DSN rather than trusting private-network addresses. Remote/control-DSN drift,
+non-disposable names and mismatched identities remain refused. New-head CI is
+still required. Tests cover unconfirmed defaults, explicit zero,
 exact conversion, supplier/count-profile changes, authorization, concurrent
 edits, exact retries, failed-write rollback, immutable history, disposable
 backup/restore, manual order entry and Track 1 independence. A retained uncertain
@@ -161,6 +211,18 @@ checked before the local commit. Fresh exact-head CI remains a merge gate.
 
 Migration raw SHA-256:
 `84814517f75bb58940a36facdbf5a7934036ff5b388e97a820038e837416506e`.
+
+Amendment focused offline checks passed **9 methods and 29 subtests**, including
+fixed response notation without evidence/fingerprint mutation, localhost and
+Docker-forwarded identity proof, remote/control-DSN refusal and mismatched
+cluster/database/address/port refusal with probe cleanup. Evidence prefix:
+`pr45-amend-targeted-20261018T052037880682Z`. Python syntax, documentation links,
+generated contracts and whitespace checks pass; migration bytes remain unchanged.
+The broader local database follow-up is retained under
+`pr45-amend-db-20261018T052146412985Z`; it was still running at amendment push.
+GitHub's isolated runner verifies the full frontend/build, Windows safety and
+disposable Docker database selections. Completed amended-head CI and any local
+rerun results are recorded on PR45 before merge approval is requested.
 
 All database runs use fictional data and an owned, loopback-only PostgreSQL 17
 server. Their receipts compare database/role inventories and stop that owned
