@@ -1,6 +1,61 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## PR44 monetary planning completeness — review amendment
+## Reviewed par units — local implementation, manual ordering
+
+**PR45 amendment:** the owner accepted the temporary par-editing freeze on the
+test deployment while the new table awaits separate hosted approval/application.
+Merge remains unapproved. The original head `a239429` passed frontend/build and
+Windows CI (including the two locally timed-out ACL checks), but its database CI
+failed on the Docker service's server-address fixture guard. The amendment
+verifies the disposable database through the dedicated localhost connection,
+formats response decimals in fixed notation without changing retry fingerprints,
+and documents shared-revision conflicts and O1 permission follow-up. See the
+linked record below for amendment validation and remaining approval gates.
+
+At `2e583de`, fresh CI passed all **1,026 frontend tests**, the strict build,
+**151 database cases** and **906 Windows offline cases**. The extra local run
+reported failures and reached its 40-minute runner limit; it is not counted as
+passing. Its runtime suite also inherited incompatible fresh-installer tests.
+Fixture helpers are now reused without inheriting those test methods. Corrected
+local validation passed **48/48 cases** (23 methods and 25 subtests), including
+all par/runtime tests and the restricted-role order/receiving/Food Cost case;
+its inventories are unchanged and its server is stopped. Final-head CI remains
+required. The exact invented leftovers
+from the timed run were removed after inventory verification, restoring the
+original database/role inventory and stopping the owned server.
+
+The owner authorized explicit purchased-inventory par units and review status.
+The new local slice retains quantity, verified stocking/count profile, fixed
+physical target, coverage note, reviewer and timestamp in immutable history.
+Existing ambiguous numbers remain unconfirmed; native Item Setup and Reviewed
+Order Planning use the same reference. Supplier pack changes do not reinterpret
+the target, and count-profile changes require re-review. Order quantities stay
+manual; no stock or Food Cost deduction is introduced.
+
+See [contract, migration and validation](docs/REVIEWED_INVENTORY_PARS.md).
+Validation passes **1,026 frontend tests**, **62/62 corrected PostgreSQL cases**
+and the strict build. Broad offline checks pass **884/886**; two unchanged Windows
+ACL startup timeouts remain after a serialized guard rerun. Evidence and initial
+failures are recorded in the linked document. These are the original local
+results; draft PR45 is published and its tested amendment push is authorized.
+Fresh CI and merge approval remain separate. This adds one separately applied
+migration, which has not been applied to hosted Supabase.
+Earlier deployment checkpoints below are historical.
+
+## PR44 merged and deployed; monetary acceptance recorded
+
+Owner-approved [PR44](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/44)
+merged as **1729ecf** from **8cb8886**. Reviewed-head and merged-main CI passed;
+both automatic Render deployments are Live on the merge. Fictional recipe
+Unknown/null/zero, decimal quantity, saved sales and fresh-document checks passed.
+The independent database comparison verifies **81 protected relations unchanged**,
+with only the expected Bert's analytical state change in the 82-table set.
+The historical **$212.00** accounting control and its hashes are unchanged.
+The new labelled GR-002 recipe remains with unknown price and zero test sales.
+See [live evidence and limits](docs/PR44_LIVE_MONETARY_ACCEPTANCE.md).
+The next par-unit decision was subsequently approved; see the local slice above.
+
+## PR44 monetary planning completeness — historical review amendment
 
 The owner authorized amending [draft PR44](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/44)
 for S1 and N1–N3 and pushing the tested updates. Legacy and native readers now

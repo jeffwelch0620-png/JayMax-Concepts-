@@ -7,6 +7,24 @@ every legacy field or future integration is complete.
 
 ## Current continuation
 
+The owner selected explicit purchased-inventory par units and review status,
+aligned native Setup/order references and manual ordering. The local
+[reviewed-par implementation](REVIEWED_INVENTORY_PARS.md) retains ambiguous old
+numbers as unconfirmed, stores a fixed physical target with its verified count
+profile, and requires re-review after count-profile changes. All 1,026 frontend
+tests, the strict build and 62 corrected PostgreSQL cases pass. Broad offline
+checks pass 884/886 with two unchanged Windows ACL startup timeouts, retained in
+the serialized guard rerun. The requested draft-push prompt is pending; fresh
+CI, merge approval and hosted schema application remain separate.
+
+PR44 merged with owner approval as `1729ecf` from `8cb8886`; reviewed-head and
+merged-main CI pass and both Render services are Live. The scoped
+[monetary acceptance](PR44_LIVE_MONETARY_ACCEPTANCE.md) passes native recipe,
+null/zero/decimal projection, owner-warning and saved-sales checks. An independent
+database comparison verifies 81 protected relations unchanged, with the expected
+analytical state change and unchanged $212.00 historical control. Legacy-only and
+malformed negative cases retain local/CI evidence. Earlier gates below are history.
+
 The owner authorized the [PR44 review amendment](MONETARY_PLANNING_COMPLETENESS.md):
 S1 now reuses per-item sales completeness in legacy reports/table, N1/N2 tighten
 legacy conversion refusal and guidance, and N3 exposes Unknown variance/waste.
@@ -103,7 +121,7 @@ the review amendment to that same branch.
 | Catalog decimal fields | Adapter retains decimal text for pack counts, quantities, portions, factors, pars and prices | An unrelated save must not round or derive a replacement factor. Existing editor/adapter tests cover these targeted fields. |
 | Supplier planning price | Local supplier setting and price provenance; available supplier selection | Unknown differs from zero. Planning prices do not value explicit Track 1 counts. |
 | Recipe ingredient identity | API adapter retains canonical `itemCode` plus resolved local alias; prep uses recipe ID | Recipe writes validate store membership, source type, positive quantities, units, yield and cycles. Readers still need explicit completeness handling. |
-| Native ordering | Reviewed quantities use chosen supplier purchase unit; par is displayed with count unit | No suggested live on-hand or order quantity is inferred from dated counts/legacy stock. |
+| Native ordering | Reviewed order quantities use the selected supplier purchase unit; the new separate par reference retains its saved stocking/count unit and fixed base quantity | Old numeric pars have unconfirmed units. No suggested live on-hand or order quantity is inferred from dated counts/legacy stock. |
 | Actual accounting | Received purchase facts plus purchased-item explicit opening/closing counts | Prep/waste and sales explain usage; neither deducts from or revalues Track 1. |
 
 Source entry points: `frontend/src/lib/api.js` (`pgItemToMongoItem`,
@@ -116,11 +134,11 @@ whole-schema migration/restore test was performed for this audit.
 
 | ID / priority | Evidence and impact | Disposition |
 | --- | --- | --- |
-| F01 / medium | `rawPortionsForRecipe` matches local aliases only, skips missing prep references, returns zero on cycles and defaults zero/missing yield to one. The active expected-sales table previously summed this output without completeness. | Native current-period table now uses the local explicit quantity-completeness helper; draft publication and hosted acceptance remain gates. Price is not required for portions. Legacy-mode callers and historical/source coverage remain open. |
+| F01 / medium | `rawPortionsForRecipe` matches local aliases only, skips missing prep references, returns zero on cycles and defaults zero/missing yield to one. The active expected-sales table previously summed this output without completeness. | Native current-period handling shipped in PR43; PR44 shares the helper with legacy table/report callers. Native scoped live acceptance and CI pass; legacy behavior is covered locally/CI. Price is not required for portions. Historical/source coverage remains F06. |
 | F02 / medium | Item Setup uses permissive `itemDerived` while the recipe editor uses strict `itemPlanningCost`. A fictional 5 lb pack, 4 fl oz portion and $20 price gives 1.25 portions/$16 in Setup despite incompatible families; strict recipe costing is Unknown. Missing portion data gives a misleading zero list cost. | Bounded client fix implemented locally: Setup list and preview use strict cost; unsupported/mismatched/missing unit and nonpositive pack/portion quantities cannot show an invented portion total. Valid zero prices remain zero. Shared calculators and writes are unchanged. |
-| F03 / medium | Backend `calc_ppu` has the same cross-family numeric fallback; `recipe_cost` returns/skips zero for missing items/prep/cycles. This can understate planning summaries/context for retained malformed definitions, despite write-time recipe validation. | Addressed locally in the monetary follow-up: strict compatible conversion, explicit recipe completeness/reasons, retained adapter evidence and nullable summary/context values. Independent review, new-head CI and merge/hosted acceptance remain gates. Held legacy writers and native accounting remain independent. |
-| F03b / medium, frontend planning reads | Shared frontend `itemDerived` / `calcPortionsPerUnit` retain the cross-family numeric fallback outside Setup. `buildPeriodReport` cost fields, `adjustmentValue` / `wasteByReason` and the legacy sales actual-portion calculation can therefore use the fictional 1.25-portions/$16 estimate. | Addressed locally in the monetary follow-up: unavailable conversion and missing monetary evidence propagate to planning totals/display; genuine zero stays zero. Legacy count-unit conventions, historical/source coverage and unmatched-sales recovery are not promoted to native accounting. See the linked scope and validation record. |
-| F04 / low, design | Setup labels par as purchase units, while native order planning labels the same par with `countUnit`; count bags and supplier cases may differ. Native quantities remain explicitly reviewed. | Select/document the intended par basis and show it consistently. Do not reinterpret existing numbers or convert them silently. |
+| F03 / medium | Backend `calc_ppu` has the same cross-family numeric fallback; `recipe_cost` returns/skips zero for missing items/prep/cycles. This can understate planning summaries/context for retained malformed definitions, despite write-time recipe validation. | Corrected in merged/deployed PR44: strict compatible conversion, explicit recipe completeness/reasons, retained adapter evidence and nullable summary/context values. CI and scoped native live checks pass. Negative/AI-context cases retain local/CI coverage; held legacy writers and native accounting remain independent. |
+| F03b / medium, frontend planning reads | Shared frontend `itemDerived` / `calcPortionsPerUnit` retain the cross-family numeric fallback outside Setup. `buildPeriodReport` cost fields, `adjustmentValue` / `wasteByReason` and the legacy sales actual-portion calculation can therefore use the fictional 1.25-portions/$16 estimate. | Corrected in PR44: unavailable conversion and missing monetary evidence propagate to planning totals/display; genuine zero stays zero. Scoped native live checks and CI pass; legacy variance/waste UI remains local/CI coverage. Legacy count-unit conventions and historical/source coverage are not promoted to native accounting. |
+| F04 / low, design | Setup labelled par as purchase units, while native order planning labelled the same par with `countUnit`; count bags and supplier cases may differ. | Owner-approved local implementation adds explicit reviewed stocking/count units and fixed physical targets with immutable history. Both native screens use the same reference. Old numbers remain unit-unconfirmed; no backfill or suggested order. Validation, independent review, migration approval and live acceptance remain separate gates; see reviewed-par record. |
 | F05 / low, compatibility | Planning uses `fl oz`/`ct`; native physical units use `fl_oz`/`each`, with an explicit adapter bridge. Unsupported catalog labels remain possible. | Define accepted aliases at explicit boundaries, retain original labels, and refuse ambiguous weight/volume conversions. Existing alias differences alone do not prove physical-profile drift. No bulk relabeling. |
 | F06 / future integration | Working sales store dish IDs/quantities, while expansion uses current recipe/portion definitions. Saved working entries are not versioned historical consumption evidence. | Before Toast variance history: retain recipe/portion version, location, business period, source identity and coverage/completeness. This is a separate design step; no historical rewrite or new integration is included here. |
 
@@ -174,9 +192,10 @@ Evidence retained outside Git:
 
 ## Sequence from here
 
-F02 is merged in PR42; its scoped deployed fictional editor check passed.
-Finish review/CI/merge approval/acceptance for the draft F01 quantity slice, then address
-F03/F03b backend/frontend monetary completeness as focused slices. Resolve par/unit aliases and
-historical versions before integrating Toast analytics. O1 restricted deployed
+F02 shipped in PR42, F01 in PR43 and the shared legacy reader amendment in PR44;
+F03/F03b shipped in PR44. Their scoped acceptance and local/CI limits are linked above.
+Next select the F04 par basis before changing labels or stored interpretations.
+Resolve explicit F05 aliases and F06 historical versions before integrating Toast analytics.
+O1 restricted deployed
 runtime roles remain required before operational use; current build connections,
 credential rotation deferral, separate auth/UI workflows and native holds remain.

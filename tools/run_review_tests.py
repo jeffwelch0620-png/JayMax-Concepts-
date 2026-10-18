@@ -13,13 +13,23 @@ OFFLINE_MODULES = ('planning_numbers backend_planning_prices monetary_completene
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 DATABASE_CASES = (
+ ('runtime_permissions','RuntimePermissionTests','test_later_par_schema_is_held_without_inheriting_candidate_access'),
+ ('inventory_pars','InventoryParTests','test_unconfirmed_legacy_default_and_missing_installation_are_not_zero_targets'),
+ ('inventory_pars','InventoryParTests','test_exact_target_zero_withdrawal_and_actor_are_metadata_only'),
+ ('inventory_pars','InventoryParTests','test_parallel_retries_and_stale_versions_never_replace_a_newer_target'),
+ ('inventory_pars','InventoryParTests','test_changed_supplier_keeps_target_and_changed_count_conversion_requires_review'),
+ ('inventory_pars','InventoryParTests','test_missing_units_wrong_location_access_and_missing_revision_are_refused'),
+ ('inventory_pars','InventoryParTests','test_history_guards_and_failed_insert_roll_back_review_and_store_revision'),
+ ('inventory_pars','InventoryParTests','test_review_history_exact_retry_and_accounting_survive_disposable_restore'),
+ ('inventory_pars','InventoryParTests','test_small_and_large_exact_targets_roundtrip_without_float_rounding'),
+ ('inventory_pars','InventoryParTests','test_fixed_decimal_save_replay_reads_and_history_preserve_exact_request_identity'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_single_item_extreme_quantities_refuse_before_any_stock_write'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_single_item_finite_completion_and_zero_price_preserve_actual_facts'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_single_item_late_database_failure_rolls_back_stock_and_progress'),

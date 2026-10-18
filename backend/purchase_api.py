@@ -536,6 +536,8 @@ def create_router(pool_factory, store_check, authorize):
     install_contact_routes(router,context)
     from prep_planning import install_routes as install_planning_routes
     install_planning_routes(router,context)
+    from inventory_pars import install_routes as install_inventory_par_routes
+    install_inventory_par_routes(router,context)
     from prep_day_tasks import install_routes as install_day_task_routes
     install_day_task_routes(router,context)
     from prep_execution import install_routes as install_execution_routes

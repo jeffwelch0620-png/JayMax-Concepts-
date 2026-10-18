@@ -3,7 +3,7 @@ import os
 import unittest
 import hashlib
 from uuid import uuid4
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import asyncpg
 import runtime_permissions as candidate
@@ -18,6 +18,11 @@ class RuntimeProfileTests(unittest.TestCase):
         profile = candidate.manifest()
         reference = candidate.contract(profile)
         matrix = candidate.table_privileges(profile)
+        self.assertEqual(len(profile['migrationSha256']),30)
+        self.assertNotIn('20261018_reviewed_inventory_pars.sql',profile['migrationSha256'])
+        self.assertNotIn('purchasing.inventory_par_versions',matrix)
+        with patch.object(candidate.readiness,'RUNTIME_CANDIDATE_MIGRATIONS',candidate.readiness.MIGRATIONS):
+            with self.assertRaisesRegex(ValueError,'migration list drift'):candidate.manifest()
         self.assertEqual(len(reference['functions']), 94)
         self.assertEqual(len(reference['relations']), 123)
         for name in candidate.READ_ONLY_TABLES:
@@ -31,6 +36,42 @@ class RuntimeProfileTests(unittest.TestCase):
 
 
 class RuntimeFixtureSafetyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_loopback_probe_proves_native_and_docker_forwarded_targets(self):
+        database='native_purchase_test_'+uuid4().hex
+        for address in ('127.0.0.1/32','172.18.0.2/32'):
+            with self.subTest(address=address):
+                identity=dict(cluster_id='synthetic-cluster',database_id=12345,server_address=address,server_port=5432)
+                conn=Mock(fetchval=AsyncMock(return_value=database),fetchrow=AsyncMock(return_value=identity))
+                probe=Mock(fetchrow=AsyncMock(return_value=identity),close=AsyncMock(),transaction=Mock(return_value=AsyncMock()))
+                with patch.dict(os.environ,NATIVE_PURCHASE_TEST_DSN='postgresql://purchase_implementation_test@127.0.0.1:55439/native_purchase_test_control'),patch.object(fixture.asyncpg,'connect',AsyncMock(return_value=probe)) as connect:
+                    await fixture.verify_disposable_target(conn)
+                connect.assert_awaited_once_with('postgresql://purchase_implementation_test@127.0.0.1:55439/'+database,timeout=5)
+                probe.transaction.assert_called_once_with(readonly=True)
+                probe.close.assert_awaited_once()
+
+    async def test_loopback_probe_refuses_untrusted_configuration_and_non_disposable_names(self):
+        local='postgresql://purchase_implementation_test@127.0.0.1:55439/native_purchase_test_control'
+        for dsn in ('',local.replace('127.0.0.1','db.example.invalid'),local.replace('127.0.0.1','172.18.0.2'),
+                    local.replace('purchase_implementation_test@','other@'),local.replace('native_purchase_test_control','operational'),
+                    local+'?host=db.example.invalid',local+'#other'):
+            with self.subTest(dsn=dsn),patch.dict(os.environ,NATIVE_PURCHASE_TEST_DSN=dsn),patch.object(fixture.asyncpg,'connect',AsyncMock()) as connect:
+                with self.assertRaises(ValueError):await fixture.verify_disposable_target(Mock())
+                connect.assert_not_awaited()
+        for database in ('native_purchase_test_control','operational','native_purchase_test_'+('a'*31)):
+            conn=Mock(fetchval=AsyncMock(return_value=database))
+            with self.subTest(database=database),patch.dict(os.environ,NATIVE_PURCHASE_TEST_DSN=local),patch.object(fixture.asyncpg,'connect',AsyncMock()) as connect:
+                with self.assertRaisesRegex(ValueError,'Unique disposable'):await fixture.verify_disposable_target(conn)
+                connect.assert_not_awaited()
+
+    async def test_loopback_probe_refuses_different_database_identity_and_closes_on_failure(self):
+        identity=dict(cluster_id='synthetic-cluster',database_id=12345,server_address='172.18.0.2/32',server_port=5432)
+        conn=Mock(fetchval=AsyncMock(return_value='native_purchase_test_'+uuid4().hex),fetchrow=AsyncMock(return_value=identity))
+        for field,value in dict(cluster_id='other',database_id=54321,server_address='172.18.0.3/32',server_port=5433).items():
+            probe=Mock(fetchrow=AsyncMock(return_value=identity|{field:value}),close=AsyncMock(),transaction=Mock(return_value=AsyncMock()))
+            with self.subTest(field=field),patch.dict(os.environ,NATIVE_PURCHASE_TEST_DSN='postgresql://purchase_implementation_test@127.0.0.1:55439/native_purchase_test_control'),patch.object(fixture.asyncpg,'connect',AsyncMock(return_value=probe)):
+                with self.assertRaisesRegex(ValueError,'differs from loopback'):await fixture.verify_disposable_target(conn)
+            probe.close.assert_awaited_once()
+
     async def test_fixture_safety_preserves_exact_sql_and_cleans_failed_setup(self):
         source = candidate.readiness.ROOT / 'migrations' / candidate.readiness.MIGRATIONS[0]
         class Parent:
@@ -50,10 +91,17 @@ class RuntimeFixtureSafetyTests(unittest.IsolatedAsyncioTestCase):
 
 
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'), 'Disposable PostgreSQL required')
-class RuntimePermissionTests(installed.NativeInstallTests):
+class RuntimePermissionTests(unittest.IsolatedAsyncioTestCase):
+    # Reuse fixture operations, not standalone installer test methods: this
+    # suite already installs its candidate during setup before assessing ACLs.
+    run_install=installed.NativeInstallTests.run_install
+    asyncTearDown=installed.NativeInstallTests.asyncTearDown
+
     async def asyncSetUp(self):
-        await super().asyncSetUp()
-        await self.run_install()
+        # This suite assesses the frozen candidate, not later feature grants.
+        with patch.object(candidate.readiness,'MIGRATIONS',candidate.readiness.RUNTIME_CANDIDATE_MIGRATIONS):
+            await installed.NativeInstallTests.asyncSetUp(self)
+            await self.run_install()
         self.role = 'native_runtime_test_' + uuid4().hex
         await self.admin.execute('CREATE ROLE ' + self.role + ' NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION')
         self.roles = [self.role]
@@ -106,6 +154,15 @@ class RuntimePermissionTests(installed.NativeInstallTests):
         async with self.conn.transaction():
             with self.assertRaisesRegex(ValueError, 'outside a transaction'):
                 await self.report()
+
+    async def test_later_par_schema_is_held_without_inheriting_candidate_access(self):
+        self.assertEqual((await self.report())['status'],'passed_local_candidate')
+        await self.conn.execute((candidate.readiness.ROOT/'migrations/20261018_reviewed_inventory_pars.sql').read_bytes().decode())
+        report=await self.report()
+        self.assertEqual(report['status'],'held')
+        self.assertTrue(any(i['kind']=='catalog_relations_drift' and i['object']=='purchasing.inventory_par_versions' for i in report['issues']))
+        self.assertFalse(await self.conn.fetchval("SELECT has_table_privilege($1,'purchasing.inventory_par_versions','SELECT,INSERT,UPDATE,DELETE')",self.role))
+        self.assertFalse(await self.conn.fetchval("SELECT has_function_privilege($1,'purchasing.guard_inventory_par()','EXECUTE')",self.role))
 
     async def test_permissions_missing_and_excess_table_function_and_sequence_access(self):
         await self.conn.execute('REVOKE INSERT ON purchasing.posting_batches FROM ' + self.role)

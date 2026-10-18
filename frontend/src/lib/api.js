@@ -19,6 +19,8 @@ export const isPostgres = USE_PG;
 export const nativePurchasesEnabled = USE_PG && process.env.REACT_APP_NATIVE_PURCHASES === "true";
 export const actualInventoryEnabled = nativePurchasesEnabled && process.env.REACT_APP_ACTUAL_INVENTORY === "true";
 export const catalogMappingEnabled = actualInventoryEnabled && process.env.REACT_APP_CATALOG_MAPPING === "true";
+export const inventoryPars = rid => axios.get(`${PG_API}/purchases/${pgStoreId(rid)}/inventory-pars`).then(r => r.data);
+export const reviewInventoryPar = (rid, code, body, version, key) => axios.put(`${PG_API}/purchases/${pgStoreId(rid)}/inventory-pars/${encodeURIComponent(code)}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const orderWorkflowEnabled = catalogMappingEnabled && process.env.REACT_APP_ORDER_WORKFLOW === "true";
 export const supplierContactsEnabled = orderWorkflowEnabled && process.env.REACT_APP_SUPPLIER_CONTACTS === "true";
 export const supplierContacts = rid => axios.get(`${PG_API}/purchases/${pgStoreId(rid)}/supplier-contacts`).then(r => r.data);

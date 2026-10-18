@@ -23,7 +23,7 @@ import hosted_committed_workflow as workflow
 
 def receipt(history):
     entries = []
-    for i, name in enumerate(readiness.MIGRATIONS[:-1], 1):
+    for i, name in enumerate(readiness.ORIGINAL_NATIVE_MIGRATIONS, 1):
         version = f'202610081900{i:02}'
         raw = (readiness.ROOT / 'migrations' / name).read_bytes()
         entries.append({'order': i, 'sourceFile': 'migrations/' + name, 'deliveryVersion': version,

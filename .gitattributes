@@ -30,4 +30,5 @@ migrations/20261007_staff_prep_production.sql text eol=crlf
 migrations/20261008_container_waste_corrections.sql text eol=crlf
 migrations/20261007_native_private_access.sql text eol=lf
 migrations/20261013_purchase_source_lookup_index.sql text eol=lf
+migrations/20261018_reviewed_inventory_pars.sql text eol=lf
 supabase/schema.sql text eol=crlf

@@ -1,5 +1,20 @@
 # Backend runtime permission assessment
 
+## O1 follow-up: reviewed inventory pars (PR45, October 18, 2026)
+
+The frozen 30-migration candidate does not grant access to the new
+`purchasing.inventory_par_versions` table. Its existing public items/store_items
+UPDATE ACLs already support SHARE locks; verify this route under the eventual
+role without broadening those privileges to DELETE/TRUNCATE. Add the new table
+with SELECT/INSERT only and explicit trusted-backend RLS policies to a separately
+reviewed candidate; table ACLs alone do not enable this RLS-protected route.
+Include invoker-trigger reads of unit profiles/item bases and the store-state revision write.
+Exercise read/history, confirmation, withdrawal, replay, stale-profile and
+location/actor denials plus unchanged Track 1 reports. Retain append-only history,
+RLS and client-role denials. The new-table drift test must continue holding the
+old candidate. This is a checklist, not grant SQL or hosted cutover approval.
+See [par rollout and validation](REVIEWED_INVENTORY_PARS.md).
+
 The later [workflow checkpoint](RUNTIME_PERMISSION_WORKFLOW_CHECKPOINT.md)
 records **seven passing selected local cases** under a per-object nonowner
 candidate across purchasing, physical counts/corrections, staff review, orders,

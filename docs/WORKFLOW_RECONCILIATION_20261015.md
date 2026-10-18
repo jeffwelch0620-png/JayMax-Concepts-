@@ -1,5 +1,50 @@
 # Inventory workflow checkpoint and remaining work
 
+**PR45 review amendment:** owner accepted the temporary hosted par-editing freeze
+and authorized tested updates to the existing draft, with merge approval still
+separate. Original-head frontend/build and Windows CI passed; database CI failed
+in the runtime fixture's container-side address guard. The amendment verifies
+the same disposable target through the dedicated localhost DSN, retains refusal
+of remote/mismatched targets, and formats all par response decimals without
+changing stored evidence or retry fingerprints. Store-wide revision conflicts
+and the future O1 par permissions are documented in
+[the par record](REVIEWED_INVENTORY_PARS.md). No hosted SQL, grants, connection or
+deployment changes are included. Original local counts below remain historical.
+
+Amendment `2e583de` passed fresh CI: 1,026 frontend tests, strict build,
+151 database cases and 906 Windows offline cases. The extra local run timed out
+at 40 minutes after reporting failures; its selection included standalone
+installer tests inherited by the already-installed runtime fixture. Fixture
+helpers are now reused without inheriting those incompatible test methods.
+Original inventory was restored after deleting only the two recorded invented
+leftovers; the owned server was stopped. The corrected full par/runtime selection
+passed **48/48 cases** (23 methods and 25 subtests), preserving the database/role
+inventory and stopping its owned server. Final-head CI is recorded in the par
+reference/PR45 before merge approval is requested.
+
+**Reviewed par units, local:** the owner approved explicit units/review status,
+aligned native screens and manual ordering. The implementation preserves old
+numbers as unconfirmed and retains each reviewed physical target independently
+of supplier packs. New confirmations use the current verified count profile;
+changed profiles require re-review. One new append-only migration is local only.
+See [scope, rollout and validation](REVIEWED_INVENTORY_PARS.md). All 1,026 frontend
+tests, the strict build and 62 corrected PostgreSQL cases pass; broad offline
+checks pass 884/886 with two unchanged Windows ACL startup timeouts. Prompt
+before a new draft PR push. Fresh CI, hosted application, merge and live
+acceptance require later approvals. Unit aliases, historical Toast evidence,
+runtime permissions and the later UI rework remain separate work.
+
+**PR44 merged/live acceptance:** owner-approved merge `1729ecf` from `8cb8886`,
+with reviewed-head and merged-main CI green. Both automatic Render deployments
+are Live on the merge. Fictional missing-price, null/zero price, decimal quantity,
+saved expected-sales and fresh-document cases pass. The SELECT-only comparison
+verifies 81 protected relations unchanged and the expected Bert's analytical
+state change; the $212.00 historical control and both report hashes are unchanged.
+The new GR-002 fixture remains with unknown price and zero test sales. See
+[evidence and scope limits](PR44_LIVE_MONETARY_ACCEPTANCE.md). Par unit
+basis selection was subsequently approved; aliases, historical Toast evidence, runtime roles and UI rework
+remain separate. Earlier publication/merge gates below are historical.
+
 **PR44 review amendment:** the owner authorized S1 and N1–N3, tests and a
 same-branch push. Per-item sales completeness is shared across native/legacy
 readers; legacy conversion/portion refusals and Unknown display are tightened.
