@@ -1,4 +1,4 @@
-import { planningProduct, planningSum } from "../lib/planningNumbers";
+import { planningNumber, planningProduct, planningQuotient, planningSum } from "../lib/planningNumbers";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { confirmed, saveFailureMessage, useRetainedDraft } from "../lib/saveIntegrity";
 import { mergeSalesDraft } from "../lib/salesDraft";
@@ -138,9 +138,9 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
 
   }
 
-  const periodPurchaseQty = (cn) => purchases
+  const periodPurchaseQty = (cn) => planningSum(purchases
     .filter((p) => p.controlNumber === cn && p.invoiceDate >= local.periodStart && p.invoiceDate <= local.periodEnd)
-    .reduce((s, p) => s + (Number(p.qty) || 0), 0);
+    .map(p => planningNumber(p.qty)));
   const periodAdjustments = (cn) => adjustments
     .filter((a) => a.controlNumber === cn && a.date >= local.periodStart && a.date <= local.periodEnd);
 
@@ -152,21 +152,20 @@ export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => 
       return { it, theoreticalPortions: usage.portions, usageIssues: usage.issues };
     }
     const d = itemDerived(it);
-    let theoreticalPortions = 0;
-    normalizedRecipes.filter((dish) => dish.recipeType !== "prep").forEach((dish) => {
-      const qtySold = Number(local.dishSales[dish.id]) || 0;
-      theoreticalPortions += rawPortionsForRecipe(dish, it.controlNumber, items, normalizedRecipes) * qtySold;
-    });
+    const theoreticalPortions = planningSum(normalizedRecipes.filter(dish => dish.recipeType !== "prep").map(dish => {
+      const qtySold = planningNumber(local.dishSales[dish.id]);
+      return qtySold === 0 ? 0 : qtySold == null || qtySold < 0 ? null : planningProduct(rawPortionsForRecipe(dish, it.controlNumber, items, normalizedRecipes), qtySold);
+    }));
     const counts = local.itemCounts[it.controlNumber] || {};
-    const beginning = counts.beginning !== undefined && counts.beginning !== "" ? Number(counts.beginning) : null;
-    const ending = counts.ending !== undefined && counts.ending !== "" ? Number(counts.ending) : null;
+    const beginning = planningNumber(counts.beginning);
+    const ending = planningNumber(counts.ending);
     const purchased = periodPurchaseQty(it.controlNumber);
-    const actualUnits = (beginning !== null && ending !== null) ? (beginning + purchased - ending) : null;
+    const actualUnits = beginning !== null && ending !== null ? planningSum([beginning, purchased, -ending]) : null;
     const actualPortions = actualUnits !== null ? planningProduct(actualUnits, d.portionsPerUnit) : null;
-    const delta = actualPortions !== null ? actualPortions - theoreticalPortions : null;
+    const delta = planningSum([actualPortions, theoreticalPortions == null ? null : -theoreticalPortions]);
     const explainedPortions = planningSum(periodAdjustments(it.controlNumber).map(a => adjustmentSignedPortions(a, it)));
     const unexplainedDelta = planningSum([delta, explainedPortions == null ? null : -explainedPortions]);
-    const unexplainedPct = (unexplainedDelta !== null && theoreticalPortions > 0) ? (unexplainedDelta / theoreticalPortions) * 100 : null;
+    const unexplainedPct = theoreticalPortions > 0 ? planningProduct(planningQuotient(unexplainedDelta, theoreticalPortions), 100) : null;
     return { it, theoreticalPortions, purchased, actualPortions, delta, explainedPortions, unexplainedDelta, unexplainedPct, hasCounts: beginning !== null && ending !== null };
   });
 

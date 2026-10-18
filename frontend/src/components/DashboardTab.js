@@ -85,7 +85,7 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
       )}
 
       <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))" }}>
-        <MetricCard testId="metric-purchases" label="Purchases" value={fmtMoney(report.purchaseSpend)} sub={`${report.periodPurchases.length} invoice lines`} />
+        <MetricCard testId="metric-purchases" label="Purchases" value={fmtPlanningCost(report.purchaseSpend)} sub={`${report.periodPurchases.length} invoice lines`} />
         <MetricCard testId="metric-actual-cogs" label="Actual COGS" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtPlanningCost(report.actualCogs) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : `${countCoverage}% tracked-count coverage`} tone={noMatchForCustom || !report.usableRows.length ? "warn" : "normal"} />
         <MetricCard testId="metric-theo-cogs" label="Theoretical COGS" value={noMatchForCustom ? "No saved period" : fmtPlanningCost(report.theoreticalCogs)} sub={noMatchForCustom ? "for this custom range" : "from menu sales + recipes"} tone={noMatchForCustom ? "warn" : "normal"} />
         <MetricCard testId="metric-variance" label="Unexplained Variance" value={noMatchForCustom ? "No saved period" : report.usableRows.length ? fmtPlanningCost(report.unexplainedCost) : "Needs counts"} sub={noMatchForCustom ? "for this custom range" : "after known adjustments"} tone={noMatchForCustom ? "warn" : (!report.usableRows.length ? "warn" : (Math.abs(report.unexplainedCost) > 0 ? "warn" : "good"))} />

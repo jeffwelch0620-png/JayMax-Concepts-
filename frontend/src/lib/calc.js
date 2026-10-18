@@ -1,7 +1,6 @@
 import { planningNumber, planningProduct, planningQuotient, planningSum } from "./planningNumbers";
 
-// Pure business logic ported from the audited BertsInventorySystem.jsx (UOM engine,
-// costing, variance, invoice import) — unchanged behavior, now shared by all locations.
+// Shared planning logic. Catalog estimates never value native physical counts.
 
 export const RESTAURANTS = [
   { id: "berts", name: "Bert's Hometown Grill & Pizzeria", short: "Bert's", location: "Madisonville, TN", accent: "#F97316" },
@@ -69,6 +68,7 @@ export const CONV_TO_BASE = {
   each: 1, ct: 1, dozen: 12,
 };
 export const UOM_OPTIONS = Object.keys(UOM_FAMILY);
+const supportedPlanningUnit = unit => typeof unit === "string" && Object.hasOwn(UOM_FAMILY, unit);
 
 export const ADJUSTMENT_REASONS = [
   { id: "waste", label: "Waste", direction: "remove" }, { id: "spoilage", label: "Spoilage", direction: "remove" },
@@ -131,19 +131,19 @@ export function calcPortionsPerUnit(yieldQty, yieldUOM, portionSize, portionUOM)
   // Missing portion size/UOM is a data gap (silently yields $0 cost downstream),
   // distinct from `mismatch` below (portion size IS entered, but its unit doesn't
   // convert against the pack unit) — callers should flag these two cases differently.
-  if (!yq || !ps) return { value: 0, mismatch: false, needsPortion: true };
+  if (!(yq > 0) || !(ps > 0)) return { value: null, mismatch: false, needsPortion: ps === 0 };
+  if (!supportedPlanningUnit(yieldUOM) || !supportedPlanningUnit(portionUOM)) return { value: null, mismatch: true, needsPortion: false };
   const famY = UOM_FAMILY[yieldUOM], famP = UOM_FAMILY[portionUOM];
   if (famY && famP && famY === famP) {
     const totalBase = planningProduct(yq, CONV_TO_BASE[yieldUOM]), portionBase = planningProduct(ps, CONV_TO_BASE[portionUOM]);
     const value = planningQuotient(totalBase, portionBase);
     return value == null ? unavailable : { value, mismatch: false, needsPortion: false };
   }
-  const value = planningQuotient(yq, ps);
-  return value == null ? unavailable : { value, mismatch: yieldUOM !== portionUOM, needsPortion: false };
+  return { value: null, mismatch: true, needsPortion: false };
 }
 
 export function preferredSku(item) {
-  const skus = (item.vendorSkus || []).filter(s => s.available !== false);
+  const skus = (Array.isArray(item?.vendorSkus) ? item.vendorSkus : []).filter(s => s && typeof s === "object" && s.available !== false);
   return skus.find((s) => s.preferred) || skus[0] || null;
 }
 export function isCountActive(item) { return item.countActive !== undefined ? !!item.countActive : item.active !== false; }
@@ -172,16 +172,20 @@ export function normalizeItemSchema(item) {
 
 export function itemDerived(item) {
   const pref = preferredSku(item);
-  const pack = vendorPack(item, pref);
-  const packTotal = planningProduct(pack.packCount, pack.unitQty);
-  const conversion = packTotal == null ? { value:null, mismatch:false, needsPortion:false, rangeUnavailable:true }
+  const pack = { ...vendorPack(item, pref), unitUOM: pref?.unitUOM || item.unitUOM };
+  const positivePack = pack.packCount > 0 && pack.unitQty > 0;
+  const packTotal = positivePack ? planningProduct(pack.packCount, pack.unitQty) : null;
+  const conversion = !positivePack ? { value:null, mismatch:false, needsPortion:false, rangeUnavailable:pack.packCount == null || pack.unitQty == null }
+    : packTotal == null ? { value:null, mismatch:false, needsPortion:false, rangeUnavailable:true }
     : calcPortionsPerUnit(packTotal, pack.unitUOM, item.portionSize, item.portionUOM);
   const { value: portionsPerUnit, mismatch, needsPortion } = conversion;
   const rawPrice = pref?.price;
   const priceMissing = rawPrice == null || (typeof rawPrice === "string" && rawPrice.trim() === "");
-  const price = planningNumber(rawPrice);
-  const costPerPortion = portionsPerUnit > 0 ? planningQuotient(price, portionsPerUnit) : (portionsPerUnit === 0 && price != null ? 0 : null);
-  const rangeUnavailable = !!conversion.rangeUnavailable || (!priceMissing && (price == null || costPerPortion == null));
+  const parsedPrice = planningNumber(rawPrice);
+  const price = parsedPrice != null && parsedPrice >= 0 ? parsedPrice : null;
+  const costPerPortion = portionsPerUnit > 0 ? planningQuotient(price, portionsPerUnit) : null;
+  const rangeUnavailable = !!conversion.rangeUnavailable || (!priceMissing && price == null)
+    || (portionsPerUnit > 0 && price != null && costPerPortion == null);
   return { portionsPerUnit, costPerPortion, mismatch, needsPortion, rangeUnavailable, priceMissing, preferred: pref, price, pack };
 }
 
@@ -195,12 +199,15 @@ export function statusOf(item) {
 }
 
 export function adjustmentSignedPortions(adj, item) {
+  if (!item || !ADJUSTMENT_REASONS.some(reason => reason.id === adj.reason) || !["portion", "purchase"].includes(adj.qtyBasis)) return null;
   const d = itemDerived(item);
-  const qty = Number(adj.qty) || 0;
+  const qty = planningNumber(adj.qty);
+  if (qty == null || qty < 0) return null;
   const portions = adj.qtyBasis === "portion" ? qty : planningProduct(qty, d.portionsPerUnit);
   return portions == null ? null : adjustmentReason(adj.reason).direction === "add" ? -portions : portions;
 }
 export function adjustmentValue(adj, item) {
+  if (!item) return null;
   const portions = adjustmentSignedPortions(adj, item);
   return planningProduct(portions == null ? null : Math.abs(portions), itemDerived(item).costPerPortion);
 }
@@ -352,7 +359,8 @@ export function normalizeRecipeSchema(r) {
     portionNote: r.portionNote || "",
     prepPar: r.prepPar ?? 0,
     frequency: r.frequency || "daily",
-    lines: (r.lines || []).map((l) => l.sourceType ? l : ({ ...l, sourceType: "item", qty: l.qty ?? l.qtyPortions ?? 0 })),
+    lines: Array.isArray(r.lines) ? r.lines.map(l => l && typeof l === "object" && !Array.isArray(l)
+      ? (l.sourceType ? l : ({ ...l, sourceType: "item", qty: l.qty ?? l.qtyPortions })) : l) : (r.lines ?? []),
   };
 }
 const recipeNumber = value => planningNumber(value);
@@ -366,7 +374,7 @@ export function itemPlanningCost(item) {
   if (!sku || sku.available === false || price == null || price < 0) return { cost: null, issues: [`${item.name}: supplier price is unknown or unavailable`] };
   const packCount = recipeNumber(sku.packCount ?? item.packCount), unitQty = recipeNumber(sku.unitQty ?? item.unitQty), portionSize = recipeNumber(item.portionSize);
   const unit = sku.unitUOM || item.unitUOM, portion = item.portionUOM;
-  if (!(packCount > 0) || !(unitQty > 0) || !(portionSize > 0) || !UOM_FAMILY[unit] || UOM_FAMILY[unit] !== UOM_FAMILY[portion]) {
+  if (!(packCount > 0) || !(unitQty > 0) || !(portionSize > 0) || !supportedPlanningUnit(unit) || !supportedPlanningUnit(portion) || UOM_FAMILY[unit] !== UOM_FAMILY[portion]) {
     return { cost: null, issues: [`${item.name}: confirm compatible pack and portion quantities/units`] };
   }
   const portions = planningQuotient(planningProduct(packCount, unitQty, CONV_TO_BASE[unit]), planningProduct(portionSize, CONV_TO_BASE[portion]));
@@ -376,7 +384,7 @@ export function itemPlanningCost(item) {
 
 export function recipeCostSummary(recipe, items, recipes, stack = new Set()) {
   const unknown = (issue, cycle = false) => ({ totalCost: null, costPerYieldUnit: null, complete: false, valid: false, cycle, issues: [issue], validationIssues: [issue], lines: [] });
-  if (!recipe) return unknown("Missing prep recipe");
+  if (!recipe || typeof recipe !== "object" || Array.isArray(recipe)) return unknown("Missing prep recipe");
   if (stack.size >= 100) return unknown("Recipe nesting exceeds the supported depth of 100");
   const key = recipe.id || "draft";
   if (stack.has(key)) return unknown("Circular prep recipe reference", true);
@@ -386,7 +394,7 @@ export function recipeCostSummary(recipe, items, recipes, stack = new Set()) {
   if (!["menu", "prep"].includes(type)) validationIssues.push("Invalid recipe type");
   if (!Array.isArray(recipe.lines) || !recipe.lines.length) validationIssues.push("Add at least one ingredient");
   const yieldQty = type === "prep" ? recipeNumber(recipe.yieldQty) : 1;
-  if (type === "prep" && (!(yieldQty > 0) || !UOM_FAMILY[recipe.yieldUOM])) validationIssues.push("Confirm a positive prep yield and supported yield unit");
+  if (type === "prep" && (!(yieldQty > 0) || !supportedPlanningUnit(recipe.yieldUOM))) validationIssues.push("Confirm a positive prep yield and supported yield unit");
   if (type === "menu" && ((recipe.yieldQty != null && recipeNumber(recipe.yieldQty) !== 1) || (recipe.yieldUOM != null && recipe.yieldUOM !== "each"))) validationIssues.push("Menu definitions are one serving (yield 1 each)");
   for (const [field, label, minimum, maximum] of [["price", "Price", 0, Infinity], ["prepPar", "Prep par", 0, Infinity], ["targetPct", "Target food cost percentage", Number.MIN_VALUE, 100]]) {
     if (recipe[field] != null && String(recipe[field]).trim() !== "") {
@@ -396,13 +404,15 @@ export function recipeCostSummary(recipe, items, recipes, stack = new Set()) {
   }
   let cycle = false;
   const lines = (Array.isArray(recipe.lines) ? recipe.lines : []).map(raw => {
-    const line = raw.sourceType ? raw : { ...raw, sourceType: "item", qty: raw.qty ?? raw.qtyPortions };
+    const line = raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw.sourceType ? raw : { ...raw, sourceType: "item", qty: raw.qty ?? raw.qtyPortions }) : {};
     const qty = recipeNumber(line.qty ?? line.qtyPortions);
     const problems = [], invalid = [];
     if (!(qty > 0)) invalid.push("Ingredient quantities must be finite and greater than zero");
     let unitCost = null, name = "Missing ingredient", usageUOM = "units";
     if (line.sourceType === "prep") {
-      const sub = recipes.find(r => r.id === line.recipeId);
+      const matches = recipes.filter(r => r?.id === line.recipeId);
+      const sub = matches.length === 1 ? matches[0] : null;
       name = sub ? `PREP — ${sub.name}` : "Missing prep recipe"; usageUOM = sub?.yieldUOM || "units";
       if (line.controlNumber || line.itemCode || !sub || sub.recipeType !== "prep") invalid.push("Select one retained prep recipe for this ingredient");
       else {
@@ -412,7 +422,8 @@ export function recipeCostSummary(recipe, items, recipes, stack = new Set()) {
         problems.push(...summary.issues); invalid.push(...summary.validationIssues);
       }
     } else if (line.sourceType === "item") {
-      const item = items.find(i => line.itemCode ? i.itemCode === line.itemCode : i.controlNumber === line.controlNumber);
+      const matches = items.filter(i => line.itemCode ? (i.itemCode || i.code) === line.itemCode : line.controlNumber && i.controlNumber === line.controlNumber);
+      const item = matches.length === 1 ? matches[0] : null;
       name = item ? `${item.controlNumber} — ${item.name}` : "Missing inventory ingredient"; usageUOM = item?.portionUOM ? `${item.portionUOM} portions` : "portions";
       if (line.recipeId || !item) invalid.push("Select one inventory ingredient linked to this restaurant");
       else { const result = itemPlanningCost(item); unitCost = result.cost; problems.push(...result.issues); }
@@ -426,24 +437,30 @@ export function recipeCostSummary(recipe, items, recipes, stack = new Set()) {
   issues.push(...validationIssues);
   const sum = planningSum(lines.map(line => line.cost));
   const costPerYieldUnit = planningQuotient(sum, yieldQty);
-  if (sum == null || (yieldQty > 0 && costPerYieldUnit == null)) issues.push("Recipe cost exceeds supported numeric range");
+  if (lines.every(line => line.cost != null) && (sum == null || (yieldQty > 0 && costPerYieldUnit == null))) issues.push("Recipe cost exceeds supported numeric range");
   const complete = !issues.length && lines.every(line => line.cost != null);
   return { totalCost: complete ? sum : null, costPerYieldUnit: complete ? costPerYieldUnit : null, complete, valid: !validationIssues.length, cycle, issues: [...new Set(issues)], validationIssues: [...new Set(validationIssues)], lines };
 }
 export function rawPortionsForRecipe(recipe, targetCN, items, recipes, stack = new Set()) {
-  if (!recipe) return 0;
+  if (!recipe || !Array.isArray(recipe.lines) || !recipe.lines.length || stack.size >= 100) return null;
   const key = recipe.id || recipe.name || "draft";
-  if (stack.has(key)) return 0;
+  if (stack.has(key)) return null;
   const nextStack = new Set(stack); nextStack.add(key);
-  return (recipe.lines || []).reduce((sum, rawLine) => {
-    const l = rawLine.sourceType ? rawLine : { ...rawLine, sourceType: "item", qty: rawLine.qty ?? rawLine.qtyPortions ?? 0 };
-    const qty = Number(l.qty ?? l.qtyPortions) || 0;
-    if (l.sourceType === "item") return sum + (l.controlNumber === targetCN ? qty : 0);
-    const sub = recipes.find((r) => r.id === l.recipeId);
-    if (!sub) return sum;
-    const subYield = Number(sub.yieldQty) || 1;
-    return sum + rawPortionsForRecipe(sub, targetCN, items, recipes, nextStack) * (qty / subYield);
-  }, 0);
+  return planningSum(recipe.lines.map(l => {
+    if (!l || typeof l !== "object" || Array.isArray(l)) return null;
+    const qty = planningNumber(l.qty ?? l.qtyPortions);
+    if (!(qty > 0)) return null;
+    if ((l.sourceType || "item") === "item") {
+      const matches = items.filter(i => l.itemCode ? (i.itemCode || i.code) === l.itemCode : l.controlNumber && i.controlNumber === l.controlNumber);
+      if (matches.length !== 1 || l.recipeId || (l.uom != null && l.uom !== "portion")) return null;
+      return matches[0].controlNumber === targetCN ? qty : 0;
+    }
+    if (l.sourceType !== "prep") return null;
+    const matches = recipes.filter(r => r?.id === l.recipeId);
+    const sub = matches.length === 1 ? matches[0] : null;
+    if (!sub || sub.recipeType !== "prep" || l.itemCode || l.controlNumber || !(planningNumber(sub.yieldQty) > 0) || !supportedPlanningUnit(sub.yieldUOM) || (l.uom != null && l.uom !== sub.yieldUOM)) return null;
+    return planningProduct(rawPortionsForRecipe(sub, targetCN, items, recipes, nextStack), planningQuotient(qty, sub.yieldQty));
+  }));
 }
 
 /* ---------- Order generator helpers ---------- */
@@ -481,22 +498,22 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
   const normalizedRecipes = dishes.map(normalizeRecipeSchema);
   const periodPurchases = purchases.filter((p) => p.invoiceDate >= start && p.invoiceDate <= end);
   const periodAdjustmentsAll = adjustments.filter((a) => a.date >= start && a.date <= end);
-  const purchaseSpend = periodPurchases.reduce((sum, p) => sum + (Number(p.extendedCost) || ((Number(p.qty) || 0) * (Number(p.unitCost) || 0))), 0);
+  const purchaseSpend = planningSum(periodPurchases.map(p => p.extendedCost != null && String(p.extendedCost).trim() !== ""
+    ? planningNumber(p.extendedCost) : planningProduct(planningNumber(p.qty), planningNumber(p.unitCost))));
 
   const trackedRows = items.filter((it) => it.salesTracked).map((it) => {
     const d = itemDerived(it);
-    const purchaseQty = periodPurchases.filter((p) => p.controlNumber === it.controlNumber).reduce((sum, p) => sum + (Number(p.qty) || 0), 0);
-    let theoreticalPortions = 0;
-    normalizedRecipes.filter((r) => r.recipeType !== "prep").forEach((recipe) => {
-      const sold = Number(period?.dishSales?.[recipe.id]) || 0;
-      theoreticalPortions += rawPortionsForRecipe(recipe, it.controlNumber, items, normalizedRecipes) * sold;
-    });
+    const purchaseQty = planningSum(periodPurchases.filter(p => p.controlNumber === it.controlNumber).map(p => planningNumber(p.qty)));
+    const theoreticalPortions = planningSum(normalizedRecipes.filter(r => r.recipeType !== "prep").map(recipe => {
+      const sold = planningNumber(period?.dishSales?.[recipe.id]);
+      return sold === 0 ? 0 : sold == null || sold < 0 ? null : planningProduct(rawPortionsForRecipe(recipe, it.controlNumber, items, normalizedRecipes), sold);
+    }));
     const counts = period?.itemCounts?.[it.controlNumber] || {};
-    const beginning = counts.beginning !== undefined && counts.beginning !== "" ? Number(counts.beginning) : null;
-    const ending = counts.ending !== undefined && counts.ending !== "" ? Number(counts.ending) : null;
-    const actualUnits = beginning !== null && ending !== null ? beginning + purchaseQty - ending : null;
+    const beginning = planningNumber(counts.beginning);
+    const ending = planningNumber(counts.ending);
+    const actualUnits = beginning !== null && ending !== null ? planningSum([beginning, purchaseQty, -ending]) : null;
     const actualPortions = actualUnits !== null ? planningProduct(actualUnits, d.portionsPerUnit) : null;
-    const rawDelta = actualPortions !== null ? actualPortions - theoreticalPortions : null;
+    const rawDelta = planningSum([actualPortions, theoreticalPortions == null ? null : -theoreticalPortions]);
     const itemAdjustments = periodAdjustmentsAll.filter((a) => a.controlNumber === it.controlNumber);
     const explainedPortions = planningSum(itemAdjustments.map(a => adjustmentSignedPortions(a, it)));
     const unexplainedPortions = planningSum([rawDelta, explainedPortions == null ? null : -explainedPortions]);
@@ -519,7 +536,6 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
   const wasteByReason = {};
   periodAdjustmentsAll.forEach((a) => {
     const it = items.find((i) => i.controlNumber === a.controlNumber);
-    if (!it) return;
     const label = adjustmentReason(a.reason).label;
     wasteByReason[label] = planningSum([Object.hasOwn(wasteByReason, label) ? wasteByReason[label] : 0, adjustmentValue(a, it)]);
   });
@@ -543,7 +559,7 @@ export function buildPeriodReport(period, items, purchases, dishes, adjustments)
     return { recipe: r, cost: c.totalCost, costComplete: c.complete, costIssues: c.issues, price, foodCostPct: c.complete && price > 0 ? planningProduct(planningQuotient(c.totalCost, price), 100) : null, contribution: c.complete && price != null ? planningSum([price, -c.totalCost]) : null };
   }).sort((a, b) => a.foodCostPct == null ? (b.foodCostPct == null ? 0 : 1) : b.foodCostPct == null ? -1 : b.foodCostPct - a.foodCostPct);
 
-  const liveInventoryValue = planningSum(items.map(it => planningProduct(planningNumber(it.currentStock, 0), itemDerived(it).price)));
+  const liveInventoryValue = planningSum(items.map(it => planningProduct(planningNumber(it.currentStock), itemDerived(it).price)));
   const orderExposure = planningSum(items.filter((it) => isOrderEnabled(it) && (Number(it.currentStock) || 0) < (Number(it.par) || 0)).map(it => {
     const shortfall = Math.max(0, (Number(it.par) || 0) - (Number(it.currentStock) || 0));
     const sku = preferredSku(it);

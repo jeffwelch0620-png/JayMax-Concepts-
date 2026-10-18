@@ -1,7 +1,7 @@
 // Finite planning estimates; retained catalog decimals and Track 1 stay exact.
 export function planningNumber(value, fallback = null) {
   if (value == null || value === "") return fallback;
-  if (typeof value === "boolean" || String(value).trim() === "") return null;
+  if (!["string", "number"].includes(typeof value) || String(value).trim() === "") return null;
   const number = Number(value);
   if (!Number.isFinite(number) || (number === 0 && /[1-9]/.test(String(value).split(/[eE]/)[0]))) return null;
   return number;

@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-OFFLINE_MODULES = ('planning_numbers backend_planning_prices catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
+OFFLINE_MODULES = ('planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
  'managed_development rotate_build_connections provision_build_connections staff_response pg_routes pg_migrations '
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
@@ -28,6 +28,7 @@ DATABASE_CASES = (
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_task_missing_later_price_is_refused_before_any_stock_write'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_legacy_helper_ignores_unavailable_supplier_and_keeps_selected_unknown'),
  ('shared_catalog','SharedCatalogTests','test_backend_planning_prices_use_location_alias_and_never_change_actual_report'),
+ ('shared_catalog','SharedCatalogTests','test_monetary_reader_holds_preserve_adapter_evidence_and_actual_report'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_direct_later_invalid_cost_or_arithmetic_reaches_no_stock_writes'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_task_later_invalid_cost_or_arithmetic_reaches_no_stock_writes'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_direct_happy_path_deducts_both_and_writes_one_log'),

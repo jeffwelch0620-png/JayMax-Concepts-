@@ -1,5 +1,14 @@
 # Inventory workflow checkpoint and remaining work
 
+**Latest local slice:** the owner authorized the remaining backend/frontend
+[monetary completeness audit](MONETARY_PLANNING_COMPLETENESS.md) and local fixes.
+Incomplete conversions, recipe references and monetary evidence stay Unknown;
+valid zero and native accounting remain intact. All 994 frontend tests and the
+strict build pass. Offline checks pass 852/854 reported cases (two unchanged
+PowerShell/Windows ACL startup failures); corrected database fixtures pass 6/6
+after 47/49 in the initial run. No local failure is hidden or counted as passed.
+Prompt before a draft PR push; no new merge or hosted action is authorized.
+
 **Latest continuation:** PR43 merged with owner approval as `0cf5464`; all four
 reviewed-head and merged-main checks passed. The frontend is Live on the merge;
 unchanged API remains at `84cb381`. Core fictional expected-sales UI cases passed,

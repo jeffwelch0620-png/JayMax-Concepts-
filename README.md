@@ -1,5 +1,19 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Monetary planning completeness — local follow-up
+
+The owner-authorized [backend/frontend monetary audit](docs/MONETARY_PLANNING_COMPLETENESS.md)
+addresses F03/F03b: incompatible conversions, broken recipe references, missing
+yield/price evidence and incomplete waste totals remain Unknown instead of free
+or partial estimates. Canonical identities override stale display aliases; valid
+zero costs stay zero. Native Track 1 and held legacy writers remain independent.
+Validation passes 994 frontend tests/79 suites and the strict build. Offline
+checks pass 852/854 reported cases; two unchanged Windows ACL tests time out
+starting PowerShell. The corrected PostgreSQL fixture rerun passes 6/6 after
+47/49 in the initial run; all evidence and limitations are documented. Prompt
+before pushing a new draft PR; review, fresh CI, merge and hosted acceptance
+remain separate.
+
 ## PR43 merged and deployed; scoped live expected-sales checks recorded
 
 Owner-approved PR43 merged as **0cf5464** from **79b40ad**. Reviewed-head and

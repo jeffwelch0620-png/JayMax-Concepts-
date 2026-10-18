@@ -75,6 +75,8 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
         baseline=(await self.report(opening,closing)).json()
         for price in ('1e400','1e-400','0E-10'):
             body=await self.payload('berts');body['vendor_skus'][0]['price']=price
+            body.update(pack_count='1',unit_qty='1',unit_uom='each',portion_size='1',portion_uom='each')
+            body['vendor_skus'][0].update(pack_count='1',unit_qty='1',unit_uom='each')
             async with self.pool.acquire() as conn:
                 revision=await conn.fetchval("SELECT revision FROM store_state WHERE store_id='berts'")
             saved=await self.put(body,revision,'berts');self.assertEqual(saved.status_code,200,saved.text)
@@ -135,6 +137,55 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
                 async with self.pool.acquire() as c:
                     self.assertEqual(await c.fetchval('SELECT price FROM vendor_items WHERE id=$1',self.sku),Decimal('99.100000000000000001'))
                 self.assertEqual((await self.report(opening, closing)).json(),actual_before)
+
+    async def test_monetary_reader_holds_preserve_adapter_evidence_and_actual_report(self):
+        self.assertEqual((await self.units())[0].status_code, 200)
+        _, opening, closing = await self.pair()
+        captured, *_ = await self.capture()
+        self.assertEqual((await self.post(captured['documents'][0])).status_code, 200)
+        baseline = (await self.report(opening, closing)).json()
+        self.assertEqual((await self.link()).status_code, 200)
+        body = await self.payload()
+        body['vendor_skus'][0]['price'] = '80'
+        async with self.pool.acquire() as c:
+            revision = await c.fetchval("SELECT revision FROM store_state WHERE store_id='rudds'")
+        self.assertEqual((await self.put(body, revision)).status_code, 200)
+        async with self.pool.acquire() as c:
+            await c.execute("UPDATE items SET portion_size=1,portion_uom='lb' WHERE code='test_food'")
+            prep = await c.fetchval("""INSERT INTO dishes(store_id,name,recipe_type,yield_qty,yield_uom)
+                VALUES('rudds','Fictional retained prep','prep',0,'each') RETURNING id""")
+            menu = await c.fetchval("""INSERT INTO dishes(store_id,name,recipe_type,price,yield_qty,yield_uom)
+                VALUES('rudds','Fictional retained plate','menu',NULL,1,'each') RETURNING id""")
+            await c.execute("INSERT INTO dish_lines(dish_id,source_type,item_code,qty) VALUES($1,'item','test_food',1)", prep)
+            await c.execute("INSERT INTO dish_lines(dish_id,source_type,prep_dish_id,qty) VALUES($1,'prep',$2,1)", menu, prep)
+        for yield_qty, portion_unit, complete in [('0', 'lb', False), (None, 'lb', False), ('2', 'fl oz', False), ('2', 'lb', True)]:
+            with self.subTest(yield_qty=yield_qty, portion_unit=portion_unit):
+                async with self.pool.acquire() as c:
+                    await c.execute('UPDATE dishes SET yield_qty=$1 WHERE id=$2', Decimal(yield_qty) if yield_qty is not None else None, prep)
+                    await c.execute("UPDATE items SET portion_uom=$1 WHERE code='test_food'", portion_unit)
+                    before = await c.fetch("SELECT * FROM dishes WHERE store_id='rudds' ORDER BY id")
+                    lines_before = await c.fetch('SELECT * FROM dish_lines WHERE dish_id=ANY($1::uuid[]) ORDER BY id', [prep, menu])
+                    revision = await c.fetchval("SELECT revision FROM store_state WHERE store_id='rudds'")
+                items, purchases, dishes, prep_stock = await server._pg_owner_view('rudds')
+                mapped_prep = next(d for d in dishes if d['id'] == str(prep))
+                mapped_menu = next(d for d in dishes if d['id'] == str(menu))
+                self.assertEqual(mapped_prep['yieldQty'], yield_qty)
+                self.assertIsNone(mapped_menu['price'])
+                self.assertEqual(mapped_prep['lines'][0]['itemCode'], 'test_food')
+                estimate = server.recipe_cost_summary(mapped_menu, items, dishes)
+                self.assertEqual(estimate['complete'], complete)
+                with patch.object(server, 'ensure_seed', unittest.mock.AsyncMock()):
+                    result = await server.store_summary(dict(id='rudds'))
+                self.assertEqual(result['planningCostsAvailable'], complete)
+                self.assertIsNone(result['avgFoodCost'])
+                context = server.build_ai_context('rudds', items, purchases, dishes, [], prep_stock, result['nativeInventory'])
+                self.assertIn('price Unknown', context)
+                if not complete: self.assertIn('plate cost Unknown', context)
+                async with self.pool.acquire() as c:
+                    self.assertEqual(await c.fetch("SELECT * FROM dishes WHERE store_id='rudds' ORDER BY id"), before)
+                    self.assertEqual(await c.fetch('SELECT * FROM dish_lines WHERE dish_id=ANY($1::uuid[]) ORDER BY id', [prep, menu]), lines_before)
+                    self.assertEqual(await c.fetchval("SELECT revision FROM store_state WHERE store_id='rudds'"), revision)
+                self.assertEqual((await self.report(opening, closing)).json(), baseline)
 
     async def test_catalog_extreme_decimals_are_422_without_changing_catalog_or_revision(self):
         async def snapshot():

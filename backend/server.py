@@ -286,32 +286,34 @@ def f(x, d=0.0):
         return d
 
 def calc_ppu(yq, yuom, ps, puom):
-    yq, ps = planning.number(yq, 0), planning.number(ps, 0)
-    if yq is None or ps is None:
+    yq, ps = planning.number(yq), planning.number(ps)
+    if yq is None or ps is None or yq <= 0 or ps <= 0:
         return None
-    if not yq or not ps:
-        return 0.0
-    fy, fp = UOM_FAMILY.get(yuom), UOM_FAMILY.get(puom)
+    fy = UOM_FAMILY.get(yuom) if isinstance(yuom, str) else None
+    fp = UOM_FAMILY.get(puom) if isinstance(puom, str) else None
     if fy and fp and fy == fp:
         pb = planning.product(ps, CONV_TO_BASE[puom])
         return planning.quotient(planning.product(yq, CONV_TO_BASE[yuom]), pb)
-    return planning.quotient(yq, ps)
+    return None
 
 def preferred_sku(item):
-    skus = [sku for sku in item.get("vendorSkus") or [] if sku.get("available") is not False]
+    rows = item.get("vendorSkus")
+    skus = [sku for sku in rows if isinstance(sku, dict) and sku.get("available") is not False] if isinstance(rows, list) else []
     return next((s for s in skus if s.get("preferred")), skus[0] if skus else None)
 
 def item_derived(item):
     pref = preferred_sku(item) or {}
-    pack_count = planning.number(pref.get("packCount", item.get("packCount")), 0)
-    unit_qty = planning.number(pref.get("unitQty", item.get("unitQty")), 0)
-    unit_uom = pref.get("unitUOM") or item.get("unitUOM") or "each"
-    pack_total = planning.product(pack_count, unit_qty)
+    pack_count = planning.number(pref.get("packCount") if pref.get("packCount") is not None else item.get("packCount"))
+    unit_qty = planning.number(pref.get("unitQty") if pref.get("unitQty") is not None else item.get("unitQty"))
+    unit_uom = pref.get("unitUOM") or item.get("unitUOM")
+    pack_total = planning.product(pack_count, unit_qty) if pack_count is not None and pack_count > 0 and unit_qty is not None and unit_qty > 0 else None
     ppu = calc_ppu(pack_total, unit_uom, item.get("portionSize"), item.get("portionUOM")) if pack_total is not None else None
     raw_price = pref.get("price")
     price_missing = raw_price is None or isinstance(raw_price, str) and not raw_price.strip()
     price = planning.number(raw_price)
-    cost = planning.quotient(price, ppu) if ppu is not None and ppu > 0 else (0.0 if ppu == 0 and price is not None else None)
+    if price is not None and price < 0:
+        price = None
+    cost = planning.quotient(price, ppu)
     return {"portionsPerUnit": ppu, "costPerPortion": cost, "price": price, "priceMissing": price_missing,
             "calculationUnavailable": ppu is None or price is None or cost is None}
 
@@ -340,36 +342,101 @@ def _require_prep_planning_cost(derived, item):
         raise HTTPException(422, f"Supplier planning price is unknown for {name}; enter or confirm it before recording this prep. No prep write was made.")
     raise HTTPException(422, "Catalog cost/conversion is outside the supported calculation range; no prep write is allowed")
 
-def recipe_cost(recipe, items_by_cn, by_id, stack=()):
-    if not recipe or recipe.get("id") in stack:
-        return 0.0
-    stack = stack + (recipe.get("id"),)
-    total = 0.0
-    for l in recipe.get("lines", []):
-        qty = planning.number(l.get("qty", l.get("qtyPortions")), 0)
-        if qty is None:
-            return None
-        if l.get("sourceType") == "prep":
-            sub = by_id.get(l.get("recipeId"))
-            sub_cost = recipe_cost(sub, items_by_cn, by_id, stack)
-            sy = planning.number((sub or {}).get("yieldQty"), 1)
-            if sy is None:
-                return None
-            total = planning.total([total, planning.product(planning.quotient(sub_cost, sy or 1), qty)])
+def _planning_rows(rows):
+    return list(rows.values()) if isinstance(rows, dict) else rows if isinstance(rows, (list, tuple)) else []
+
+
+def _planning_item(line, rows):
+    rows = _planning_rows(rows)
+    canonical = line.get('itemCode')
+    alias = line.get('controlNumber')
+    matches = [row for row in rows if isinstance(row, dict) and
+               ((row.get('itemCode') or row.get('code')) == canonical if canonical else
+                bool(alias) and row.get('controlNumber') == alias)]
+    if len(matches) != 1:
+        return None
+    return matches[0]  # A retained canonical key overrides an old display alias.
+
+
+def recipe_cost_summary(recipe, items_by_cn, by_id, stack=()):
+    """Read-only current planning estimate; malformed evidence is never free."""
+    def unknown(issue):
+        return dict(totalCost=None, complete=False, issues=[issue])
+    if not isinstance(recipe, dict):
+        return unknown('Missing prep recipe')
+    key = recipe.get('id') or 'draft'
+    if key in stack:
+        return unknown('Circular prep recipe reference')
+    if len(stack) >= 100:
+        return unknown('Recipe nesting exceeds the supported depth of 100')
+    kind = recipe.get('recipeType') or 'menu'
+    if kind not in ('prep', 'menu'):
+        return unknown('Invalid recipe type')
+    if kind == 'prep' and (not (planning.number(recipe.get('yieldQty')) or 0) > 0 or
+                           not isinstance(recipe.get('yieldUOM'), str) or recipe['yieldUOM'] not in UOM_FAMILY):
+        return unknown('Confirm a positive prep yield and supported yield unit')
+    if kind == 'menu' and ((recipe.get('yieldQty') is not None and planning.number(recipe['yieldQty']) != 1) or
+                           (recipe.get('yieldUOM') is not None and recipe['yieldUOM'] != 'each')):
+        return unknown('Menu definitions are one serving (yield 1 each)')
+    lines = recipe.get('lines')
+    if not isinstance(lines, list) or not lines:
+        return unknown('Recipe ingredients are missing')
+    costs, issues = [], []
+    for line in lines:
+        if not isinstance(line, dict):
+            return unknown('Ingredient details are missing')
+        qty = planning.number(line.get('qty') if line.get('qty') is not None else line.get('qtyPortions'))
+        if qty is None or qty <= 0:
+            return unknown('Ingredient quantities must be finite and greater than zero')
+        source = line.get('sourceType') or 'item'
+        if source == 'prep':
+            matches = [row for row in _planning_rows(by_id) if isinstance(row, dict) and row.get('id') == line.get('recipeId')]
+            sub = matches[0] if len(matches) == 1 else None
+            if line.get('itemCode') or line.get('controlNumber') or not sub or sub.get('recipeType') != 'prep':
+                return unknown('Select one retained prep recipe at this restaurant')
+            if line.get('uom') is not None and line['uom'] != sub.get('yieldUOM'):
+                return unknown('Sub-recipe quantity unit must match its defined yield unit')
+            child = recipe_cost_summary(sub, items_by_cn, by_id, stack + (key,))
+            issues.extend(child['issues'])
+            unit_cost = planning.quotient(child['totalCost'], sub.get('yieldQty'))
+        elif source == 'item':
+            item = _planning_item(line, items_by_cn)
+            if line.get('recipeId') or not item:
+                return unknown('Inventory ingredient identity is missing or ambiguous at this restaurant')
+            if line.get('uom') is not None and line['uom'] != 'portion':
+                return unknown('Inventory recipe quantities must be portions')
+            derived = item_derived(item)
+            unit_cost = derived['costPerPortion']
+            if unit_cost is None:
+                label = item.get('name') or item.get('controlNumber') or item.get('code')
+                issues.append(f'{label}: supplier planning price is unknown' if derived['priceMissing'] else
+                              f'{label}: confirm compatible pack/portion units, quantities and supported cost range')
         else:
-            it = items_by_cn.get(l.get("controlNumber"))
-            if it:
-                total = planning.total([total, planning.product(item_derived(it)["costPerPortion"], qty)])
-        if total is None:
-            return None
-    return total
+            return unknown('Invalid ingredient source type')
+        cost = planning.product(unit_cost, qty)
+        if unit_cost is not None and cost is None:
+            issues.append('Ingredient cost exceeds supported numeric range')
+        costs.append(cost)
+    total = planning.total(costs)
+    if not issues and total is None:
+        issues.append('Recipe cost exceeds supported numeric range')
+    return dict(totalCost=total if not issues else None, complete=not issues and total is not None,
+                issues=list(dict.fromkeys(issues)))
+
+
+def recipe_cost(recipe, items_by_cn, by_id, stack=()):
+    return recipe_cost_summary(recipe, items_by_cn, by_id, stack)['totalCost']
 
 ADJ_DIRECTIONS = {"waste": "remove", "spoilage": "remove", "employee_meal": "remove", "comp": "remove",
                   "prep_loss": "remove", "transfer_out": "remove", "transfer_in": "add",
                   "count_correction_remove": "remove", "count_correction_add": "add",
                   "other_remove": "remove", "other_add": "add"}
 def adj_value(adj, item):
-    qty = planning.number(adj.get("qty"), 0)
+    if not item or adj.get('reason') not in ADJ_DIRECTIONS or adj.get('qtyBasis') not in ('portion', 'purchase'):
+        return None
+    qty = planning.number(adj.get("qty"))
+    if qty is None or qty < 0:
+        return None
     derived = item_derived(item)
     portions = qty if adj.get("qtyBasis") == "portion" else planning.product(qty, derived["portionsPerUnit"])
     return planning.product(abs(portions) if portions is not None else None, derived["costPerPortion"])
@@ -2372,8 +2439,8 @@ async def _pg_owner_view(rid):
     # Read-only Mongo-shaped view of items/purchases/dishes/prep_stock from Postgres,
     # for server-side reporting (Owner Dashboard, AI Assistant) that can't go through
     # the frontend's own /api/pg/* adapter. Mirrors frontend/src/lib/api.js's
-    # pgItemToMongoItem/pgDishToMongoDish closely enough for item_derived/recipe_cost/
-    # raw_portions (all written against the Mongo shape) to work unchanged. See
+    # pgItemToMongoItem/pgDishToMongoDish for explicit planning readers. Preserve
+    # canonical identity and missing/zero yield/price evidence; never invent it. See
     # docs/SUPABASE_MIGRATION_PLAN.md, chunk 5.5.
     store_id = RESTAURANT_TO_PG_STORE[rid]
     prefix = rid + "_"
@@ -2408,15 +2475,17 @@ async def _pg_owner_view(rid):
                 if l["item_code"]:
                     cn = controls_by_code.get(l["item_code"],
                         l["item_code"][len(prefix):] if l["item_code"].startswith(prefix) else l["item_code"])
-                lines.append({"sourceType": l["source_type"], "controlNumber": cn,
+                lines.append({"sourceType": l["source_type"], "controlNumber": cn, "itemCode": l['item_code'],
                               "recipeId": str(l["prep_dish_id"]) if l["prep_dish_id"] else None,
-                              "qty": float(l["qty"] or 0)})
+                               "qty": str(l["qty"]) if l["qty"] is not None else None,
+                               "uom": l.get('uom')})
             dishes.append({"id": str(d["id"]), "name": d["name"], "menuCode": d["menu_code"] or "",
                            "recipeType": d["recipe_type"],
-                           "price": float(d["price"]) if d["price"] is not None else 0,
+                           "price": str(d["price"]) if d["price"] is not None else None,
                            "targetPct": float(d["target_pct"]) if d["target_pct"] is not None else None,
-                           "prepPar": float(d["prep_par"] or 0), "yieldQty": float(d["yield_qty"] or 1),
-                           "yieldUOM": d["yield_uom"] or "each", "lines": lines})
+                           "prepPar": str(d["prep_par"]) if d["prep_par"] is not None else None,
+                           "yieldQty": str(d["yield_qty"]) if d["yield_qty"] is not None else None,
+                           "yieldUOM": d["yield_uom"], "lines": lines})
 
         prep_stock = await _pg_prep_stock_list(conn, store_id)
         return items, purchases, dishes, prep_stock
@@ -2434,27 +2503,28 @@ async def store_summary(r):
         dishes = await db.dishes.find({"restaurantId": rid}, {"_id": 0}).to_list(20000)
         prep_stock = await _prep_stock_list(rid)
     adjustments = await _adjustments_for(rid)
-    items_by_cn = {i["controlNumber"]: i for i in items}
-    by_id = {d["id"]: d for d in dishes}
     native_summary = None
     if purchase_api.enabled():
         from native_inventory_views import read_operating_summary
         native_summary = await read_operating_summary(db_pg.pool(), RESTAURANT_TO_PG_STORE[rid])
-    inv_value = None if native_summary else planning.total(planning.product(planning.number(i.get("currentStock"), 0), item_derived(i)["price"]) for i in items)
+    inv_value = None if native_summary else planning.total(planning.product(planning.number(i.get("currentStock")), item_derived(i)["price"]) for i in items)
     alerts = None if native_summary else sum(1 for i in items if i.get("orderEnabled", True) and f(i.get("currentStock")) < f(i.get("par")))
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
-    spend30 = native_summary['netFoodPurchases30'] if native_summary else round(sum(f(p.get("extendedCost")) for p in purchases if (p.get("invoiceDate") or "") >= cutoff), 2)
-    waste30 = planning.total(adj_value(a, items_by_cn[a["controlNumber"]]) for a in adjustments
-                  if (a.get("date") or "") >= cutoff and a.get("controlNumber") in items_by_cn
+    spend30 = native_summary['netFoodPurchases30'] if native_summary else planning.rounded(planning.total(planning.number(p.get("extendedCost")) for p in purchases if (p.get("invoiceDate") or "") >= cutoff))
+    waste30 = planning.total(adj_value(a, _planning_item(a, items)) for a in adjustments
+                  if (a.get("date") or "") >= cutoff
                   and ADJ_DIRECTIONS.get(a.get("reason"), "remove") == "remove")
     dish_rows = []
     for d in dishes:
         if d.get("recipeType", "menu") == "prep":
             continue
-        cost = recipe_cost(d, items_by_cn, by_id)
-        price = planning.number(d.get("price"), 0)
+        estimate = recipe_cost_summary(d, items, dishes)
+        cost = estimate['totalCost']
+        price = planning.number(d.get("price"))
+        if price is not None and price < 0: price = None
         pct = planning.product(planning.quotient(cost, price), 100) if price is not None and price > 0 else None
         dish_rows.append({"name": d.get("name", ""), "code": d.get("menuCode", ""), "cost": planning.rounded(cost),
+                          "costComplete": estimate['complete'], "costIssues": estimate['issues'],
                           "price": price, "pct": planning.rounded(pct, 1),
                           "target": f(d.get("targetPct"), 30)})
     pcts = [x["pct"] for x in dish_rows if x["pct"] is not None]
@@ -2464,10 +2534,10 @@ async def store_summary(r):
     costs_available = all(row['cost'] is not None for row in dish_rows)
     return {**r, "inventoryValue": native_summary['inventoryValue'] if native_summary else planning.rounded(inv_value), "orderAlerts": alerts, "spend30": spend30,
             "nativeInventory": native_summary,
-            "waste30": planning.rounded(waste30), "avgFoodCost": planning.rounded(planning.quotient(planning.total(pcts), len(pcts)), 1) if pcts and costs_available else None,
+            "waste30": planning.rounded(waste30), "avgFoodCost": planning.rounded(planning.quotient(planning.total(pcts), len(pcts)), 1) if pcts and len(pcts) == len(dish_rows) else None,
             "planningCostsAvailable": costs_available,
             "dishCount": len(dish_rows), "itemCount": len(items), "prepLow": prep_low,
-            "topCostDishes": sorted(dish_rows, key=lambda x: -(x["pct"] or 0))[:3]}
+            "topCostDishes": sorted(dish_rows, key=lambda x: (x['pct'] is None, -(x['pct'] or 0)))[:3]}
 
 @api_router.get("/owner/summary")
 async def owner_summary():
@@ -2483,15 +2553,13 @@ async def owner_summary():
         return {"stores":stores,"totals":totals,"inventoryBasis":"native_received_purchases_and_explicit_counts"}
     totals = {"inventoryValue": planning.rounded(planning.total(s["inventoryValue"] for s in stores)),
               "orderAlerts": sum(s["orderAlerts"] for s in stores),
-              "spend30": round(sum(s["spend30"] for s in stores), 2),
+              "spend30": planning.rounded(planning.total(s["spend30"] for s in stores)),
               "waste30": planning.rounded(planning.total(s["waste30"] for s in stores))}
     return {"stores": stores, "totals": totals}
 
 # ---------------- AI assistant (OpenAI via Emergent universal key) ----------------
 def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock, native_summary=None):
     rname = next((r["name"] for r in RESTAURANTS if r["id"] == rid), rid)
-    items_by_cn = {i["controlNumber"]: i for i in items}
-    by_id = {d["id"]: d for d in dishes}
     lines = [f"RESTAURANT: {rname}"]
     if purchase_api.enabled() and native_summary is None:
         raise HTTPException(503,'Native inventory context is unavailable; legacy values cannot be substituted')
@@ -2504,7 +2572,7 @@ def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock, nat
         if native_summary['countStatus']=='complete':
             lines.append("DATED PHYSICAL COUNT: "+"; ".join(f"{r['item_code']} {r['base_quantity']} {r['base_unit']} explicit value {r['inventory_value']} USD" for r in native_summary['items'][:60]))
     else:
-        inv_value = planning.total(planning.product(planning.number(i.get("currentStock"), 0), item_derived(i)["price"]) for i in items)
+        inv_value = planning.total(planning.product(planning.number(i.get("currentStock")), item_derived(i)["price"]) for i in items)
         lines.append(f"Live inventory value: {planning.money(inv_value)} across {len(items)} items")
     low = [] if native_summary else [i for i in items if i.get("orderEnabled", True) and f(i.get("currentStock")) < f(i.get("par"))]
     if low:
@@ -2515,11 +2583,15 @@ def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock, nat
     for d in dishes:
         if d.get("recipeType", "menu") == "prep":
             continue
-        cost = recipe_cost(d, items_by_cn, by_id)
-        price = planning.number(d.get("price"), 0)
+        estimate = recipe_cost_summary(d, items, dishes)
+        cost = estimate['totalCost']
+        price = planning.number(d.get("price"))
+        if price is not None and price < 0: price = None
         ratio = planning.product(planning.quotient(cost, price), 100)
         pct = f"{ratio:.1f}%" if ratio is not None else "unavailable"
         menu_lines.append(f"{d.get('menuCode','')} {d.get('name','')}: price {planning.money(price)}, plate cost {planning.money(cost)}, FC {pct} (target {f(d.get('targetPct'), 30):g}%)")
+        if estimate['issues']:
+            menu_lines.append('Planning cost needs review: ' + '; '.join(estimate['issues']))
     if menu_lines:
         lines.append("MENU COSTING: " + " | ".join(menu_lines[:40]))
     preps = [d for d in dishes if d.get("recipeType") == "prep"]
@@ -2531,10 +2603,10 @@ def build_ai_context(rid, items, purchases, dishes, adjustments, prep_stock, nat
             f"{p.get('name','')} on-hand {f((stock_map.get(p['id']) or {}).get('onHand')):g} {p.get('yieldUOM','')} (par {f(p.get('prepPar')):g}, {p.get('frequency','daily')}, yield {f(p.get('yieldQty')):g} {p.get('yieldUOM','')}/batch, shelf life {p.get('shelfLife','n/a')})"
             for p in preps))
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
-    spend30 = sum(f(p.get("extendedCost")) for p in purchases if (p.get("invoiceDate") or "") >= cutoff)
-    if not native_summary:lines.append(f"Purchases last 30 days: ${spend30:,.2f} ({len(purchases)} invoice lines total on file)")
-    waste30 = planning.total(adj_value(a, items_by_cn[a["controlNumber"]]) for a in adjustments
-                  if (a.get("date") or "") >= cutoff and a.get("controlNumber") in items_by_cn
+    spend30 = planning.total(planning.number(p.get("extendedCost")) for p in purchases if (p.get("invoiceDate") or "") >= cutoff)
+    if not native_summary:lines.append(f"Purchases last 30 days: {planning.money(spend30)} ({len(purchases)} invoice lines total on file)")
+    waste30 = planning.total(adj_value(a, _planning_item(a, items)) for a in adjustments
+                  if (a.get("date") or "") >= cutoff
                   and ADJ_DIRECTIONS.get(a.get("reason"), "remove") == "remove")
     lines.append(f"{'Track 2 legacy estimated waste/removals (not accounting deductions)' if native_summary else 'Waste/removals'} last 30 days: {planning.money(waste30)}")
     return "\n".join(lines)
