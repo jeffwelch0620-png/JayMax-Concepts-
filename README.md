@@ -1,6 +1,19 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## PR44 monetary planning completeness — review amendment
+## PR44 merged and deployed; monetary acceptance recorded
+
+Owner-approved [PR44](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/44)
+merged as **1729ecf** from **8cb8886**. Reviewed-head and merged-main CI passed;
+both automatic Render deployments are Live on the merge. Fictional recipe
+Unknown/null/zero, decimal quantity, saved sales and fresh-document checks passed.
+The independent database comparison verifies **81 protected relations unchanged**,
+with only the expected Bert's analytical state change in the 82-table set.
+The historical **$212.00** accounting control and its hashes are unchanged.
+The new labelled GR-002 recipe remains with unknown price and zero test sales.
+See [live evidence and limits](docs/PR44_LIVE_MONETARY_ACCEPTANCE.md).
+Next: resolve the par unit basis before changing labels or interpreting values.
+
+## PR44 monetary planning completeness — historical review amendment
 
 The owner authorized amending [draft PR44](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/44)
 for S1 and N1–N3 and pushing the tested updates. Legacy and native readers now

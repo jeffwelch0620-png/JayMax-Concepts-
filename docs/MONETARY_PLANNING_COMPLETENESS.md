@@ -1,5 +1,17 @@
 # Backend and frontend monetary planning completeness
 
+## Merged deployment and live acceptance
+
+Owner-approved PR44 merged as `1729ecf` from `8cb8886`. Reviewed-head and
+merged-main CI passed, and both Render services are Live on the exact merge.
+The [live checkpoint](PR44_LIVE_MONETARY_ACCEPTANCE.md) records successful
+fictional null/zero menu-price, decimal ingredient, unknown-cost, expected-sales
+and fresh-document checks. A read-only before/after comparison verifies 81
+protected relations unchanged; the expected changed relation is Bert's analytical
+state. The historical $212.00 control and both report representations are unchanged.
+Legacy-only/negative cases remain local/CI evidence. The prior gates below are
+historical; the next workflow resolves the par unit basis.
+
 October 17, 2026 (America/New_York). Baseline implementation: owner-approved
 PR43 merge `0cf5464019592979e7f9242591c5ddaeea6eeec8`, plus the local PR43
 live-acceptance documentation. The owner authorized auditing and fixing the
