@@ -10,9 +10,10 @@ every legacy field or future integration is complete.
 PR43 subsequently merged with owner approval as `0cf5464` from `79b40ad`, with
 reviewed-head and merged-main CI green. Its frontend is Live and the core
 [expected-sales UI checks](PR43_LIVE_EXPECTED_SALES_ACCEPTANCE.md) passed.
-Unmatched-entry recovery still awaits the exact test-menu deletion confirmation;
-direct database fingerprints were not obtained. The displayed $212 saved control
-and fingerprint match before/after. Earlier PR42/PR43 draft checkpoints below are
+Owner-approved deletion of only the new test menu enabled unmatched hold,
+removal and reload checks, which passed. Live cancellation was not observed;
+direct database fingerprints were not obtained. The displayed $212 saved control,
+usage lines and fingerprint match before/after. Earlier PR42/PR43 draft checkpoints below are
 historical; F03/F03b and later integration work remain open.
 
 PR42 merged with owner approval as `c926217` from reviewed head `b9b4f79`.

@@ -4,8 +4,10 @@
 reviewed-head and merged-main checks passed. The frontend is Live on the merge;
 unchanged API remains at `84cb381`. Core fictional expected-sales UI cases passed,
 including independent saved-document readback and price-independent portions.
-The [live checkpoint](PR43_LIVE_EXPECTED_SALES_ACCEPTANCE.md) records the pending
-test-menu deletion confirmation and failed direct database baseline attempts.
+The [live checkpoint](PR43_LIVE_EXPECTED_SALES_ACCEPTANCE.md) records owner-approved
+deletion of only the new test menu, successful unmatched hold/removal/reload,
+unchanged $212 saved control and fingerprint, and failed direct database reads.
+Live cancellation remains unverified because the browser did not expose its dialog.
 No new PR push is authorized by this checkpoint. Earlier draft gates are history.
 
 **PR43 review continuation:** the owner authorized S1 unmatched-entry recovery,

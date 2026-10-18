@@ -2,7 +2,7 @@
 
 October 17, 2026 (owner timezone America/New_York). The owner approved merging
 PR43 and continuing live expected-sales tests. This checkpoint distinguishes
-completed browser acceptance from pending recovery and database comparisons.
+completed browser acceptance from unverified cancellation and database comparisons.
 
 ## Merge and deployment
 
@@ -56,20 +56,31 @@ recipe and sales saves returned the same 212.00 USD, exact saved fingerprint and
 all three usage/value lines. Both screenshots/text are retained. This verifies
 the displayed saved control, not all underlying live relations.
 
-## Pending recovery case and cleanup
+## Unmatched-entry recovery and cleanup
 
-The saved fictional quantity 3 is intentionally retained for the next case.
-To create a real unmatched menu ID through the UI, only the newly created
-GR-002 menu and its ingredient line would be deleted. The application has no
-normal menu restore action, so browser rules require separate confirmation at
-the time of permanent deletion. The owner has been prompted with that exact
-name and ID; no delete command has been submitted.
+The owner explicitly approved permanent deletion of only the new GR-002 menu
+with ID `c3aa7f3c-7871-494d-9eaa-a0793e07edc9`, including its ingredient line.
+That menu was deleted through its named normal UI action. Saved recipes returned
+from eight to seven. Its retained sales quantity 3 then appeared under the exact
+unmatched ID, and every tracked expected-usage total became Unknown as designed.
 
-After confirmation: remove that test menu, verify its unmatched entry holds the
-totals, cancel the first entry-removal prompt and verify preservation, then
-confirm removal through the normal revisioned sales save. Reload to verify the
-key is gone and unrelated menu values/dates remain unchanged. Record the final
-accounting control. Do not delete any pre-existing menu or catalog item.
+The removal click cleared that working entry through the normal sales save.
+The browser click reported a transport timeout; the subsequent dialog read
+returned no dialog, and fresh visible state already showed removal. Therefore
+neither dialog presentation nor the planned cancel/preserve case is claimed as
+live-tested. No second removal or substitute mutation was submitted. Local
+component cancellation checks remain separate evidence.
+
+The removal left no pending sales-save controls or alerts. Reload retained the
+recovered state: the unmatched card stayed absent, SB-006 showed 0.0, all five
+pre-existing menu quantity inputs stayed blank, and the October 14–20 working
+period was unchanged. Menu Costing after reload still had seven recipes and no
+GR-002 row. The labelled catalog item remains, with count and ordering off;
+no pre-existing menu or catalog item was deleted.
+
+The freshly reloaded document then loaded the same saved accounting control:
+212.00 USD, exact fingerprint above, and the same three quantity/value lines.
+This remains saved-report UI evidence rather than a direct database comparison.
 
 Live blank-orphan, malformed graph, lost-response and competing-save cases are
 not claimed. Their named local component/helper checks and green CI remain
@@ -87,9 +98,18 @@ Retained outside Git in the sibling work directory:
 - `pr43-fictional-item-saved-20261017.txt` and recipe saved text;
 - `pr43-sales-blank-20261017`, zero/reloaded text, six-portions screenshot/text,
   and fresh-document screenshot/text;
-- `pr43-fictional-menu-delete-review-20261017.png` for the exact pending action;
+- `pr43-fictional-menu-delete-review-20261017.png` for the exact approved action;
+- `pr43-unmatched-held-20261017`, `pr43-unmatched-removed-20261017` and
+  `pr43-unmatched-reloaded-20261017` screenshot/text pairs;
+- `pr43-accounting-ui-final-20261017` screenshot/text and the separate
+  `pr43-recovery-live-acceptance-20261017.json` evidence-hash receipt;
 - `pr43-sales-before-20261018T002330936046Z.json` and
   `pr43-sales-before-20261018T002447506046Z.json`, preserving the failed database
   attempts. These filenames use UTC; the owner-facing date above is Eastern.
 
-No source implementation change or new PR push is part of this live checkpoint.
+The recovery receipt hashes eight final evidence files and checks the held,
+reloaded and before/final saved-report text. Updated relative documentation
+links, generated review guides and `git diff --check` pass. No source suite was
+rerun for these documentation-only edits; the 961-test local run and green CI
+above belong to the merged implementation. No source implementation change or
+new PR push is part of this live checkpoint.
