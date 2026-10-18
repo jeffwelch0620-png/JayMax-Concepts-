@@ -1,5 +1,13 @@
 # Inventory workflow checkpoint and remaining work
 
+**Latest continuation:** PR43 merged with owner approval as `0cf5464`; all four
+reviewed-head and merged-main checks passed. The frontend is Live on the merge;
+unchanged API remains at `84cb381`. Core fictional expected-sales UI cases passed,
+including independent saved-document readback and price-independent portions.
+The [live checkpoint](PR43_LIVE_EXPECTED_SALES_ACCEPTANCE.md) records the pending
+test-menu deletion confirmation and failed direct database baseline attempts.
+No new PR push is authorized by this checkpoint. Earlier draft gates are history.
+
 **PR43 review continuation:** the owner authorized S1 unmatched-entry recovery,
 the low recipe-guidance note, tests and same-branch push, with merge approval
 reserved. Blank unmatched quantities no longer block estimates; current-menu

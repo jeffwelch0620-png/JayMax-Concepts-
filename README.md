@@ -1,5 +1,18 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR43 merged and deployed; live expected-sales checks underway
+
+Owner-approved PR43 merged as **0cf5464** from **79b40ad**. Reviewed-head and
+merged-main CI passed; the automatic frontend deployment is Live on the exact
+merge, with the unchanged API at **84cb381**. Fictional blank/zero/positive and
+save/reload/fresh-document checks passed, including three sales producing six
+portions without a supplier price. The live unmatched-entry case awaits
+confirmation to delete only its newly created test menu. Direct database
+fingerprints remain unverified after two failed reads; the browser accounting
+control is recorded separately. See [scope and evidence](docs/PR43_LIVE_EXPECTED_SALES_ACCEPTANCE.md).
+
+Earlier draft gates below preserve their historical checkpoint.
+
 ## PR42 accepted; expected-sales completeness in draft PR43
 
 Owner-approved [PR42](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/42)
