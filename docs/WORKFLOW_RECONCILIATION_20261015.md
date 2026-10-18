@@ -1,5 +1,35 @@
 # Inventory workflow checkpoint and remaining work
 
+**Guarded reviewed-par installer, local continuation:** the owner authorized
+the par-specific installer and disposable local rehearsal, with a prompt before
+publishing a draft PR and before any Supabase application. The
+[runbook](HOSTED_REVIEWED_PAR_INSTALLER.md) records source/catalog/history guards,
+atomic migration/ledger application, backup/window qualification and independent
+reconciliation. Local acceptance now covers 24 new methods plus 45 subtests
+(69 reported cases across selection and corrected restore rerun); the full offline
+profile passed all 328 methods plus 617 subtests (945 cases). Real encrypted
+export/restore preserved two fictional par versions and the $55 Food Cost control.
+Owned database/role inventories and server shutdown were verified. Earlier failed
+attempts are retained in the runbook; overlapping results are not added. No hosted
+window, connection, schema, grant or configuration change is claimed. Prompt before
+draft publication; independent review/CI, merge, fresh window/backup and exact-plan
+application approval remain open. Earlier unimplemented-adapter statements below
+are historical stages, not permission to reuse the index tool.
+
+**October 18 PR45 merge / hosted-plan checkpoint:** owner approved merging
+reviewed head `93941d4` after all four CI checks passed. The squash merge is
+`9dac63e659945aae3b68b613c13785af6a4ea658`; all four merged-main checks passed
+in run `39165819254`. Read-only Render inspection verifies both services Live
+on that merge. The next bounded slice is the
+[hosted reviewed-par migration plan](HOSTED_REVIEWED_PAR_MIGRATION_PLAN.md):
+no hosted DDL, writer pause, grants, credentials or connection changes. A new
+table-capable additive adapter needs independent review and local testing; the
+old index-only adapter must not be repurposed by swapping its SQL constant.
+Then seek a fresh window, backup/restore and separate exact-plan approval before
+application. Manual ordering and the accepted temporary par-editing freeze remain.
+Earlier unapproved/draft statements below are historical; merged-main CI,
+deployment verification and hosted acceptance are distinct gates.
+
 **PR45 review amendment:** owner accepted the temporary hosted par-editing freeze
 and authorized tested updates to the existing draft, with merge approval still
 separate. Original-head frontend/build and Windows CI passed; database CI failed

@@ -32,3 +32,6 @@ migrations/20261007_native_private_access.sql text eol=lf
 migrations/20261013_purchase_source_lookup_index.sql text eol=lf
 migrations/20261018_reviewed_inventory_pars.sql text eol=lf
 supabase/schema.sql text eol=crlf
+docs/REVIEWED_PAR_INSTALL_CATALOG.json text eol=lf
+tools/ops/apply_reviewed_par_migration.py text eol=lf
+tools/ops/hosted_reviewed_pars.py text eol=lf

@@ -1,6 +1,47 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Reviewed par units — local implementation, manual ordering
+## Guarded par installer — local follow-up, publication pending
+
+The owner authorized the par-specific installer and disposable local rehearsal,
+with a prompt before a new draft PR push and before any Supabase application.
+The [installer runbook](docs/HOSTED_REVIEWED_PAR_INSTALLER.md) records exact
+source/catalog bindings, original-plus-index history verification, atomic DDL
+and one ledger row, fresh backup/window requirements and independent uncertain-
+outcome reconciliation. Existing index-only tools and SQL remain unchanged.
+
+Local acceptance covers all 24 new methods plus 45 subtests (69 reported cases)
+across the selected run and corrected restore rerun. Real encrypted export and
+disposable restore preserved two par-history rows and the $55 fictional Food Cost
+control. The full offline profile passed 328 methods plus 617 subtests (945 cases).
+The [validation record](docs/HOSTED_REVIEWED_PAR_INSTALLER.md#validation-record)
+retains earlier failed/incomplete attempts and the non-overlapping count basis.
+No hosted connection, service/job pause, migration, grant, credential or application-
+connection change is part of this local work. Publication, independent review/CI,
+merge and a new hosted window/exact-plan approval remain separate gates.
+Ordering remains manual; the accepted par-editing freeze stays in place.
+
+## PR45 merged; hosted reviewed-par migration plan prepared
+
+Owner-approved PR45 merged from tested head `93941d4` as
+**`9dac63e659945aae3b68b613c13785af6a4ea658`**. All four reviewed-head CI
+checks passed: 1,026 frontend tests/strict build, 151 reported backend cases and
+906 reported Windows cases. All four merged-main checks also passed in
+[run 39165819254](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39165819254).
+Read-only Render inspection verifies the frontend and API Live on `9dac63e`.
+Hosted par installation and live acceptance remain separate gates.
+
+The [hosted par migration plan](docs/HOSTED_REVIEWED_PAR_MIGRATION_PLAN.md)
+records the exact migration/hash, new-table security, fresh backup/restore,
+writer drain, atomic ledger/catalog checks, reconciliation and approval sequence.
+It is planning documentation, not an executable plan: the current index-only
+adapter cannot install this table. A separately reviewed/tested par adapter is
+required. **No hosted migration, maintenance pause, grants or connection changes
+are authorized by this plan. Prompt the owner before applying the final exact plan.**
+Temporary par-editing freeze remains accepted; ordering stays manual.
+
+Earlier PR45 review and test details below are historical checkpoints.
+
+## Reviewed par units — original local implementation, manual ordering
 
 **PR45 amendment:** the owner accepted the temporary par-editing freeze on the
 test deployment while the new table awaits separate hosted approval/application.
