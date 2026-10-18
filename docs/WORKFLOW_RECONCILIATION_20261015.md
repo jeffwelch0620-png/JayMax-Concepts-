@@ -1,5 +1,29 @@
 # Inventory workflow checkpoint and remaining work
 
+**PR43 review continuation:** the owner authorized S1 unmatched-entry recovery,
+the low recipe-guidance note, tests and same-branch push, with merge approval
+reserved. Blank unmatched quantities no longer block estimates; current-menu
+blanks remain Unknown. Meaningful unmatched quantities are named and retained
+until confirmed removal through the normal draft/revision path. Cancellation,
+save failure and concurrent-change safety are tested. The legacy saved-report
+loader remains hidden in native mode. All 961 amendment frontend tests and the
+strict production build passed. Reviewed-head `5ccb30a` CI passed; new-head
+CI must be checked after the amendment push. See
+[the review and validation record](EXPECTED_SALES_USAGE_COMPLETENESS.md).
+
+**Current continuation:** owner-approved PR42 merged as `c926217` from reviewed
+head `b9b4f79`; exact-head and merged-main CI passed. Render's frontend is Live
+on the merge; unchanged API remains Live on `84cb381`. The deployed fictional
+editor check [passed after owner sign-in](PR42_LIVE_SETUP_ACCEPTANCE.md), including
+specific mismatch guidance and cancellation/reload preservation. No fresh database
+accounting comparison is claimed. The next [expected-sales slice](EXPECTED_SALES_USAGE_COMPLETENESS.md)
+addresses F01's quantity completeness without price requirements or accounting
+writeback; all 942 frontend tests in 77 suites and the strict build passed.
+The owner approved publishing [draft PR43](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/43).
+Independent review, fresh exact-head CI and separate merge approval remain.
+The earlier entries below
+preserve their historical publication and deployment gates.
+
 **Current continuation:** PR41 merged as `84cb381` with owner approval. All
 reviewed-head and merged-main CI passed; API automatic deployment is Live on
 the merge and unchanged frontend remains at `f33db6e`. Read-only owner smoke

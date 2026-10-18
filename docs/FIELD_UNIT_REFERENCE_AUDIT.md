@@ -5,6 +5,28 @@ October 16, 2026 (EDT). Audited source baseline: PR41 merge
 recipe, sales-expansion and order-planning boundaries, not a declaration that
 every legacy field or future integration is complete.
 
+## Current continuation
+
+PR42 merged with owner approval as `c926217` from reviewed head `b9b4f79`.
+[Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38996499994)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/38997332845)
+passed. Render frontend deployment `dep-db9eb5dg1s2s73ace54g` is Live on the exact
+merge; the unchanged API remains Live on PR41 `84cb381`. The deployed fictional
+editor check [passed after owner sign-in](PR42_LIVE_SETUP_ACCEPTANCE.md): specific
+mismatch guidance, no numeric preview, cancellation and original values after
+reload. No save or hosted configuration change was submitted.
+
+F01 now has a [native expected-sales implementation](EXPECTED_SALES_USAGE_COMPLETENESS.md)
+in owner-authorized [draft PR43](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/43).
+Its owner-authorized review amendment adds confirmed recovery for meaningful
+unmatched sales entries and preserves the distinction between current-menu
+unknowns and blank orphan keys. New-head CI and merge approval remain separate.
+It resolves canonical item keys, distinguishes missing sales from confirmed zero,
+validates prep expansion and returns explicit unavailable quantities. This is
+current-period quantity planning only. F03/F03b monetary readers, legacy-mode
+expansion, par basis, unit aliases and historical/source coverage remain open.
+The review and draft/merge language below records the earlier PR42 checkpoint.
+
 ## PR42 review amendment
 
 Original draft head `592dbd9` passed all four Inventory CI checks. The owner
@@ -68,7 +90,7 @@ whole-schema migration/restore test was performed for this audit.
 
 | ID / priority | Evidence and impact | Disposition |
 | --- | --- | --- |
-| F01 / medium | `rawPortionsForRecipe` matches local aliases only, skips missing prep references, returns zero on cycles and defaults zero/missing yield to one. The active expected-sales table sums this output without a completeness result. Broken definitions can look like low/zero theoretical usage. Very large usage can become Infinity. | Next implementation slice: canonical ingredient resolution and quantity-only completeness, finite arithmetic and explicit unavailable results. Do not require supplier price merely to compute portions. Preserve genuine zero sales separately from missing/invalid evidence. |
+| F01 / medium | `rawPortionsForRecipe` matches local aliases only, skips missing prep references, returns zero on cycles and defaults zero/missing yield to one. The active expected-sales table previously summed this output without completeness. | Native current-period table now uses the local explicit quantity-completeness helper; draft publication and hosted acceptance remain gates. Price is not required for portions. Legacy-mode callers and historical/source coverage remain open. |
 | F02 / medium | Item Setup uses permissive `itemDerived` while the recipe editor uses strict `itemPlanningCost`. A fictional 5 lb pack, 4 fl oz portion and $20 price gives 1.25 portions/$16 in Setup despite incompatible families; strict recipe costing is Unknown. Missing portion data gives a misleading zero list cost. | Bounded client fix implemented locally: Setup list and preview use strict cost; unsupported/mismatched/missing unit and nonpositive pack/portion quantities cannot show an invented portion total. Valid zero prices remain zero. Shared calculators and writes are unchanged. |
 | F03 / medium | Backend `calc_ppu` has the same cross-family numeric fallback; `recipe_cost` returns/skips zero for missing items/prep/cycles. This can understate planning summaries/context for retained malformed definitions, despite write-time recipe validation. | Open. Follow F01 with a shared, explicit backend completeness contract across summaries/context. Keep unavailable estimates distinct from accounting and preserve held legacy writers; do not silently enable them. |
 | F03b / medium, frontend planning reads | Shared frontend `itemDerived` / `calcPortionsPerUnit` retain the cross-family numeric fallback outside Setup. `buildPeriodReport` cost fields, `adjustmentValue` / `wasteByReason` and the legacy sales actual-portion calculation can therefore use the fictional 1.25-portions/$16 estimate. | Open. Cover these frontend consumers alongside F03 with an explicit completeness contract: mismatched conversion is unavailable, genuine zero stays zero, and physical Track 1 remains untouched. This PR fixes Setup only; shared calculator behavior is unchanged. |
@@ -126,11 +148,9 @@ Evidence retained outside Git:
 
 ## Sequence from here
 
-The original F02 fix/audit is published in draft PR42. Review amendment and push
-are owner-authorized; independent review, exact-head CI, merge approval and later
-fictional UI
-acceptance remain separate. Then address F01 quantity completeness and F03/F03b
-backend/frontend read completeness as focused slices. Resolve par/unit aliases and
+F02 is merged in PR42; its scoped deployed fictional editor check passed.
+Finish review/CI/merge approval/acceptance for the draft F01 quantity slice, then address
+F03/F03b backend/frontend monetary completeness as focused slices. Resolve par/unit aliases and
 historical versions before integrating Toast analytics. O1 restricted deployed
 runtime roles remain required before operational use; current build connections,
 credential rotation deferral, separate auth/UI workflows and native holds remain.
