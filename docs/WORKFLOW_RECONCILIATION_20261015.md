@@ -1,5 +1,14 @@
 # Inventory workflow checkpoint and remaining work
 
+**Local role-check follow-up October 19:** owner-authorized
+[v2 classification](PAR_INSTALL_ROLE_CLASSIFICATION.md) separates denied browser
+clients from backend logins while preserving ledger denial and writer guards.
+All 1,025 offline cases and 69 PostgreSQL cases across 21 methods passed in
+completed serial selections.
+Supabase, Render and app connections remain unchanged; the closed window stays
+closed. Prompt before a draft PR push. Independent review/CI/merge and future
+hosted validation/window/exact-plan approval remain separate gates.
+
 **October 19 maintenance outcome:** the approved 12:21:26-1:06:26 a.m. Eastern window [closed at 12:39:21 AM Eastern](REVIEWED_PAR_WINDOW_20261019.md) with original API/Toast states restored. Strict writer drain and a fresh encrypted backup/disposable restore passed (120 relations, 13 catalog groups, 45,608 rows). Read-only par-plan preparation held on the trusted Inventory backend role being evaluated under private-client denial checks. No executable plan, schema SQL, grant change or connection cutover occurred. Review role classification locally before another window; retain browser denial, backend ledger denial and strict writer guards. Par editing remains held and ordering manual. Earlier pending/active stages below are dated history.
 
 **October 19 read-only IPv6 validation passed:** the separately approved

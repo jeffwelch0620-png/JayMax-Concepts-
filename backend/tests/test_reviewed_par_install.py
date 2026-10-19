@@ -28,7 +28,7 @@ import actual_inventory_api as actual
 def review():
     now = datetime.now(timezone.utc)
     return {'format':hosted.REVIEW_FORMAT,'projectRef':'abcdefghijklmnopqrst',
-            'deliveryVersion':'20261018190000','clientRoles':['anon','authenticated'],
+            'deliveryVersion':'20261018190000','clientRoles':['anon','authenticated','test_only_par_writer'],'backendRoles':[],
             'writerLoginRoles':['test_only_par_writer'], 'budgets':hosted.BUDGETS.copy(),
             'maintenance':{'startsAt':(now-timedelta(minutes=1)).isoformat(),
                            'endsAt':(now+timedelta(minutes=29)).isoformat(),
@@ -36,6 +36,35 @@ def review():
 
 
 class ParInstallGuards(unittest.TestCase):
+    def test_role_groups_are_explicit_disjoint_and_never_inferred_from_names(self):
+        spec=review();spec['clientRoles']=['anon','authenticated'];spec['backendRoles']=['test_only_par_writer']
+        self.assertEqual(hosted.backend_roles(spec),spec['backendRoles'])
+        self.assertEqual(hosted.ledger_roles(spec),['anon','authenticated','test_only_par_writer'])
+        for change in ({'backendRoles':None},{'backendRoles':'test_only_par_writer'},
+                       {'backendRoles':['test_only_par_writer']*2},
+                       {'backendRoles':['anon']},{'backendRoles':['not_in_writer_inventory']},
+                       {'backendRoles':[{}]},{'clientRoles':['authenticated']}):
+            with self.subTest(change=change),self.assertRaises(hosted.Held):
+                hosted.backend_roles(spec|change)
+        # A backend-looking name in clientRoles keeps the denial contract.
+        old=review()
+        self.assertEqual(hosted.backend_roles(old),[])
+        self.assertIn('test_only_par_writer',hosted.roles(old))
+        unclassified=review();unclassified['clientRoles']=['anon','authenticated']
+        with self.assertRaises(hosted.Held):hosted.backend_roles(unclassified)
+        # Only the already-pinned administrative postgres actor is exempt.
+        for actor in ('postgres','test_only_other_admin'):
+            spec=review();spec['writerLoginRoles'].append(actor)
+            with self.subTest(administrator=actor):
+                if actor=='postgres':self.assertEqual(hosted.backend_roles(spec),[])
+                else:
+                    with self.assertRaises(hosted.Held):hosted.backend_roles(spec)
+        for field in ('format','backendRoles'):
+            old=review()
+            if field=='format':old[field]='jaymax-hosted-reviewed-par-review-v1'
+            else:old.pop(field)
+            with self.subTest(old=field),self.assertRaises(hosted.Held):hosted.load_evidence(old)
+
     def test_retained_security_primitives_match_the_independently_tested_index_tool(self):
         import hosted_additive_index as original
         for name in ('require_runtime','sha','fingerprint','utc','maintenance','target','roles',
@@ -105,7 +134,7 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
              patch.object(engine,'verify_prior',AsyncMock()),patch.object(engine,'absent',AsyncMock()),\
              patch.object(engine,'readiness_check',AsyncMock()),\
              patch.object(engine.preservation,'lock_original_tables',AsyncMock()):
-            plan.update(originalInstallation={},sourceIndexPlan={},clientRoles=[])
+            plan.update(originalInstallation={},sourceIndexPlan={},clientRoles=[],backendRoles=[])
             with self.assertRaises(engine.AdditiveFailure) as result:await engine.apply(conn,plan,guard=guard)
         self.assertEqual(result.exception.report['status'],'rollback_outcome_unknown')
         self.assertIsNone(result.exception.report['sqlCommitted'])
@@ -129,7 +158,8 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
                 backup={k:str(root/k) for k in ('encryptedFile','keyFile','restoreReceipt')})
             target={'actor':'postgres','projectRef':spec['projectRef'],
                     'connectionMode':'direct' if direct else 'session_pooler'};binding={'TEST_ONLY':True}
-            core={'clientRoles':spec['clientRoles'],'baseline':{'identity':{'actor':'postgres'}},
+            core={'clientRoles':spec['clientRoles'],'backendRoles':spec['backendRoles'],
+                  'baseline':{'identity':{'actor':'postgres'}},
                   'migration':{'deliveryVersion':spec['deliveryVersion']}}
             plan={'format':hosted.FORMAT,'createdAt':'TEST ONLY','target':target,
                   'reviewSha256':hosted.fingerprint(spec),'backup':binding,'maintenance':spec['maintenance'],
@@ -271,8 +301,10 @@ class ParInstallDatabaseTests(unittest.IsolatedAsyncioTestCase):
         try:return await engine.verify_outcome(c,plan)
         finally:await c.close()
 
-    async def hosted_plan(self):
+    async def hosted_plan(self,backend_roles=()):
         self.spec=review();self.spec['writerLoginRoles']=self.writer_login_roles
+        self.spec['backendRoles']=list(backend_roles)
+        self.spec['clientRoles']=['anon','authenticated']+[role for role in self.writer_login_roles if role not in backend_roles]
         self.target={'projectRef':self.spec['projectRef'],'actor':'purchase_implementation_test',
                      'host':'127.0.0.1','port':55439,'database':self.name,'connectionMode':'TEST ONLY loopback'}
         async with self.conn.transaction(isolation='repeatable_read',readonly=True):
@@ -285,6 +317,150 @@ class ParInstallDatabaseTests(unittest.IsolatedAsyncioTestCase):
         c=await asyncpg.connect(self.dsn,server_settings={'default_transaction_read_only':'on'})
         try:return await hosted.reconcile(c,plan,self.spec,self.target,self.facts,self.binding)
         finally:await c.close()
+
+    async def backend_role(self):
+        role=self.writer_login_roles[0]
+        await self.conn.execute('GRANT USAGE ON SCHEMA purchasing,actual_inventory,prep_inventory TO '+role)
+        await self.conn.execute('GRANT SELECT ON purchasing.item_bases TO '+role)
+        await self.conn.execute('GRANT EXECUTE ON FUNCTION purchasing.text_cells(jsonb) TO '+role)
+        return role
+
+    async def test_explicit_backend_access_survives_prepare_apply_reconcile_without_new_par_access(self):
+        role=await self.backend_role()
+        before=await engine.snapshot(self.conn)
+        params=self.workflow['actualReportParams'];store=self.workflow['temporaryStore']
+        food=await actual.period_report(self.conn,store,UUID(params['opening']),UUID(params['closing']))
+        # LOGIN and the existing read/function grants work on a separate client.
+        backend=await asyncpg.connect(self.dsn,user=role)
+        try:
+            self.assertTrue(await backend.fetchval("SELECT purchasing.text_cells('[]'::jsonb)"))
+            await backend.fetchval('SELECT count(*) FROM purchasing.item_bases')
+        finally:await backend.close()
+        plan=await self.hosted_plan([role])
+        self.assertEqual(await engine.snapshot(self.conn),before)
+        self.assertEqual(plan['core']['backendRoles'],[role])
+        self.assertEqual(plan['core']['clientRoles'],['anon','authenticated'])
+        self.assertEqual((await self.hosted_verify(plan))['status'],'verified_not_applied')
+        self.assertTrue((await hosted.apply(self.conn,plan,self.spec,self.target,self.facts,self.binding))['sqlCommitted'])
+        self.assertEqual((await self.hosted_verify(plan))['status'],'verified_applied')
+        self.assertTrue(await self.conn.fetchval("SELECT has_table_privilege($1,'purchasing.item_bases','SELECT')",role))
+        for client in ['anon','authenticated',role]:
+            self.assertFalse(await self.conn.fetchval("SELECT has_table_privilege($1,$2,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE')",client,engine.TABLE))
+        self.assertEqual(await actual.period_report(self.conn,store,UUID(params['opening']),UUID(params['closing'])),food)
+        self.assertEqual(food['actualFoodCost'],'55.00')
+
+    async def test_backend_classification_and_plan_bindings_cannot_be_omitted_or_relabelled(self):
+        role=await self.backend_role()
+        # The old combined-role list still fails closed; no prefix-based exemption.
+        with self.assertRaises(ValueError):
+            await engine.prepare(self.conn,self.original,self.index_plan,'20261018190000',client_roles=['anon','authenticated',role])
+        plan=await self.hosted_plan([role])
+        for change in ({'format':'jaymax-additive-reviewed-par-plan-v1'},{'backendRoles':None},
+                       {'backendRoles':[role,role]},{'backendRoles':['anon']}):
+            with self.subTest(change=change),self.assertRaises(ValueError):engine.validate_plan(plan['core']|change)
+        missing=deepcopy(plan['core']);missing.pop('backendRoles')
+        with self.assertRaises(ValueError):engine.validate_plan(missing)
+        changed=deepcopy(plan);changed['core']['backendRoles']=[]
+        with self.assertRaises(hosted.Held):hosted.validate(changed,self.spec,self.target,self.binding)
+        changed=deepcopy(plan);changed['core']['clientRoles'].append(role)
+        with self.assertRaises(hosted.Held):hosted.validate(changed,self.spec,self.target,self.binding)
+        bad_spec=deepcopy(self.spec);bad_spec['writerLoginRoles']=[]
+        with self.assertRaises(hosted.Held):hosted.validate(plan,bad_spec,self.target,self.binding)
+
+    async def test_backend_ledger_table_and_column_exposure_hold_before_plan(self):
+        role=await self.backend_role()
+        for privilege in ('SELECT','SELECT(version)','INSERT','UPDATE(name)'):
+            tx=self.conn.transaction(isolation='repeatable_read');await tx.start()
+            try:
+                await self.conn.execute('GRANT '+privilege+' ON supabase_migrations.schema_migrations TO '+role)
+                with self.subTest(privilege=privilege),self.assertRaises(hosted.Held):
+                    await engine.prepare(self.conn,self.original,self.index_plan,'20261018190000',backend_roles=[role])
+                self.assertFalse(await self.conn.fetchval('SELECT to_regclass($1) IS NOT NULL',engine.TABLE))
+            finally:await tx.rollback()
+
+    async def test_backend_trust_never_waives_browser_private_access(self):
+        role=await self.backend_role()
+        for sql in ('GRANT USAGE ON SCHEMA purchasing TO anon',
+                    'GRANT SELECT ON purchasing.item_bases TO authenticated',
+                    'GRANT EXECUTE ON FUNCTION purchasing.text_cells(jsonb) TO anon'):
+            tx=self.conn.transaction(isolation='repeatable_read');await tx.start()
+            try:
+                await self.conn.execute(sql)
+                with self.subTest(sql=sql),self.assertRaises(ValueError):
+                    await engine.prepare(self.conn,self.original,self.index_plan,'20261018190000',backend_roles=[role])
+            finally:await tx.rollback()
+
+    async def test_backend_authority_membership_and_future_defaults_are_held(self):
+        role=await self.backend_role()
+        changes=['ALTER ROLE '+role+' '+flag for flag in ('NOLOGIN','SUPERUSER','BYPASSRLS','CREATEDB','CREATEROLE','REPLICATION')]
+        changes += ['GRANT anon TO '+role,'GRANT CREATE ON SCHEMA purchasing TO '+role,
+            'GRANT '+role+' TO anon WITH INHERIT FALSE, SET TRUE',
+            'GRANT CREATE ON DATABASE '+self.name+' TO '+role,
+            'ALTER SCHEMA purchasing OWNER TO '+role+'; REVOKE CREATE ON SCHEMA purchasing FROM '+role,
+            'ALTER DATABASE '+self.name+' OWNER TO '+role+'; REVOKE CREATE ON DATABASE '+self.name+' FROM '+role,
+            'ALTER TABLE purchasing.item_bases OWNER TO '+role,
+            'ALTER DEFAULT PRIVILEGES IN SCHEMA purchasing GRANT SELECT ON TABLES TO '+role,
+            'ALTER DEFAULT PRIVILEGES IN SCHEMA purchasing GRANT EXECUTE ON FUNCTIONS TO '+role]
+        for sql in changes:
+            tx=self.conn.transaction(isolation='repeatable_read');await tx.start()
+            try:
+                await self.conn.execute(sql)
+                with self.subTest(sql=sql),self.assertRaises(ValueError):await engine.backend_permissions(self.conn,[role])
+            finally:await tx.rollback()
+        with self.assertRaises(ValueError):await engine.backend_permissions(self.conn,['test_only_missing_backend'])
+        tx=self.conn.transaction(isolation='repeatable_read');await tx.start()
+        try:
+            administrator=await self.conn.fetchval('SELECT current_user')
+            await self.conn.execute('GRANT '+role+' TO '+administrator+' WITH ADMIN TRUE, INHERIT FALSE, SET FALSE')
+            # PostgreSQL may retain a CREATE ROLE grant to its administrator.
+            await engine.backend_permissions(self.conn,[role])
+        finally:await tx.rollback()
+
+    async def test_browser_column_only_access_is_denied_with_a_classified_backend(self):
+        role=await self.backend_role()
+        await self.conn.execute('CREATE SEQUENCE purchasing.test_only_ungranted_sequence')
+        for client,privilege in [('anon','SELECT(item_code)'),('authenticated','UPDATE(item_code)')]:
+            tx=self.conn.transaction(isolation='repeatable_read');await tx.start()
+            try:
+                await self.conn.execute('GRANT '+privilege+' ON purchasing.item_bases TO '+client)
+                self.assertFalse(await self.conn.fetchval("SELECT has_table_privilege($1,'purchasing.item_bases','SELECT,INSERT,UPDATE,REFERENCES')",client))
+                with self.subTest(client=client),self.assertRaisesRegex(ValueError,'private column access'):
+                    await engine.prepare(self.conn,self.original,self.index_plan,'20261018190000',backend_roles=[role])
+                self.assertFalse(await self.conn.fetchval('SELECT to_regclass($1) IS NOT NULL',engine.TABLE))
+            finally:await tx.rollback()
+
+        # Non-table relations cannot break or bypass the column-only guard.
+        await engine.readiness_check(self.conn, ['anon','authenticated'], before=True, backend_roles=[role])
+
+    async def test_new_par_access_and_late_backend_grants_stay_blocked(self):
+        role=await self.backend_role();plan=await self.hosted_plan([role])
+        await hosted.apply(self.conn,plan,self.spec,self.target,self.facts,self.binding)
+        for sql in ('GRANT SELECT ON purchasing.inventory_par_versions TO '+role,
+                    'GRANT SELECT(quantity) ON purchasing.inventory_par_versions TO '+role,
+                    'GRANT EXECUTE ON FUNCTION purchasing.guard_inventory_par() TO '+role):
+            tx=self.conn.transaction(isolation='repeatable_read');await tx.start()
+            try:
+                await self.conn.execute(sql)
+                with self.subTest(sql=sql),self.assertRaisesRegex(ValueError,'New par runtime access'):
+                    await engine.backend_permissions(self.conn,[role])
+            finally:await tx.rollback()
+        await self.conn.execute('GRANT SELECT ON purchasing.inventory_par_versions TO '+role)
+        with self.assertRaises(ValueError):await self.hosted_verify(plan)
+
+    async def test_classified_backend_still_holds_live_writers_and_changed_permissions(self):
+        role=await self.backend_role();plan=await self.hosted_plan([role])
+        writer=await asyncpg.connect(self.dsn,user=role)
+        try:
+            with self.assertRaises(hosted.Held):
+                await hosted.apply(self.conn,plan,self.spec,self.target,self.facts,self.binding)
+            self.assertFalse(await self.conn.fetchval('SELECT to_regclass($1) IS NOT NULL',engine.TABLE))
+        finally:await writer.close()
+        await self.conn.execute('GRANT INSERT ON purchasing.item_bases TO '+role)
+        with self.assertRaises(engine.AdditiveFailure) as result:
+            await hosted.apply(self.conn,plan,self.spec,self.target,self.facts,self.binding)
+        self.assertTrue(result.exception.report['rollbackCompleted'])
+        self.assertFalse(result.exception.report['commitAttempted'])
+        self.assertFalse(await self.conn.fetchval('SELECT to_regclass($1) IS NOT NULL',engine.TABLE))
 
     async def test_readonly_plan_atomic_install_exact_delta_and_food_cost_preserved(self):
         before=await engine.snapshot(self.conn)

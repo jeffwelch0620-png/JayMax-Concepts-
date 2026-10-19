@@ -40,18 +40,41 @@ import hosted_backup as backup
 from db_tls import connection_tls
 from maintenance_connection import MaintenanceConnectionError
 
-FORMAT = 'jaymax-hosted-reviewed-par-plan-v1'
-REVIEW_FORMAT = 'jaymax-hosted-reviewed-par-review-v1'
+FORMAT = 'jaymax-hosted-reviewed-par-plan-v2'
+REVIEW_FORMAT = 'jaymax-hosted-reviewed-par-review-v2'
 BUDGETS = {'lockSeconds': 5, 'probeSeconds': 20, 'ddlSeconds': 30,
            'idleTransactionSeconds': 120, 'operationSeconds': 600}
 LEDGER = 'supabase_migrations.schema_migrations'
+
+
+def backend_roles(review):
+    clients = roles(review)
+    backends = review.get('backendRoles')
+    if not isinstance(backends, list):
+        raise Held('An explicit reviewed backend role list is required, including when empty')
+    try:
+        engine.role_groups(clients, backends)
+    except ValueError:
+        raise Held('Client and backend role groups are invalid or overlap') from None
+    writers = set(writer_roles(review))
+    if not set(backends) <= writers:
+        raise Held('Every reviewed backend must remain in the writer LOGIN inventory')
+    # postgres is the separately pinned administrative actor, not an ordinary
+    # client to deny ledger access. Every other writer needs an explicit policy.
+    if writers - {'postgres'} - set(clients) - set(backends):
+        raise Held('Every non-administrative writer must have an explicit permission classification')
+    return backends
+
+
+def ledger_roles(review):
+    return roles(review) + backend_roles(review)
 
 
 def load_evidence(review, *, now=None, active=True):
     """Authenticate the backup; bind the isolated-restore receipt to that archive."""
     if review.get('format') != REVIEW_FORMAT or review.get('budgets') != BUDGETS:
         raise Held('Unsupported hosted review or unreviewed timeout budgets')
-    roles(review)
+    backend_roles(review)
     writer_roles(review)
     now = now or datetime.now(timezone.utc)
     start, end = maintenance(review, now=now, active=active)
@@ -89,7 +112,9 @@ def load_evidence(review, *, now=None, active=True):
 
 
 def validate(plan, review, reviewed_target, binding):
-    writer_roles(review)
+    backend_roles(review)
+    if review.get('format') != REVIEW_FORMAT:
+        raise Held('A newly reviewed v2 par role classification is required')
     fields = {'format', 'createdAt', 'target', 'reviewSha256', 'backup', 'maintenance',
               'budgets', 'core', 'writerObservations', 'automaticApply', 'operationalReleaseApproved'}
     if (set(plan) != fields or plan.get('automaticApply') is not False
@@ -100,6 +125,8 @@ def validate(plan, review, reviewed_target, binding):
         raise Held('Hosted plan does not match the reviewed target, backup or maintenance evidence')
     if plan['core'].get('clientRoles') != roles(review):
         raise Held('Hosted plan omitted or changed the mandatory client permission checks')
+    if plan['core'].get('backendRoles') != backend_roles(review):
+        raise Held('Hosted plan omitted or changed the reviewed backend permission checks')
     if plan['core']['baseline']['identity']['actor'] != reviewed_target['actor']:
         raise Held('The live administrative actor must be postgres')
     if plan['core']['migration']['deliveryVersion'] != review['deliveryVersion']:
@@ -129,15 +156,17 @@ async def backup_match(conn, facts, *, after=False):
 
 async def prepare(conn, original, review, reviewed_target, facts, binding, *, observations=None):
     # Preparation and backup comparison share one consistent read-only snapshot.
+    backend_roles(review)
     maintenance(review)
     observations = observations if observations is not None else []
     await server_version(conn, binding)
     await writer_sessions(conn, review, 'prepare', observations)
     async with readonly_snapshot(conn):
         await conn.execute("SET LOCAL statement_timeout='20s'")
-        await ledger_clients(conn, roles(review))
+        await ledger_clients(conn, ledger_roles(review))
         await backup_match(conn, facts)
-        core = await engine.prepare(conn, *original, review['deliveryVersion'], client_roles=roles(review))
+        core = await engine.prepare(conn, *original, review['deliveryVersion'], client_roles=roles(review),
+                                    backend_roles=backend_roles(review))
     result = {'format': FORMAT, 'createdAt': datetime.now(timezone.utc).isoformat(),
               'target': reviewed_target, 'reviewSha256': fingerprint(review), 'backup': binding,
               'maintenance': review['maintenance'], 'budgets': BUDGETS, 'core': core,
@@ -159,7 +188,7 @@ async def apply(conn, plan, review, reviewed_target, facts, binding, *, observat
         # Recheck after acquiring the engine's table locks and before COMMIT.
         maintenance(review)
         await writer_sessions(connection, review, 'locked_' + phase, observations)
-        await ledger_clients(connection, roles(review))
+        await ledger_clients(connection, ledger_roles(review))
         checked = await backup_match(connection, facts, after=phase == 'after')
         maintenance(review)
         return checked
@@ -180,7 +209,7 @@ async def reconcile(conn, plan, review, reviewed_target, facts, binding):
             'lockReleaseErrorType'):
         async with readonly_snapshot(conn):
             outcome = await engine._verify_outcome(conn, plan['core'])
-            await ledger_clients(conn, roles(review))
+            await ledger_clients(conn, ledger_roles(review))
             await backup_match(conn, facts, after=outcome['sqlCommitted'])
             return outcome | {'backedUpRowsAndSequencesPreserved': True}
 

@@ -21,7 +21,7 @@ import schema_reconciliation as catalog
 from install_lock import INSTALLER_LOCK
 from readonly_snapshot import readonly_snapshot, preserve_cleanup_failure, error_details
 
-FORMAT = 'jaymax-additive-reviewed-par-plan-v1'
+FORMAT = 'jaymax-additive-reviewed-par-plan-v2'
 SOURCE = '20261018_reviewed_inventory_pars.sql'
 SOURCE_SHA = '84814517f75bb58940a36facdbf5a7934036ff5b388e97a820038e837416506e'
 BODY_SHA = '3a189a8b2a352cbd560cea88194dbde1940f160a54e7bcd4616d719c47b88c48'
@@ -183,8 +183,80 @@ def catalog_delta(before, after):
     return added
 
 
-async def readiness_check(conn, roles, before=False):
-    value = await readiness.inspect(conn, client_roles=roles,
+def role_groups(clients, backends):
+    """Explicit classification only; never infer trust from a role-name prefix."""
+    for group in (clients, backends):
+        if (not isinstance(group, (list, tuple))
+                or any(not isinstance(role, str) or not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}', role)
+                       for role in group) or len(set(group)) != len(group)):
+            raise ValueError('Invalid reviewed par role group')
+    if not {'anon', 'authenticated'} <= set(clients) or set(clients) & set(backends):
+        raise ValueError('Browser roles are mandatory and backend groups must be disjoint')
+    return list(clients), list(backends)
+
+
+async def backend_permissions(conn, backends):
+    """Preserve existing backend access; authorize no new runtime permissions.
+
+    Full ACL/role/catalog snapshots still bind existing access before and after
+    DDL. This narrow contract is not the deferred runtime candidate assessment.
+    Backend logins must not control DDL/roles, inherit other authorities, receive
+    future default grants, or gain the new par table/function through this install.
+    """
+    for role in backends:
+        flags = await conn.fetchrow('''SELECT oid,rolcanlogin,rolsuper,rolbypassrls,
+            rolcreatedb,rolcreaterole,rolreplication FROM pg_roles WHERE rolname=$1''', role)
+        if (flags is None or not flags['rolcanlogin']
+                or any(flags[key] for key in ('rolsuper','rolbypassrls','rolcreatedb','rolcreaterole','rolreplication'))):
+            raise ValueError('Reviewed backend must be an existing unprivileged LOGIN role')
+        # The existing administrator may hold the grant created by CREATE ROLE.
+        # All other incoming membership (including NOINHERIT + SET ROLE) holds.
+        if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_auth_members
+                WHERE member=$1 OR (roleid=$1 AND member<>(SELECT oid FROM pg_roles WHERE rolname=current_user)))''', flags['oid']):
+            raise ValueError('Reviewed backend role membership requires separate review')
+        if (await conn.fetchval('''SELECT has_database_privilege($1,current_database(),'CREATE')
+                OR EXISTS(SELECT 1 FROM pg_database WHERE datname=current_database() AND datdba=$2)''',role,flags['oid'])
+                or await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_namespace
+                    WHERE nspname=ANY($2::text[]) AND (has_schema_privilege($1,oid,'CREATE') OR nspowner=$3))''',
+                    role,list(catalog.SCHEMAS)+['supabase_migrations'],flags['oid'])):
+            raise ValueError('Reviewed backend DDL authority is not allowed')
+        if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname=ANY($2::text[]) AND c.relowner=$1)
+            OR EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+                WHERE n.nspname=ANY($2::text[]) AND p.proowner=$1)''',
+                flags['oid'],list(catalog.SCHEMAS)+['supabase_migrations']):
+            raise ValueError('Reviewed backend object ownership is not allowed')
+        if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_default_acl d
+                LEFT JOIN pg_namespace n ON n.oid=d.defaclnamespace,
+                LATERAL aclexplode(d.defaclacl) a
+                WHERE (d.defaclnamespace=0 OR n.nspname=ANY($2::text[])) AND a.grantee=$1)''',
+                flags['oid'],list(readiness.PRIVATE)+['supabase_migrations']):
+            raise ValueError('Future backend default grants require separate review')
+        if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='purchasing' AND c.relname='inventory_par_versions'
+                AND (has_table_privilege($1,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    OR has_any_column_privilege($1,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))
+            OR EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+                WHERE n.nspname='purchasing' AND p.proname='guard_inventory_par'
+                AND has_function_privilege($1,p.oid,'EXECUTE'))''',role):
+            raise ValueError('New par runtime access requires separate review')
+
+
+async def readiness_check(conn, roles, before=False, *, backend_roles=()):
+    clients, backends = role_groups(roles, backend_roles)
+    # Reuse the historical predicate unchanged: column-level ledger exposure is
+    # forbidden for both groups, even when private Inventory access is intentional.
+    from hosted_additive_index import ledger_clients
+    await backend_permissions(conn, backends)
+    await ledger_clients(conn, clients + backends)
+    # The historical readiness inspector checks table privileges separately.
+    # Do not let a column-only client grant disappear when groups are split.
+    for client in clients:
+        if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname=ANY($2::text[]) AND CASE WHEN c.relkind IN ('r','p','v','m')
+                THEN has_any_column_privilege($1,c.oid,'SELECT,INSERT,UPDATE,REFERENCES') ELSE false END)''',client,list(readiness.PRIVATE)):
+            raise ValueError('Ordinary client private column access is not allowed')
+    value = await readiness.inspect(conn, client_roles=clients,
                                     migration_baseline='source_index_v1' if before else 'current')
     if value['issues'] or value['warnings']:
         raise ValueError('Reviewed par installation readiness is held')
@@ -203,7 +275,8 @@ async def absent(conn):
 
 def validate_plan(plan):
     required = {'format', 'originalInstallation', 'sourceIndexPlan', 'clientRoles', 'baseline',
-                'migration', 'sourceHashes', 'referenceSha256', 'automaticApply', 'operationalReleaseApproved'}
+                'migration', 'sourceHashes', 'referenceSha256', 'automaticApply', 'operationalReleaseApproved',
+                'backendRoles'}
     if (not isinstance(plan, dict) or set(plan) != required or plan['format'] != FORMAT
             or plan['automaticApply'] is not False or plan['operationalReleaseApproved'] is not False):
         raise ValueError('Unsupported reviewed par plan or execution flags')
@@ -221,25 +294,25 @@ def validate_plan(plan):
     if not re.fullmatch(r'\d{14}', version) or version <= max(plan['baseline']['ledger']):
         raise ValueError('New delivery must follow every installed ledger version')
     datetime.strptime(version, '%Y%m%d%H%M%S')
-    if (not isinstance(plan['clientRoles'], list) or len(set(plan['clientRoles'])) != len(plan['clientRoles'])
-            or any(not isinstance(role, str) or not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}', role)
-                   for role in plan['clientRoles'])):
+    if not isinstance(plan['clientRoles'], list) or not isinstance(plan['backendRoles'], list):
         raise ValueError('Invalid client roles')
+    role_groups(plan['clientRoles'], plan['backendRoles'])
     return sql_body(source_bytes())
 
 
-async def prepare(conn, original, source_index, version, client_roles=('anon', 'authenticated')):
+async def prepare(conn, original, source_index, version, client_roles=('anon', 'authenticated'), *, backend_roles=()):
+    clients, backends = role_groups(client_roles, backend_roles)
     checked_prior(original, source_index)
     async with readonly_snapshot(conn):
         await conn.execute("SET LOCAL statement_timeout='20s'")
         await verify_prior(conn, original, source_index)
         await absent(conn)
-        await readiness_check(conn, client_roles, before=True)
+        await readiness_check(conn, clients, before=True, backend_roles=backends)
         baseline = await snapshot(conn)
         if any(not all(row[k] for k in ('valid','ready','live')) for row in baseline['indexStates']):
             raise ValueError('An existing application index is invalid or not ready/live')
     result = {'format': FORMAT, 'originalInstallation': deepcopy(original),
-              'sourceIndexPlan': deepcopy(source_index), 'clientRoles': list(client_roles),
+              'sourceIndexPlan': deepcopy(source_index), 'clientRoles': clients, 'backendRoles': backends,
               'baseline': baseline, 'sourceHashes': sources(), 'referenceSha256': REFERENCE_SHA,
               'migration': {'sourceFile': 'migrations/' + SOURCE, 'sha256': SOURCE_SHA,
                             'bodySha256': BODY_SHA, 'deliveryVersion': version, 'name': 'reviewed_inventory_pars'},
@@ -290,7 +363,7 @@ async def _verify_outcome(conn, plan):
         delta = normalize_owner(catalog_delta(base['catalog'], current['catalog']), current['identity']['actor'])
         if delta != reference()['added']:
             raise ValueError('New par catalog/security delta differs from the reviewed reference')
-        check = await readiness_check(conn, plan['clientRoles'])
+        check = await readiness_check(conn, plan['clientRoles'], backend_roles=plan['backendRoles'])
         return {'status': 'verified_applied', 'readOnly': True, 'sqlCommitted': True,
                 'originalRowsAndCatalogPreserved': True, 'historicalLedgerPreserved': True,
                 'nativeReadiness': check}
@@ -325,7 +398,7 @@ async def apply(conn, plan, *, guard=None):
         if await snapshot(conn) != plan['baseline']:
             raise ValueError('Baseline changed or migration is already applied')
         await verify_prior(conn,plan['originalInstallation'],plan['sourceIndexPlan'])
-        await absent(conn); await readiness_check(conn,plan['clientRoles'],before=True)
+        await absent(conn); await readiness_check(conn,plan['clientRoles'],before=True,backend_roles=plan['backendRoles'])
         if guard is not None: await guard(conn,'before')
         await conn.execute("SET LOCAL statement_timeout='30s'")
         await conn.execute(body)

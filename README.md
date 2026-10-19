@@ -1,5 +1,16 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local par-installer role classification follow-up
+
+The owner authorized a [local role-check correction](docs/PAR_INSTALL_ROLE_CLASSIFICATION.md)
+after the held October 19 plan. V2 review/plan artifacts explicitly separate
+denied clients from trusted backend logins while retaining ledger denial, full
+permission preservation and strict writer drain. Backend access to the new par
+table remains deferred. All 1,025 offline cases and 69 PostgreSQL cases across
+21 methods passed in completed serial selections. No hosted connection or change is part
+of this work. Draft publication, independent review/CI, merge and any later hosted
+window/exact-plan application remain separate approvals. Ordering stays manual.
+
 ## October 19 backup verified; par migration held
 
 **October 19 maintenance outcome:** the approved 12:21:26-1:06:26 a.m. Eastern window [closed at 12:39:21 AM Eastern](docs/REVIEWED_PAR_WINDOW_20261019.md) with original API/Toast states restored. Strict writer drain and a fresh encrypted backup/disposable restore passed (120 relations, 13 catalog groups, 45,608 rows). Read-only par-plan preparation held on the trusted Inventory backend role being evaluated under private-client denial checks. No executable plan, schema SQL, grant change or connection cutover occurred. Review role classification locally before another window; retain browser denial, backend ledger denial and strict writer guards. Par editing remains held and ordering manual. Earlier pending/active stages below are dated history.
