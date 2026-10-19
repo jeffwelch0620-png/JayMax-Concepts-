@@ -1,5 +1,7 @@
 # Read-only direct IPv6 validation October 19 2026
 
+**October 19 maintenance outcome:** the approved 12:21:26-1:06:26 a.m. Eastern window [closed at 12:39:21 AM Eastern](REVIEWED_PAR_WINDOW_20261019.md) with original API/Toast states restored. Strict writer drain and a fresh encrypted backup/disposable restore passed (120 relations, 13 catalog groups, 45,608 rows). Read-only par-plan preparation held on the trusted Inventory backend role being evaluated under private-client denial checks. No executable plan, schema SQL, grant change or connection cutover occurred. Review role classification locally before another window; retain browser denial, backend ledger denial and strict writer guards. Par editing remains held and ordering manual. Earlier pending/active stages below are dated history.
+
 Status: **passed within the separately approved read-only scope** on accepted
 PR47 merge `a7270ca`. No API/Toast pause, backup, schema/data write, grant change,
 credential rotation or app/Render configuration change occurred. The next gate

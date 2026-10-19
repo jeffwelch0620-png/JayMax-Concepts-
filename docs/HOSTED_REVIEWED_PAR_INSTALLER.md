@@ -1,5 +1,7 @@
 # Guarded reviewed-par installer and local rehearsal
 
+**October 19 maintenance outcome:** the approved 12:21:26-1:06:26 a.m. Eastern window [closed at 12:39:21 AM Eastern](REVIEWED_PAR_WINDOW_20261019.md) with original API/Toast states restored. Strict writer drain and a fresh encrypted backup/disposable restore passed (120 relations, 13 catalog groups, 45,608 rows). Read-only par-plan preparation held on the trusted Inventory backend role being evaluated under private-client denial checks. No executable plan, schema SQL, grant change or connection cutover occurred. Review role classification locally before another window; retain browser denial, backend ledger denial and strict writer guards. Par editing remains held and ordering manual. Earlier pending/active stages below are dated history.
+
 **October 19 read-only check passed:** the separately approved
 [IPv6/session result](PR47_READONLY_IPV6_VALIDATION_20261019.md) verifies the accepted
 helper with two owned clients and scoped cleanup. It does not establish fresh
