@@ -1,5 +1,21 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Maintenance-only direct IPv6 follow-up — local, push approval pending
+
+The owner authorized local tooling and regression tests after the held window's
+read-only investigation reproduced retained/reassigned Supavisor backends.
+The [maintenance-only IPv6 runbook](docs/MAINTENANCE_DIRECT_IPV6.md) adds explicit
+operator opt-in and separate `MAINTENANCE_DATABASE_URL` input to encrypted export
+and the par adapter. It verifies the exact project/actor, trusted TLS, native
+IPv6 transport and effective session settings, with bounded owned cleanup.
+The historical writer guard and index tool remain unchanged; idle or previously
+owned pool PIDs are not exempted. Render/app connections, migration bytes,
+runtime grants and ordering behavior remain unchanged. Hosted execution is held;
+a fresh window/backup/restore and separate exact-plan schema approval remain
+required. Local validation passed all 1,013 offline cases and seven reported
+PostgreSQL cases, with exact owned cleanup verified. The runbook records scope,
+earlier fixture/incomplete attempts and the remaining hosted acceptance gate.
+
 ## PR46 merged; hosted window closed with writer drain held
 
 Owner-approved [PR46](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/46)

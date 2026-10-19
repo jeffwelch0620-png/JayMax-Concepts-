@@ -1,5 +1,13 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
+**Subsequent local follow-up:** the owner approved
+[maintenance-only IPv6 tooling and tests](MAINTENANCE_DIRECT_IPV6.md), with a
+prompt before draft publication. Read-only investigation reproduced the pooler's
+retained/reassigned backend behavior and verified direct IPv6 availability.
+The proposed path leaves Render/app connections unchanged and retains every
+writer guard. The dated closed window below is not reopened; hosted execution
+and exact-plan application remain separate approvals after review and merge.
+
 **Latest outcome:** the [October 18 approved window](REVIEWED_PAR_WINDOW_20261018.md)
 closed at 8:35:28 p.m. Eastern, with API/jobs restored and database health connected.
 Reviewed sessions remained despite no observed writes; the drain prerequisite held.

@@ -104,6 +104,30 @@ class BackupCliTests(unittest.TestCase):
 
 
 class CliAdapterBindingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_flag_requires_private_separate_config_and_keeps_app_url_unused(self):
+        import hosted_additive_index as adapter
+        project='abcdefghijklmnopqrst'
+        url='postgresql://postgres:TEST_ONLY@db.'+project+'.supabase.co:5432/postgres'
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            argv=['backup','export','--owner-config',str(root/'TEST_ONLY.env'),'--expected-project',project,
+                  '--pg-bin',str(root),'--maintenance-direct-ipv6']
+            for config,expected in (({'DATABASE_URL':'TEST ONLY APP'},False),
+                    ({'DATABASE_URL':'TEST ONLY APP','MAINTENANCE_DATABASE_URL':url},True)):
+                with self.subTest(config_present=expected),patch.object(sys,'argv',argv),\
+                     patch.dict(os.environ,LOCALAPPDATA=str(root)),patch.object(cli,'dotenv_values',return_value=config) as read_config,\
+                     patch.object(adapter,'private_file',side_effect=lambda p:Path(p)) as private,\
+                     patch.object(backup,'export_backup',AsyncMock(return_value={})) as export,redirect_stdout(io.StringIO()):
+                    if expected:
+                        await cli.main()
+                        self.assertEqual(export.await_args.args[0],url)
+                        self.assertTrue(export.await_args.kwargs['maintenance_direct_ipv6'])
+                    else:
+                        with self.assertRaises(ValueError):await cli.main()
+                        export.assert_not_awaited()
+                    private.assert_called_once_with(str(root/'TEST_ONLY.env'))
+                    self.assertEqual(read_config.call_args.kwargs,{'interpolate':False})
+
     async def test_cli_migration_keys_bind_authenticated_archive_to_unchanged_adapter(self):
         import hosted_additive_index as adapter
         from test_hosted_additive_index import review, receipt, PROJECT

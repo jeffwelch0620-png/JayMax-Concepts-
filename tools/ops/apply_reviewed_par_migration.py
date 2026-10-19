@@ -47,7 +47,7 @@ def sources():
              'backend/readonly_snapshot.py', 'backend/install_lock.py',
              'backend/hosted_install_preservation.py', 'backend/hosted_native_install.py',
              'backend/hosted_test_trial.py', 'backend/deployment_readiness.py',
-             'backend/native_backup.py', 'backend/hosted_backup.py',
+             'backend/native_backup.py', 'backend/hosted_backup.py', 'backend/maintenance_connection.py',
              'backend/schema_reconciliation.py', 'backend/db_tls.py',
              'backend/managed_development.py', 'docs/REVIEWED_PAR_INSTALL_CATALOG.json',
              'docs/RUNTIME_PERMISSION_CANDIDATE.json']

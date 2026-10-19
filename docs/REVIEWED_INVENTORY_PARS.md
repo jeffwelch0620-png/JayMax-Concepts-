@@ -1,5 +1,11 @@
 # Reviewed purchased-inventory par units
 
+**Local continuation:** [maintenance-only direct IPv6 tooling](MAINTENANCE_DIRECT_IPV6.md)
+is being tested under owner authorization, with draft push approval pending.
+It changes the operator path, not application connections or par semantics.
+The hosted table remains absent at the last verified checkpoint; par editing
+stays held and ordering manual until separately approved installation/acceptance.
+
 **Current installation checkpoint:** guarded tooling is merged in owner-approved
 PR46 `f762808`, with reviewed-head/merged-main CI green. The
 [October 18 approved window](REVIEWED_PAR_WINDOW_20261018.md) closed early with

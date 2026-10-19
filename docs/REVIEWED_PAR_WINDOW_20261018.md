@@ -1,5 +1,8 @@
 # Reviewed-par maintenance window - October 18, 2026
 
+Subsequent work is tracked in the [maintenance-only IPv6 runbook](MAINTENANCE_DIRECT_IPV6.md).
+This execution record remains the dated closed-window outcome.
+
 **Closed at 8:35:28 p.m. Eastern without schema application.** The approved
 window began at 8:15:16 p.m. and had a 9:00:16 p.m. deadline. Render's API is
 restored Live on accepted PR46 merge `f762808`; `/api/health` reports

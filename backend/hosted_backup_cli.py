@@ -9,6 +9,7 @@ from uuid import uuid4
 from dotenv import dotenv_values
 import hosted_backup as backup
 from readonly_snapshot import error_details
+from maintenance_connection import MaintenanceConnectionError
 
 
 def held_result(error):
@@ -19,7 +20,7 @@ def held_result(error):
     artifacts = backup.safe_export_artifacts(getattr(error, 'backupArtifacts', None))
     if artifacts is not None:
         result['backupArtifacts'] = artifacts
-    if isinstance(error, backup.BackupError):
+    if isinstance(error, (backup.BackupError, MaintenanceConnectionError)):
         result['reason'] = str(error)
     return result
 
@@ -29,6 +30,8 @@ async def main():
     commands = parser.add_subparsers(dest='action', required=True)
     export = commands.add_parser('export')
     export.add_argument('--owner-config', required=True, help='Private dotenv file; never pass a URL/password as an argument')
+    export.add_argument('--maintenance-direct-ipv6', action='store_true',
+        help='Opt-in operator path using separate MAINTENANCE_DATABASE_URL; never reads the app URL')
     export.add_argument('--timeout-seconds', type=int, default=backup.EXPORT_TIMEOUT_SECONDS,
         help='Overall export budget, 1–600 seconds; reserve additional time for cleanup and service recovery')
     restore = commands.add_parser('verify-restore')
@@ -43,14 +46,21 @@ async def main():
     root = Path(os.environ['LOCALAPPDATA']) / 'JayMaxBuild'
     label = 'backup-' + uuid4().hex
     if args.action == 'export':
-        config = dotenv_values(args.owner_config)
+        if args.maintenance_direct_ipv6:
+            from maintenance_connection import config_url
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/ops'))
+            from hosted_additive_index import private_file
+            private_file(args.owner_config)
+        config = dotenv_values(args.owner_config, **({'interpolate': False} if args.maintenance_direct_ipv6 else {}))
+        url = config_url(config) if args.maintenance_direct_ipv6 else config.get('DATABASE_URL', '')
         repo = Path(__file__).resolve().parents[1]
         migrations = {path.relative_to(repo).as_posix(): backup.digest(path.read_bytes()) for directory in
             (repo / 'migrations', repo / 'supabase/migrations') for path in directory.glob('*.sql')}
-        result = await backup.export_backup(config.get('DATABASE_URL', ''), args.expected_project,
+        options = {'maintenance_direct_ipv6': True} if args.maintenance_direct_ipv6 else {}
+        result = await backup.export_backup(url, args.expected_project,
             binaries / 'pg_dump.exe', binaries / 'pg_restore.exe', root / 'backups' / label,
             root / 'credentials' / label, migrations, timeout_seconds=args.timeout_seconds,
-            progress=lambda event: print(json.dumps(event), file=sys.stderr, flush=True))
+            progress=lambda event: print(json.dumps(event), file=sys.stderr, flush=True), **options)
     else:
         dsn = os.environ.get(args.connection_env)
         if not dsn:

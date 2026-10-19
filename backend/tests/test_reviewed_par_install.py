@@ -40,7 +40,7 @@ class ParInstallGuards(unittest.TestCase):
         import hosted_additive_index as original
         for name in ('require_runtime','sha','fingerprint','utc','maintenance','target','roles',
                      'writer_roles','server_version','writer_sessions','checked_json','ledger_clients',
-                     'private_file','verify_acl','write_private','arguments'):
+                     'private_file','verify_acl','write_private'):
             with self.subTest(helper=name):
                 self.assertEqual(ast.dump(ast.parse(inspect.getsource(getattr(original,name)))),
                                  ast.dump(ast.parse(inspect.getsource(getattr(hosted,name)))))
@@ -122,12 +122,13 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(hosted.Held):await hosted.apply(None,{},spec,{}, {},{})
             probe.assert_not_awaited();send.assert_not_awaited()
 
-    async def exercise(self, mode):
+    async def exercise(self, mode, *, direct=False):
         with TemporaryDirectory() as directory:
             root=Path(directory);out=root/'out';out.mkdir()
             spec=review();spec.update(originalReceipt=str(root/'original'),sourceIndexPlan=str(root/'index'),
                 backup={k:str(root/k) for k in ('encryptedFile','keyFile','restoreReceipt')})
-            target={'actor':'postgres','projectRef':spec['projectRef']};binding={'TEST_ONLY':True}
+            target={'actor':'postgres','projectRef':spec['projectRef'],
+                    'connectionMode':'direct' if direct else 'session_pooler'};binding={'TEST_ONLY':True}
             core={'clientRoles':spec['clientRoles'],'baseline':{'identity':{'actor':'postgres'}},
                   'migration':{'deliveryVersion':spec['deliveryVersion']}}
             plan={'format':hosted.FORMAT,'createdAt':'TEST ONLY','target':target,
@@ -139,7 +140,7 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
             args=SimpleNamespace(mode='apply',owner_config=str(root/'owner'),expected_project=spec['projectRef'],
                 review=str(rp),review_sha256=hosted.sha(rp.read_bytes()),plan=str(pp),
                 plan_sha256=hosted.sha(pp.read_bytes()),approve_plan_sha256=hosted.sha(pp.read_bytes()),
-                output_directory=str(out))
+                output_directory=str(out),maintenance_direct_ipv6=direct)
             if mode=='wrong_approval':args.approve_plan_sha256='0'*64
             conn=SimpleNamespace(close=AsyncMock())
             connect=AsyncMock(side_effect=[conn,ConnectionError('TEST ONLY private connection detail')])
@@ -152,15 +153,22 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
                         'sqlCommitted':None,'automaticRetry':False,'errorType':'ConnectionError'})
                 return {'status':'committed_requires_independent_verification','commitAttempted':True,'sqlCommitted':True}
             apply=AsyncMock(side_effect=send)
+            import maintenance_connection
+            direct_url='postgresql://postgres:TEST_ONLY@db.'+spec['projectRef']+'.supabase.co:5432/postgres'
+            config={'DATABASE_URL':'TEST ONLY APP'}
+            if direct:config['MAINTENANCE_DATABASE_URL']=direct_url
             with ExitStack() as stack:
                 for obj,name,value in [(hosted.backup,'private_directory',lambda p,area:out),
                     (hosted,'write_private',lambda p,raw:Path(p).write_bytes(raw)),
-                    (hosted,'private_file',Path),(hosted,'dotenv_values',lambda p:{'DATABASE_URL':'TEST ONLY'}),
+                    (hosted,'private_file',Path),(hosted,'dotenv_values',lambda p,**kw:config),
                     (hosted,'target',lambda *a:target),(hosted,'connection_tls',lambda x:True),
                     (hosted,'load_evidence',lambda *a,**kw:(({},{}),{},binding)),
                     (engine,'validate_plan',lambda x:None),(hosted.asyncpg,'connect',connect),(hosted,'apply',apply)]:
                     stack.enter_context(patch.object(obj,name,value))
+                direct_connect=stack.enter_context(patch.object(maintenance_connection,'connect',connect if direct else AsyncMock()))
                 self.assertEqual(await hosted.run(args),2)
+                if direct and mode!='wrong_approval':
+                    self.assertTrue(all(call.args==(direct_url,spec['projectRef']) for call in direct_connect.await_args_list))
             result=json.loads((out/'receipt.json').read_text())
             self.assertFalse(result['automaticRetry'])
             self.assertEqual(result['planSha256'],args.plan_sha256)
@@ -181,6 +189,19 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
         result,send,_=await self.exercise('fresh_failure')
         self.assertEqual(result['status'],'committed_verification_held');self.assertTrue(result['sqlCommitted'])
         self.assertEqual(send.await_count,1)
+
+    async def test_direct_approval_unknown_commit_and_independent_reconcile_gates_remain(self):
+        for mode in ('wrong_approval','lost_ack','fresh_failure'):
+            with self.subTest(mode=mode):
+                result,send,connect=await self.exercise(mode,direct=True)
+                if mode=='wrong_approval':
+                    self.assertEqual(result['status'],'held');send.assert_not_awaited();connect.assert_not_awaited()
+                elif mode=='lost_ack':
+                    self.assertEqual(result['status'],'commit_outcome_unknown');self.assertIsNone(result['sqlCommitted'])
+                    self.assertEqual(send.await_count,1)
+                else:
+                    self.assertEqual(result['status'],'committed_verification_held');self.assertTrue(result['sqlCommitted'])
+                    self.assertEqual(send.await_count,1)
 
 
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'),'Disposable PostgreSQL required')

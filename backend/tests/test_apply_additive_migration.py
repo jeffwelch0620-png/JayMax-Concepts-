@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 import sys
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -369,6 +369,75 @@ class AdditiveDatabaseTests(unittest.IsolatedAsyncioTestCase):
 
 @unittest.skipUnless(os.environ.get('NATIVE_PURCHASE_TEST_DSN'), 'Dedicated disposable PostgreSQL required')
 class HostedBackupLocalDatabaseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_maintenance_export_restores_rows_and_closes_owned_transport(self):
+        import hosted_backup as backup
+        import maintenance_connection as maintenance
+        control=os.environ['NATIVE_PURCHASE_TEST_DSN'];additive.local_target(control)
+        source='native_purchase_test_bsrc_'+uuid4().hex
+        restored='native_purchase_test_backup_'+uuid4().hex
+        source_dsn=control.rsplit('/',1)[0]+'/'+source
+        restore_dsn=control.rsplit('/',1)[0]+'/'+restored
+        settings=backup.native.disposable_connection(source_dsn)
+        project='abcdefghijklmnopqrst'
+        fake='postgresql://postgres:TEST_ONLY@db.'+project+'.supabase.co:5432/postgres'
+        real_connect=asyncpg.connect;real_tool=backup.tool
+        controller=await real_connect(control,ssl=False)
+        created=[];owned=[]
+        async def connect(url,expected,**kwargs):
+            self.assertEqual((url,expected),(fake,project));self.assertTrue(kwargs['readonly'])
+            conn=await real_connect(**settings,ssl=False,connection_class=maintenance.DirectIPv6Connection,
+                server_settings={'default_transaction_read_only':'on','application_name':kwargs['label']})
+            owned.append(conn)
+            self.assertEqual(conn.maintenance_peer[0],'127.0.0.1')
+            self.assertFalse(conn.maintenance_tls)  # Real loopback transport; hosted TLS is not claimed here.
+            return conn
+        async def restore_connect(*args,**kwargs):
+            self.assertFalse(args);self.assertEqual(kwargs['database'],restored)
+            self.assertEqual(kwargs['host'],'127.0.0.1')
+            return await real_connect(**kwargs)
+        async def tool(executable,args,connection_settings=None,remote=False):
+            return await real_tool(executable,args,settings if remote else connection_settings,False)
+        def directory(path,area):path.mkdir();return path
+        dump=Path(os.environ['NATIVE_BACKUP_PG_DUMP']);restore=dump.with_name('pg_restore'+dump.suffix)
+        try:
+            for name in (source,restored):
+                await controller.execute('CREATE DATABASE '+backup.native.quoted(name)+' TEMPLATE template0')
+                created.append(name)
+            setup=await real_connect(source_dsn,ssl=False)
+            try:
+                for schema in backup.SCHEMAS:
+                    if schema!='public':await setup.execute('CREATE SCHEMA '+backup.native.quoted(schema))
+                await setup.execute("CREATE TABLE public.test_only_direct(id integer PRIMARY KEY,value text); "
+                                    "INSERT INTO public.test_only_direct VALUES(1,'TEST ONLY encrypted restore')")
+            finally:await setup.close()
+            with TemporaryDirectory() as temporary:
+                root=Path(temporary)
+                with patch.object(backup,'private_directory',side_effect=directory),\
+                     patch.object(backup,'connection_tls',return_value=True),\
+                     patch.object(maintenance,'dump_settings',AsyncMock(return_value=maintenance.direct_settings(fake,project)|{'hostaddr':'2001:db8::1'})),\
+                     patch.object(maintenance,'connect',side_effect=connect),\
+                     patch.object(backup.asyncpg,'connect',side_effect=restore_connect),\
+                     patch.object(backup,'tool',side_effect=tool):
+                    exported=await backup.export_backup(fake,project,dump,restore,root/'archive',root/'key',{},maintenance_direct_ipv6=True)
+                    self.assertTrue(owned[0].is_closed())
+                    verified=await backup.verify_restore(restore_dsn,exported['encryptedBackup'],exported['privateKey'],project,restore,root/'restore')
+                    self.assertEqual(verified['status'],'verified_application_restore')
+                    self.assertEqual(verified['rowsMatched'],1)
+                    self.assertEqual(verified['archiveSha256'],exported['archiveSha256'])
+            check=await real_connect(restore_dsn,ssl=False)
+            try:self.assertEqual(await check.fetchval('SELECT value FROM public.test_only_direct WHERE id=1'),'TEST ONLY encrypted restore')
+            finally:await check.close()
+            for _ in range(50):
+                remaining=await controller.fetchval('SELECT count(*) FROM pg_stat_activity WHERE datname=$1',source)
+                if not remaining:break
+                await asyncio.sleep(.02)
+            self.assertEqual(remaining,0)
+        finally:
+            for conn in owned:
+                if not conn.is_closed():await conn.close(timeout=5)
+            for name in reversed(created):await controller.execute('DROP DATABASE '+backup.native.quoted(name)+' WITH (FORCE)')
+            await controller.close()
+
     async def test_export_deadline_and_operator_cancel_remove_only_owned_database_sessions(self):
         import hosted_backup as backup
         control=os.environ['NATIVE_PURCHASE_TEST_DSN'];additive.local_target(control)

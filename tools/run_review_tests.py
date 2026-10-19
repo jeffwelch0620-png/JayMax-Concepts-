@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-OFFLINE_MODULES = ('planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
+OFFLINE_MODULES = ('maintenance_connection planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
  'managed_development rotate_build_connections provision_build_connections staff_response pg_routes pg_migrations '
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
@@ -61,6 +61,7 @@ DATABASE_CASES = (
  ('manual_purchases','ManualPurchaseTests','test_capture_recovery_status_requires_capture_role_and_location_without_writes'),
  ('backup_fingerprint','FingerprintDatabaseTests','test_server_cursor_fallback_and_legacy_fingerprints_are_equivalent'),
  ('apply_additive_migration','HostedBackupLocalDatabaseTests','test_export_deadline_and_operator_cancel_remove_only_owned_database_sessions'),
+ ('apply_additive_migration','HostedBackupLocalDatabaseTests','test_direct_maintenance_export_restores_rows_and_closes_owned_transport'),
  ('apply_additive_migration','HostedBackupLocalDatabaseTests','test_encrypted_export_restore_and_close_failure_stay_disposable'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_same_version_correction_and_exact_retry'),
  ('posted_invoice_corrections','PostedInvoiceCorrectionTests','test_recovery_identity_survives_reissued_version_correction_and_exact_retry'),
@@ -161,7 +162,7 @@ def main():
     dsn = env.get('NATIVE_PURCHASE_TEST_DSN','')
     for key in list(env):
         if key.startswith('REACT_APP_') or key.endswith('_ENABLED') or key in (
-                'DATABASE_URL','AUXILIARY_DATABASE_URL','NATIVE_PURCHASE_TEST_DSN','TEST_PG_URL','BOOTSTRAP_TOKEN'):
+                'DATABASE_URL','AUXILIARY_DATABASE_URL','MAINTENANCE_DATABASE_URL','NATIVE_PURCHASE_TEST_DSN','TEST_PG_URL','BOOTSTRAP_TOKEN'):
             env.pop(key)
     env.update(DATABASE_URL='',AUXILIARY_DATABASE_URL='',PYTHON_DOTENV_DISABLED='1',
                USE_PG='true',AUTH_REQUIRED='true',AUTH_SECRET='synthetic-review-test-secret-only',

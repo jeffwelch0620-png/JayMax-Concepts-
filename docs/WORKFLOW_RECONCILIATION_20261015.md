@@ -1,5 +1,18 @@
 # Inventory workflow checkpoint and remaining work
 
+**Local maintenance-only IPv6 follow-up:** the owner authorized local changes and
+regression tests, with a prompt before publishing a draft PR. The
+[new runbook](MAINTENANCE_DIRECT_IPV6.md) records the reproduced pooler retention
+and PID reassignment, separate private configuration, explicit operator opt-in,
+certificate/native-IPv6/effective-session checks and unchanged writer guards.
+Existing app/Render connections and hosted systems remain unchanged. A new
+window and separate exact-plan schema approval remain required after review.
+All 1,013 offline cases and seven reported cases in the narrowed PostgreSQL
+selection passed, with exact owned inventory restoration and server shutdown.
+The runbook distinguishes these results from the earlier failed/incomplete
+fixture attempts and the pending hosted IPv6 acceptance. Draft push approval and
+fresh CI remain pending.
+
 **October 18 hosted window closed:** the owner-approved 8:15:16-9:00:16 p.m.
 Eastern window closed at 8:35:28 p.m. API and both Toast jobs are restored to their
 original states; API database health is connected. Five drain observations found

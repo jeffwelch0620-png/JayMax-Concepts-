@@ -38,6 +38,7 @@ from hosted_additive_index import (
 from readonly_snapshot import readonly_snapshot, preserve_cleanup_failure, error_details
 import hosted_backup as backup
 from db_tls import connection_tls
+from maintenance_connection import MaintenanceConnectionError
 
 FORMAT = 'jaymax-hosted-reviewed-par-plan-v1'
 REVIEW_FORMAT = 'jaymax-hosted-reviewed-par-review-v1'
@@ -200,7 +201,10 @@ async def run(args):
     conn = None
     started = time.monotonic()
     try:
-        config = dotenv_values(private_file(args.owner_config))
+        direct = getattr(args, 'maintenance_direct_ipv6', False)
+        if type(direct) is not bool:
+            raise Held('Explicit boolean maintenance mode required')
+        config = dotenv_values(private_file(args.owner_config), **({'interpolate': False} if direct else {}))
         review = checked_json(private_file(args.review), args.review_sha256)
         if review['projectRef'] != args.expected_project:
             raise Held('Explicit project designation differs from the reviewed artifact')
@@ -209,8 +213,15 @@ async def run(args):
         private_file(review['originalReceipt'])
         private_file(review['sourceIndexPlan'])
         original, facts, binding = load_evidence(review, active=args.mode != 'reconcile')
-        dsn = config.get('DATABASE_URL', '')
+        if direct:
+            import maintenance_connection
+            dsn = maintenance_connection.config_url(config)
+            maintenance_connection.direct_settings(dsn, args.expected_project)
+        else:
+            dsn = config.get('DATABASE_URL', '')
         identity = target(dsn, args.expected_project)
+        if not direct and identity.get('connectionMode') == 'direct':
+            raise Held('Direct maintenance requires explicit IPv6 opt-in and separate configuration')
         plan = None
         if args.mode != 'dry-run':
             plan = checked_json(private_file(args.plan), args.plan_sha256)
@@ -220,6 +231,9 @@ async def run(args):
             raise Held('Application requires explicit approval of this exact plan SHA-256')
         tls = connection_tls(dsn)
         async def connect(readonly):
+            if direct:
+                return await maintenance_connection.connect(dsn, args.expected_project,
+                    readonly=readonly, timeout=20, command_timeout=30)
             return await asyncpg.connect(dsn, ssl=tls, timeout=20, command_timeout=30,
                 statement_cache_size=0, server_settings={'default_transaction_read_only': 'on' if readonly else 'off'})
         async with asyncio.timeout(BUDGETS['operationSeconds']):
@@ -254,7 +268,7 @@ async def run(args):
         elif result['status'] != 'apply_in_progress_outcome_unknown':
             result['status'] = 'held'
         result.update(error_details(exc))
-        if isinstance(exc, Held):
+        if isinstance(exc, (Held, MaintenanceConnectionError)):
             result['reason'] = str(exc)
     finally:
         if conn is not None:
@@ -284,6 +298,8 @@ def arguments():
     parser.add_argument('--plan')
     parser.add_argument('--plan-sha256')
     parser.add_argument('--approve-plan-sha256')
+    parser.add_argument('--maintenance-direct-ipv6', action='store_true',
+        help='Use separate MAINTENANCE_DATABASE_URL for operator-only direct IPv6')
     args = parser.parse_args()
     if args.mode != 'dry-run' and (not args.plan or not args.plan_sha256):
         parser.error('Apply/reconcile require the retained plan and exact SHA-256')
