@@ -1,5 +1,23 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR46 merged; hosted maintenance preflight prepared
+
+Owner-approved [PR46](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/46)
+merged as **`f762808b22bae680c40026af01a69c0226f5d2c7`** from tested `31f65c3`.
+All four reviewed-head and [merged-main CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39178376304)
+passed: 1,026 frontend tests/strict build, 181 backend cases and 945 Windows cases.
+The API is Live on the merge; the unchanged frontend remains Live on PR45 because
+its Render root is `frontend/`. No manual deployment or hosting change was used.
+
+The [maintenance preflight](docs/REVIEWED_PAR_MAINTENANCE_PREFLIGHT_20261018.md)
+records successful local retained-evidence/private-input checks and the owner's
+reconfirmed API/two-Toast-job writer scope; Companion remains local-only. No
+Supabase connection, writer pause, fresh hosted backup or schema application has
+occurred in this step. A new approved window/backup/restore and then separate
+exact-plan application approval are required. Ordering stays manual and the
+accepted par-editing freeze remains. Earlier publication-pending entries below
+are dated stages; the installer is now merged, not awaiting draft publication.
+
 ## Guarded par installer — local follow-up, publication pending
 
 The owner authorized the par-specific installer and disposable local rehearsal,

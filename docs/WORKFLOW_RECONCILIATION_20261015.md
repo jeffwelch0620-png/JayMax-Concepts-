@@ -1,5 +1,20 @@
 # Inventory workflow checkpoint and remaining work
 
+**October 18 PR46 merge / next-window preparation:** owner-approved `31f65c3`
+merged as `f762808b22bae680c40026af01a69c0226f5d2c7`. All four reviewed-head and
+merged-main CI checks passed (1,026 frontend tests/strict build; 181 backend cases;
+945 Windows cases). API deployment `dep-dbalnujm8hqs73bi9s3g` is Live on the merge;
+the unchanged frontend remains Live on PR45 under its observed `frontend/` root.
+The [local maintenance preflight](REVIEWED_PAR_MAINTENANCE_PREFLIGHT_20261018.md)
+verified retained installation/index evidence, protected readback and an intentionally
+non-executable pending review. Owner reconfirmed only API/two Toast jobs write;
+Companion remains local-only. No Supabase connection, writer pause, schema, grant,
+credential or connection change occurred. Next: new 45-minute window/no-other-writes
+approval, fresh backup/restore and then a separate exact-plan application prompt.
+Ordering remains manual and par editing held. Earlier draft/merge-pending entries
+below retain their historical scope; no new implementation PR is required merely
+to apply already accepted tooling through the approved maintenance process.
+
 **Guarded reviewed-par installer, local continuation:** the owner authorized
 the par-specific installer and disposable local rehearsal, with a prompt before
 publishing a draft PR and before any Supabase application. The

@@ -1,5 +1,12 @@
 # Reviewed purchased-inventory par units
 
+**Current installation checkpoint:** guarded tooling is merged in owner-approved
+PR46 `f762808`, with reviewed-head/merged-main CI green. The
+[maintenance preflight](REVIEWED_PAR_MAINTENANCE_PREFLIGHT_20261018.md) is prepared;
+new window/backup/restore approval and separate exact-plan application remain
+open. The schema remains unapplied by this workflow; ordering stays manual and
+the accepted par-editing freeze remains. Earlier draft-pending entries are history.
+
 **Guarded-installer continuation:** a separately authorized local follow-up
 implements the [par-specific additive installer](HOSTED_REVIEWED_PAR_INSTALLER.md)
 and disposable rehearsal. Publication, independent review, a new maintenance

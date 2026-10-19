@@ -1,5 +1,15 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
+**PR46 merged; next approval is a new maintenance window.** Accepted merge
+`f762808` passed reviewed-head/merged-main CI, and its API deployment is Live.
+The unchanged frontend remains Live on PR45 under its `frontend/` build root.
+The [maintenance preflight](REVIEWED_PAR_MAINTENANCE_PREFLIGHT_20261018.md) records
+verified retained local evidence, protected non-executable inputs and the owner's
+reconfirmed three-writer scope. No Supabase connection or mutation occurred in
+that preparation. Obtain a fresh bounded window/backup/restore, then prompt for
+the exact plan hash before application. Earlier draft-pending statements below
+are historical stages, not current blockers or execution permission.
+
 **Local implementation follow-up:** the owner subsequently authorized building
 the guarded installer and rehearsing it locally, with prompts before draft PR
 publication and every Supabase application. See the
