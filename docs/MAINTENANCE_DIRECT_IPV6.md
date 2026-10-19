@@ -1,5 +1,13 @@
 # Maintenance-only direct IPv6 connections
 
+**Hosted read-only validation passed October 19:** the owner-approved
+[two-client result](PR47_READONLY_IPV6_VALIDATION_20261019.md) verifies native IPv6,
+trusted TLS, effective read-only settings and first-backend disappearance, with
+both owned clients closed. Separate private maintenance config is retained;
+app/Render connections remain unchanged. No backup or schema execution occurred.
+The owner reconfirmed writers and their controls were refreshed read-only; a new
+maintenance window remains a separate approval.
+
 Status: **[PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47) owner-approved and merged as `a7270ca` from tested head `755aff3`; all four reviewed-head checks passed.** The [next preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) separates merged-main CI, read-only hosted validation and later maintenance/application approval.
 This work changes manual operator tooling only. Render and the application's
 saved database connections, credentials, pool settings and feature flags remain

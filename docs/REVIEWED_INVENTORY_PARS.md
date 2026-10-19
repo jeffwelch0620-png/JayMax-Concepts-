@@ -1,5 +1,12 @@
 # Reviewed purchased-inventory par units
 
+**Read-only IPv6 validation passed October 19:** see the
+[scoped result](PR47_READONLY_IPV6_VALIDATION_20261019.md). This confirms direct
+maintenance access and cleanup, with separate private config and no app/Render
+changes. The par table is still absent; no backup, par write or schema application
+occurred. Reconfirm writers, then request a new maintenance window; par editing
+stays held and ordering manual. Earlier pending read-only approval is history.
+
 **PR47 merged:** owner-approved merge `a7270ca` preserves tested `755aff3` exactly.
 The [new preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) prepares separately approved
 read-only validation before a new hosted maintenance window; no hosted calls or

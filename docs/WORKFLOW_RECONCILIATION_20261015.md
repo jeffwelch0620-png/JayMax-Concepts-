@@ -1,5 +1,19 @@
 # Inventory workflow checkpoint and remaining work
 
+**October 19 read-only IPv6 validation passed:** the separately approved
+[two-client check](PR47_READONLY_IPV6_VALIDATION_20261019.md) passed on accepted
+`a7270ca`. Its observer verified the first backend identity absent, and both owned
+clients closed. The separate private maintenance config passed protected readback;
+original owner inputs and app/Render settings are unchanged. Exactly two connection
+attempts took 3.859 seconds of observation. Par table absent/55 ledger entries is
+dated presence/count evidence only. No outage, backup or schema/data writes occurred.
+The owner reconfirmed only the API/two Toast writers and Companion local-only;
+read-only Render/job inventory confirms the API Live on `a7270ca`, both jobs
+enabled with matching identities/commands, and no extra active cron jobs. A new
+45-minute window is proposed, not active. Fresh backup/restore
+and exact-plan schema approval remain later gates. Earlier preparation statements
+below are history, not current pending read-only approval.
+
 **PR47 merged:** owner-approved merge `a7270ca` matches tested head `755aff3`
 exactly, with all four reviewed-head and merged-main CI checks passed. The
 [direct-maintenance preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) prepares the

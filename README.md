@@ -1,6 +1,17 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## PR47 merged; read-only maintenance validation is next
+## PR47 read-only IPv6 validation passed
+
+The separately approved [October 19 read-only check](docs/PR47_READONLY_IPV6_VALIDATION_20261019.md)
+passed on accepted `a7270ca`: two direct IPv6/TLS/read-only clients, first backend
+disappearance observed, and both owned clients closed. A separate private
+maintenance config is retained; original inputs and app/Render settings are
+unchanged. No API/Toast pause, backup or schema/data write occurred. The owner
+reconfirmed the API/two Toast writers, and their controls were refreshed read-only.
+The next gate is a separately approved 45-minute maintenance window,
+new encrypted backup/disposable restore and exact-plan application approval.
+
+## Earlier PR47 merge and read-only preparation
 
 Owner-approved [PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47)
 is merged as `a7270ca`, with the exact tested `755aff3` tree. Reviewed-head and

@@ -1,5 +1,11 @@
 # Guarded reviewed-par installer and local rehearsal
 
+**October 19 read-only check passed:** the separately approved
+[IPv6/session result](PR47_READONLY_IPV6_VALIDATION_20261019.md) verifies the accepted
+helper with two owned clients and scoped cleanup. It does not establish fresh
+hosted backup/restore or schema application. Reconfirm writers before requesting
+a new bounded window. App/Render settings remain unchanged and ordering manual.
+
 **PR47 accepted tooling:** owner-approved merge `a7270ca` matches tested `755aff3`
 exactly and has green reviewed-head/merged-main CI. The [new preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md)
 prepares separately approved read-only validation, then a fresh window,

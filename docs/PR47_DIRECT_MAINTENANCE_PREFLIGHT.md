@@ -1,9 +1,10 @@
 # PR47 direct maintenance validation plan
 
-Status: **prepared locally; hosted validation approval pending.** This is a
-read-only transport/session check before proposing another maintenance window.
-No private configuration is created and no hosted connection is made by this
-preparation. Keep par editing held and ordering manual.
+Status: **the owner separately approved this plan and its read-only check passed
+on October 19.** See the [execution result](PR47_READONLY_IPV6_VALIDATION_20261019.md)
+for the exact two-client scope, private-config creation and cleanup evidence.
+The remaining sections retain the approved preparation; they do not authorize
+a maintenance window or schema application. Keep par editing held and ordering manual.
 
 ## Accepted source and validation
 

@@ -1,5 +1,13 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
+**Current gate after October 19:** the separately approved
+[read-only IPv6 check](PR47_READONLY_IPV6_VALIDATION_20261019.md) passed. Separate
+private maintenance config is ready, with app/Render settings unchanged. The owner
+reconfirmed only the API/two Toast writers; refreshed controls match. A new
+45-minute window awaits approval; no API/Toast pause, backup or schema/data
+write occurred in the check. Fresh window/backup/restore and exact-plan application
+approval remain separate. Earlier pending read-only stages below are historical.
+
 **Current accepted tooling:** PR47 is merged as `a7270ca` from the exact tested
 `755aff3` tree, with reviewed-head and merged-main CI green. The
 [direct-maintenance preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) proposes a
