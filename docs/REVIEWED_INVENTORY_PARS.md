@@ -1,7 +1,9 @@
 # Reviewed purchased-inventory par units
 
 **Local continuation:** [maintenance-only direct IPv6 tooling](MAINTENANCE_DIRECT_IPV6.md)
-is being tested under owner authorization, with draft push approval pending.
+passed local testing and was published with owner approval as
+[draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47) from
+tested `e92cd37`; branch CI and independent review remain pending.
 It changes the operator path, not application connections or par semantics.
 The hosted table remains absent at the last verified checkpoint; par editing
 stays held and ordering manual until separately approved installation/acceptance.

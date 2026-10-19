@@ -10,8 +10,9 @@ window and separate exact-plan schema approval remain required after review.
 All 1,013 offline cases and seven reported cases in the narrowed PostgreSQL
 selection passed, with exact owned inventory restoration and server shutdown.
 The runbook distinguishes these results from the earlier failed/incomplete
-fixture attempts and the pending hosted IPv6 acceptance. Draft push approval and
-fresh CI remain pending.
+fixture attempts and the pending hosted IPv6 acceptance. The owner approved
+publication as [draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47)
+from tested `e92cd37`; fresh branch CI and independent review are pending.
 
 **October 18 hosted window closed:** the owner-approved 8:15:16-9:00:16 p.m.
 Eastern window closed at 8:35:28 p.m. API and both Toast jobs are restored to their

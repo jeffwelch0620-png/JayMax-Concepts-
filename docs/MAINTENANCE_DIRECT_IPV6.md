@@ -1,6 +1,6 @@
 # Maintenance-only direct IPv6 connections
 
-Status: **local implementation tested; draft push approval pending.**
+Status: **[draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47) published with owner approval from tested `e92cd37`; branch CI and independent review pending.**
 This work changes manual operator tooling only. Render and the application's
 saved database connections, credentials, pool settings and feature flags remain
 unchanged. No Supabase window, backup, migration, grants or hosted execution is
@@ -131,6 +131,6 @@ Only its recorded test-owned databases/roles were removed, with exact inventory
 restoration verified. The final frozen-source selection above passed the drift
 case and encrypted recovery. The interrupted batch is not counted as a pass.
 
-Fresh CI and independent review remain pending until an approved draft push.
+Fresh branch CI and independent review remain pending after the approved draft push.
 Merge, a new hosted window and exact-plan schema approval remain separate gates.
 These local results do not establish hosted acceptance of the new IPv6 tooling.

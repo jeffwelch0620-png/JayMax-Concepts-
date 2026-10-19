@@ -1,6 +1,11 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Maintenance-only direct IPv6 follow-up — local, push approval pending
+## Maintenance-only direct IPv6 follow-up — draft PR47
+
+Owner-approved publication opened [draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47)
+from tested `e92cd37`. Branch CI and independent review are pending; this
+publication update changes documentation only. Merge and hosted execution remain
+separate approvals.
 
 The owner authorized local tooling and regression tests after the held window's
 read-only investigation reproduced retained/reassigned Supavisor backends.
