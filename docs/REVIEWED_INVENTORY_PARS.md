@@ -1,5 +1,22 @@
 # Reviewed purchased-inventory par units
 
+**Local continuation:** [maintenance-only direct IPv6 tooling](MAINTENANCE_DIRECT_IPV6.md)
+passed local testing and was published with owner approval as
+[draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47) from
+tested `e92cd37`; branch CI and independent review remain pending.
+It changes the operator path, not application connections or par semantics.
+The hosted table remains absent at the last verified checkpoint; par editing
+stays held and ordering manual until separately approved installation/acceptance.
+
+**Current installation checkpoint:** guarded tooling is merged in owner-approved
+PR46 `f762808`, with reviewed-head/merged-main CI green. The
+[October 18 approved window](REVIEWED_PAR_WINDOW_20261018.md) closed early with
+writer drain held and all API/Toast controls restored. No fresh backup, restore,
+executable plan or schema application was started. The par table remains absent.
+Next: read-only operator/pool session investigation, then a new approved window
+and separate exact-plan application approval. Ordering stays manual and the
+accepted par-editing freeze remains. Earlier draft-pending entries are history.
+
 **Guarded-installer continuation:** a separately authorized local follow-up
 implements the [par-specific additive installer](HOSTED_REVIEWED_PAR_INSTALLER.md)
 and disposable rehearsal. Publication, independent review, a new maintenance

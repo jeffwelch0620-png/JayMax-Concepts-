@@ -335,6 +335,9 @@ def process_env(settings, remote):
     if remote:
         env.update(PGSSLROOTCERT=os.environ.get('DATABASE_SSL_ROOT_CERT', str(DEFAULT_CA)),
                    PGOPTIONS='-c default_transaction_read_only=on')
+        if 'hostaddr' in settings:
+            from maintenance_connection import ipv6_address
+            env['PGHOSTADDR'] = ipv6_address(settings['hostaddr'])
     control = EXPORT_CONTROL.get()
     if control is not None:
         env['PGAPPNAME'] = control.application_name + '-tool'
@@ -515,15 +518,18 @@ def restore_list(toc):
 
 
 async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory, migration_hashes,
-                        *, timeout_seconds=EXPORT_TIMEOUT_SECONDS, progress=None):
+                        *, timeout_seconds=EXPORT_TIMEOUT_SECONDS, progress=None, maintenance_direct_ipv6=False):
+    if type(maintenance_direct_ipv6) is not bool:
+        raise BackupError('Explicit boolean maintenance mode required')
     if (isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float))
             or not 0 < timeout_seconds <= EXPORT_TIMEOUT_SECONDS or not math.isfinite(timeout_seconds)):
         raise BackupError('Export timeout must be positive and at most 600 seconds')
     diagnostics = ExportDiagnostics(timeout_seconds, progress)
     control = ExportControl(diagnostics)
     token = EXPORT_CONTROL.set(control)
+    options = {'maintenance_direct_ipv6': True} if maintenance_direct_ipv6 else {}
     worker = asyncio.create_task(_export_backup(url, project, pg_dump, pg_restore, backup_directory,
-                                               key_directory, migration_hashes, diagnostics))
+                                               key_directory, migration_hashes, diagnostics, **options))
     watcher = asyncio.create_task(control.watch(worker))
     try:
         try:
@@ -573,8 +579,12 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
 
 
 async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory,
-                         migration_hashes, diagnostics):
-    settings = hosted_connection(url, project)
+                         migration_hashes, diagnostics, *, maintenance_direct_ipv6=False):
+    if maintenance_direct_ipv6:
+        import maintenance_connection
+        settings = await maintenance_connection.dump_settings(url, project)
+    else:
+        settings = hosted_connection(url, project)
     context = connection_tls(url)
     directory = private_directory(backup_directory, 'backups')
     private_key = private_directory(key_directory, 'credentials') / 'backup.key'
@@ -598,9 +608,14 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
     async with preserve_cleanup_failure(clean_partials, 'partialCleanupErrorType'):
         async with preserve_cleanup_failure(close_connection, 'connectionCloseErrorType'):
             with diagnostics.phase('connect'):
-                conn = await asyncpg.connect(url, ssl=context, timeout=CONNECT_TIMEOUT_SECONDS,
-                    command_timeout=COMMAND_TIMEOUT_SECONDS, statement_cache_size=0,
-                    server_settings={'application_name':EXPORT_CONTROL.get().application_name})
+                if maintenance_direct_ipv6:
+                    conn = await maintenance_connection.connect(url, project, readonly=True,
+                        timeout=CONNECT_TIMEOUT_SECONDS, command_timeout=COMMAND_TIMEOUT_SECONDS,
+                        label=EXPORT_CONTROL.get().application_name)
+                else:
+                    conn = await asyncpg.connect(url, ssl=context, timeout=CONNECT_TIMEOUT_SECONDS,
+                        command_timeout=COMMAND_TIMEOUT_SECONDS, statement_cache_size=0,
+                        server_settings={'application_name':EXPORT_CONTROL.get().application_name})
                 EXPORT_CONTROL.get().connection = conn
                 await native.configure(conn)
             # This aggregate overlaps its named subphases; do not sum all timings.

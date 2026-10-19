@@ -1,5 +1,46 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Maintenance-only direct IPv6 follow-up — draft PR47
+
+Owner-approved publication opened [draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47)
+from tested `e92cd37`. Branch CI and independent review are pending; this
+publication update changes documentation only. Merge and hosted execution remain
+separate approvals.
+
+The owner authorized local tooling and regression tests after the held window's
+read-only investigation reproduced retained/reassigned Supavisor backends.
+The [maintenance-only IPv6 runbook](docs/MAINTENANCE_DIRECT_IPV6.md) adds explicit
+operator opt-in and separate `MAINTENANCE_DATABASE_URL` input to encrypted export
+and the par adapter. It verifies the exact project/actor, trusted TLS, native
+IPv6 transport and effective session settings, with bounded owned cleanup.
+The historical writer guard and index tool remain unchanged; idle or previously
+owned pool PIDs are not exempted. Render/app connections, migration bytes,
+runtime grants and ordering behavior remain unchanged. Hosted execution is held;
+a fresh window/backup/restore and separate exact-plan schema approval remain
+required. Local validation passed all 1,013 offline cases and seven reported
+PostgreSQL cases, with exact owned cleanup verified. The runbook records scope,
+earlier fixture/incomplete attempts and the remaining hosted acceptance gate.
+
+## PR46 merged; hosted window closed with writer drain held
+
+Owner-approved [PR46](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/46)
+merged as **`f762808b22bae680c40026af01a69c0226f5d2c7`** from tested `31f65c3`.
+All four reviewed-head and [merged-main CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39178376304)
+passed: 1,026 frontend tests/strict build, 181 backend cases and 945 Windows cases.
+The API is Live on the merge; the unchanged frontend remains Live on PR45 because
+its Render root is `frontend/`. No manual deployment or hosting change was used.
+
+The [October 18 maintenance record](docs/REVIEWED_PAR_WINDOW_20261018.md) closes
+the approved 8:15:16-9:00:16 p.m. Eastern window at 8:35:28 p.m. The API and both
+Toast jobs were temporarily paused, but five checks retained one or two reviewed
+database sessions despite zero write transactions, queues or unfinished Toast
+syncs. The drain guard stayed intact. All producers are restored; API database
+health is connected. No fresh backup, restore, executable plan or schema
+application was started. The par table remains absent and the live ledger count
+is 55. Next: read-only operator/pool session investigation before another approved
+window. Companion remains local-only, ordering manual and par editing held.
+Earlier preparation/publication-pending entries below are dated stages.
+
 ## Guarded par installer — local follow-up, publication pending
 
 The owner authorized the par-specific installer and disposable local rehearsal,

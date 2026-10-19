@@ -291,15 +291,21 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
     async def export(self, root, conn, *, fingerprint_error=None, facts=None,
                      cleanup_error=None, readback_error=None, publish_error=None,
-                     fingerprint_action=None, tool_action=None, timeout_seconds=600, progress=None):
+                     fingerprint_action=None, tool_action=None, timeout_seconds=600, progress=None,
+                     maintenance_direct_ipv6=False):
         def directory(path,area): path.mkdir();return path
         async def tool(executable,args,*extra):
             filename=next((arg[7:] for arg in args if arg.startswith('--file=')),None)
             if filename: Path(filename).write_bytes(b'PGDMP TEST ONLY fictional archive')
             return b'; TEST ONLY archive list'
         with ExitStack() as patches:
+            import maintenance_connection
             patches.enter_context(patch.object(backup,'private_directory',side_effect=directory))
             connect=patches.enter_context(patch.object(backup.asyncpg,'connect',AsyncMock(return_value=conn)))
+            direct_connect=patches.enter_context(patch.object(maintenance_connection,'connect',AsyncMock(return_value=conn)))
+            patches.enter_context(patch.object(maintenance_connection,'dump_settings',AsyncMock(return_value={
+                'host':'db.'+PROJECT+'.supabase.co','hostaddr':'2001:db8::1','port':5432,
+                'user':'postgres','password':'TEST_ONLY','database':'postgres'})))
             patches.enter_context(patch.object(backup,'connection_tls',return_value=True))
             patches.enter_context(patch.object(backup.native,'configure',AsyncMock()))
             patches.enter_context(patch.object(backup,'fingerprint',AsyncMock(side_effect=fingerprint_action or fingerprint_error,
@@ -312,15 +318,40 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 patches.enter_context(patch.object(backup,'open_backup',side_effect=readback_error))
             if publish_error:
                 patches.enter_context(patch.object(Path,'rename',side_effect=publish_error))
-            result=await backup.export_backup('postgresql://postgres.'+PROJECT+':TEST_ONLY@aws-0.pooler.supabase.com:5432/postgres',
+            url=('postgresql://postgres:TEST_ONLY@db.'+PROJECT+'.supabase.co:5432/postgres' if maintenance_direct_ipv6 else
+                 'postgresql://postgres.'+PROJECT+':TEST_ONLY@aws-0.pooler.supabase.com:5432/postgres')
+            result=await backup.export_backup(url,
                 PROJECT,'TEST ONLY dump','TEST ONLY restore',root/'archive',root/'key',{},
-                timeout_seconds=timeout_seconds,progress=progress)
+                timeout_seconds=timeout_seconds,progress=progress,maintenance_direct_ipv6=maintenance_direct_ipv6)
+            if maintenance_direct_ipv6:
+                connect.assert_not_awaited()
+                self.assertEqual(direct_connect.await_args.args,(url,PROJECT))
+                self.assertTrue(direct_connect.await_args.kwargs['readonly'])
+                return result
             self.assertEqual(connect.await_args.kwargs['timeout'],20)
             self.assertEqual(connect.await_args.kwargs['command_timeout'],60)
             self.assertRegex(connect.await_args.kwargs['server_settings']['application_name'],r'^jaymax-backup-[a-f0-9]{32}$')
             self.assertEqual(connect.await_args.kwargs['server_settings']['application_name'],
                 'jaymax-backup-'+result['backupDiagnostics']['exportReference'])
             return result
+
+    async def test_explicit_direct_export_preserves_encryption_and_publication_guards(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection()
+            result=await self.export(root,conn,maintenance_direct_ipv6=True)
+            self.assertEqual(result['status'],'exported_not_restore_verified')
+            manifest,data=backup.open_backup(result['encryptedBackup'],result['privateKey'],PROJECT)
+            self.assertEqual(data,b'PGDMP TEST ONLY fictional archive')
+            self.assertEqual(result['archiveSha256'],manifest['archiveSha256'])
+            conn.close.assert_awaited_once();tx.commit.assert_awaited_once()
+            self.assertFalse((root/'archive/archive.partial').exists())
+
+    async def test_direct_export_close_failure_never_publishes_archive(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection(close_error=ConnectionError('TEST ONLY close'))
+            with self.assertRaises(ConnectionError):await self.export(root,conn,maintenance_direct_ipv6=True)
+            self.assertFalse((root/'archive/backup.jmax.enc').exists())
+            self.assertFalse((root/'archive/backup.partial.enc').exists())
 
     async def test_success_publishes_only_after_close_and_cleanup_with_authenticated_archive(self):
         with TemporaryDirectory() as temporary:

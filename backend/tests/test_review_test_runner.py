@@ -31,7 +31,7 @@ class ReviewRunnerTests(unittest.TestCase):
                 if '-m' in command: report.write_text('<testsuites><testsuite tests="1" skipped="1" failures="0" errors="0"/></testsuites>')
                 return SimpleNamespace(returncode=0)
             with patch.dict(os.environ,dict(DATABASE_URL='private-live',AUXILIARY_DATABASE_URL='private-account',
-                    NATIVE_PURCHASE_TEST_DSN='private-test',CATALOG_MAPPING_ENABLED='true',REACT_APP_USE_PG='true')),\
+                    MAINTENANCE_DATABASE_URL='private-maintenance',NATIVE_PURCHASE_TEST_DSN='private-test',CATALOG_MAPPING_ENABLED='true',REACT_APP_USE_PG='true')),\
                     patch('sys.argv',['runner','offline','--report',str(report)]),patch.object(runner.subprocess,'run',side_effect=run):
                 with self.assertRaises(SystemExit): runner.main()
             self.assertEqual(len(captured),2)
@@ -40,3 +40,4 @@ class ReviewRunnerTests(unittest.TestCase):
                 self.assertEqual(env['PYTHON_DOTENV_DISABLED'],'1')
                 self.assertNotIn('NATIVE_PURCHASE_TEST_DSN',env); self.assertNotIn('CATALOG_MAPPING_ENABLED',env)
                 self.assertNotIn('REACT_APP_USE_PG',env)
+                self.assertNotIn('MAINTENANCE_DATABASE_URL',env)

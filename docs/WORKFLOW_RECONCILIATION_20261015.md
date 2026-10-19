@@ -1,5 +1,46 @@
 # Inventory workflow checkpoint and remaining work
 
+**Local maintenance-only IPv6 follow-up:** the owner authorized local changes and
+regression tests, with a prompt before publishing a draft PR. The
+[new runbook](MAINTENANCE_DIRECT_IPV6.md) records the reproduced pooler retention
+and PID reassignment, separate private configuration, explicit operator opt-in,
+certificate/native-IPv6/effective-session checks and unchanged writer guards.
+Existing app/Render connections and hosted systems remain unchanged. A new
+window and separate exact-plan schema approval remain required after review.
+All 1,013 offline cases and seven reported cases in the narrowed PostgreSQL
+selection passed, with exact owned inventory restoration and server shutdown.
+The runbook distinguishes these results from the earlier failed/incomplete
+fixture attempts and the pending hosted IPv6 acceptance. The owner approved
+publication as [draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47)
+from tested `e92cd37`; fresh branch CI and independent review are pending.
+
+**October 18 hosted window closed:** the owner-approved 8:15:16-9:00:16 p.m.
+Eastern window closed at 8:35:28 p.m. API and both Toast jobs are restored to their
+original states; API database health is connected. Five drain observations found
+no write transactions, queued requests or unfinished Toast work, but one or two
+reviewed database sessions remained. The guard held; no fresh backup, restore,
+executable plan or schema application was started. A final fresh read found the
+par table absent, zero par ledger entries and 55 ledger entries total. This is
+not a fresh full accounting comparison. See the
+[execution/recovery record](REVIEWED_PAR_WINDOW_20261018.md). Next: read-only
+operator/pool session investigation before another approved window. Par editing
+remains held and ordering manual.
+
+**Earlier October 18 PR46 merge / next-window preparation:** owner-approved `31f65c3`
+merged as `f762808b22bae680c40026af01a69c0226f5d2c7`. All four reviewed-head and
+merged-main CI checks passed (1,026 frontend tests/strict build; 181 backend cases;
+945 Windows cases). API deployment `dep-dbalnujm8hqs73bi9s3g` is Live on the merge;
+the unchanged frontend remains Live on PR45 under its observed `frontend/` root.
+The [local maintenance preflight](REVIEWED_PAR_MAINTENANCE_PREFLIGHT_20261018.md)
+verified retained installation/index evidence, protected readback and an intentionally
+non-executable pending review. Owner reconfirmed only API/two Toast jobs write;
+Companion remains local-only. No Supabase connection, writer pause, schema, grant,
+credential or connection change occurred. Next: new 45-minute window/no-other-writes
+approval, fresh backup/restore and then a separate exact-plan application prompt.
+Ordering remains manual and par editing held. Earlier draft/merge-pending entries
+below retain their historical scope; no new implementation PR is required merely
+to apply already accepted tooling through the approved maintenance process.
+
 **Guarded reviewed-par installer, local continuation:** the owner authorized
 the par-specific installer and disposable local rehearsal, with a prompt before
 publishing a draft PR and before any Supabase application. The

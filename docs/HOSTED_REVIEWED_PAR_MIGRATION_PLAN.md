@@ -1,5 +1,30 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
+**Subsequent local follow-up:** the owner approved
+[maintenance-only IPv6 tooling and tests](MAINTENANCE_DIRECT_IPV6.md), with a
+prompt before draft publication. Read-only investigation reproduced the pooler's
+retained/reassigned backend behavior and verified direct IPv6 availability.
+The proposed path leaves Render/app connections unchanged and retains every
+writer guard. The dated closed window below is not reopened; hosted execution
+and exact-plan application remain separate approvals after review and merge.
+
+**Latest outcome:** the [October 18 approved window](REVIEWED_PAR_WINDOW_20261018.md)
+closed at 8:35:28 p.m. Eastern, with API/jobs restored and database health connected.
+Reviewed sessions remained despite no observed writes; the drain prerequisite held.
+Backup/restore, concrete plan and schema application were not started. Investigate
+operator/pool session ownership read-only before requesting a new window. Keep
+par editing held, ordering manual and the separate exact-plan approval gate.
+
+**Earlier PR46 merge / preflight checkpoint.** Accepted merge
+`f762808` passed reviewed-head/merged-main CI, and its API deployment is Live.
+The unchanged frontend remains Live on PR45 under its `frontend/` build root.
+The [maintenance preflight](REVIEWED_PAR_MAINTENANCE_PREFLIGHT_20261018.md) records
+verified retained local evidence, protected non-executable inputs and the owner's
+reconfirmed three-writer scope. No Supabase connection or mutation occurred in
+that preparation. Obtain a fresh bounded window/backup/restore, then prompt for
+the exact plan hash before application. Earlier draft-pending statements below
+are historical stages, not current blockers or execution permission.
+
 **Local implementation follow-up:** the owner subsequently authorized building
 the guarded installer and rehearsing it locally, with prompts before draft PR
 publication and every Supabase application. See the

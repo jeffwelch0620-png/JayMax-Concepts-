@@ -1,5 +1,23 @@
 # Guarded reviewed-par installer and local rehearsal
 
+**Local follow-up under review:** [maintenance-only direct IPv6](MAINTENANCE_DIRECT_IPV6.md)
+adds an explicit operator option and separate private maintenance URL for export
+and this adapter. The app's saved connection and all writer, backup, plan-hash,
+timeout and reconciliation gates remain unchanged. Pending reviews/plans need
+new source hashes after acceptance; no hosted execution is included.
+
+**Latest hosted checkpoint:** the [October 18 window](REVIEWED_PAR_WINDOW_20261018.md)
+closed early with writer drain held. API and Toast controls are restored; no
+fresh backup/restore, executable plan or schema application was started. Resolve
+operator/pool session ownership read-only before proposing another window.
+
+**Merged checkpoint:** owner-approved PR46 merged as `f762808` from `31f65c3`.
+Reviewed-head and merged-main CI passed all four checks. The
+[maintenance preflight](REVIEWED_PAR_MAINTENANCE_PREFLIGHT_20261018.md) records
+deployment and local input/evidence checks. Draft publication/merge gates below
+describe the earlier local stage; a new hosted window, fresh backup/restore and
+separate exact-plan application approval remain open. No hosted SQL was applied.
+
 Local follow-up to owner-approved PR45 merge `9dac63e`. The owner authorized
 building the installer and disposable local rehearsal, requested a prompt before
 publishing a draft PR, and reserved every Supabase application for separate
