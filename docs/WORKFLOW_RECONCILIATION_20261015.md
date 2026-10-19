@@ -1,6 +1,18 @@
 # Inventory workflow checkpoint and remaining work
 
-**October 18 PR46 merge / next-window preparation:** owner-approved `31f65c3`
+**October 18 hosted window closed:** the owner-approved 8:15:16-9:00:16 p.m.
+Eastern window closed at 8:35:28 p.m. API and both Toast jobs are restored to their
+original states; API database health is connected. Five drain observations found
+no write transactions, queued requests or unfinished Toast work, but one or two
+reviewed database sessions remained. The guard held; no fresh backup, restore,
+executable plan or schema application was started. A final fresh read found the
+par table absent, zero par ledger entries and 55 ledger entries total. This is
+not a fresh full accounting comparison. See the
+[execution/recovery record](REVIEWED_PAR_WINDOW_20261018.md). Next: read-only
+operator/pool session investigation before another approved window. Par editing
+remains held and ordering manual.
+
+**Earlier October 18 PR46 merge / next-window preparation:** owner-approved `31f65c3`
 merged as `f762808b22bae680c40026af01a69c0226f5d2c7`. All four reviewed-head and
 merged-main CI checks passed (1,026 frontend tests/strict build; 181 backend cases;
 945 Windows cases). API deployment `dep-dbalnujm8hqs73bi9s3g` is Live on the merge;

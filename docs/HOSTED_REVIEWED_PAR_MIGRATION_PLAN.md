@@ -1,6 +1,13 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
-**PR46 merged; next approval is a new maintenance window.** Accepted merge
+**Latest outcome:** the [October 18 approved window](REVIEWED_PAR_WINDOW_20261018.md)
+closed at 8:35:28 p.m. Eastern, with API/jobs restored and database health connected.
+Reviewed sessions remained despite no observed writes; the drain prerequisite held.
+Backup/restore, concrete plan and schema application were not started. Investigate
+operator/pool session ownership read-only before requesting a new window. Keep
+par editing held, ordering manual and the separate exact-plan approval gate.
+
+**Earlier PR46 merge / preflight checkpoint.** Accepted merge
 `f762808` passed reviewed-head/merged-main CI, and its API deployment is Live.
 The unchanged frontend remains Live on PR45 under its `frontend/` build root.
 The [maintenance preflight](REVIEWED_PAR_MAINTENANCE_PREFLIGHT_20261018.md) records

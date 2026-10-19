@@ -1,10 +1,14 @@
 # Reviewed-par maintenance preflight - October 18, 2026
 
-Status: **PR46 merged and verified; local maintenance inputs prepared. No active
-window, fresh hosted backup, executable plan hash or schema-application approval.**
-This checkpoint does not authorize pausing writers, taking a hosted backup or
-applying SQL. The owner reconfirmed the writer inventory below; a new bounded
-window and no-manual-writes commitment are the next approval.
+Current outcome: **the subsequently approved October 18 window closed at 8:35:28
+p.m. Eastern with writer drain held and all producers restored.** No fresh backup,
+restore, executable plan or schema application was started. See the
+[maintenance execution record](REVIEWED_PAR_WINDOW_20261018.md) for the five
+session holds, verified recovery and next read-only investigation.
+
+The remaining sections preserve the **earlier local-only preflight**. Its proposed
+window was later approved for 8:15:16-9:00:16 p.m. Eastern, then closed early.
+Those proposals do not authorize another pause or reuse of the closed window.
 
 ## Accepted implementation and CI
 
