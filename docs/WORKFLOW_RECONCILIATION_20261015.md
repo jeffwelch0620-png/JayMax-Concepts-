@@ -1,5 +1,14 @@
 # Inventory workflow checkpoint and remaining work
 
+**PR47 merged:** owner-approved merge `a7270ca` matches tested head `755aff3`
+exactly, with all four reviewed-head and merged-main CI checks passed. The
+[direct-maintenance preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) prepares the
+next bounded read-only hosted check, pending separate approval. This
+continuation changes documentation only; no Supabase connection/configuration,
+writer control, backup or schema application occurred. App/Render settings remain
+unchanged; a fresh window and separate exact-plan application approval follow
+successful hosted validation.
+
 **Local maintenance-only IPv6 follow-up:** the owner authorized local changes and
 regression tests, with a prompt before publishing a draft PR. The
 [new runbook](MAINTENANCE_DIRECT_IPV6.md) records the reproduced pooler retention

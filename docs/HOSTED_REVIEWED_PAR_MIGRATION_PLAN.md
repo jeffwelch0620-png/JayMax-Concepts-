@@ -1,5 +1,12 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
+**Current accepted tooling:** PR47 is merged as `a7270ca` from the exact tested
+`755aff3` tree, with reviewed-head and merged-main CI green. The
+[direct-maintenance preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) proposes a
+separately approved read-only validation before a new window. The older
+local/draft-pending statements below are dated stages. No hosted execution or
+schema application is authorized by merging the tooling.
+
 **Subsequent local follow-up:** the owner approved
 [maintenance-only IPv6 tooling and tests](MAINTENANCE_DIRECT_IPV6.md), with a
 prompt before draft publication. Read-only investigation reproduced the pooler's

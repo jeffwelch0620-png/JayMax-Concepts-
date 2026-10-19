@@ -1,5 +1,11 @@
 # Guarded reviewed-par installer and local rehearsal
 
+**PR47 accepted tooling:** owner-approved merge `a7270ca` matches tested `755aff3`
+exactly and has green reviewed-head/merged-main CI. The [new preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md)
+prepares separately approved read-only validation, then a fresh window,
+backup/disposable restore and exact-plan application approval. Earlier local/draft
+statuses below remain history. No hosted execution occurs in this preparation.
+
 **Local follow-up under review:** [maintenance-only direct IPv6](MAINTENANCE_DIRECT_IPV6.md)
 adds an explicit operator option and separate private maintenance URL for export
 and this adapter. The app's saved connection and all writer, backup, plan-hash,

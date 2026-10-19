@@ -1,11 +1,22 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Maintenance-only direct IPv6 follow-up — draft PR47
+## PR47 merged; read-only maintenance validation is next
+
+Owner-approved [PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47)
+is merged as `a7270ca`, with the exact tested `755aff3` tree. Reviewed-head and
+[merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39196674518)
+passed all four checks. The
+[next validation plan](docs/PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) proposes a bounded
+read-only direct IPv6 check and separate private maintenance configuration,
+pending approval. Render/app connections remain unchanged. No hosted connection,
+pause, backup or schema application occurs in this documentation-only preparation.
+
+## PR47 implementation and publication record
 
 Owner-approved publication opened [draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47)
-from tested `e92cd37`. Branch CI and independent review are pending; this
-publication update changes documentation only. Merge and hosted execution remain
-separate approvals.
+from tested `e92cd37`. Its reviewed-head CI subsequently passed and the owner
+approved its merge. The publication update changed documentation only. Hosted
+validation, a new maintenance window and exact-plan application remain separate.
 
 The owner authorized local tooling and regression tests after the held window's
 read-only investigation reproduced retained/reassigned Supavisor backends.

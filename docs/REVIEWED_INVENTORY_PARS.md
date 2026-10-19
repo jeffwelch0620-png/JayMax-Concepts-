@@ -1,5 +1,11 @@
 # Reviewed purchased-inventory par units
 
+**PR47 merged:** owner-approved merge `a7270ca` preserves tested `755aff3` exactly.
+The [new preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) prepares separately approved
+read-only validation before a new hosted maintenance window; no hosted calls or
+configuration changes occur in this preparation. The earlier draft/local statuses
+below are retained history. Par editing stays held and ordering remains manual.
+
 **Local continuation:** [maintenance-only direct IPv6 tooling](MAINTENANCE_DIRECT_IPV6.md)
 passed local testing and was published with owner approval as
 [draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47) from
