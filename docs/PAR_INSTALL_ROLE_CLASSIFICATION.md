@@ -84,6 +84,34 @@ contract. After review and acceptance, a separately scoped read-only role
 preflight should precede another outage. It may still hold on unsafe privileges;
 correcting the classification does not approve all existing backend permissions.
 
+## PR48 CI fixture correction
+
+The initial [PR48 CI run](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39206935839)
+at `91d5f7f` passed all 1,026 frontend tests/80 suites, the strict build and
+1,025 Windows offline cases. Its database job passed 128 methods and 91 subtests
+but failed two new login methods: the fictional backend had no password and
+inherited the owner DSN's password on connect. The owned local server used trust
+authentication, so the earlier local pass did not cover that CI requirement.
+This initial CI run is **failed**, not an acceptance result.
+
+The fixture now creates its UUID-scoped backend LOGIN with a public TEST_ONLY
+password and explicitly supplies that role's password in both new connections.
+No production credential, runtime grant, CI authentication policy or installer
+guard changes. The targeted local rerun uses an alternate startup-only HBA file:
+non-owner loopback connections require SCRAM, an independent probe must reject a
+wrong password and accept the correct one, and the saved cluster HBA is preserved.
+The owner DSN intentionally carries a different synthetic password to verify the
+role override. Both affected methods passed in
+`reviewed-par-password-auth-20261019T060031844776Z` (two cases, no failures or
+skips). Its receipt verifies the negative/positive SCRAM probe, unchanged saved
+HBA, exact database/role cleanup, stopped server and no hosted connections.
+The corrected-fixture full offline rerun
+`reviewed-par-role-v2-offline-20261019T060456000855Z` passed all 1,025 cases
+(346 methods plus 679 subtests), with no failures, errors or skips.
+The earlier complete local selections below retain their own scope and overlap
+this corrected-fixture rerun; they are not added as unique coverage. Fresh-head
+CI remains required before independent-review readiness.
+
 ## Validation
 
 Regression work uses fictional data, sanitized environment variables and an owned
@@ -104,7 +132,7 @@ earlier attempts and overlapping offline guards are not added as unique coverage
 
 Both unchanged Windows ACL cases passed in the final offline profile. Five
 existing deprecation warnings remain. Frontend tests/build were not rerun because
-frontend code is unchanged. Fresh CI remains pending publication.
+frontend code is unchanged. Fresh-head CI is required after the fixture amendment.
 
 Each completed database receipt proves identical starting/final database and role
 inventories, owned-server shutdown and no hosted connections. Real encrypted
@@ -132,7 +160,8 @@ unchanged. No Supabase/Render connection or permission changes were made.
 
 The JMAX workflow, progress hub, hosted plan and root are synchronized through
 11 guarded block updates and full 184-block readback; unrelated content and the
-Companion boundary were preserved. The draft is ready for an owner publication
-decision. Independent review/CI, owner merge, hosted preflight, a new window
+Companion boundary were preserved. Owner-approved draft PR48 is published;
+the fixture amendment requires fresh-head CI. Independent review, owner merge,
+hosted preflight, a new window
 and exact-plan application remain distinct later gates. This local rehearsal
 does not establish hosted par acceptance or managed Auth/Storage/Vault recovery.

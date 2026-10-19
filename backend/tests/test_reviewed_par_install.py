@@ -259,13 +259,15 @@ class ParInstallDatabaseTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
         cls.created_roles=[]
+        cls.writer_password='TEST_ONLY_par_backend_password'
         cls.writer_login_roles=['test_only_par_'+uuid4().hex[:12]]
         async def provision():
             c=await asyncpg.connect(os.environ['NATIVE_PURCHASE_TEST_DSN'])
             try:
                 for name in ['anon','authenticated']+cls.writer_login_roles:
                     if not await c.fetchval('SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)',name):
-                        await c.execute('CREATE ROLE '+name+(' LOGIN' if name in cls.writer_login_roles else ' NOLOGIN'))
+                        await c.execute('CREATE ROLE '+name+(
+                            " LOGIN PASSWORD '"+cls.writer_password+"'" if name in cls.writer_login_roles else ' NOLOGIN'))
                         cls.created_roles.append(name)
             finally:await c.close()
         asyncio.run(provision())
@@ -331,7 +333,7 @@ class ParInstallDatabaseTests(unittest.IsolatedAsyncioTestCase):
         params=self.workflow['actualReportParams'];store=self.workflow['temporaryStore']
         food=await actual.period_report(self.conn,store,UUID(params['opening']),UUID(params['closing']))
         # LOGIN and the existing read/function grants work on a separate client.
-        backend=await asyncpg.connect(self.dsn,user=role)
+        backend=await asyncpg.connect(self.dsn,user=role,password=self.writer_password)
         try:
             self.assertTrue(await backend.fetchval("SELECT purchasing.text_cells('[]'::jsonb)"))
             await backend.fetchval('SELECT count(*) FROM purchasing.item_bases')
@@ -449,7 +451,7 @@ class ParInstallDatabaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_classified_backend_still_holds_live_writers_and_changed_permissions(self):
         role=await self.backend_role();plan=await self.hosted_plan([role])
-        writer=await asyncpg.connect(self.dsn,user=role)
+        writer=await asyncpg.connect(self.dsn,user=role,password=self.writer_password)
         try:
             with self.assertRaises(hosted.Held):
                 await hosted.apply(self.conn,plan,self.spec,self.target,self.facts,self.binding)

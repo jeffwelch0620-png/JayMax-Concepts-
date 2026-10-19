@@ -8,8 +8,12 @@ denied clients from trusted backend logins while retaining ledger denial, full
 permission preservation and strict writer drain. Backend access to the new par
 table remains deferred. All 1,025 offline cases and 69 PostgreSQL cases across
 21 methods passed in completed serial selections. No hosted connection or change is part
-of this work. Draft publication, independent review/CI, merge and any later hosted
-window/exact-plan application remain separate approvals. Ordering stays manual.
+of this work. Owner-approved [draft PR48](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/48)
+is published. Its first CI run exposed a synthetic-role password mismatch in two
+new test connections; the corrected fixture passed both cases under local SCRAM,
+with exact cleanup. Fresh-head CI and independent review remain required.
+Merge and any later hosted window/exact-plan application remain separate
+approvals. Ordering stays manual.
 
 ## October 19 backup verified; par migration held
 
