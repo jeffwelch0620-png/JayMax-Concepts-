@@ -34,6 +34,38 @@ sql_body = prior.sql_body
 local_target = prior.local_target
 
 
+class BackendPermissionHeld(ValueError):
+    """Bounded operator metadata; role names belong in private receipts only."""
+    MESSAGES = {
+        'flags': 'Reviewed backend must be an existing unprivileged LOGIN role',
+        'membership': 'Reviewed backend role membership requires separate review',
+        'ddl': 'Reviewed backend DDL authority is not allowed',
+        'ownership': 'Reviewed backend object ownership is not allowed',
+        'default_acl': 'Future backend default grants require separate review',
+        'new_par_access': 'New par runtime access requires separate review',
+    }
+
+    @classmethod
+    def valid_detail(cls, role, rule):
+        return (isinstance(role, str) and re.fullmatch(r'[a-z_][a-z0-9_]{0,62}', role) is not None
+                and isinstance(rule, str) and rule in cls.MESSAGES)
+
+    def __init__(self, role, rule):
+        if not self.valid_detail(role, rule):
+            raise ValueError('Invalid backend permission hold metadata')
+        self.role, self.rule = role, rule
+        super().__init__(self.MESSAGES[rule])
+
+
+def backend_permission_details(error):
+    """Accept only our typed, validated detail; never copy driver attributes."""
+    if isinstance(error, BackendPermissionHeld):
+        role, rule = getattr(error, 'role', None), getattr(error, 'rule', None)
+        if BackendPermissionHeld.valid_detail(role, rule):
+            return {'backendPermissionHold': {'role': role, 'rule': rule}}
+    return {}
+
+
 def source_bytes():
     raw = (readiness.ROOT / 'migrations' / SOURCE).read_bytes()
     if digest(raw) != SOURCE_SHA or digest(sql_body(raw).encode()) != BODY_SHA:
@@ -208,30 +240,30 @@ async def backend_permissions(conn, backends):
             rolcreatedb,rolcreaterole,rolreplication FROM pg_roles WHERE rolname=$1''', role)
         if (flags is None or not flags['rolcanlogin']
                 or any(flags[key] for key in ('rolsuper','rolbypassrls','rolcreatedb','rolcreaterole','rolreplication'))):
-            raise ValueError('Reviewed backend must be an existing unprivileged LOGIN role')
+            raise BackendPermissionHeld(role, 'flags')
         # The existing administrator may hold the grant created by CREATE ROLE.
         # All other incoming membership (including NOINHERIT + SET ROLE) holds.
         if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_auth_members
                 WHERE member=$1 OR (roleid=$1 AND member<>(SELECT oid FROM pg_roles WHERE rolname=current_user)))''', flags['oid']):
-            raise ValueError('Reviewed backend role membership requires separate review')
+            raise BackendPermissionHeld(role, 'membership')
         if (await conn.fetchval('''SELECT has_database_privilege($1,current_database(),'CREATE')
                 OR EXISTS(SELECT 1 FROM pg_database WHERE datname=current_database() AND datdba=$2)''',role,flags['oid'])
                 or await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_namespace
                     WHERE nspname=ANY($2::text[]) AND (has_schema_privilege($1,oid,'CREATE') OR nspowner=$3))''',
                     role,list(catalog.SCHEMAS)+['supabase_migrations'],flags['oid'])):
-            raise ValueError('Reviewed backend DDL authority is not allowed')
+            raise BackendPermissionHeld(role, 'ddl')
         if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                 WHERE n.nspname=ANY($2::text[]) AND c.relowner=$1)
             OR EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
                 WHERE n.nspname=ANY($2::text[]) AND p.proowner=$1)''',
                 flags['oid'],list(catalog.SCHEMAS)+['supabase_migrations']):
-            raise ValueError('Reviewed backend object ownership is not allowed')
+            raise BackendPermissionHeld(role, 'ownership')
         if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_default_acl d
                 LEFT JOIN pg_namespace n ON n.oid=d.defaclnamespace,
                 LATERAL aclexplode(d.defaclacl) a
                 WHERE (d.defaclnamespace=0 OR n.nspname=ANY($2::text[])) AND a.grantee=$1)''',
                 flags['oid'],list(readiness.PRIVATE)+['supabase_migrations']):
-            raise ValueError('Future backend default grants require separate review')
+            raise BackendPermissionHeld(role, 'default_acl')
         if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                 WHERE n.nspname='purchasing' AND c.relname='inventory_par_versions'
                 AND (has_table_privilege($1,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
@@ -239,7 +271,7 @@ async def backend_permissions(conn, backends):
             OR EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
                 WHERE n.nspname='purchasing' AND p.proname='guard_inventory_par'
                 AND has_function_privilege($1,p.oid,'EXECUTE'))''',role):
-            raise ValueError('New par runtime access requires separate review')
+            raise BackendPermissionHeld(role, 'new_par_access')
 
 
 async def readiness_check(conn, roles, before=False, *, backend_roles=()):
@@ -413,6 +445,7 @@ async def apply(conn, plan, *, guard=None):
         return report
     except Exception as exc:
         report.update(error_details(exc))
+        report.update(backend_permission_details(exc))
         if report['commitAttempted']: report.update(status='commit_outcome_unknown',sqlCommitted=None)
         elif tx is not None:
             try: await tx.rollback(); report['rollbackCompleted']=True

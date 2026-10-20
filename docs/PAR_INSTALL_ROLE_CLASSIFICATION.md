@@ -1,5 +1,10 @@
 # Reviewed par installer: explicit browser and backend role checks
 
+**Accepted PR48:** owner-approved merge `cbe8e88` matches reviewed `12dba79`;
+reviewed-head and merged-main CI passed. The local
+[diagnostic/preflight follow-up](PAR_BACKEND_HOLD_DIAGNOSTICS.md) addresses N1/N2.
+It needs its own publication/review gate; hosted validation remains unrun.
+
 Local follow-up to the [October 19 held plan](REVIEWED_PAR_WINDOW_20261019.md).
 Supabase, Render, app connections and runtime grants are unchanged. Par editing
 remains held and ordering manual. This work neither applies the par schema nor
@@ -83,6 +88,14 @@ The actual hosted role configuration has not been validated against this new
 contract. After review and acceptance, a separately scoped read-only role
 preflight should precede another outage. It may still hold on unsafe privileges;
 correcting the classification does not approve all existing backend permissions.
+
+Managed-project memberships, CREATE on `public` or `extensions`, and global
+default ACLs can be preflight findings. `public` is checked directly today;
+`extensions` is outside the explicit schema check. The default-ACL predicate is
+global/private/ledger scoped, not every namespace. Record a dated per-rule
+read-only result before any window, marking unvisited checks `not_evaluated`.
+Resolve holds as separate reviewed permission work, never installer exceptions;
+see the [exact scope and record requirements](PAR_BACKEND_HOLD_DIAGNOSTICS.md).
 
 ## PR48 CI fixture correction
 

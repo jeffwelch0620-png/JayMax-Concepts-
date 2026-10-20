@@ -1,5 +1,14 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## PR48 merged; backend-hold diagnostic follow-up
+
+Owner-approved PR48 merged as `cbe8e88`, matching reviewed `12dba79`, with green
+reviewed-head and merged-main CI. The local [N1/N2 follow-up](docs/PAR_BACKEND_HOLD_DIAGNOSTICS.md)
+adds bounded role/rule details to private operator receipts and documents the
+exact managed-project preflight scope. Permission checks and commit/rollback
+semantics stay intact. Prompt before the next draft push and before any hosted
+work. Par editing remains held; ordering stays manual.
+
 ## Local par-installer role classification follow-up
 
 The owner authorized a [local role-check correction](docs/PAR_INSTALL_ROLE_CLASSIFICATION.md)
