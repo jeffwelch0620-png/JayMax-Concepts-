@@ -1,11 +1,52 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Maintenance-only direct IPv6 follow-up — draft PR47
+## Local par-installer role classification follow-up
+
+The owner authorized a [local role-check correction](docs/PAR_INSTALL_ROLE_CLASSIFICATION.md)
+after the held October 19 plan. V2 review/plan artifacts explicitly separate
+denied clients from trusted backend logins while retaining ledger denial, full
+permission preservation and strict writer drain. Backend access to the new par
+table remains deferred. All 1,025 offline cases and 69 PostgreSQL cases across
+21 methods passed in completed serial selections. No hosted connection or change is part
+of this work. Owner-approved [draft PR48](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/48)
+is published. Its first CI run exposed a synthetic-role password mismatch in two
+new test connections; the corrected fixture passed both cases under local SCRAM,
+with exact cleanup. Fresh-head CI and independent review remain required.
+Merge and any later hosted window/exact-plan application remain separate
+approvals. Ordering stays manual.
+
+## October 19 backup verified; par migration held
+
+**October 19 maintenance outcome:** the approved 12:21:26-1:06:26 a.m. Eastern window [closed at 12:39:21 AM Eastern](docs/REVIEWED_PAR_WINDOW_20261019.md) with original API/Toast states restored. Strict writer drain and a fresh encrypted backup/disposable restore passed (120 relations, 13 catalog groups, 45,608 rows). Read-only par-plan preparation held on the trusted Inventory backend role being evaluated under private-client denial checks. No executable plan, schema SQL, grant change or connection cutover occurred. Review role classification locally before another window; retain browser denial, backend ledger denial and strict writer guards. Par editing remains held and ordering manual. Earlier pending/active stages below are dated history.
+
+## PR47 read-only IPv6 validation passed
+
+The separately approved [October 19 read-only check](docs/PR47_READONLY_IPV6_VALIDATION_20261019.md)
+passed on accepted `a7270ca`: two direct IPv6/TLS/read-only clients, first backend
+disappearance observed, and both owned clients closed. A separate private
+maintenance config is retained; original inputs and app/Render settings are
+unchanged. No API/Toast pause, backup or schema/data write occurred. The owner
+reconfirmed the API/two Toast writers, and their controls were refreshed read-only.
+The next gate is a separately approved 45-minute maintenance window,
+new encrypted backup/disposable restore and exact-plan application approval.
+
+## Earlier PR47 merge and read-only preparation
+
+Owner-approved [PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47)
+is merged as `a7270ca`, with the exact tested `755aff3` tree. Reviewed-head and
+[merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39196674518)
+passed all four checks. The
+[next validation plan](docs/PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) proposes a bounded
+read-only direct IPv6 check and separate private maintenance configuration,
+pending approval. Render/app connections remain unchanged. No hosted connection,
+pause, backup or schema application occurs in this documentation-only preparation.
+
+## PR47 implementation and publication record
 
 Owner-approved publication opened [draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47)
-from tested `e92cd37`. Branch CI and independent review are pending; this
-publication update changes documentation only. Merge and hosted execution remain
-separate approvals.
+from tested `e92cd37`. Its reviewed-head CI subsequently passed and the owner
+approved its merge. The publication update changed documentation only. Hosted
+validation, a new maintenance window and exact-plan application remain separate.
 
 The owner authorized local tooling and regression tests after the held window's
 read-only investigation reproduced retained/reassigned Supavisor backends.

@@ -1,6 +1,16 @@
 # Maintenance-only direct IPv6 connections
 
-Status: **[draft PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47) published with owner approval from tested `e92cd37`; branch CI and independent review pending.**
+**October 19 maintenance outcome:** the approved 12:21:26-1:06:26 a.m. Eastern window [closed at 12:39:21 AM Eastern](REVIEWED_PAR_WINDOW_20261019.md) with original API/Toast states restored. Strict writer drain and a fresh encrypted backup/disposable restore passed (120 relations, 13 catalog groups, 45,608 rows). Read-only par-plan preparation held on the trusted Inventory backend role being evaluated under private-client denial checks. No executable plan, schema SQL, grant change or connection cutover occurred. Review role classification locally before another window; retain browser denial, backend ledger denial and strict writer guards. Par editing remains held and ordering manual. Earlier pending/active stages below are dated history.
+
+**Hosted read-only validation passed October 19:** the owner-approved
+[two-client result](PR47_READONLY_IPV6_VALIDATION_20261019.md) verifies native IPv6,
+trusted TLS, effective read-only settings and first-backend disappearance, with
+both owned clients closed. Separate private maintenance config is retained;
+app/Render connections remain unchanged. No backup or schema execution occurred.
+The owner reconfirmed writers and their controls were refreshed read-only; a new
+maintenance window remains a separate approval.
+
+Status: **[PR47](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/47) owner-approved and merged as `a7270ca` from tested head `755aff3`; all four reviewed-head checks passed.** The [next preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) separates merged-main CI, read-only hosted validation and later maintenance/application approval.
 This work changes manual operator tooling only. Render and the application's
 saved database connections, credentials, pool settings and feature flags remain
 unchanged. No Supabase window, backup, migration, grants or hosted execution is
@@ -131,6 +141,7 @@ Only its recorded test-owned databases/roles were removed, with exact inventory
 restoration verified. The final frozen-source selection above passed the drift
 case and encrypted recovery. The interrupted batch is not counted as a pass.
 
-Fresh branch CI and independent review remain pending after the approved draft push.
-Merge, a new hosted window and exact-plan schema approval remain separate gates.
+Reviewed-head CI passed and the owner approved the merge. Merged-main CI
+also passed all four checks at exact merge `a7270ca`. Hosted validation, a new hosted window and exact-plan schema
+approval remain separate gates.
 These local results do not establish hosted acceptance of the new IPv6 tooling.

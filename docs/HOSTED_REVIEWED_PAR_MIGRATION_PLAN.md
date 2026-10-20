@@ -1,5 +1,30 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
+**Current local follow-up:** the owner authorized the
+[v2 role-classification fix](PAR_INSTALL_ROLE_CLASSIFICATION.md) and regressions.
+All 1,025 offline cases and 69 PostgreSQL cases across 21 methods passed in
+completed serial selections. Browser denial, backend ledger protection and full existing permission
+preservation remain required, with no new backend par access. No hosted connection
+or change is part of this work. Prompt before draft publication; a later merge,
+new window/fresh backup and exact executable plan approval remain separate.
+
+**October 19 maintenance outcome:** the approved 12:21:26-1:06:26 a.m. Eastern window [closed at 12:39:21 AM Eastern](REVIEWED_PAR_WINDOW_20261019.md) with original API/Toast states restored. Strict writer drain and a fresh encrypted backup/disposable restore passed (120 relations, 13 catalog groups, 45,608 rows). Read-only par-plan preparation held on the trusted Inventory backend role being evaluated under private-client denial checks. No executable plan, schema SQL, grant change or connection cutover occurred. Review role classification locally before another window; retain browser denial, backend ledger denial and strict writer guards. Par editing remains held and ordering manual. Earlier pending/active stages below are dated history.
+
+**Current gate after October 19:** the separately approved
+[read-only IPv6 check](PR47_READONLY_IPV6_VALIDATION_20261019.md) passed. Separate
+private maintenance config is ready, with app/Render settings unchanged. The owner
+reconfirmed only the API/two Toast writers; refreshed controls match. A new
+45-minute window awaits approval; no API/Toast pause, backup or schema/data
+write occurred in the check. Fresh window/backup/restore and exact-plan application
+approval remain separate. Earlier pending read-only stages below are historical.
+
+**Current accepted tooling:** PR47 is merged as `a7270ca` from the exact tested
+`755aff3` tree, with reviewed-head and merged-main CI green. The
+[direct-maintenance preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md) proposes a
+separately approved read-only validation before a new window. The older
+local/draft-pending statements below are dated stages. No hosted execution or
+schema application is authorized by merging the tooling.
+
 **Subsequent local follow-up:** the owner approved
 [maintenance-only IPv6 tooling and tests](MAINTENANCE_DIRECT_IPV6.md), with a
 prompt before draft publication. Read-only investigation reproduced the pooler's

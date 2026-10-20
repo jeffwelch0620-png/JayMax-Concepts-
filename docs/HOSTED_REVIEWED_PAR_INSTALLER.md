@@ -1,5 +1,28 @@
 # Guarded reviewed-par installer and local rehearsal
 
+**Local v2 role-check follow-up:** the owner authorized the
+[explicit role-classification correction](PAR_INSTALL_ROLE_CLASSIFICATION.md)
+and regression tests after the October 19 dry-run held. Clients and trusted
+backend logins now have distinct checks, with both still denied ledger access.
+Old v1 reviews/plans are refused, and backend par-table access remains deferred.
+All 1,025 offline cases and 69 PostgreSQL cases across 21 methods passed in
+completed serial selections. Supabase/Render/app connections remain unchanged. Publication,
+review/CI/merge, a new window and exact-plan application are separate gates.
+
+**October 19 maintenance outcome:** the approved 12:21:26-1:06:26 a.m. Eastern window [closed at 12:39:21 AM Eastern](REVIEWED_PAR_WINDOW_20261019.md) with original API/Toast states restored. Strict writer drain and a fresh encrypted backup/disposable restore passed (120 relations, 13 catalog groups, 45,608 rows). Read-only par-plan preparation held on the trusted Inventory backend role being evaluated under private-client denial checks. No executable plan, schema SQL, grant change or connection cutover occurred. Review role classification locally before another window; retain browser denial, backend ledger denial and strict writer guards. Par editing remains held and ordering manual. Earlier pending/active stages below are dated history.
+
+**October 19 read-only check passed:** the separately approved
+[IPv6/session result](PR47_READONLY_IPV6_VALIDATION_20261019.md) verifies the accepted
+helper with two owned clients and scoped cleanup. It does not establish fresh
+hosted backup/restore or schema application. Reconfirm writers before requesting
+a new bounded window. App/Render settings remain unchanged and ordering manual.
+
+**PR47 accepted tooling:** owner-approved merge `a7270ca` matches tested `755aff3`
+exactly and has green reviewed-head/merged-main CI. The [new preflight](PR47_DIRECT_MAINTENANCE_PREFLIGHT.md)
+prepares separately approved read-only validation, then a fresh window,
+backup/disposable restore and exact-plan application approval. Earlier local/draft
+statuses below remain history. No hosted execution occurs in this preparation.
+
 **Local follow-up under review:** [maintenance-only direct IPv6](MAINTENANCE_DIRECT_IPV6.md)
 adds an explicit operator option and separate private maintenance URL for export
 and this adapter. The app's saved connection and all writer, backup, plan-hash,
@@ -89,19 +112,23 @@ administrative Supabase direct/session endpoint. It does not change the saved
 Render application connection, buy IPv4 or switch credentials. Transaction pool
 6543, endpoint override options and wrong project/actor/TLS are refused.
 
-Private review format is `jaymax-hosted-reviewed-par-review-v1`; the generated
-hosted plan is `jaymax-hosted-reviewed-par-plan-v1`, containing the distinct
-`jaymax-additive-reviewed-par-plan-v1` core. Original index plans/reviews cannot
+Private review format is `jaymax-hosted-reviewed-par-review-v2`; the generated
+hosted plan is `jaymax-hosted-reviewed-par-plan-v2`, containing the distinct
+`jaymax-additive-reviewed-par-plan-v2` core. Explicit `backendRoles` is required,
+even when empty. Classify every non-administrative writer as a denied client or
+reviewed backend; both groups retain ledger denial. V1 artifacts are refused
+without conversion or approval transfer. Original index plans/reviews cannot
 be supplied as par plans. Keep all real paths, identifiers and backup/key
 material in the protected local operator folder, outside Git/Drive/Pages.
 
 ```json
 {
-  "format": "jaymax-hosted-reviewed-par-review-v1",
+  "format": "jaymax-hosted-reviewed-par-review-v2",
   "projectRef": "<designated-build-project>",
   "deliveryVersion": "<new-reviewed-version-after-current-ledger>",
-  "clientRoles": ["anon", "authenticated"],
-  "writerLoginRoles": ["<deployed-login>", "<other-reviewed-application-logins>"],
+  "clientRoles": ["anon", "authenticated", "<accounts-login-denied-private-access>"],
+  "backendRoles": ["<reviewed-inventory-backend-login>"],
+  "writerLoginRoles": ["postgres", "<accounts-login-denied-private-access>", "<reviewed-inventory-backend-login>"],
   "budgets": {"lockSeconds": 5, "probeSeconds": 20, "ddlSeconds": 30,
     "idleTransactionSeconds": 120, "operationSeconds": 600},
   "maintenance": {"startsAt": "<approved-UTC-start>", "endsAt": "<approved-UTC-end>",
@@ -176,9 +203,10 @@ Publication or merge of this tool does not authorize a window, backup, hosted
 dry run or application. Future restricted-role grants/RLS policies and credential
 cutover remain O1 work; no new runtime access is silently inherited.
 
-## Validation record
+## Historical PR46 validation record
 
-Local acceptance is complete, with draft publication approval still pending.
+The following PR46 evidence records its earlier pre-publication stage. Current
+role-classification results are in [the local follow-up](PAR_INSTALL_ROLE_CLASSIFICATION.md).
 All tests use fictional data and synthetic credentials. No Supabase connection,
 real invoice import or active app configuration is used.
 
