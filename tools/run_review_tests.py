@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 OFFLINE_MODULES = ('maintenance_connection planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
- 'managed_development rotate_build_connections provision_build_connections staff_response pg_routes pg_migrations '
+ 'managed_development rotate_build_connections provision_build_connections staff_response staff_pin_security pg_routes pg_migrations '
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()

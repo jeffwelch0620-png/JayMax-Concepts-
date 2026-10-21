@@ -1,5 +1,25 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local staff-PIN security follow-up — review pending
+
+Accepted PR49 main is `6f1774a1a21073370ac006d9b48155123128d6bf`, matching
+reviewed `e72d597`. [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39459639861)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39527741640)
+passed all four checks. Older checkpoints below retain their dated scope.
+
+The owner authorized this separate [local security fix](docs/STAFF_PIN_SECURITY.md):
+shared-PIN roster selection cannot mint a manager session; old synthetic tokens
+are refused, missing PINs disable unauthenticated portal access, and all PIN
+consumers share an instance-local attempt limit. Frontend elevation is removed,
+with a path to personal manager/owner login. SQLite coordinates workers on one
+filesystem; multiple instances need separately reviewed centralized enforcement.
+No credentials, Supabase schema, Render/app connections or historical actors are
+changed. Prompt before draft publication and before hosted work or credential
+changes. Companion identity adoption and reviewed-par installation remain separate;
+par editing stays held and ordering manual. Local validation passed all 1,034 frontend tests, all 1,134 offline cases and the
+strict production build. The security runbook records attempts and limitations;
+fresh CI and independent review follow separate draft-publication approval.
+
 ## PR48 merged; backend-hold diagnostic follow-up
 
 Owner-approved PR48 merged as `cbe8e88`, matching reviewed `12dba79`, with green

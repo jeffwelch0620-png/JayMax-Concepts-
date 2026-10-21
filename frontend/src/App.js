@@ -169,7 +169,7 @@ export default function App() {
 
   if (!session) {
     return staffOpen
-      ? <StaffSheet drafts={drafts.current} onClose={() => setStaffOpen(false)} onElevate={(sess) => { api.storeSession(sess); setSession(sess); setStaffOpen(false); }} />
+      ? <StaffSheet drafts={drafts.current} onClose={() => setStaffOpen(false)} onPersonalLogin={() => { setStaffOpen(false); setLoginNotice("Manager and owner access requires your personal account."); }} />
       : <Login onLogin={(sess) => { setLoginNotice(""); setSession(sess); }} onOpenStaff={() => setStaffOpen(true)} notice={loginNotice} />;
   }
   return (
@@ -295,7 +295,7 @@ export default function App() {
         )}
       </main>
 
-      {staffOpen && <StaffSheet drafts={drafts.current} onClose={() => setStaffOpen(false)} onElevate={(sess) => { api.storeSession(sess); setSession(sess); setStaffOpen(false); }} />}
+      {staffOpen && <StaffSheet drafts={drafts.current} onClose={() => setStaffOpen(false)} onPersonalLogin={() => { setStaffOpen(false); setLoginNotice("Manager and owner access requires your personal account."); }} />}
       <AiAssistant rid={aiRid || (isOwner ? "berts" : loc)} setRid={setAiRid} open={aiOpen} onClose={() => setAiOpen(false)} />
     </div>
   );

@@ -39,6 +39,15 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.useRealTimers(); jest.restoreAllMocks(); });
 
+test("unconfigured staff PIN is blank and the manager sees the portal-disabled notice", async () => {
+  api.getStaffPin.mockResolvedValue({ staffPin: "", custom: false, enabled: false });
+  await render(<PrepTab rid="berts" drafts={drafts} items={[item]} dishes={[recipe]} showToast={success} showError={errors} />);
+  await click(find("prep-subtab-planning"));
+  expect(find("staff-pin-input").value).toBe("");
+  expect(find("staff-pin-disabled").textContent).toContain("disabled until a manager sets a PIN");
+  expect(container.textContent).not.toContain("(default)");
+});
+
 test("polling leaves a dirty sales draft and its original revision intact", async () => {
   await render(sales()); await input("dish-sales-dish", "17");
   await render(sales({ revision: 20, salesPeriod: { ...period, dishSales: { dish: "99" } } }));
