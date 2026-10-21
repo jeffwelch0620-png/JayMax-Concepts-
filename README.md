@@ -1,6 +1,52 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## PR50 merged; local role-preflight preparation
+## PR52 merged; PR51 role-preflight follow-up
+
+Accepted main is PR52 `cc88899f0e32faca0da4e93a640a9e077d0ef6e2`, tree-identical
+to approved `a173c68`. All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39664731594)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39666352459)
+passed. The owner approved the merge and its existing automatic Render deployment;
+deployment completion and live behavior were not inspected. G04 remains open.
+The owner separately authorized updating existing draft PR51 from main, resolving
+these docs and adding the missing-role diagnostic with fresh CI. This is a normal
+merge preserving branch history. PR51 merge approval, hosted work and credential
+changes remain separate; no hosted preflight or schema application is authorized.
+
+## Store-wide staff PIN boundary retained from PR52
+
+The owner approved the separate [store-budget security fix](docs/STAFF_PIN_STORE_BUDGET.md)
+and local tests on October 21, 2026. The five-check/60-second failure budget is now
+mandatory across clients within each canonical store, independent of proxy/client
+attribution. The shared-store availability tradeoff is explicit; SQLite remains
+limited to workers sharing one filesystem, without cross-instance durability.
+Personal login and the PR50 authority boundary are preserved. Original security
+preparation started from PR50 `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, with separate
+[reviewed-head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
+green. [Draft PR51](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/51)
+retains its own review/merge gates. Local store-budget validation
+passed all 1,145 offline cases, including 60 PIN-security cases and both Windows
+ACL checks. A strengthened fixture initially had two incorrect exact-proxy
+expectations; the corrected full rerun passed. Counts overlap; no frontend build,
+database-server run or fresh CI is claimed for this backend-only follow-up.
+Under separate owner approval, [PR52](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/52)
+merged after its documentation-only follow-ups to tested `e262c9f`. Its source and
+test bytes are retained here. Fresh combined-head CI and PR51's separate owner
+merge approval remain gates. Further hosted work, credential changes and manual
+deployment remain held; G04 is not closed by local
+tests. No frontend, SQL, application connection or hosting configuration changes
+are included. The earlier checkpoints below retain their dated scope.
+
+The owner-approved documentation amendment adds [staff lockout reporting and the
+pre-operational mitigation gate](docs/STAFF_PIN_STORE_BUDGET.md#staff-response-to-a-temporary-lockout).
+The five-check/60-second policy and application/test bytes are unchanged. Inventory
+Build Main is the owner's primary coordinating chat; retain Companion App
+Integration as history and for explicitly assigned specialist work. PR52 merged
+first; this PR51 update resolves shared docs and requires fresh CI plus its own
+owner approval. This does not authorize PR51's merge or adopt Companion
+services/schema.
+
+## Historical PR50 and original PR51 preparation checkpoint
 
 Accepted PR50 main is `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, matching
 reviewed `b22734a`. [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
