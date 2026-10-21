@@ -48,7 +48,7 @@ old stock/count/task writers or grant private schemas to browser roles.
 
 ## Attempt limit and deployment boundary
 
-The proposed local limiter admits at most five failed or unresolved checks per canonical
+The local limiter admits at most five failed or unresolved checks per canonical
 store/client in a fixed 60-second window. Verify, identify and direct consumers
 share that budget, including the `papa_leonis`/`papa` alias. Admission is reserved
 atomically before reading the PIN. A successful check refunds only its own
@@ -56,10 +56,13 @@ reservation, not previous failures; expired reservations cannot refund a newer
 window. Blocked attempts return 429 with `Retry-After` and do not extend the
 window. Disabled-PIN attempts also consume the budget. Infrastructure read
 failures refund their reservation without authenticating the caller.
-The five-attempt/60-second values are a reviewable proposal, not an owner-selected
-deployed policy. Confirm thresholds and the supported strong per-store PIN policy
-before release. This patch does not rotate or silently reject an otherwise valid
-explicitly stored PIN to enforce a newly selected strength rule.
+On October 21, 2026, the owner accepted these values for the build deployment,
+including temporary shared throttling if the proxy groups staff devices into
+one client key. This is acceptance of a release limitation, not evidence that
+the policy is deployed or suitable for operational use. Review thresholds,
+client attribution and the supported strong per-store PIN policy before
+operational use. This patch does not rotate or silently reject an otherwise
+valid explicitly stored PIN to enforce a newly selected strength rule.
 
 Counters use Python's standard-library SQLite in the instance's local temporary
 directory, outside the repository and application database. Threads and workers
@@ -78,10 +81,27 @@ resets counters. Before scaling, adopt a separately reviewed centralized limiter
 Do not claim a deployment-wide durable limit merely from these local tests.
 
 Client identity comes only from the ASGI client address, with IP normalization;
-arbitrary `X-Forwarded-For`/`Forwarded` headers cannot change the key. Before live
-acceptance, inspect the actual server/trusted-proxy topology under separate owner
-authorization. A proxy address presented as the client will group users into one
-budget; do not fix it by trusting caller-supplied headers indiscriminately.
+the limiter does not read raw `X-Forwarded-For`/`Forwarded` headers. Uvicorn may
+rewrite the ASGI address when it trusts the connecting proxy, so effective
+client attribution depends on the server's trust configuration. A proxy address
+presented as the client groups devices using that address into one budget;
+shared restaurant NAT can also group devices even with correct proxy handling.
+The deployed environment and proxy addresses have not been inspected in this
+review. Repository configuration establishes a possible shared budget, not
+proof that every visitor uses one proxy address or one store-wide budget.
+
+The tracked start command supplies no explicit proxy allow list. Pinned Uvicorn
+0.25.0 uses `FORWARDED_ALLOW_IPS` or defaults to `127.0.0.1`; its
+[configuration](https://github.com/encode/uvicorn/blob/0.25.0/uvicorn/config.py)
+and [proxy middleware](https://github.com/encode/uvicorn/blob/0.25.0/uvicorn/middleware/proxy_headers.py)
+use exact trusted-address matching, not CIDR network matching. Do not assume
+that configuring a proxy range works with this pinned version, or trust `*`
+without verified ingress and direct-origin boundaries. A future per-client
+backoff or higher store ceiling cannot distinguish devices while the client
+key remains a shared proxy address. Under separate owner authorization, verify
+the actual proxy chain and header handling and test trusted/untrusted peers
+before changing trust settings. No such inspection or setting change is
+authorized by the temporary build acceptance.
 
 ## Validation and release gates
 
@@ -101,12 +121,30 @@ sessions, personal-login navigation, disabled/limited errors and native portal
 compatibility. Record final test attempts/results in the review packet before
 requesting draft publication; local tests do not prove hosted acceptance.
 
-Before any hosted work: obtain separate owner approval, verify the accepted
-deployment/head and single-instance/proxy boundary, and confirm personal manager
-accounts and explicit store PIN configuration through approved private handling.
+### Pre-merge checklist and owner acceptance
+
+Merging into `main` automatically deploys the Render test application. Before
+merge approval, record each decision independently:
+
+- **Accepted October 21, 2026:** temporary shared throttling in the build
+  deployment, including possible grouping of staff devices behind a proxy/NAT.
+- **Accepted October 21, 2026:** staff portals without a valid explicitly
+  configured PIN remain disabled until a manager sets one through the authorized
+  personal-login interface. This acceptance replaces a requirement to inspect or
+  provision every store PIN before this build release; it does not claim that
+  store configuration has been verified or authorize any PIN change.
+- Confirm personal manager/owner login is available before relying on it for
+  access or PIN configuration. This documentation amendment does not verify live
+  accounts. Old synthetic PIN sessions will be rejected by the updated backend.
+- Obtain separate approval to merge, with the automatic deployment consequence
+  understood. The owner authorized this documentation push only; PR50 remains
+  draft and unmerged. Hosted work and credential changes remain on hold.
+
+Before any hosted inspection or fictional live acceptance: obtain separate owner
+approval, verify the accepted deployment/head and single-instance/proxy boundary,
+and use approved private handling for any account/PIN configuration checks.
 Do not create accounts, set PINs, rotate secrets or alter service settings without
-that approval. Deploying this patch rejects old PIN sessions and may disable
-unconfigured portals; report this behavior before merge approval. Reverting the
+that approval. Reverting the
 backend can restore the old vulnerability and must not be treated as a routine
 security rollback. A separately approved fictional live acceptance can follow.
 
@@ -142,6 +180,17 @@ separate. Track 1 accounting, par-editing hold and manual ordering are unchanged
 
 Evidence stems outside Git: `staff-pin-offline-20261021T023646499531Z`,
 `staff-pin-frontend-20261021T023525305435Z`, and
-`staff-pin-build-20261021T023835487571Z`. No live/deployment acceptance, new CI,
-credential change, session revocation on a running server, or mitigation of
-Companion ingress-header trust is claimed. Draft publication awaits the owner.
+`staff-pin-build-20261021T023835487571Z`. Published draft
+[PR50](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/50) at
+`3b37fba3f8b76942eaa581be1127df73f8936d81` passed all four checks in
+[CI run 39632624195](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39632624195):
+1,034 frontend tests in 82 suites, strict production build, 1,134 Windows offline
+cases and 228 backend/disposable PostgreSQL cases. Profiles overlap; counts are
+not additional unique coverage. This documentation-only follow-up records owner
+acceptance and corrects release/proxy guidance; fresh exact-head CI is required
+after its push. The existing eight-thread reservation test already verifies five
+admissions plus three 429 responses without 503, and another-process coordination
+is covered. No observed contention failure justifies changing the 250 ms timeout
+in this amendment. No live/deployment acceptance, credential change, session
+revocation on a running server, or mitigation of Companion ingress-header trust
+is claimed. Merge and hosted work remain separately gated.

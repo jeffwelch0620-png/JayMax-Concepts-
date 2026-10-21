@@ -14,11 +14,21 @@ consumers share an instance-local attempt limit. Frontend elevation is removed,
 with a path to personal manager/owner login. SQLite coordinates workers on one
 filesystem; multiple instances need separately reviewed centralized enforcement.
 No credentials, Supabase schema, Render/app connections or historical actors are
-changed. Prompt before draft publication and before hosted work or credential
-changes. Companion identity adoption and reviewed-par installation remain separate;
-par editing stays held and ordering manual. Local validation passed all 1,034 frontend tests, all 1,134 offline cases and the
-strict production build. The security runbook records attempts and limitations;
-fresh CI and independent review follow separate draft-publication approval.
+changed. [PR50](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/50)
+is published as a draft; all four checks passed at `3b37fba`, including 1,034
+frontend tests / 82 suites, the strict build, 1,134 Windows offline cases and 228
+backend/disposable PostgreSQL cases. These profiles overlap local coverage.
+
+On October 21, 2026, the owner accepted temporary shared throttling and disabled
+staff portals where no valid PIN is configured for the build deployment. The
+documentation amendment records those decisions and qualifies the unverified
+proxy behavior; it makes no runtime changes. Personal manager/owner login must
+be available, and the pinned Uvicorn trust rules require separate review before
+changing proxy settings. Merge automatically deploys the Render test app, so
+return for explicit merge approval after the amended-head checks. Hosted work
+and credential changes remain on hold. Companion identity adoption and
+reviewed-par installation remain separate; par editing stays held and ordering
+manual. The security runbook records release gates, evidence and limitations.
 
 ## PR48 merged; backend-hold diagnostic follow-up
 
