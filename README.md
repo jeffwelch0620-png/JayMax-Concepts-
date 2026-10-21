@@ -1,28 +1,49 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local store-wide PIN budget follow-up
+## PR52 merged; PR51 role-preflight follow-up
+
+Accepted main is PR52 `cc88899f0e32faca0da4e93a640a9e077d0ef6e2`, tree-identical
+to approved `a173c68`. All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39664731594)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39666352459)
+passed. The owner approved the merge and its existing automatic Render deployment;
+deployment completion and live behavior were not inspected. G04 remains open.
+The owner separately authorized updating existing draft PR51 from main, resolving
+these docs and adding the missing-role diagnostic with fresh CI. This is a normal
+merge preserving branch history. PR51 merge approval, hosted work and credential
+changes remain separate; no hosted preflight or schema application is authorized.
+
+The combined PR51/main amendment passes 1,176 offline cases (419 methods plus
+757 subtests) and 91 focused cases (71 methods plus 20 subtests), with no failures,
+errors or skips. Profiles overlap; counts are not additive. Missing backend roles
+now have an explicit private `missing_role` diagnostic, all six backend checks
+remain `not_evaluated`, and the independent ledger hold remains. Lookup failures
+propagate instead of being called missing roles. Present roles continue normally;
+the public report still contains fixed counts only. Fresh exact-head CI, including
+the strengthened disposable PostgreSQL assertions, is required before merge
+approval. See the [amended validation packet](docs/PAR_ROLE_PREFLIGHT_PACKET.md#missing-role-amendment-validation).
+
+## Store-wide staff PIN boundary retained from PR52
 
 The owner approved the separate [store-budget security fix](docs/STAFF_PIN_STORE_BUDGET.md)
 and local tests on October 21, 2026. The five-check/60-second failure budget is now
 mandatory across clients within each canonical store, independent of proxy/client
 attribution. The shared-store availability tradeoff is explicit; SQLite remains
 limited to workers sharing one filesystem, without cross-instance durability.
-Personal login and the PR50 authority boundary are preserved. This branch starts
-from accepted PR50 main and keeps the separate draft PR51 par packet untouched.
-Accepted PR50 main is `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, with separate
+Personal login and the PR50 authority boundary are preserved. Original security
+preparation started from PR50 `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, with separate
 [reviewed-head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
 and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
 green. [Draft PR51](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/51)
-at `7fd4ce4` retains its own review/merge gates. Local store-budget validation
+retains its own review/merge gates. Local store-budget validation
 passed all 1,145 offline cases, including 60 PIN-security cases and both Windows
 ACL checks. A strengthened fixture initially had two incorrect exact-proxy
 expectations; the corrected full rerun passed. Counts overlap; no frontend build,
 database-server run or fresh CI is claimed for this backend-only follow-up.
-Under separate owner approval, [draft PR52](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/52)
-is published from tested `e262c9f`. This publication update changes documentation
-only; current-head CI and independent review remain separate gates. The PR's
-checks provide the current CI result. PR52 remains draft and unmerged. Hosted work,
-credential changes, merge and deployment remain held; G04 is not closed by local
+Under separate owner approval, [PR52](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/52)
+merged after its documentation-only follow-ups to tested `e262c9f`. Its source and
+test bytes are retained here. Fresh combined-head CI and PR51's separate owner
+merge approval remain gates. Further hosted work, credential changes and manual
+deployment remain held; G04 is not closed by local
 tests. No frontend, SQL, application connection or hosting configuration changes
 are included. The earlier checkpoints below retain their dated scope.
 
@@ -30,17 +51,19 @@ The owner-approved documentation amendment adds [staff lockout reporting and the
 pre-operational mitigation gate](docs/STAFF_PIN_STORE_BUDGET.md#staff-response-to-a-temporary-lockout).
 The five-check/60-second policy and application/test bytes are unchanged. Inventory
 Build Main is the owner's primary coordinating chat; retain Companion App
-Integration as history and for explicitly assigned specialist work. PR52 should
-merge before PR51; update the second branch normally, resolve the shared docs and
-require fresh CI plus its own owner approval. This does not authorize either merge
-or adopt Companion services/schema.
+Integration as history and for explicitly assigned specialist work. PR52 merged
+first; this PR51 update resolves shared docs and requires fresh CI plus its own
+owner approval. This does not authorize PR51's merge or adopt Companion
+services/schema.
 
-## Historical PR50 pre-merge checkpoint
+## Historical PR50 and original PR51 preparation checkpoint
 
-Accepted PR49 main is `6f1774a1a21073370ac006d9b48155123128d6bf`, matching
-reviewed `e72d597`. [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39459639861)
-and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39527741640)
-passed all four checks. Older checkpoints below retain their dated scope.
+Accepted PR50 main is `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, matching
+reviewed `b22734a`. [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
+passed all four checks. PR49 merged as `6f1774a`, matching reviewed `e72d597`;
+its reviewed-head and merged-main CI also passed. Older checkpoints retain their
+dated scope and do not make those accepted PRs pending again.
 
 The owner authorized this separate [local security fix](docs/STAFF_PIN_SECURITY.md):
 shared-PIN roster selection cannot mint a manager session; old synthetic tokens
@@ -50,7 +73,7 @@ with a path to personal manager/owner login. SQLite coordinates workers on one
 filesystem; multiple instances need separately reviewed centralized enforcement.
 No credentials, Supabase schema, Render/app connections or historical actors are
 changed. [PR50](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/50)
-is published as a draft; all four checks passed at `3b37fba`, including 1,034
+is merged; all four checks passed at the accepted revision, including 1,034
 frontend tests / 82 suites, the strict build, 1,134 Windows offline cases and 228
 backend/disposable PostgreSQL cases. These profiles overlap local coverage.
 
@@ -59,11 +82,22 @@ staff portals where no valid PIN is configured for the build deployment. The
 documentation amendment records those decisions and qualifies the unverified
 proxy behavior; it makes no runtime changes. Personal manager/owner login must
 be available, and the pinned Uvicorn trust rules require separate review before
-changing proxy settings. Merge automatically deploys the Render test app, so
-return for explicit merge approval after the amended-head checks. Hosted work
-and credential changes remain on hold. Companion identity adoption and
+changing proxy settings. The approved merge triggers Render automatic deployment;
+deployment health and live security acceptance have not been inspected. Hosted
+work and credential changes remain on hold. Companion identity adoption and
 reviewed-par installation remain separate; par editing stays held and ordering
 manual. The security runbook records release gates, evidence and limitations.
+
+The next owner-authorized local slice is the [role-permission preflight packet](docs/PAR_ROLE_PREFLIGHT_PACKET.md):
+reuse the existing installer checks in a read-only snapshot, record later checks
+as not evaluated after a refusal, and report supplemental `public`/`extensions`
+observations. Fictional local rehearsals do not establish hosted compatibility,
+full readiness or O1 cutover. Prompt before its new draft PR push; no hosted
+execution, permission repair or new maintenance window is authorized.
+Local validation passed all 1,161 offline cases, 178 focused cases and the final
+10-case PostgreSQL selection; the packet preserves the earlier 18-case database
+run and overlapping counts. Owned database/role inventories were restored and the
+test server stopped. Existing installer/app/schema/hosting code is unchanged.
 
 ## PR48 merged; backend-hold diagnostic follow-up
 

@@ -1,13 +1,18 @@
 # Staff PIN authority boundary
 
-**Current local follow-up:** the owner approved a separate mandatory store-wide
-attempt budget and local testing on October 21, 2026. See the
-[store-budget review packet](STAFF_PIN_STORE_BUDGET.md). Under separate owner
-approval it is published as [draft PR52](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/52)
-from tested `e262c9f`; it is not merged or deployed. This publication update changes
-documentation only; independent review and current-head CI remain gates. Hosted work and credential changes
-remain on hold. G04 remains open pending review and separately approved deployed
-acceptance. The historical PR50 validation below does not establish that outcome.
+**Accepted source:** the store-wide limit and lockout guidance are merged in
+[PR52](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/52) as
+`cc88899f0e32faca0da4e93a640a9e077d0ef6e2`, tree-identical to approved `a173c68`.
+All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39664731594)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39666352459)
+passed. See the [store-budget packet](STAFF_PIN_STORE_BUDGET.md). The owner approved
+the merge and existing Render auto-deployment, but deployment completion and live
+behavior were not inspected. Further hosted work and credential changes remain
+held. G04 stays open; source/CI is not deployed security acceptance.
+
+The owner authorized this separate PR51 main merge and missing-role diagnostic,
+not a security-policy change. The store-wide implementation and tests are retained
+unchanged from main; PR51's own merge needs fresh CI and separate approval.
 
 The store-budget packet now includes [staff lockout guidance](STAFF_PIN_STORE_BUDGET.md#staff-response-to-a-temporary-lockout)
 and a [pre-operational mitigation decision](STAFF_PIN_STORE_BUDGET.md#pre-operational-mitigation-decision).
@@ -22,8 +27,8 @@ The PR50 authority fix is merged as
 [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
 and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
 passed. Later separately approved hosted checks stopped on an unresolved limiter
-result; they did not complete security acceptance. Publication, merge and hosted
-acceptance for the new store-budget follow-up remain separate owner decisions.
+result; they did not complete security acceptance. PR52's source merge is complete;
+hosted acceptance and credential changes remain separately held.
 This work changes no credentials,
 deployed settings, application database schema or stored operational records.
 
@@ -149,10 +154,10 @@ sessions, personal-login navigation, disabled/limited errors and native portal
 compatibility. Record final test attempts/results in the review packet before
 requesting draft publication; local tests do not prove hosted acceptance.
 
-### Pre-merge checklist and owner acceptance
+### Recorded pre-merge decisions and remaining acceptance
 
-Merging into `main` automatically deploys the Render test application. Before
-merge approval, record each decision independently:
+Merging into `main` automatically deploys the Render test application. PR50's
+owner-approved merge is recorded above; its distinct decisions and limits are:
 
 - **Accepted October 21, 2026:** temporary shared throttling in the build
   deployment, including possible grouping of staff devices behind a proxy/NAT.
@@ -164,9 +169,9 @@ merge approval, record each decision independently:
 - Confirm personal manager/owner login is available before relying on it for
   access or PIN configuration. This documentation amendment does not verify live
   accounts. Old synthetic PIN sessions will be rejected by the updated backend.
-- Obtain separate approval to merge, with the automatic deployment consequence
-  understood. The owner authorized this documentation push only; PR50 remains
-  draft and unmerged. Hosted work and credential changes remain on hold.
+- **Approved and merged October 21, 2026:** PR50, with the automatic deployment
+  consequence understood. This does not authorize hosted inspection or acceptance,
+  credential changes or further work. Those holds remain in force.
 
 Before any hosted inspection or fictional live acceptance: obtain separate owner
 approval, verify the accepted deployment/head and single-instance/proxy boundary,
@@ -215,10 +220,11 @@ Evidence stems outside Git: `staff-pin-offline-20261021T023646499531Z`,
 1,034 frontend tests in 82 suites, strict production build, 1,134 Windows offline
 cases and 228 backend/disposable PostgreSQL cases. Profiles overlap; counts are
 not additional unique coverage. This documentation-only follow-up records owner
-acceptance and corrects release/proxy guidance; fresh exact-head CI is required
-after its push. The existing eight-thread reservation test already verifies five
+acceptance and corrects release/proxy guidance; amended-head and merged-main CI
+subsequently passed with the same test counts, as linked above. The existing
+eight-thread reservation test already verifies five
 admissions plus three 429 responses without 503, and another-process coordination
 is covered. No observed contention failure justifies changing the 250 ms timeout
 in this amendment. No live/deployment acceptance, credential change, session
 revocation on a running server, or mitigation of Companion ingress-header trust
-is claimed. Merge and hosted work remain separately gated.
+is claimed. The merge is complete; hosted work remains separately gated.

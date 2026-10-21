@@ -19,7 +19,8 @@ OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrit
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
-OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests']
+OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests',
+                    'par_role_preflight::ParRolePreflightGuards']
 DATABASE_CASES = (
  ('runtime_permissions','RuntimePermissionTests','test_later_par_schema_is_held_without_inheriting_candidate_access'),
  ('inventory_pars','InventoryParTests','test_unconfirmed_legacy_default_and_missing_installation_are_not_zero_targets'),
@@ -127,6 +128,11 @@ DATABASE_CASES += tuple(('hosted_additive_index', 'HostedAdapterDatabaseTests', 
  'test_activity_refresh_sees_new_session_in_same_transaction',
  'test_new_login_after_preflight_is_refused_by_locked_guard',
  'test_restricted_observer_cannot_claim_other_sessions_are_drained'))
+DATABASE_CASES += tuple(('par_role_preflight', 'ParRolePreflightDatabaseTests', name) for name in (
+ 'test_readonly_report_keeps_catalog_accounting_and_role_inventory_unchanged',
+ 'test_real_refusals_report_only_the_evaluated_prefix',
+ 'test_public_and_extensions_findings_are_observed_without_waiving_installer_rules',
+ 'test_injected_write_is_refused_and_connection_is_closed_without_a_report'))
 DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name) for name in (
  'test_explicit_backend_access_survives_prepare_apply_reconcile_without_new_par_access',
  'test_backend_classification_and_plan_bindings_cannot_be_omitted_or_relabelled',
