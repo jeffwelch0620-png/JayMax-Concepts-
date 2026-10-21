@@ -24,6 +24,8 @@ from fastapi import HTTPException
 from starlette.requests import Request
 import server
 import staff_pin_security as security
+from uvicorn import Config
+import uvicorn
 
 MEMBER = {'id': '11111111-1111-4111-8111-111111111111', 'name': 'TEST ONLY Claimed Manager',
           'role': 'owner_admin', 'active': True, 'store_id': 'berts'}
@@ -83,9 +85,11 @@ def portal(monkeypatch, tmp_path):
     return conn, mongo
 
 
-async def post(path, body, token=None):
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url='https://testserver') as client:
-        return await client.post(path, json=body, headers={'Authorization': 'Bearer ' + token} if token else {})
+async def post(path, body, token=None, *, app=None, host='127.0.0.1', headers=None):
+    transport = httpx.ASGITransport(app=app or server.app, client=(host, 1))
+    async with httpx.AsyncClient(transport=transport, base_url='https://testserver') as client:
+        return await client.post(path, json=body,
+                                 headers={'Authorization': 'Bearer ' + token} if token else headers or {})
 
 
 @pytest.mark.parametrize('pg', [False, True])
@@ -196,11 +200,12 @@ def test_native_staff_actor_stays_claimed_and_uses_same_failure_budget(portal):
 
 
 def test_mongo_and_pg_store_aliases_cannot_split_the_failure_budget(portal):
-    req = request()
-    for _ in range(3): assert not asyncio.run(server._verify_legacy_staff_pin(req, 'papa_leonis', '0000'))
-    for _ in range(2): assert not asyncio.run(server._verify_pg_staff_pin(req, portal[0], 'papa', '0000'))
+    for index in range(3):
+        assert not asyncio.run(server._verify_legacy_staff_pin(request(host=f'192.0.2.{index}'), 'papa_leonis', '0000'))
+    for index in range(2):
+        assert not asyncio.run(server._verify_pg_staff_pin(request(host=f'198.51.100.{index}'), portal[0], 'papa', '0000'))
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(server._verify_legacy_staff_pin(req, 'papa_leonis', '4826'))
+        asyncio.run(server._verify_legacy_staff_pin(request(host='2001:db8::1'), 'papa_leonis', '4826'))
     assert exc.value.status_code == 429
 
 
@@ -265,12 +270,140 @@ except HTTPException as exc: print(exc.status_code)
     assert process.stdout.strip() == '429'
 
 
-def test_client_identity_ignores_untrusted_forwarded_headers():
-    a = request(extra=[(b'x-forwarded-for', b'203.0.113.1')])
-    b = request(extra=[(b'x-forwarded-for', b'203.0.113.99')])
-    assert security.client_key(a, 'berts') == security.client_key(b, 'berts')
-    assert security.client_key(a, 'berts') != security.client_key(a, 'rudds')
-    assert security.client_key(a, 'berts') != security.client_key(request(host='192.0.2.11'), 'berts')
+def test_store_key_is_namespaced_and_separates_stores():
+    assert security.store_key('berts') != security.store_key('rudds')
+    assert security.store_key('berts') != security.store_key('papa')
+    assert security.store_key('berts') == security.store_key('berts')
+    assert len(security.store_key('berts')) == 64
+    # Do not reinterpret old per-client entries as store-wide reservations.
+    previous = hashlib.sha256(json.dumps(['berts', '127.0.0.1'], separators=(',', ':')).encode()).hexdigest()
+    assert security.store_key('berts') != previous
+
+
+@pytest.mark.parametrize('pg', [False, True])
+@pytest.mark.parametrize('profile', ['provider-wildcard', 'exact-proxy', 'no-proxy'])
+def test_store_budget_survives_server_proxy_pipeline(portal, monkeypatch, pg, profile):
+    monkeypatch.setattr(server, 'USE_PG', pg)
+    monkeypatch.setattr(security.limiter, 'clock', lambda: 1000)
+    # Exercise the dependency actually pinned by this repository, including its
+    # environment-configured middleware. Direct Request tests omit this boundary.
+    pinned = next(line.split('==')[1] for line in
+                  Path(server.__file__).with_name('requirements.txt').read_text().splitlines()
+                  if line.startswith('uvicorn=='))
+    assert uvicorn.__version__ == pinned
+    monkeypatch.setenv('FORWARDED_ALLOW_IPS', '*')  # Synthetic provider profile.
+    seen_clients = []
+    async def observed_app(scope, receive, send):
+        seen_clients.append(scope.get('client'))
+        await server.app(scope, receive, send)
+    config = Config(observed_app, proxy_headers=profile != 'no-proxy',
+                    forwarded_allow_ips='192.0.2.10' if profile == 'exact-proxy' else None,
+                    lifespan='off', http='h11', ws='none', interface='asgi3', log_config=None)
+    assert config.forwarded_allow_ips == ('192.0.2.10' if profile == 'exact-proxy' else '*')
+    config.load()
+    app = config.loaded_app
+    verify = '/api/pg/staff/berts/verify' if pg else '/api/staff/verify'
+    identify = ('/api/pg' if pg else '/api') + '/staff/berts/identify'
+    body = {'pin': '000', 'restaurantId': 'berts', 'staffId': MEMBER['id']}
+    original_headers = [(b'x-forwarded-for', b'198.51.100.10')]
+    for index in range(5):
+        response = asyncio.run(post(verify if index % 2 == 0 else identify, body,
+                                    app=app, host='192.0.2.10', headers=original_headers))
+        assert response.status_code in (200, 403)
+        if response.status_code == 200: assert response.json()['ok'] is False
+    # Unchanged / changed / unchanged controls, followed by malformed, duplicate
+    # and IPv6 attribution. All must remain blocked without reading the PIN.
+    variants = [
+        ('192.0.2.10', original_headers),
+        ('192.0.2.10', [(b'x-forwarded-for', b'203.0.113.123, 198.51.100.10')]),
+        ('192.0.2.10', original_headers),
+        ('192.0.2.11', []),
+        ('2001:db8::10', [(b'x-forwarded-for', b'2001:db8::20')]),
+        ('not-an-address', [(b'x-forwarded-for', b'unknown')]),
+        ('192.0.2.10', [(b'x-forwarded-for', b'203.0.113.1'),
+                       (b'x-forwarded-for', b'203.0.113.2')]),
+        ('192.0.2.12', [(b'forwarded', b'for=203.0.113.5;proto=https')]),
+    ]
+    async def must_not_read(*args): raise AssertionError('Blocked admission read a PIN')
+    monkeypatch.setattr(server, '_pg_get_staff_pin' if pg else '_get_pin', must_not_read)
+    for host, headers in variants:
+        response = asyncio.run(post(verify, body, app=app, host=host, headers=headers))
+        assert response.status_code == 429 and int(response.headers['retry-after']) == 61
+    expected_original = '192.0.2.10' if profile == 'no-proxy' else '198.51.100.10'
+    expected_changed = ('203.0.113.123' if profile == 'provider-wildcard' else expected_original)
+    assert seen_clients[5][0] == seen_clients[7][0] == expected_original
+    assert seen_clients[6][0] == expected_changed
+    assert len({client[0] for client in seen_clients}) > 1
+    # Personal authority bypasses the PIN check, not its own authorization rules.
+    token = server._token({'id': 'usr_fictional_owner', 'email': 'owner@example.test', 'role': 'owner'})
+    response = asyncio.run(post(verify, body, token, app=app, host='192.0.2.10'))
+    assert response.status_code == 200 and response.json()['ok'] is True
+
+
+def test_different_clients_share_failures_but_not_different_stores(portal):
+    for index in range(5):
+        assert not asyncio.run(server._verify_legacy_staff_pin(request(host=f'192.0.2.{index}'), 'berts', '0000'))
+    assert asyncio.run(server._verify_legacy_staff_pin(request(host='192.0.2.99'), 'rudds', '4826'))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server._verify_legacy_staff_pin(request(host='192.0.2.99'), 'berts', '4826'))
+    assert exc.value.status_code == 429
+
+
+def test_success_from_another_client_refunds_only_its_own_reservation(portal):
+    for index in range(4):
+        assert not asyncio.run(server._verify_legacy_staff_pin(request(host=f'192.0.2.{index}'), 'berts', '0000'))
+    assert asyncio.run(server._verify_legacy_staff_pin(request(host='2001:db8::1'), 'berts', '4826'))
+    assert not asyncio.run(server._verify_legacy_staff_pin(request(host='192.0.2.50'), 'berts', '0000'))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server._verify_legacy_staff_pin(request(host='2001:db8::2'), 'berts', '4826'))
+    assert exc.value.status_code == 429
+
+
+def test_concurrent_clients_reserve_one_store_budget_before_pin_reads(portal):
+    async def run():
+        entered = 0
+        release = asyncio.Event()
+        async def load():
+            nonlocal entered
+            entered += 1
+            if entered == 5: release.set()
+            await asyncio.wait_for(release.wait(), 10)
+            return '4826'
+        async def attempt(index):
+            try:
+                assert not await security.verify(request(host=f'192.0.2.{index}'), 'berts', '0000', load)
+                return 200
+            except HTTPException as error: return error.status_code
+        results = await asyncio.gather(*(attempt(index) for index in range(8)))
+        assert sorted(results) == [200] * 5 + [429] * 3
+        assert entered == 5
+    asyncio.run(run())
+
+
+def test_disabled_pin_budget_is_shared_and_expiry_reopens_only_next_window(portal, monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(security.limiter, 'clock', lambda: now[0])
+    portal[0].pin = portal[1].settings.pin = None
+    for index in range(5):
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(server._verify_legacy_staff_pin(request(host=f'192.0.2.{index}'), 'berts', ''))
+        assert exc.value.status_code == 403
+    now[0] = 159
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server._verify_legacy_staff_pin(request(host='192.0.2.99'), 'berts', ''))
+    assert exc.value.status_code == 429
+    now[0] = 160
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server._verify_legacy_staff_pin(request(host='192.0.2.99'), 'berts', ''))
+    assert exc.value.status_code == 403
+
+
+def test_pin_refund_storage_failure_never_authenticates(portal, monkeypatch):
+    def unavailable(ticket): raise HTTPException(503, 'Fictional unavailable counter')
+    monkeypatch.setattr(security.limiter, 'refund', unavailable)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server._verify_legacy_staff_pin(request(), 'berts', '4826'))
+    assert exc.value.status_code == 503
 
 
 def test_unavailable_counter_fails_closed(tmp_path):
@@ -285,8 +418,12 @@ def test_malformed_supplied_pin_refuses_without_encoding_errors(portal, supplied
 
 
 def test_pin_reader_failure_refunds_reservation(portal):
+    for index in range(4):
+        assert not asyncio.run(server._verify_legacy_staff_pin(request(host=f'192.0.2.{index}'), 'berts', '0000'))
     async def unavailable(): raise RuntimeError('fictional-read-failure')
     with pytest.raises(RuntimeError):
         asyncio.run(security.verify(request(), 'berts', '4826', unavailable))
-    for _ in range(5):
-        assert not asyncio.run(server._verify_legacy_staff_pin(request(), 'berts', '0000'))
+    assert not asyncio.run(server._verify_legacy_staff_pin(request(host='2001:db8::1'), 'berts', '0000'))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server._verify_legacy_staff_pin(request(), 'berts', '0000'))
+    assert exc.value.status_code == 429

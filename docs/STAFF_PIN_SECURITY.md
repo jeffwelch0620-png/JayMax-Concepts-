@@ -1,8 +1,20 @@
 # Staff PIN authority boundary
 
-Local security follow-up from accepted PR49 main
-`6f1774a1a21073370ac006d9b48155123128d6bf`. Publication, merge and hosted
-acceptance remain separate owner decisions. This work changes no credentials,
+**Current local follow-up:** the owner approved a separate mandatory store-wide
+attempt budget and local testing on October 21, 2026. See the
+[store-budget review packet](STAFF_PIN_STORE_BUDGET.md). It is not pushed, merged
+or deployed; prompt before draft publication. Hosted work and credential changes
+remain on hold. G04 remains open pending review and separately approved deployed
+acceptance. The historical PR50 validation below does not establish that outcome.
+
+The PR50 authority fix is merged as
+`cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, matching reviewed `b22734a`.
+[Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
+passed. Later separately approved hosted checks stopped on an unresolved limiter
+result; they did not complete security acceptance. Publication, merge and hosted
+acceptance for the new store-budget follow-up remain separate owner decisions.
+This work changes no credentials,
 deployed settings, application database schema or stored operational records.
 
 ## Personal authority and claimed roster names
@@ -48,27 +60,29 @@ old stock/count/task writers or grant private schemas to browser roles.
 
 ## Attempt limit and deployment boundary
 
-The local limiter admits at most five failed or unresolved checks per canonical
-store/client in a fixed 60-second window. Verify, identify and direct consumers
+The local follow-up admits at most five failed or unresolved checks per canonical
+store in a fixed 60-second window, across all clients. Verify, identify and direct consumers
 share that budget, including the `papa_leonis`/`papa` alias. Admission is reserved
 atomically before reading the PIN. A successful check refunds only its own
 reservation, not previous failures; expired reservations cannot refund a newer
 window. Blocked attempts return 429 with `Retry-After` and do not extend the
 window. Disabled-PIN attempts also consume the budget. Infrastructure read
 failures refund their reservation without authenticating the caller.
-On October 21, 2026, the owner accepted these values for the build deployment,
-including temporary shared throttling if the proxy groups staff devices into
-one client key. This is acceptance of a release limitation, not evidence that
-the policy is deployed or suitable for operational use. Review thresholds,
-client attribution and the supported strong per-store PIN policy before
-operational use. This patch does not rotate or silently reject an otherwise
-valid explicitly stored PIN to enforce a newly selected strength rule.
+PR50 used per-store/client attribution. On October 21, the owner first accepted
+temporary shared throttling and later approved implementing the recommended
+store-wide budget as separate local work. The new budget deliberately groups
+every staff device at that store: failures or unresolved checks by one caller
+can temporarily block other callers, including correct PIN checks. Personal
+manager/owner authorization remains independent. This local approval is not
+deployment approval or operational acceptance. Review availability, thresholds
+and the supported strong per-store PIN policy before operational use. No PIN is
+rotated or silently rejected to enforce a newly selected strength rule.
 
 Counters use Python's standard-library SQLite in the instance's local temporary
 directory, outside the repository and application database. Threads and workers
 sharing that filesystem use atomic transactions. No Redis/service, Supabase
 table, migration, grant, signing secret or new environment variable is required.
-The state contains hashed store/client keys, expiry and counts, never PINs,
+The state contains namespaced hashed store keys, expiry and counts, never PINs,
 tokens, passwords or roster records. Expired entries are removed on admission;
 10,000 active keys is a hard bound. Saturation refuses new keys. State/storage
 errors return 503 and never bypass verification. SQLite busy waits are bounded
@@ -80,28 +94,32 @@ instances and separate hosts do not coordinate; ephemeral filesystem replacement
 resets counters. Before scaling, adopt a separately reviewed centralized limiter.
 Do not claim a deployment-wide durable limit merely from these local tests.
 
-Client identity comes only from the ASGI client address, with IP normalization;
-the limiter does not read raw `X-Forwarded-For`/`Forwarded` headers. Uvicorn may
-rewrite the ASGI address when it trusts the connecting proxy, so effective
-client attribution depends on the server's trust configuration. A proxy address
-presented as the client groups devices using that address into one budget;
-shared restaurant NAT can also group devices even with correct proxy handling.
-The deployed environment and proxy addresses have not been inspected in this
-review. Repository configuration establishes a possible shared budget, not
-proof that every visitor uses one proxy address or one store-wide budget.
+The mandatory budget uses only the canonical store supplied by the common
+PostgreSQL/Mongo wrappers. It does not use request headers, ASGI client address,
+session identity or proxy peer to create additional budgets. The new namespace
+does not reinterpret old per-client entries as store-wide counts. On first use
+of the new namespace a fresh window begins; old entries expire normally. This
+is not a durable migration of earlier counters. No per-client attribution is
+asserted trustworthy by this fix.
 
 The tracked start command supplies no explicit proxy allow list. Pinned Uvicorn
-0.25.0 uses `FORWARDED_ALLOW_IPS` or defaults to `127.0.0.1`; its
+0.25.0 uses `FORWARDED_ALLOW_IPS` or defaults to `127.0.0.1`; Render's documented
+[native Python runtime default](https://render.com/docs/environment-variables)
+sets that variable to `*`. A dashboard without an explicit override is therefore
+not proof of loopback-only proxy trust. The earlier proxy assessment missed this
+provider default. Uvicorn's
 [configuration](https://github.com/encode/uvicorn/blob/0.25.0/uvicorn/config.py)
 and [proxy middleware](https://github.com/encode/uvicorn/blob/0.25.0/uvicorn/middleware/proxy_headers.py)
 use exact trusted-address matching, not CIDR network matching. Do not assume
 that configuring a proxy range works with this pinned version, or trust `*`
-without verified ingress and direct-origin boundaries. A future per-client
-backoff or higher store ceiling cannot distinguish devices while the client
-key remains a shared proxy address. Under separate owner authorization, verify
-the actual proxy chain and header handling and test trusted/untrusted peers
-before changing trust settings. No such inspection or setting change is
-authorized by the temporary build acceptance.
+without verified ingress and direct-origin boundaries. The store-wide fix
+does not change proxy trust, URL scheme handling or deployment configuration.
+Effective hosted ingress sanitization and instance attribution remain unverified;
+local reproduction does not conclusively identify the cause of the prior live
+result. Future per-client isolation requires separately verified provenance.
+Under separate owner authorization, verify the actual proxy chain and test
+trusted/untrusted peers before changing trust settings. No such setting change
+is authorized by this local implementation.
 
 ## Validation and release gates
 
@@ -115,7 +133,7 @@ offline validation.
 
 Required evidence includes no token/session on identify, old synthetic-token
 refusal, preserved personal login, unset/malformed PIN refusal, shared failure
-budget, expiry/client/store isolation, bounded/error states, and configured-PIN
+budget across different clients, expiry/store isolation, bounded/error states, and configured-PIN
 prep/count/task compatibility. Frontend coverage includes ignored old response
 sessions, personal-login navigation, disabled/limited errors and native portal
 compatibility. Record final test attempts/results in the review packet before
@@ -151,7 +169,7 @@ security rollback. A separately approved fictional live acceptance can follow.
 Reviewed-par installation, runtime-role/RLS work and Companion adoption remain
 separate. Track 1 accounting, par-editing hold and manual ordering are unchanged.
 
-## Completed local validation
+## Historical PR50 local validation
 
 - Full frontend: **1,034/1,034 tests across 82 suites**, using the reviewed native
   feature profile. Includes the real App-to-personal-login navigation test.

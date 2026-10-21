@@ -8,7 +8,6 @@ from contextlib import closing
 from dataclasses import dataclass
 import hashlib
 import hmac
-import ipaddress
 import json
 from pathlib import Path
 import re
@@ -23,14 +22,10 @@ def configured_pin(value):
     return value if isinstance(value, str) and re.fullmatch(r'[0-9]{4,8}', value) else None
 
 
-def client_key(request, store):
-    # ASGI's client is normalized by the deployment's trusted proxy handling.
-    # Never trust arbitrary X-Forwarded-For/Forwarded headers in this module.
-    try:
-        host = str(ipaddress.ip_address(request.client.host))
-    except (AttributeError, ValueError):
-        host = 'unknown'
-    return hashlib.sha256(json.dumps([store, host], separators=(',', ':')).encode()).hexdigest()
+def store_key(store):
+    # Callers supply the canonical store. Client attribution may have already
+    # been rewritten by server/proxy middleware, so it cannot define this budget.
+    return hashlib.sha256(json.dumps(['staff-pin-store-v1', store], separators=(',', ':')).encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -87,7 +82,9 @@ limiter = PinAttemptLimiter(Path(tempfile.gettempdir()) / 'jaymax-staff-pin' / '
 
 
 async def verify(request, store, supplied, load_pin):
-    ticket = await asyncio.to_thread(limiter.reserve, client_key(request, store))
+    # Keep the request argument for the common route contract, but deliberately
+    # do not use its headers, client address or session to partition PIN failures.
+    ticket = await asyncio.to_thread(limiter.reserve, store_key(store))
     try:
         stored = configured_pin(await load_pin())
     except BaseException:

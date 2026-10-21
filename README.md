@@ -1,6 +1,29 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local staff-PIN security follow-up — review pending
+## Local store-wide PIN budget follow-up
+
+The owner approved the separate [store-budget security fix](docs/STAFF_PIN_STORE_BUDGET.md)
+and local tests on October 21, 2026. The five-check/60-second failure budget is now
+mandatory across clients within each canonical store, independent of proxy/client
+attribution. The shared-store availability tradeoff is explicit; SQLite remains
+limited to workers sharing one filesystem, without cross-instance durability.
+Personal login and the PR50 authority boundary are preserved. This branch starts
+from accepted PR50 main and keeps the separate draft PR51 par packet untouched.
+Accepted PR50 main is `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, with separate
+[reviewed-head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
+green. [Draft PR51](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/51)
+at `7fd4ce4` retains its own review/merge gates. Local store-budget validation
+passed all 1,145 offline cases, including 60 PIN-security cases and both Windows
+ACL checks. A strengthened fixture initially had two incorrect exact-proxy
+expectations; the corrected full rerun passed. Counts overlap; no frontend build,
+database-server run or fresh CI is claimed for this backend-only follow-up.
+Prompt before draft publication. Hosted work,
+credential changes, merge and deployment remain held; G04 is not closed by local
+tests. No frontend, SQL, application connection or hosting configuration changes
+are included. The earlier checkpoints below retain their dated scope.
+
+## Historical PR50 pre-merge checkpoint
 
 Accepted PR49 main is `6f1774a1a21073370ac006d9b48155123128d6bf`, matching
 reviewed `e72d597`. [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39459639861)
