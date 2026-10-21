@@ -26,6 +26,15 @@ credential changes, merge and deployment remain held; G04 is not closed by local
 tests. No frontend, SQL, application connection or hosting configuration changes
 are included. The earlier checkpoints below retain their dated scope.
 
+The owner-approved documentation amendment adds [staff lockout reporting and the
+pre-operational mitigation gate](docs/STAFF_PIN_STORE_BUDGET.md#staff-response-to-a-temporary-lockout).
+The five-check/60-second policy and application/test bytes are unchanged. Inventory
+Build Main is the owner's primary coordinating chat; retain Companion App
+Integration as history and for explicitly assigned specialist work. PR52 should
+merge before PR51; update the second branch normally, resolve the shared docs and
+require fresh CI plus its own owner approval. This does not authorize either merge
+or adopt Companion services/schema.
+
 ## Historical PR50 pre-merge checkpoint
 
 Accepted PR49 main is `6f1774a1a21073370ac006d9b48155123128d6bf`, matching

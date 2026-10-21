@@ -9,6 +9,14 @@ documentation only; independent review and current-head CI remain gates. Hosted 
 remain on hold. G04 remains open pending review and separately approved deployed
 acceptance. The historical PR50 validation below does not establish that outcome.
 
+The store-budget packet now includes [staff lockout guidance](STAFF_PIN_STORE_BUDGET.md#staff-response-to-a-temporary-lockout)
+and a [pre-operational mitigation decision](STAFF_PIN_STORE_BUDGET.md#pre-operational-mitigation-decision).
+Staff should pause retries, observe the retry interval and report recurring
+lockouts to the on-duty manager without sharing credentials. Personal authority
+is separate in source; its deployed success still requires approved acceptance.
+This amendment selects no new limiter policy, changes no credentials and releases
+none of the hosted holds.
+
 The PR50 authority fix is merged as
 `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, matching reviewed `b22734a`.
 [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)

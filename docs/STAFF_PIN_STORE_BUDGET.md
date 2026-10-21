@@ -36,6 +36,43 @@ existing role/location checks. Shared roster selection still issues no session,
 old synthetic staff tokens remain refused, and unconfigured portals stay disabled.
 No password normalization, fallback credentials or account repair is introduced.
 
+## Staff response to a temporary lockout
+
+"Too many staff PIN attempts. Try again later." (HTTP 429) means the shared
+store budget is exhausted by failed or unresolved checks. It does not establish
+which employee made the attempts or that a personal account password is wrong.
+Pause PIN retries and wait until the indicated `Retry-After` interval expires
+before trying again. Continued attempts can exhaust a later window too, so this
+is not a promise that access will recover after one wait.
+
+If the message recurs or blocks work, report it to the on-duty manager through
+the existing support/reporting channel. Give the store, time, affected screen and
+error text; never send the PIN, password or session token. An authorized manager
+may use **Manager / owner sign in** with their own personal account, subject to
+the existing permissions. That path is independent in source, but successful
+deployed personal login remains unverified: do not describe it as a demonstrated
+fallback. No credential reset, PIN change, account provisioning or service change
+is authorized by this guidance or by the current documentation amendment.
+
+## Pre-operational mitigation decision
+
+Before operational use, record an owner-reviewed plan for sustained store-wide
+lockouts and counter continuity. The review must evaluate a centralized durable
+limiter with verified client attribution, a mandatory store ceiling and secondary
+client controls; review any proposed threshold/backoff changes for both guessing
+resistance and legitimate staff access. A stronger/longer PIN policy may reduce
+guessing risk, but does not by itself prevent someone exhausting the store budget.
+Backoff or a higher ceiling alone does not establish trusted client isolation.
+
+The release record must name the selected mitigation, accountable owner, staff
+escalation path and acceptance evidence for legitimate concurrent use, repeated
+lockout, personal-authority access, instance replacement and supported scaling.
+Unselected alternatives remain proposals. The current five-check/60-second build
+policy, SQLite implementation and credential/hosted holds remain unchanged.
+G04 is not closed by this documentation or by an eventual source merge.
+
+## Counter continuity
+
 The existing SQLite transaction implementation and 250 ms busy wait are unchanged.
 Counters coordinate only workers sharing one filesystem. Independent instances,
 rolling replacements or temporary-storage reset can each have a new budget.
@@ -115,4 +152,11 @@ were not opened by this work.
    Keep request details private, use fictional scope, and stop on unexpected
    results. Do not guess credentials, rotate them or silently repair accounts.
 4. Keep the separate PR51/par permissions/migration workflow on its own review
-   and hosted gates. Ordering remains manual; Track 1 accounting is unchanged.
+   and hosted gates. Recommended merge order is PR52 first; after its separately
+   approved merge, normally merge accepted main into PR51, preserve the store-wide
+   security guidance, resolve README/runbook conflicts and obtain fresh CI before
+   PR51's own merge approval. Its proposed missing-role diagnostic remains separate
+   work. No PR51 amendment or merge is authorized by this PR52 documentation task.
+5. Complete the pre-operational mitigation decision and demonstrate the staff
+   escalation/personal-login path under separate approval before operational use.
+   Ordering remains manual; Track 1 accounting is unchanged.
