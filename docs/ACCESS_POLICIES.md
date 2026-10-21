@@ -17,6 +17,12 @@
 The former staff PIN endpoints remain for compatibility with existing clients, but new
 deployments should provision named staff users and stop distributing the shared PIN.
 
+The local [staff-PIN security follow-up](STAFF_PIN_SECURITY.md) removes PIN-based
+session elevation and implicit defaults, rejects the old synthetic token namespace,
+and adds a single-instance shared attempt budget to all PIN consumers. It is not
+deployed or hosted-accepted. Personal authority and claimed roster attribution stay
+distinct; review the counter topology/proxy limitations before release.
+
 ## Security audit summary (latest)
 | ID | Sev | Status | Summary |
 |---|---|---|---|
@@ -35,6 +41,7 @@ deployments should provision named staff users and stop distributing the shared 
 ## Hardening backlog (see KNOWN_GAPS.md)
 - Enforce creator ≠ approver separation on PO approve/send.
 - Add account disable/reset flows and cap message/context size.
-- Force per-store PIN provisioning (remove the `1234` default).
+- Verify explicit per-store PIN provisioning and the reviewed counter topology
+  when the local security follow-up is separately approved for deployment.
 - Explicit CORS origin allowlist in production.
 - Coerce/validate untyped dict/date bodies to prevent NoSQL operator injection.

@@ -23,7 +23,7 @@ const VIEWS = [
   { id: "counts", label: "Counts", icon: ClipboardList },
 ];
 
-export function StaffSheet({ onClose, onElevate, drafts }) {
+export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
   const privatePrepCountDrafts = useRef(new Map());
   const taskRequests = useRef(0);
   useEffect(() => () => { taskRequests.current += 1; }, []);
@@ -38,7 +38,7 @@ export function StaffSheet({ onClose, onElevate, drafts }) {
 
   // Roster picker — shown between PIN entry and the main portal when this
   // restaurant has named staff set up (Staff tab); identifies who is tapping
-  // in so tasks/counts get attributed and Owner/Admin can be elevated.
+  // in for claimed task/count attribution; it never grants manager authority.
   const [roster, setRoster] = useState(null);
   const [identifying, setIdentifying] = useState(false);
   const [staffName, setStaffName] = useState("");
@@ -102,7 +102,6 @@ export function StaffSheet({ onClose, onElevate, drafts }) {
         setRoster(null); setUnlocked(true); setView("tasks"); await refreshTasks(); return;
       }
       const r = await api.identifyStaffMember(rid, pin, staffId);
-      if (r.role === "owner_admin" && r.session) { onElevate?.(r.session); return; }
       setStaffName(r.name || "");
       setTaskName(r.name || "");
       setCountsName(r.name || "");
@@ -216,6 +215,9 @@ export function StaffSheet({ onClose, onElevate, drafts }) {
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-white transition" data-testid="staff-sheet-close"><X size={20} /></button>
         </div>
 
+        {onPersonalLogin && <button type="button" className={`${btnGhost} mb-4`} data-testid="staff-personal-login"
+          onClick={() => { lock(); onPersonalLogin(); }}>Manager / owner sign in</button>}
+        <p className="text-xs text-slate-400 mb-4">Choosing a roster name labels staff work. Manager and owner access requires personal sign-in.</p>
         {!unlocked && roster ? (
           <div className={`${cardCls} p-6`} data-testid="staff-roster-picker">
             <div className="flex items-center gap-2 mb-4"><Lock size={16} style={{ color: "#F97316" }} /><span className="font-display font-bold text-slate-100">Who are you?</span></div>

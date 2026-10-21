@@ -111,6 +111,8 @@ def _password_ok(password, stored):
         return False
 
 def _token(user):
+    if str(user.get("email", "")).startswith("staff:"):
+        raise HTTPException(403, "Personal login required")
     payload = {"sub": user["id"], "email": user["email"], "role": user["role"],
                "locations": user.get("locations", []),
                "exp": int(datetime.now(timezone.utc).timestamp()) + SESSION_TTL}
@@ -128,6 +130,8 @@ def _decode_token(token):
         if not hmac.compare_digest(sig, expected):
             return None
         payload = json.loads(_unb64(raw))
+        if not isinstance(payload, dict) or str(payload.get("email", "")).startswith("staff:"):
+            return None  # Retire previously minted shared-PIN sessions without rotating keys.
         if int(payload.get("exp", 0)) < int(datetime.now(timezone.utc).timestamp()):
             return None
         return payload
@@ -1645,18 +1649,29 @@ async def put_projection(rid: str, body: ProjectionIn, request: Request):
     return {"ok": True}
 
 # ---------------- Staff PIN & prep sheet ----------------
-DEFAULT_STAFF_PIN = "1234"
+import staff_pin_security
+
+async def _verify_legacy_staff_pin(request, rid, supplied):
+    return await staff_pin_security.verify(request, RESTAURANT_TO_PG_STORE.get(rid, rid), supplied,
+                                           lambda: _get_pin(rid))
+
+
+async def _verify_pg_staff_pin(request, conn, store_id, supplied):
+    return await staff_pin_security.verify(request, store_id, supplied,
+                                           lambda: _pg_get_staff_pin(conn, store_id))
+
 
 async def _get_pin(rid):
     cfg = await db.settings.find_one({"restaurantId": rid, "key": "staff"}, {"_id": 0})
-    return (cfg or {}).get("staffPin") or DEFAULT_STAFF_PIN
+    return staff_pin_security.configured_pin((cfg or {}).get("staffPin"))
 
 @api_router.get("/staff/{rid}/pin")
 async def get_pin(rid: str, request: Request):
     check_rid(rid)
     _require_manager(request)
     cfg = await db.settings.find_one({"restaurantId": rid, "key": "staff"}, {"_id": 0})
-    return {"staffPin": (cfg or {}).get("staffPin") or DEFAULT_STAFF_PIN, "custom": bool((cfg or {}).get("staffPin"))}
+    pin = staff_pin_security.configured_pin((cfg or {}).get("staffPin"))
+    return {"staffPin": pin or "", "custom": pin is not None, "enabled": pin is not None}
 
 @api_router.post("/staff/{rid}/pin")
 async def set_pin(rid: str, body: dict, request: Request):
@@ -1666,7 +1681,7 @@ async def set_pin(rid: str, body: dict, request: Request):
     if not user or user.get("role") not in ("owner", "manager"):
         raise HTTPException(403, "Manager role required")
     pin = str(body.get("staffPin", "")).strip()
-    if not (pin.isdigit() and 4 <= len(pin) <= 8):
+    if staff_pin_security.configured_pin(pin) is None:
         raise HTTPException(400, "PIN must be 4-8 digits")
     await db.settings.update_one({"restaurantId": rid, "key": "staff"},
         {"$set": {"restaurantId": rid, "key": "staff", "staffPin": pin}}, upsert=True)
@@ -1740,7 +1755,7 @@ async def verify_pin(body: dict, request: Request):
     elif user and rid in user.get("locations", []) and user.get("role") in ("manager", "staff"):
         ok = True
     else:
-        ok = str(body.get("pin", "")) == await _get_pin(rid)
+        ok = await _verify_legacy_staff_pin(request, rid, body.get("pin", ""))
     if not ok:
         return {"ok": False}
     roster = await db.staff_members.find({"restaurantId": rid, "active": True}, {"_id": 0}).sort("name", 1).to_list(500)
@@ -1749,27 +1764,20 @@ async def verify_pin(body: dict, request: Request):
 @api_router.post("/staff/{rid}/identify")
 async def staff_identify(rid: str, body: dict, request: Request):
     check_rid(rid)
-    if str(body.get("pin", "")) != await _get_pin(rid):
+    if not await _verify_legacy_staff_pin(request, rid, body.get("pin", "")):
         raise HTTPException(403, "Invalid PIN")
     member = await db.staff_members.find_one(
         {"restaurantId": rid, "id": body.get("staffId", ""), "active": True}, {"_id": 0})
     if not member:
         raise HTTPException(404, "Staff member not found")
-    if member.get("role") != "owner_admin":
-        return {"ok": True, "name": member["name"], "role": "cook"}
-    # Owner/Admin identified via the shared staff PIN: mint a real session token so this
-    # device gets full app access, scoped to this one restaurant (manager-equivalent —
-    # not a global "owner" token, which would also unlock the other restaurants).
-    synth_user = {"id": member["id"], "email": f"staff:{member['id']}", "role": "manager", "locations": [rid]}
-    return {"ok": True, "name": member["name"], "role": "owner_admin",
-            "session": {"user": _clean_user(synth_user), "token": _token(synth_user)}}
+    return {"ok": True, "name": member["name"], "role": member.get("role", "cook")}
 
 @api_router.post("/staff/{rid}/prepsheet")
 async def staff_prepsheet(rid: str, body: dict, request: Request):
     check_rid(rid)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    if not user and str((body or {}).get("pin", "")) != await _get_pin(rid):
+    if not user and not await _verify_legacy_staff_pin(request, rid, (body or {}).get("pin", "")):
         raise HTTPException(403, "Invalid PIN")
     track = body.get("track") or "daily"
     plist = await db.prep_lists.find_one({"restaurantId": rid, "date": _today(), "status": "released", **_track_filter(track)}, {"_id": 0})
@@ -1805,7 +1813,7 @@ async def staff_complete(rid: str, body: StaffCompleteIn, request: Request):
     check_rid(rid)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    if not user and body.pin != await _get_pin(rid):
+    if not user and not await _verify_legacy_staff_pin(request, rid, body.pin):
         raise HTTPException(403, "Invalid PIN")
     done_by = body.doneBy.strip() or (user or {}).get("email", "")
     if not done_by:
@@ -1826,7 +1834,7 @@ async def staff_counts(rid: str, body: dict, request: Request):
         raise HTTPException(410, "Ask your manager to use Actual Inventory for reviewed purchased-item counts")
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    if not user and str((body or {}).get("pin", "")) != await _get_pin(rid):
+    if not user and not await _verify_legacy_staff_pin(request, rid, (body or {}).get("pin", "")):
         raise HTTPException(403, "Invalid PIN")
     items = await db.items.find({"restaurantId": rid}, {"_id": 0}).to_list(5000)
     counted = [it for it in items if _is_count_active(it)]
@@ -1901,7 +1909,7 @@ async def staff_counts_save(rid: str, body: StaffCountsSaveIn, request: Request)
         raise HTTPException(410, "Use Actual Inventory with verified units and explicit count values")
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    if not user and body.pin != await _get_pin(rid):
+    if not user and not await _verify_legacy_staff_pin(request, rid, body.pin):
         raise HTTPException(403, "Invalid PIN")
     done_by = body.doneBy.strip() or (user or {}).get("email", "")
     if not done_by:
@@ -2058,7 +2066,7 @@ async def staff_task_inbox(rid: str, body: dict, request: Request):
     check_rid(rid)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    if not user and str((body or {}).get("pin", "")) != await _get_pin(rid):
+    if not user and not await _verify_legacy_staff_pin(request, rid, (body or {}).get("pin", "")):
         raise HTTPException(403, "Invalid PIN")
     today = _today()
     tasks = await db.staff_tasks.find({"restaurantId": rid, "status": "pending", "dueDate": {"$lte": today}},
@@ -2074,7 +2082,7 @@ async def staff_task_complete(rid: str, task_id: str, body: StaffTaskCompleteIn,
     check_rid(rid)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    if not user and body.pin != await _get_pin(rid):
+    if not user and not await _verify_legacy_staff_pin(request, rid, body.pin):
         raise HTTPException(403, "Invalid PIN")
     done_by = body.doneBy.strip() or (user or {}).get("email", "")
     if not done_by:
@@ -2113,7 +2121,7 @@ async def push_subscribe(rid: str, body: PushSubscriptionIn, request: Request):
     check_rid(rid)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    if not user and body.pin != await _get_pin(rid):
+    if not user and not await _verify_legacy_staff_pin(request, rid, body.pin):
         raise HTTPException(403, "Invalid PIN")
     if not body.endpoint or not body.keys.get("p256dh") or not body.keys.get("auth"):
         raise HTTPException(400, "Invalid push subscription")
@@ -2130,7 +2138,7 @@ async def push_unsubscribe(rid: str, body: PushUnsubscribeIn, request: Request):
     check_rid(rid)
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
-    if not user and body.pin != await _get_pin(rid):
+    if not user and not await _verify_legacy_staff_pin(request, rid, body.pin):
         raise HTTPException(403, "Invalid PIN")
     await db.push_subscriptions.delete_one({"restaurantId": rid, "endpoint": body.endpoint})
     return {"ok": True}
@@ -5298,18 +5306,17 @@ async def pg_delete_override(store_id: str, oid: str):
 # /counts/{rid}/submit + /counts/{rid}/history (CountsTab.js's own "Enter Counts" tab,
 # a different feature that happens to share the same audit table) is NOT covered here
 # -- out of this chunk's stated scope, left on Mongo for now.
-DEFAULT_STAFF_PIN_PG = "1234"
-
 async def _pg_get_staff_pin(conn, store_id):
     row = await conn.fetchrow("SELECT pin FROM staff_pins WHERE store_id=$1", store_id)
-    return (row["pin"] if row else None) or DEFAULT_STAFF_PIN_PG
+    return staff_pin_security.configured_pin(row["pin"] if row else None)
 
 @pg_router.get("/staff/{store_id}/pin")
 async def pg_get_staff_pin(store_id: str, request: Request):
     check_store_id(store_id)
     _require_manager(request)
     row = await db_pg.pool().fetchrow("SELECT pin FROM staff_pins WHERE store_id=$1", store_id)
-    return {"staffPin": (row["pin"] if row else None) or DEFAULT_STAFF_PIN_PG, "custom": bool(row)}
+    pin = staff_pin_security.configured_pin(row["pin"] if row else None)
+    return {"staffPin": pin or "", "custom": pin is not None, "enabled": pin is not None}
 
 class PgStaffPinIn(BaseModel):
     staffPin: str
@@ -5319,7 +5326,7 @@ async def pg_set_staff_pin(store_id: str, body: PgStaffPinIn, request: Request):
     check_store_id(store_id)
     _require_manager(request)
     pin = body.staffPin.strip()
-    if not (pin.isdigit() and 4 <= len(pin) <= 8):
+    if staff_pin_security.configured_pin(pin) is None:
         raise HTTPException(400, "PIN must be 4-8 digits")
     await db_pg.pool().execute(
         "INSERT INTO staff_pins (store_id, pin) VALUES ($1,$2) ON CONFLICT (store_id) DO UPDATE SET pin=$2",
@@ -5404,7 +5411,7 @@ async def pg_verify_pin(store_id: str, body: PgPinBodyIn, request: Request):
         elif user and rid in user.get("locations", []) and user.get("role") in ("manager", "staff"):
             ok = True
         else:
-            ok = body.pin == await _pg_get_staff_pin(conn, store_id)
+            ok = await _verify_pg_staff_pin(request, conn, store_id, body.pin)
         if not ok:
             return {"ok": False}
         roster = await conn.fetch("SELECT * FROM staff_members WHERE store_id=$1 AND active=TRUE ORDER BY name", store_id)
@@ -5413,7 +5420,7 @@ async def pg_verify_pin(store_id: str, body: PgPinBodyIn, request: Request):
         await db_pg.pool().release(conn)
 
 @pg_router.post("/staff/{store_id}/identify")
-async def pg_staff_identify(store_id: str, body: dict):
+async def pg_staff_identify(store_id: str, body: dict, request: Request):
     check_store_id(store_id)
     try:
         staff_uuid = uuid.UUID(str(body.get("staffId", "")))
@@ -5421,7 +5428,7 @@ async def pg_staff_identify(store_id: str, body: dict):
         raise HTTPException(404, "Staff member not found")
     conn = await db_pg.pool().acquire()
     try:
-        if str(body.get("pin", "")) != await _pg_get_staff_pin(conn, store_id):
+        if not await _verify_pg_staff_pin(request, conn, store_id, body.get("pin", "")):
             raise HTTPException(403, "Invalid PIN")
         member = await conn.fetchrow(
             "SELECT * FROM staff_members WHERE id=$1 AND store_id=$2 AND active=TRUE", staff_uuid, store_id)
@@ -5429,14 +5436,7 @@ async def pg_staff_identify(store_id: str, body: dict):
         await db_pg.pool().release(conn)
     if not member:
         raise HTTPException(404, "Staff member not found")
-    if member["role"] != "owner_admin":
-        return {"ok": True, "name": member["name"], "role": "cook"}
-    # Owner/Admin identified via the shared staff PIN: mint a real session token, scoped
-    # to this one restaurant (manager-equivalent), same as the Mongo-backed version.
-    rid = PG_STORE_TO_RESTAURANT[store_id]
-    synth_user = {"id": str(member["id"]), "email": f"staff:{member['id']}", "role": "manager", "locations": [rid]}
-    return {"ok": True, "name": member["name"], "role": "owner_admin",
-            "session": {"user": _clean_user(synth_user), "token": _token(synth_user)}}
+    return {"ok": True, "name": member["name"], "role": member["role"]}
 
 # ---------------- Staff prep sheet (read-only view + completion, reuses Prep's own logic) ----------------
 async def _pg_staff_prepsheet(conn, store_id, track):
@@ -5482,7 +5482,7 @@ async def pg_staff_prepsheet(store_id: str, body: PgStaffPrepsheetIn, request: R
     user = _decode_token(token)
     conn = await db_pg.pool().acquire()
     try:
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+        if not user and not await _verify_pg_staff_pin(request, conn, store_id, body.pin):
             raise HTTPException(403, "Invalid PIN")
         return await _pg_staff_prepsheet(conn, store_id, body.track)
     finally:
@@ -5506,7 +5506,7 @@ async def pg_staff_complete(store_id: str, body: PgStaffCompleteIn, request: Req
     conn = await db_pg.pool().acquire()
     try:
         await staff_prep_tasks.hold_legacy(conn)
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+        if not user and not await _verify_pg_staff_pin(request, conn, store_id, body.pin):
             raise HTTPException(403, "Invalid PIN")
         async with conn.transaction():
             res = await _pg_complete_task_core(conn, store_id, body.listId, body.taskId, body.batches, done_by, [])
@@ -5524,7 +5524,7 @@ async def pg_staff_counts(store_id: str, body: PgPinBodyIn, request: Request):
     user = _decode_token(token)
     conn = await db_pg.pool().acquire()
     try:
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+        if not user and not await _verify_pg_staff_pin(request, conn, store_id, body.pin):
             raise HTTPException(403, "Invalid PIN")
         rows = await conn.fetch(
             """SELECT i.code, i.name, i.unit_uom, si.storage_area, si.current_stock, si.last_counted,
@@ -5600,7 +5600,7 @@ async def pg_staff_counts_save(store_id: str, body: PgStaffCountsSaveIn, request
         raise HTTPException(400, "No counts submitted")
     conn = await db_pg.pool().acquire()
     try:
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+        if not user and not await _verify_pg_staff_pin(request, conn, store_id, body.pin):
             raise HTTPException(403, "Invalid PIN")
         async with conn.transaction():
             saved, not_applied = await _pg_apply_and_record_counts(conn, store_id, done_by, body.counts, "staff_pwa",
@@ -5701,7 +5701,7 @@ async def pg_staff_task_inbox(store_id: str, body: PgPinBodyIn, request: Request
     user = _decode_token(token)
     conn = await db_pg.pool().acquire()
     try:
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+        if not user and not await _verify_pg_staff_pin(request, conn, store_id, body.pin):
             raise HTTPException(403, "Invalid PIN")
         legacy.hold_read(await legacy.retired(conn))
         today = _pg_today()
@@ -5727,7 +5727,7 @@ async def pg_staff_task_complete(store_id: str, task_id: str, body: PgStaffTaskC
         raise HTTPException(400, "Enter your name so the task is attributed")
     conn = await db_pg.pool().acquire()
     try:
-        if not user and body.pin != await _pg_get_staff_pin(conn, store_id):
+        if not user and not await _verify_pg_staff_pin(request, conn, store_id, body.pin):
             raise HTTPException(403, "Invalid PIN")
         await hold_write(conn)
         async with conn.transaction():
@@ -5773,7 +5773,7 @@ async def pg_push_subscribe(store_id: str, body: PgPushSubscriptionIn, request: 
     user = _decode_token(token)
     if not user:
         async with db_pg.pool().acquire() as conn:
-            if body.pin != await _pg_get_staff_pin(conn, store_id):
+            if not await _verify_pg_staff_pin(request, conn, store_id, body.pin):
                 raise HTTPException(403, "Invalid PIN")
     if not body.endpoint or not body.keys.get("p256dh") or not body.keys.get("auth"):
         raise HTTPException(400, "Invalid push subscription")
@@ -5795,7 +5795,7 @@ async def pg_push_unsubscribe(store_id: str, body: PgPushUnsubscribeIn, request:
     user = _decode_token(token)
     if not user:
         async with db_pg.pool().acquire() as conn:
-            if body.pin != await _pg_get_staff_pin(conn, store_id):
+            if not await _verify_pg_staff_pin(request, conn, store_id, body.pin):
                 raise HTTPException(403, "Invalid PIN")
     async with db_auxiliary.pool().acquire() as conn:
         await conn.execute("DELETE FROM push_subscriptions WHERE store_id=$1 AND endpoint=$2", store_id, body.endpoint)
@@ -5836,7 +5836,7 @@ async def _staff_count_actor(request, conn, store_id, pin):
         if user.get('role') != 'owner' and PG_STORE_TO_RESTAURANT[store_id] not in user.get('locations', []):
             raise HTTPException(403, 'Location access denied')
         return user.get('sub') or user.get('email') or user['role'], 'bearer'
-    if not pin or pin != await _pg_get_staff_pin(conn, store_id):
+    if not await _verify_pg_staff_pin(request, conn, store_id, pin):
         raise HTTPException(403, 'Invalid staff PIN')
     return 'shared-pin', 'shared_pin'
 

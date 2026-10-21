@@ -940,7 +940,7 @@ function Planning({ drafts, showError, rid, dishes, prepItems, prepCapabilities,
 
   useEffect(() => {
     if (!overridesHeld) api.listOverrides(rid).then(setOvrList).catch(() => {});
-    api.getStaffPin(rid).then((p) => { setPinInfo(p); setPin(p.staffPin); }).catch(() => {});
+    api.getStaffPin(rid).then((p) => { setPinInfo(p); setPin(p.staffPin || ""); }).catch(() => {});
     if (!advisorHeld) api.getParRecs(rid).then(setRecs).catch(() => {});
   }, [rid, overridesHeld, advisorHeld]);
 
@@ -1053,7 +1053,8 @@ function Planning({ drafts, showError, rid, dishes, prepItems, prepCapabilities,
             Staff open the <b>Prep Sheet</b> (button in the header) on a shared kitchen phone or tablet and enter this PIN. They see only today's prep tasks — no costs, no inventory levels, no editing.
           </div>
           <div className="flex gap-2 items-end">
-            <Field label={`PIN ${pinInfo && !pinInfo.custom ? "(default)" : ""}`}><input className={`${inpCls} w-28`} data-testid="staff-pin-input" value={pin} onChange={(e) => setPin(e.target.value)} maxLength={8} /></Field>
+            {pinInfo && !pinInfo.custom && <p className="text-sm text-amber-300" data-testid="staff-pin-disabled">Staff PIN portal is disabled until a manager sets a PIN.</p>}
+            <Field label="PIN"><input className={`${inpCls} w-28`} data-testid="staff-pin-input" value={pin} onChange={(e) => setPin(e.target.value)} maxLength={8} /></Field>
             <button className={btnGhost} onClick={savePin} data-testid="staff-pin-save-button">Save PIN</button>
           </div>
         </div>

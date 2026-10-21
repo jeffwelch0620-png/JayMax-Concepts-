@@ -227,18 +227,22 @@ def test_projections_roundtrip(s):
 # an owner bearer token on every request, and the owner role short-circuits the PIN
 # check entirely (by design, so a logged-in owner never needs the PIN too). Testing the
 # PIN path itself means testing it with no token, the way an actual staff device calls it.
-def test_staff_pin_default_and_verify(s):
+def test_staff_pin_explicit_setup_and_verify(s):
+    # This external legacy suite requires a separately authorized fictional app.
+    # A store with no configured PIN must never gain access through a default.
+    r = s.post(f"{API}/staff/rudds/pin", json={"staffPin": "4826"}, timeout=30)
+    assert r.status_code == 200
     r = s.get(f"{API}/staff/rudds/pin", timeout=30)
     assert r.status_code == 200
     body = r.json()
-    assert body["staffPin"] == "1234"
+    assert body["staffPin"] == "4826" and body["custom"] is True and body["enabled"] is True
 
     anon = requests.Session()
     r = anon.post(f"{API}/staff/verify", json={"restaurantId": "rudds", "pin": "0000"}, timeout=30)
     assert r.status_code == 200
     assert r.json()["ok"] is False
 
-    r = anon.post(f"{API}/staff/verify", json={"restaurantId": "rudds", "pin": "1234"}, timeout=30)
+    r = anon.post(f"{API}/staff/verify", json={"restaurantId": "rudds", "pin": "4826"}, timeout=30)
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
@@ -249,9 +253,11 @@ def test_staff_prepsheet_wrong_pin():
     assert r.status_code == 403
 
 
-def test_staff_prepsheet_correct_pin_hides_costs():
+def test_staff_prepsheet_correct_pin_hides_costs(s):
+    r = s.post(f"{API}/staff/rudds/pin", json={"staffPin": "4826"}, timeout=30)
+    assert r.status_code == 200
     anon = requests.Session()
-    r = anon.post(f"{API}/staff/rudds/prepsheet", json={"pin": "1234"}, timeout=30)
+    r = anon.post(f"{API}/staff/rudds/prepsheet", json={"pin": "4826"}, timeout=30)
     assert r.status_code == 200
     body = r.json()
     # tasks list (possibly empty). Verify no cost/par/currentStock fields anywhere
@@ -260,17 +266,19 @@ def test_staff_prepsheet_correct_pin_hides_costs():
         assert banned not in dumped, f"prepsheet response leaks '{banned}': {dumped[:400]}"
 
 
-def test_staff_complete_requires_doneby():
+def test_staff_complete_requires_doneby(s):
+    r = s.post(f"{API}/staff/rudds/pin", json={"staffPin": "4826"}, timeout=30)
+    assert r.status_code == 200
     # get released list for rudds (from earlier test)
     # use today's date via prep sheet
     anon = requests.Session()
-    ps = anon.post(f"{API}/staff/rudds/prepsheet", json={"pin": "1234"}, timeout=30).json()
+    ps = anon.post(f"{API}/staff/rudds/prepsheet", json={"pin": "4826"}, timeout=30).json()
     if not ps.get("tasks"):
         pytest.skip("no released list for staff complete test")
     list_id = ps["listId"]
     tid = ps["tasks"][0]["id"]
     r = anon.post(f"{API}/staff/rudds/prepsheet/complete",
-               json={"pin": "1234", "listId": list_id, "taskId": tid, "batches": 1, "doneBy": ""}, timeout=30)
+               json={"pin": "4826", "listId": list_id, "taskId": tid, "batches": 1, "doneBy": ""}, timeout=30)
     assert r.status_code == 400
 
 

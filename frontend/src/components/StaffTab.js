@@ -10,9 +10,9 @@ const ROLES = [
 ];
 
 // Named staff roster tied to the shared PIN portal (StaffSheet): after entering the
-// restaurant's PIN, staff pick their name from this list. Role determines what that
-// identification unlocks — Cook stays in the PIN-only Prep/Counts/Tasks portal, while
-// Owner/Admin gets a full manager-equivalent session for this restaurant.
+// restaurant's PIN, staff claim a name from this list for task attribution.
+// Roster roles confer no authentication or management authority. Managers and
+// owners use a personal collaboration login through LoginsPanel/Login.
 export function StaffTab({ rid, showToast }) {
   const [members, setMembers] = useState(null);
   const [name, setName] = useState("");
@@ -60,8 +60,8 @@ export function StaffTab({ rid, showToast }) {
       {api.currentSession()?.user?.role === "owner" && <LoginsPanel showToast={showToast} />}
       <div className="font-display font-bold text-slate-100 mb-1">PIN Roster</div>
       <div className="text-xs text-slate-500 -mt-2 mb-5">
-        Anyone who taps in with the shared PIN picks their name from this list. Cooks get the Prep/Counts/Tasks
-        portal only; Owner/Admin gets full access to this restaurant, same as an email/password owner login.
+        Anyone who enters the shared PIN can claim a name from this list for Prep/Counts/Tasks.
+        Roster roles do not grant manager or owner access. Use a personal email/password login for management.
       </div>
 
       <div className={`${cardCls} p-5 mb-6`} data-testid="add-staff-panel">

@@ -1,5 +1,19 @@
 # Inventory workflow checkpoint and remaining work
 
+**Staff-PIN security follow-up, local only:** accepted PR49 main
+`6f1774a1a21073370ac006d9b48155123128d6bf` exactly matches tested `e72d597`;
+reviewed-head and merged-main CI passed all four checks. Under a separate owner
+instruction, the local [security slice](STAFF_PIN_SECURITY.md) removes shared-PIN
+session minting/defaults and frontend elevation, rejects the old synthetic session
+namespace, and centralizes PIN checks with a single-instance SQLite attempt budget.
+Personal login remains the manager/owner path; claimed roster attribution is not
+verified employee identity. Source-only Companion review can use accepted PR49;
+this new slice is not published, merged, deployed or hosted-accepted. Prompt before
+the draft push, any hosted work or credential change. No database schema/role,
+credential, service connection or operational record was changed. Prior maintenance
+windows stay closed; par editing held and ordering manual. Older entries below
+remain dated evidence, not current publication or application authorization.
+
 **October 20 local continuation:** PR48 merged at `cbe8e88`, identical to reviewed
 `12dba79`, with both CI runs green. The [N1/N2 follow-up](PAR_BACKEND_HOLD_DIAGNOSTICS.md)
 adds safe private role/rule hold reporting and exact managed-project preflight
