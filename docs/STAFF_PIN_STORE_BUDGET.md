@@ -1,5 +1,15 @@
 # Mandatory store-wide PIN attempt budget
 
+**Current accepted source:** PR52 merged as
+`cc88899f0e32faca0da4e93a640a9e077d0ef6e2`, tree-identical to reviewed `a173c68`.
+All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39664731594)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39666352459)
+passed. This PR51 update incorporates that source without changing the limiter
+or its tests. The owner-approved automatic deployment was not independently
+inspected; G04/live personal-login acceptance remains open and further hosted
+work and credential changes remain held. The dated preparation/publication
+record below retains its original scope; PR52 is no longer a pending draft.
+
 ## Scope and approvals
 
 On October 21, 2026 the owner authorized this separate local security fix and

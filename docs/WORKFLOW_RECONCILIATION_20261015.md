@@ -1,6 +1,25 @@
 # Inventory workflow checkpoint and remaining work
 
-**October 21 accepted baseline:** PR50 merged as
+**Current October 21 continuation:** accepted main is PR52
+`cc88899f0e32faca0da4e93a640a9e077d0ef6e2`, with green
+[reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39664731594)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39666352459).
+The owner authorized a normal main merge into existing draft PR51, documentation
+conflict resolution, an explicit missing-backend diagnostic and fresh CI, then a
+return for PR51 merge approval. Preserve the store-wide five-check/60-second PIN
+policy, staff escalation guidance and pre-operational mitigation gate. Inventory
+Build Main is the primary coordinator. No hosted work or credential change is
+included. PR52's auto-deployment was approved, but its completion/live behavior
+was not inspected; G04, O1 and hosted role compatibility remain open.
+
+The combined local amendment passes all 1,176 offline cases and 91 focused cases
+(overlapping profiles; no failures, errors or skips). The explicit missing-role
+result leaves backend checks unvisited, retains the independent ledger hold and
+does not expose role names in the public summary. Fresh CI must validate the
+pushed head, including the updated disposable PostgreSQL assertions. PR51 remains
+a draft pending separate owner merge approval.
+
+**Earlier October 21 accepted baseline:** PR50 merged as
 `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, identical to approved `b22734a`.
 All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
 and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
@@ -18,7 +37,7 @@ deployment health, live account/PIN acceptance or current hosted role compatibil
 was inspected. Hosted work and credential changes remain on hold. No manual
 service change, schema application or credential change accompanied the merge.
 
-**Current authorized local continuation:** prepare the
+**Original PR51 local preparation:** prepare the
 [read-only role-preflight packet](PAR_ROLE_PREFLIGHT_PACKET.md), reuse existing
 installer predicates, report the evaluated prefix and unvisited rules explicitly,
 observe supplemental managed-schema authority and rehearse with fictional local

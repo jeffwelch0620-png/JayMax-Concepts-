@@ -79,14 +79,53 @@ class ParRolePreflightGuards(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(preflight.public_summary(report)['fullReadinessEvaluated'])
         self.assertFalse(report['automaticApply']); self.assertFalse(report['operationalReleaseApproved'])
 
-    async def test_missing_roles_are_reported_without_inventing_ledger_success(self):
+    async def test_missing_backend_is_explicit_unvisited_and_never_ledger_success(self):
+        roles = ['test_only_bad', 'test_only_good']
+        for missing in [(roles[0],), (roles[1],), tuple(roles)]:
+            with self.subTest(missing=missing):
+                conn = Connection()
+                original = conn.fetchval
+                async def fetchval(sql, *args):
+                    return False if args and args[0] in missing else await original(sql, *args)
+                conn.fetchval = fetchval
+                report, _, check = await self.run_report(conn=conn)
+                for row in report['backendRoles']:
+                    if row['role'] in missing:
+                        self.assertEqual(row, {'role': row['role'],
+                            'checks': dict.fromkeys(preflight.RULES, 'not_evaluated'),
+                            'reason': 'missing_role', 'managedObservations': {'status': 'not_evaluated'}})
+                        self.assertIn({'role': row['role'], 'status': 'held', 'reason': 'missing_role'},
+                                      report['ledgerRoles'])
+                    else:
+                        self.assertEqual(set(row['checks'].values()), {'passed'})
+                        self.assertNotIn('reason', row)
+                present = [role for role in roles if role not in missing]
+                self.assertEqual([entry.args[1][0] for entry in check.await_args_list], present)
+                summary = preflight.public_summary(report)
+                self.assertEqual(summary['checks'], {'passed': 7 * len(present) + 2,
+                    'held': len(missing), 'not_evaluated': len(preflight.RULES) * len(missing)})
+                self.assertEqual(summary['managedObservationRoles'], len(present))
+                self.assertNotIn('test_only_', json.dumps(summary))
+                self.assertNotIn('missing_role', json.dumps(summary))
+                self.assertEqual(report['status'], 'observations_recorded')
+                self.assertFalse(summary['fullReadinessEvaluated'])
+                self.assertFalse(summary['automaticApply'])
+                self.assertFalse(summary['operationalReleaseApproved'])
+                self.assertEqual(conn.depth, 0)
+
+    async def test_backend_existence_read_failure_propagates_and_rolls_back(self):
         conn = Connection()
         original = conn.fetchval
         async def fetchval(sql, *args):
-            return False if args == ('test_only_bad',) else await original(sql, *args)
+            if args == ('test_only_bad',):
+                raise ConnectionError('TEST ONLY private role lookup failure')
+            return await original(sql, *args)
         conn.fetchval = fetchval
-        report, _, _ = await self.run_report(rule='flags', conn=conn)
-        self.assertIn({'role': 'test_only_bad', 'status': 'held', 'reason': 'missing_role'}, report['ledgerRoles'])
+        with patch.object(preflight.engine, 'backend_permissions', AsyncMock()) as check:
+            with self.assertRaises(ConnectionError):
+                await preflight.collect(conn, ['anon','authenticated'], ['test_only_bad'])
+        check.assert_not_awaited()
+        self.assertEqual(conn.depth, 0)
 
     async def test_invalid_or_empty_classification_and_nested_transactions_refuse_before_sql(self):
         cases = [([], ['test_only_bad']), (['anon','authenticated'], []),
@@ -231,7 +270,12 @@ class ParRolePreflightDatabaseTests(unittest.IsolatedAsyncioTestCase):
                 await self.conn.execute(change)
                 try:
                     report = await self.report(['test_only_missing_preflight_role', role])
-                    self.assertEqual(report['backendRoles'][0]['checks']['flags'], 'held')
+                    self.assertEqual(report['backendRoles'][0], {
+                        'role': 'test_only_missing_preflight_role', 'reason': 'missing_role',
+                        'checks': dict.fromkeys(preflight.RULES, 'not_evaluated'),
+                        'managedObservations': {'status': 'not_evaluated'}})
+                    self.assertIn({'role': 'test_only_missing_preflight_role', 'status': 'held',
+                                   'reason': 'missing_role'}, report['ledgerRoles'])
                     self.assertEqual(list(report['backendRoles'][1]['checks'].values()),
                                      ['passed'] * index + ['held'] + ['not_evaluated'] * (5-index))
                 finally: await self.conn.execute(undo)

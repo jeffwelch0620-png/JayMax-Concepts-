@@ -12,6 +12,16 @@ these docs and adding the missing-role diagnostic with fresh CI. This is a norma
 merge preserving branch history. PR51 merge approval, hosted work and credential
 changes remain separate; no hosted preflight or schema application is authorized.
 
+The combined PR51/main amendment passes 1,176 offline cases (419 methods plus
+757 subtests) and 91 focused cases (71 methods plus 20 subtests), with no failures,
+errors or skips. Profiles overlap; counts are not additive. Missing backend roles
+now have an explicit private `missing_role` diagnostic, all six backend checks
+remain `not_evaluated`, and the independent ledger hold remains. Lookup failures
+propagate instead of being called missing roles. Present roles continue normally;
+the public report still contains fixed counts only. Fresh exact-head CI, including
+the strengthened disposable PostgreSQL assertions, is required before merge
+approval. See the [amended validation packet](docs/PAR_ROLE_PREFLIGHT_PACKET.md#missing-role-amendment-validation).
+
 ## Store-wide staff PIN boundary retained from PR52
 
 The owner approved the separate [store-budget security fix](docs/STAFF_PIN_STORE_BUDGET.md)

@@ -114,6 +114,13 @@ async def _collect(conn, clients, backends):
         if report['snapshot'] != {'readOnly': 'on', 'isolation': 'repeatable read', 'searchPath': 'pg_catalog'}:
             raise ValueError('Reviewed read-only snapshot settings were not established')
         for role in backends:
+            if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1)', role):
+                # Absence is not an evaluated flags refusal. Keep every backend
+                # rule unvisited and retain the independent ledger hold below.
+                report['backendRoles'].append({'role': role,
+                    'checks': dict.fromkeys(RULES, 'not_evaluated'), 'reason': 'missing_role',
+                    'managedObservations': {'status': 'not_evaluated'}})
+                continue
             checks = await backend_result(conn, role)
             observations = ({'status': 'not_evaluated'} if checks['flags'] != 'passed'
                             else await managed_observations(conn, role))

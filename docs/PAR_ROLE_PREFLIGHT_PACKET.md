@@ -1,13 +1,25 @@
 # Reviewed-par permission preflight packet
 
 October 21, 2026. **Local preparation only; hosted work and credential changes
-remain on owner hold.** Prompt before publishing a new draft PR. This packet is
+remain on owner hold.** Existing draft PR51 publication was approved separately;
+the owner has now authorized its main merge, missing-role diagnostic and update
+push, followed by fresh CI and a return for separate merge approval. This packet is
 not permission to inspect Supabase, pause services, change grants, apply SQL,
 create credentials or reuse an expired maintenance window.
 
 ## Accepted source and why this comes next
 
-The baseline is PR50 merge `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, identical
+Current accepted main is PR52 `cc88899f0e32faca0da4e93a640a9e077d0ef6e2`,
+tree-identical to approved `a173c68`. All four
+[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39664731594)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39666352459)
+passed. It is incorporated with a normal two-parent merge, preserving original
+PR51 history; no rebase or force-push. PR52's store-wide limiter, staff lockout
+guidance and pre-operational mitigation gate remain intact. Its approved automatic
+Render deployment does not establish deployment completion or live acceptance.
+G04 and O1 remain open. Inventory Build Main is the primary coordinator.
+
+The original PR51 baseline was PR50 merge `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, identical
 to approved `b22734a`. All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
 and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
 passed. PR49 merged as `6f1774a`, matching reviewed `e72d597`; all four
@@ -40,7 +52,17 @@ marks earlier checks `passed`, that check `held` and later checks
 `not_evaluated`; it does not bypass the refusal to test later rules. Other
 reviewed roles can still be observed. The existing installer guard is called
 unchanged; a rule-order regression test protects the prefix interpretation.
-Missing roles hold rather than disappearing from the result. Unexpected query,
+Before evaluating a backend, the helper checks its existence in that same
+read-only snapshot. An absent role reports `reason: missing_role`, with **all six
+backend checks `not_evaluated`** and managed observations `not_evaluated`; no
+backend guard or managed-observation query is called for it. Its independent
+ledger entry remains `held` with `reason: missing_role`. Other roles continue.
+Absence is not an evaluated `flags` refusal and is never a passed preflight.
+The counts-only public summary remains unchanged: missing backend checks count
+as `not_evaluated`, the ledger contributes a hold, and private names/reasons are
+not exposed. The receipt remains `observations_recorded`, never readiness.
+An existence-query failure propagates rather than being classified as absence.
+Unexpected query,
 transaction or cleanup failures propagate; no completed receipt is returned.
 
 | Observation | Scope and limitation |
@@ -111,7 +133,7 @@ or establish maintenance readiness. Do not invoke the maintenance-bound installe
   review and Companion ingress trust remain separately held. Merged code and
   green CI do not close those operational/security findings.
 
-## Local rehearsal evidence
+## Original PR51 local rehearsal evidence
 
 All serial runs passed, with no failures, errors or skips:
 
@@ -139,7 +161,31 @@ are unchanged. Only explicit review-runner selections add the new tests to CI.
 Frontend tests/build were not rerun locally for this ops/documentation slice.
 Python syntax, whitespace and 182 local documentation link targets pass.
 
-This continuation remains local. Prompt before draft publication; fresh exact-head
-CI and independent review follow publication, with merge and hosted execution
-separate decisions. No credential, role/grant, service or app connection change
-was made, and no hosted preflight, maintenance or migration was run.
+Those original receipts belong to source `7fd4ce4` and are historical evidence,
+not validation of the combined PR51/main update. The owner authorized this
+existing-draft update push; fresh combined-head CI and a separate merge approval
+are required. No credential, role/grant, service or app connection change was made,
+and no hosted preflight, maintenance or migration was run.
+
+## Missing-role amendment validation
+
+The combined PR51/main amendment passed both serial local profiles with no
+failures, errors or skips:
+
+| Evidence stem outside Git | Result |
+| --- | --- |
+| `pr51-missing-role-focused-20261021T203852874679Z` | 71 methods plus 20 subtests, 91 cases, including all 60 current PIN-security cases. |
+| `pr51-missing-role-offline-20261021T204008778743Z` | 419 methods plus 757 subtests, 1,176 cases. Both Windows ACL checks passed and generated review guides match source. |
+
+These profiles overlap and must not be added as unique coverage. Five existing
+dependency/lifespan warnings remain. Python AST, conflict-marker/whitespace checks,
+generated-guide verification and 188 local documentation link targets pass. The
+application, limiter/tests, installer, migrations, snapshot, catalog/permission
+inputs, hosting and CI workflow remain unchanged from accepted main.
+Offline regression covers a missing first backend, a missing
+later backend, all backends missing, unchanged remaining-role checks, retained
+ledger holds, counts-only summaries and role-existence infrastructure failure
+with rollback. The existing disposable-database refusal case now asserts the
+explicit missing-role shape beside each of the six real permission refusals.
+Fresh CI runs that real PostgreSQL coverage; no local or hosted application
+database connection is needed for the offline checks.
