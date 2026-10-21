@@ -1,11 +1,13 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local staff-PIN security follow-up — review pending
+## PR50 merged; local role-preflight preparation
 
-Accepted PR49 main is `6f1774a1a21073370ac006d9b48155123128d6bf`, matching
-reviewed `e72d597`. [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39459639861)
-and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39527741640)
-passed all four checks. Older checkpoints below retain their dated scope.
+Accepted PR50 main is `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, matching
+reviewed `b22734a`. [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
+passed all four checks. PR49 merged as `6f1774a`, matching reviewed `e72d597`;
+its reviewed-head and merged-main CI also passed. Older checkpoints retain their
+dated scope and do not make those accepted PRs pending again.
 
 The owner authorized this separate [local security fix](docs/STAFF_PIN_SECURITY.md):
 shared-PIN roster selection cannot mint a manager session; old synthetic tokens
@@ -15,7 +17,7 @@ with a path to personal manager/owner login. SQLite coordinates workers on one
 filesystem; multiple instances need separately reviewed centralized enforcement.
 No credentials, Supabase schema, Render/app connections or historical actors are
 changed. [PR50](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/50)
-is published as a draft; all four checks passed at `3b37fba`, including 1,034
+is merged; all four checks passed at the accepted revision, including 1,034
 frontend tests / 82 suites, the strict build, 1,134 Windows offline cases and 228
 backend/disposable PostgreSQL cases. These profiles overlap local coverage.
 
@@ -24,11 +26,22 @@ staff portals where no valid PIN is configured for the build deployment. The
 documentation amendment records those decisions and qualifies the unverified
 proxy behavior; it makes no runtime changes. Personal manager/owner login must
 be available, and the pinned Uvicorn trust rules require separate review before
-changing proxy settings. Merge automatically deploys the Render test app, so
-return for explicit merge approval after the amended-head checks. Hosted work
-and credential changes remain on hold. Companion identity adoption and
+changing proxy settings. The approved merge triggers Render automatic deployment;
+deployment health and live security acceptance have not been inspected. Hosted
+work and credential changes remain on hold. Companion identity adoption and
 reviewed-par installation remain separate; par editing stays held and ordering
 manual. The security runbook records release gates, evidence and limitations.
+
+The next owner-authorized local slice is the [role-permission preflight packet](docs/PAR_ROLE_PREFLIGHT_PACKET.md):
+reuse the existing installer checks in a read-only snapshot, record later checks
+as not evaluated after a refusal, and report supplemental `public`/`extensions`
+observations. Fictional local rehearsals do not establish hosted compatibility,
+full readiness or O1 cutover. Prompt before its new draft PR push; no hosted
+execution, permission repair or new maintenance window is authorized.
+Local validation passed all 1,161 offline cases, 178 focused cases and the final
+10-case PostgreSQL selection; the packet preserves the earlier 18-case database
+run and overlapping counts. Owned database/role inventories were restored and the
+test server stopped. Existing installer/app/schema/hosting code is unchanged.
 
 ## PR48 merged; backend-hold diagnostic follow-up
 

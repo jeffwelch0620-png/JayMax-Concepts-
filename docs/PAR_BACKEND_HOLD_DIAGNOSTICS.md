@@ -7,6 +7,15 @@ passed all four checks. This follow-up implements review notes N1/N2 only.
 No Supabase connection, writer pause, permission change or migration is included.
 Prompt before draft publication and before any hosted work.
 
+**Subsequent acceptance:** this follow-up merged as PR49 `6f1774a`, identical to
+reviewed `e72d597`; [reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39459639861)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39527741640)
+passed all four checks. PR50 is now accepted as `cf0f127`; the new local
+[role-preflight packet](PAR_ROLE_PREFLIGHT_PACKET.md) prepares the next observation
+without executing it. Earlier publication/merge language below records historical
+stages. Hosted role compatibility has not been rechecked; hosted work and
+credential changes remain on owner hold.
+
 ## Private diagnostic contract
 
 `BackendPermissionHeld` remains a `ValueError` with the existing fixed messages.

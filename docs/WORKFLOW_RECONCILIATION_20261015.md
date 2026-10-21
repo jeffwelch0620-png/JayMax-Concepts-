@@ -1,18 +1,34 @@
 # Inventory workflow checkpoint and remaining work
 
-**Staff-PIN security follow-up, local only:** accepted PR49 main
-`6f1774a1a21073370ac006d9b48155123128d6bf` exactly matches tested `e72d597`;
-reviewed-head and merged-main CI passed all four checks. Under a separate owner
-instruction, the local [security slice](STAFF_PIN_SECURITY.md) removes shared-PIN
-session minting/defaults and frontend elevation, rejects the old synthetic session
-namespace, and centralizes PIN checks with a single-instance SQLite attempt budget.
-Personal login remains the manager/owner path; claimed roster attribution is not
-verified employee identity. Source-only Companion review can use accepted PR49;
-this new slice is not published, merged, deployed or hosted-accepted. Prompt before
-the draft push, any hosted work or credential change. No database schema/role,
-credential, service connection or operational record was changed. Prior maintenance
-windows stay closed; par editing held and ordering manual. Older entries below
-remain dated evidence, not current publication or application authorization.
+**October 21 accepted baseline:** PR50 merged as
+`cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, identical to approved `b22734a`.
+All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
+passed: 1,034 frontend tests / 82 suites, strict build, 1,134 Windows offline
+cases and 228 backend/disposable PostgreSQL cases. PR49 merged as `6f1774a`,
+matching reviewed `e72d597`, with both CI runs green. Earlier local/draft states
+below are dated history. The [security slice](STAFF_PIN_SECURITY.md) removes
+shared-PIN session minting/defaults and frontend elevation, rejects old synthetic
+tokens, and centralizes PIN checks. Claimed roster attribution remains separate
+from personal manager/owner authority and Companion identity adoption.
+
+The owner accepted temporary shared throttling and disabled unconfigured portals
+for the build deployment. Merging triggers Render automatic deployment, but no
+deployment health, live account/PIN acceptance or current hosted role compatibility
+was inspected. Hosted work and credential changes remain on hold. No manual
+service change, schema application or credential change accompanied the merge.
+
+**Current authorized local continuation:** prepare the
+[read-only role-preflight packet](PAR_ROLE_PREFLIGHT_PACKET.md), reuse existing
+installer predicates, report the evaluated prefix and unvisited rules explicitly,
+observe supplemental managed-schema authority and rehearse with fictional local
+roles. Prompt before a draft PR push and before any hosted execution. Prior
+maintenance windows remain closed; par editing held, ordering manual and Track 1
+independent. This packet is not a full O1 runtime cutover or install approval.
+Local evidence passes 1,161 offline cases, 178 focused cases and all 10 final
+PostgreSQL cases after session/deadline hardening. The packet records overlapping
+earlier selections and verifies owned cleanup; no new-head CI or hosted result
+is claimed before publication.
 
 **October 20 local continuation:** PR48 merged at `cbe8e88`, identical to reviewed
 `12dba79`, with both CI runs green. The [N1/N2 follow-up](PAR_BACKEND_HOLD_DIAGNOSTICS.md)

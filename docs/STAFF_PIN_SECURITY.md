@@ -1,8 +1,13 @@
 # Staff PIN authority boundary
 
-Local security follow-up from accepted PR49 main
-`6f1774a1a21073370ac006d9b48155123128d6bf`. Publication, merge and hosted
-acceptance remain separate owner decisions. This work changes no credentials,
+Security follow-up from PR49 main
+`6f1774a1a21073370ac006d9b48155123128d6bf`. PR50 is now owner-approved and
+merged as `cf0f127e3a5f8247e43746c269a47b75d2e58d1a`, identical to reviewed
+`b22734a`. All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39635235513)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39638706456)
+passed. The merge triggers automatic Render deployment; deployment health and
+live acceptance were not inspected. Hosted work and credential changes remain on
+owner hold. This source change modifies no credentials,
 deployed settings, application database schema or stored operational records.
 
 ## Personal authority and claimed roster names
@@ -121,10 +126,10 @@ sessions, personal-login navigation, disabled/limited errors and native portal
 compatibility. Record final test attempts/results in the review packet before
 requesting draft publication; local tests do not prove hosted acceptance.
 
-### Pre-merge checklist and owner acceptance
+### Recorded pre-merge decisions and remaining acceptance
 
-Merging into `main` automatically deploys the Render test application. Before
-merge approval, record each decision independently:
+Merging into `main` automatically deploys the Render test application. PR50's
+owner-approved merge is recorded above; its distinct decisions and limits are:
 
 - **Accepted October 21, 2026:** temporary shared throttling in the build
   deployment, including possible grouping of staff devices behind a proxy/NAT.
@@ -136,9 +141,9 @@ merge approval, record each decision independently:
 - Confirm personal manager/owner login is available before relying on it for
   access or PIN configuration. This documentation amendment does not verify live
   accounts. Old synthetic PIN sessions will be rejected by the updated backend.
-- Obtain separate approval to merge, with the automatic deployment consequence
-  understood. The owner authorized this documentation push only; PR50 remains
-  draft and unmerged. Hosted work and credential changes remain on hold.
+- **Approved and merged October 21, 2026:** PR50, with the automatic deployment
+  consequence understood. This does not authorize hosted inspection or acceptance,
+  credential changes or further work. Those holds remain in force.
 
 Before any hosted inspection or fictional live acceptance: obtain separate owner
 approval, verify the accepted deployment/head and single-instance/proxy boundary,
@@ -187,10 +192,11 @@ Evidence stems outside Git: `staff-pin-offline-20261021T023646499531Z`,
 1,034 frontend tests in 82 suites, strict production build, 1,134 Windows offline
 cases and 228 backend/disposable PostgreSQL cases. Profiles overlap; counts are
 not additional unique coverage. This documentation-only follow-up records owner
-acceptance and corrects release/proxy guidance; fresh exact-head CI is required
-after its push. The existing eight-thread reservation test already verifies five
+acceptance and corrects release/proxy guidance; amended-head and merged-main CI
+subsequently passed with the same test counts, as linked above. The existing
+eight-thread reservation test already verifies five
 admissions plus three 429 responses without 503, and another-process coordination
 is covered. No observed contention failure justifies changing the 250 ms timeout
 in this amendment. No live/deployment acceptance, credential change, session
 revocation on a running server, or mitigation of Companion ingress-header trust
-is claimed. Merge and hosted work remain separately gated.
+is claimed. The merge is complete; hosted work remains separately gated.
