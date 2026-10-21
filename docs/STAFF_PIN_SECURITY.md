@@ -2,8 +2,10 @@
 
 **Current local follow-up:** the owner approved a separate mandatory store-wide
 attempt budget and local testing on October 21, 2026. See the
-[store-budget review packet](STAFF_PIN_STORE_BUDGET.md). It is not pushed, merged
-or deployed; prompt before draft publication. Hosted work and credential changes
+[store-budget review packet](STAFF_PIN_STORE_BUDGET.md). Under separate owner
+approval it is published as [draft PR52](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/52)
+from tested `e262c9f`; it is not merged or deployed. This publication update changes
+documentation only; independent review and current-head CI remain gates. Hosted work and credential changes
 remain on hold. G04 remains open pending review and separately approved deployed
 acceptance. The historical PR50 validation below does not establish that outcome.
 

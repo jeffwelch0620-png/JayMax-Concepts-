@@ -10,6 +10,13 @@ par-role packet at `7fd4ce4`. No hosted requests, credential/account/PIN changes
 proxy configuration, migrations, database permissions or deployment are part of
 this package. G04 remains open. Personal-login acceptance remains incomplete.
 
+The owner subsequently approved publication. [Draft PR52](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/52)
+opened from tested `e262c9f5eb3adb7aea6c8832a649955f70d10f90`. This publication
+update changes README/runbooks only; the implementation and tests retain the
+locally tested bytes. The PR remains draft and unmerged. Current-head CI and
+independent review must precede any separate owner merge decision. Publication
+does not release the hosted-work or credential holds.
+
 ## Behavior
 
 All anonymous PIN checks for one canonical store now share a mandatory five-check
@@ -69,8 +76,9 @@ refund preserving earlier failures, expiry, disabled portals, storage refusal,
 old-token rejection and personal-authority access when PIN attempts are exhausted.
 Existing real thread/process coordination is retained. No SQL, frontend, workflow
 runner, dependency pin or hosting configuration change is required; the existing
-offline CI profile already selects this test module. CI is not yet run for this
-unpublished branch, and prior PR50/PR51 CI is not this branch's CI evidence.
+offline CI profile already selects this test module. CI had not run at the local
+source checkpoint; current PR52 checks must be evaluated separately for its
+reviewed head. Prior PR50/PR51 CI is not this branch's CI evidence.
 
 An initial focused run passed 60 cases and the initial full profile passed 1,145.
 After adding explicit assertions that middleware changes the delivered ASGI
@@ -96,8 +104,9 @@ were not opened by this work.
 
 ## Next gates
 
-1. Complete local checks, reconcile repository/JMAX documentation and prompt the
-   owner before publishing a new draft PR for independent review.
+1. **Completed:** local checks, repository/JMAX checkpoint and owner-approved
+   draft PR52 publication. This documentation-only update records that status;
+   independent review and current-head CI remain pending gates.
 2. Obtain separate merge approval after exact-head CI/review. Merging main
    automatically deploys the Render test app; current local approval does not
    authorize that deployment or changing any service settings.

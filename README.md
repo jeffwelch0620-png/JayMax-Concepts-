@@ -18,7 +18,10 @@ passed all 1,145 offline cases, including 60 PIN-security cases and both Windows
 ACL checks. A strengthened fixture initially had two incorrect exact-proxy
 expectations; the corrected full rerun passed. Counts overlap; no frontend build,
 database-server run or fresh CI is claimed for this backend-only follow-up.
-Prompt before draft publication. Hosted work,
+Under separate owner approval, [draft PR52](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/52)
+is published from tested `e262c9f`. This publication update changes documentation
+only; current-head CI and independent review remain separate gates. The PR's
+checks provide the current CI result. PR52 remains draft and unmerged. Hosted work,
 credential changes, merge and deployment remain held; G04 is not closed by local
 tests. No frontend, SQL, application connection or hosting configuration changes
 are included. The earlier checkpoints below retain their dated scope.
