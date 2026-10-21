@@ -133,6 +133,7 @@ DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name
  'test_backend_ledger_table_and_column_exposure_hold_before_plan',
  'test_backend_trust_never_waives_browser_private_access',
  'test_backend_authority_membership_and_future_defaults_are_held',
+ 'test_backend_hold_rules_classify_real_catalog_refusals',
  'test_new_par_access_and_late_backend_grants_stay_blocked',
  'test_classified_backend_still_holds_live_writers_and_changed_permissions',
  'test_browser_column_only_access_is_denied_with_a_classified_backend',

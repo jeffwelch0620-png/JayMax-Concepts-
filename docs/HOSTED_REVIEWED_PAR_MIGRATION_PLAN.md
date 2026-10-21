@@ -1,5 +1,11 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
+**October 20 gate:** PR48 merged as `cbe8e88` with reviewed-head and merged-main
+CI green. The local [N1/N2 diagnostic and preflight-record work](PAR_BACKEND_HOLD_DIAGNOSTICS.md)
+does not run a hosted preflight or authorize another window. First review the
+follow-up, then prompt for the exact read-only hosted check. Document every
+role/rule result and separate permission remediation before any new outage.
+
 **Current local follow-up:** the owner authorized the
 [v2 role-classification fix](PAR_INSTALL_ROLE_CLASSIFICATION.md) and regressions.
 All 1,025 offline cases and 69 PostgreSQL cases across 21 methods passed in

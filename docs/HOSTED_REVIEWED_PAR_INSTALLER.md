@@ -1,5 +1,14 @@
 # Guarded reviewed-par installer and local rehearsal
 
+**PR48 merged; local N1/N2 follow-up:** merge `cbe8e88` matches reviewed `12dba79`
+and both CI runs passed. [Private role/rule diagnostics and preflight records](PAR_BACKEND_HOLD_DIAGNOSTICS.md)
+preserve all permission/transaction guards. Managed role memberships, schema
+CREATE rights and global default ACLs may hold a future preflight. `public` is
+checked directly; `extensions` requires a separately scoped observation. Save a
+dated per-rule result before proposing any new window, and resolve every hold as
+separate reviewed permission work. No installer exception or hosted execution
+is authorized by this follow-up. Par editing remains held and ordering manual.
+
 **Local v2 role-check follow-up:** the owner authorized the
 [explicit role-classification correction](PAR_INSTALL_ROLE_CLASSIFICATION.md)
 and regression tests after the October 19 dry-run held. Clients and trusted

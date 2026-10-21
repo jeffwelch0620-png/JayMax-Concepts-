@@ -1,5 +1,11 @@
 # Inventory workflow checkpoint and remaining work
 
+**October 20 local continuation:** PR48 merged at `cbe8e88`, identical to reviewed
+`12dba79`, with both CI runs green. The [N1/N2 follow-up](PAR_BACKEND_HOLD_DIAGNOSTICS.md)
+adds safe private role/rule hold reporting and exact managed-project preflight
+guidance. No hosted validation or permission change is included. Prompt before
+the next draft PR push and before any hosted work; O1 remains open.
+
 **Local role-check follow-up October 19:** owner-authorized
 [v2 classification](PAR_INSTALL_ROLE_CLASSIFICATION.md) separates denied browser
 clients from backend logins while preserving ledger denial and writer guards.
