@@ -1,10 +1,19 @@
 # Reviewed-par readiness review — October 21, 2026
 
-**Subsequent local candidate:** the owner separately authorized the
-[bounded submitted par recovery fix](PAR_SAVE_RELOAD_RECOVERY.md) and local tests.
-The design limitation recorded below describes accepted PR51, not the unpublished
-candidate. Its code/test changes do not alter the dated artifact inspection,
-install SQL or hosted approval boundaries in this report.
+**Later live observation:** the owner-approved
+[bounded read-only preflight](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md) verified
+both Render services Live at PR53 and repeated all 16 scoped permission checks
+successfully. Par storage is still absent. Actual API runtime identity and full
+installer readiness remain unproven; the saved-artifact review below retains its
+original local-only scope. All remaining holds continue.
+
+**Subsequent accepted work:** the owner separately authorized the
+[bounded submitted par recovery fix](PAR_SAVE_RELOAD_RECOVERY.md), its reviewed
+local-discard amendment and PR53 merge `46461e5`; reviewed-head and merged-main
+CI passed. The limitation below describes the earlier PR51 baseline. The
+[current installation and acceptance proposal](REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
+preserves this dated artifact inspection, unchanged install SQL and separate
+hosted approval boundaries. No installation or live acceptance is implied.
 
 ## Decision and scope
 

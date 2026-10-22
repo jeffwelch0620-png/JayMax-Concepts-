@@ -2,6 +2,32 @@
 
 ## Current checkpoint — October 21
 
+**October 22 planning update:** the [fresh qualification proposal](REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md)
+is local-only and awaits review. It proposes no schema application, credential
+change or runtime grant repair. A fresh execution packet, resource headroom and
+new writer/window approval are required before any hosted work.
+
+The later [API role/writer follow-up](API_ROLE_WRITER_REVIEW_20261021.md) confirms
+the configured primary API role is postgres through the existing pooler. Known
+application writers remain API plus Toast jobs 3/4; no additional application
+client was identifiable in two snapshots. This resolves configuration identity,
+not independent per-process attribution or exhaustive external-writer inventory.
+Service pauses and credential/grant/schema changes stay held.
+
+The subsequent [bounded hosted preflight](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md)
+observed both Render services Live at PR53, all 16 scoped role checks passing,
+par storage absent and Toast jobs 3/4 unchanged/enabled. Actual API runtime
+identity and exhaustive writer attribution remain unproven. No full preparer,
+maintenance window, backup or SQL application ran; all remaining holds persist.
+
+The [current installation and acceptance proposal](REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
+pins PR53 `46461e5` and the unchanged installer/SQL/reference. Reviewed-head and
+merged-main CI passed separately. The new [offline source audit](REVIEWED_PAR_PROPOSAL_SOURCE_AUDIT_20261021.json)
+checks 49 installer-source hashes and the exact proposed object inventory; it is
+not an executable hosted plan. New-object RLS/revocations belong in any later
+explicit installation approval; runtime grants remain separate O1 work. All
+hosted, credential, grant and schema holds remain in force.
+
 [Offline readiness review](REVIEWED_PAR_READINESS_20261021.md): PR51 `07daa29`
 is accepted; all 16 narrow role checks passed under separate approval. The new
 encrypted backup/disposable restore matched 120 tables, 45,638 rows and 13 catalog

@@ -2,6 +2,32 @@
 
 ## Current status — October 21
 
+**October 22 planning update:** the [fresh qualification proposal](REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md)
+is ready for owner review. Its proposed window covers fresh backup/restore and
+read-only qualification, not schema application. Service pauses and all hosted
+execution/credential/grant/schema changes remain held; no window is active.
+
+The later [API role/writer follow-up](API_ROLE_WRITER_REVIEW_20261021.md) confirms
+the configured primary API role is postgres through the existing pooler. The
+known controllable writers remain API and Toast jobs 3/4; no extra application
+client was identifiable. No API session was connected for process-level proof.
+No pause, credential/grant/schema change or new window is authorized.
+
+The separately approved [bounded read-only preflight](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md)
+now confirms both Render deployments Live at PR53, all 16 scoped role checks
+passing and par storage absent. The runtime API role and exhaustive writer
+attribution remain unproven. This scoped observation creates no executable plan
+or authority for maintenance, grants, credentials or schema application.
+
+The [current installation and acceptance proposal](REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
+supersedes the next-action wording in earlier planning records below. Accepted
+main is PR53 `46461e5`, tree-identical to reviewed `5c8e3ea`; reviewed-head and
+merged-main CI passed all four checks. Bounded submitted-request recovery and
+the explicit local-discard exit are merged. Complete live
+installer readiness, exact executable plan/hash, schema application and fictional
+acceptance remain separately held. This is local planning only; no new window
+or delivery version has been allocated.
+
 The [readiness review](REVIEWED_PAR_READINESS_20261021.md) reconciles accepted
 PR51 `07daa29`, the completed 16-check role observation and the separately
 approved fresh encrypted backup/disposable restore. Recovery matched 120 tables,

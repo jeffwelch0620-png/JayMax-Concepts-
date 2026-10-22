@@ -1,0 +1,415 @@
+{
+  "acceptedCommit": "46461e51ea8803b61c5b1d0a2cd7c5564d3a48dd",
+  "acceptedTree": "00051925cd20183613586911ca6431fe594dad80",
+  "approvalGranted": false,
+  "columns": [
+    {
+      "name": "id",
+      "notNull": true,
+      "type": "uuid"
+    },
+    {
+      "name": "store_id",
+      "notNull": true,
+      "type": "text"
+    },
+    {
+      "name": "item_code",
+      "notNull": true,
+      "type": "text"
+    },
+    {
+      "name": "revision",
+      "notNull": true,
+      "type": "integer"
+    },
+    {
+      "name": "predecessor_id",
+      "notNull": false,
+      "type": "uuid"
+    },
+    {
+      "name": "unit_profile_id",
+      "notNull": true,
+      "type": "uuid"
+    },
+    {
+      "name": "source_unit",
+      "notNull": true,
+      "type": "text"
+    },
+    {
+      "name": "quantity",
+      "notNull": true,
+      "type": "numeric"
+    },
+    {
+      "name": "factor",
+      "notNull": true,
+      "type": "numeric"
+    },
+    {
+      "name": "base_unit",
+      "notNull": true,
+      "type": "text"
+    },
+    {
+      "name": "base_quantity",
+      "notNull": true,
+      "type": "numeric"
+    },
+    {
+      "name": "confirmed",
+      "notNull": true,
+      "type": "boolean"
+    },
+    {
+      "name": "coverage_note",
+      "notNull": true,
+      "type": "text"
+    },
+    {
+      "name": "actor",
+      "notNull": true,
+      "type": "text"
+    },
+    {
+      "name": "recorded_at",
+      "notNull": true,
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "request_key",
+      "notNull": true,
+      "type": "uuid"
+    },
+    {
+      "name": "request_fingerprint",
+      "notNull": true,
+      "type": "bytea"
+    }
+  ],
+  "constraints": [
+    {
+      "conname": "inventory_par_versions_actor_check",
+      "contype": "c",
+      "convalidated": true,
+      "definition_sha256": "8c711213252a027f3af2c72d7b279980b8d36752404de2fd9a1713b671074540",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_check",
+      "contype": "c",
+      "convalidated": true,
+      "definition_sha256": "bfd20729dd346491582f4c24ab0da2eabf5bd5b548649dbb04f65c56fa1d112b",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_check1",
+      "contype": "c",
+      "convalidated": true,
+      "definition_sha256": "a09eb858e147c18d79fd70e40f8329cbb93c0ced4dd90d125fdd3e61f1499e08",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_coverage_note_check",
+      "contype": "c",
+      "convalidated": true,
+      "definition_sha256": "b668ebf271ed919d4b82c70ff0d7a84356a9ea72c4c909503ba0036395fe66f4",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_factor_check",
+      "contype": "c",
+      "convalidated": true,
+      "definition_sha256": "8e46eed7ea4ce3375a737c8170aeb1f566b6b0d5385747f11bbc41f43d98513b",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_id_store_id_item_code_key",
+      "contype": "u",
+      "convalidated": true,
+      "definition_sha256": "8ef8af397c9f553c0a352a0efe80668d1f3addd266a6f0e7c9432e926d319ffc",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_pkey",
+      "contype": "p",
+      "convalidated": true,
+      "definition_sha256": "8c8464f42472e42ee190fc91ca8db79b5351d3a4609040516578d229c56f6fa5",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_predecessor_id_key",
+      "contype": "u",
+      "convalidated": true,
+      "definition_sha256": "4f04d10e7635d1ea0d63e6f7f8f5edb7e97893224835a718ac600b37b32040c7",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_predecessor_id_store_id_item_code_fkey",
+      "contype": "f",
+      "convalidated": true,
+      "definition_sha256": "ccc1c5aa0e75458fc548642f9002563efbb73f645442f1ede61de350a538df9a",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_quantity_check",
+      "contype": "c",
+      "convalidated": true,
+      "definition_sha256": "df9ce46d1f9647a7482ca1e6165f855b832b5aa978c6f76ef3f8ccf60a537ab6",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_request_fingerprint_check",
+      "contype": "c",
+      "convalidated": true,
+      "definition_sha256": "a150a2ab41597a1182d9dd07f0c2927e4eeead2f6a5e6b84bbca50037144a08f",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_request_key_key",
+      "contype": "u",
+      "convalidated": true,
+      "definition_sha256": "771d45aed45d39927774bff4bc344c7a7baed3a2cc5b39d5d300935ac13f7164",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_revision_check",
+      "contype": "c",
+      "convalidated": true,
+      "definition_sha256": "6e1b5de774e1e089aaa7ec71bc7230076978638860c68fb8a5ca3d3745130265",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_source_unit_check",
+      "contype": "c",
+      "convalidated": true,
+      "definition_sha256": "2c6623e299b19dda2f5850511ad83efd565b02d1036d4fcbbcd3533a0e298224",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_store_id_item_code_base_unit_fkey",
+      "contype": "f",
+      "convalidated": true,
+      "definition_sha256": "7d62c5a8a1066d58b55d94fb03fc21b0b9f1a297afa419394c505a9e4c75af2d",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_store_id_item_code_revision_key",
+      "contype": "u",
+      "convalidated": true,
+      "definition_sha256": "254411c5003561ebfdb149ed37af111c3ab5fbeeda18a53f896f7ff5945eb0d1",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    },
+    {
+      "conname": "inventory_par_versions_unit_profile_id_fkey",
+      "contype": "f",
+      "convalidated": true,
+      "definition_sha256": "60c27717b1b56aee008c7b2523a68be765ff9aaf64bf43edfd6fe53a35756f78",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions"
+    }
+  ],
+  "databaseConnectionsOpened": false,
+  "deliveryVersionAllocated": false,
+  "format": "jaymax-local-par-proposal-source-audit-v1",
+  "functions": [
+    {
+      "acl": "{@migration_actor=X/@migration_actor}",
+      "args": "",
+      "definition_sha256": "c6a656ede423b68b1f25f8be0d17f68f21e1169f64218ce82994afedb16726f8",
+      "nspname": "purchasing",
+      "owner": "@migration_actor",
+      "proname": "guard_inventory_par"
+    }
+  ],
+  "hostedAccess": false,
+  "indexes": [
+    {
+      "definition_sha256": "3ff41f046986a277f6eb259fe798c70f2fae664bf0aeb891faea222ccdcd2e2c",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions_predecessor_id_key"
+    },
+    {
+      "definition_sha256": "483965220245681d7f24f40289e0a94c17206eae285d63724d22eafd3f29ba93",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions_store_id_item_code_revision_key"
+    },
+    {
+      "definition_sha256": "66c7d6ffed6a19c4429181399de8fe05063d9fb96dfa0dea5402a07fb314e926",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions_id_store_id_item_code_key"
+    },
+    {
+      "definition_sha256": "69f5f2b29eedc3c884b8b31cb3dbca0d0d0567e15966496823af49222bf12060",
+      "nspname": "purchasing",
+      "relname": "inventory_par_root"
+    },
+    {
+      "definition_sha256": "c90a02155137e8e0c946321b8e6206aa4e88b794ef56d15b5fca3bafdff840dd",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions_pkey"
+    },
+    {
+      "definition_sha256": "df8edbb07ba406b99274d84e679903753c6b69c5bb6af0bcea6c3ad0ab63432d",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions_request_key_key"
+    }
+  ],
+  "inspectionMethod": "Saved source/reference parsing and exact accepted SQL lexer only; no hosted runner import or database execution",
+  "installerSourceHashes": {
+    "backend/db_tls.py": "5fb0c2b5efad5b07ce65c91b29ca19bbb3a80f218110cea0a5c841a39e50b339",
+    "backend/deployment_readiness.py": "53cd1518b490eed146a43625f816414bfb6a0bbc951cc1b062e50a7b8bd43bfb",
+    "backend/hosted_backup.py": "e1fbae51c519d7fda7d182d68df550e38a8644b4992ab9d8c346d62ed1ab6c09",
+    "backend/hosted_install_preservation.py": "de5ba5bd6abf8e377910cef5f2f2bd43ea5a0feee1ee821da7da137740ac9745",
+    "backend/hosted_native_install.py": "a46cf43a009bfc0f1921177fd5473e57dc03a867d5c85e2be660f1e1ad0a7f67",
+    "backend/hosted_test_trial.py": "fe3bb55f360da192c3cc8782b4cfe584dcc7cbcdae8abfba395e65ca2f62cffe",
+    "backend/install_lock.py": "a76aa3648e02800e0d85d7d0bfaa3b72308e3dedd03d9d95c8df9105cf8b4011",
+    "backend/maintenance_connection.py": "7e44e7e95ef6b4211a9dabf6c68ccfeebd0811ad68c54f5736cc7add24e11a5f",
+    "backend/managed_development.py": "3620a679d6e135a117e216356e061b4963d118e95b9f15ad64cd53453421d68e",
+    "backend/native_backup.py": "3c181be79c9dbec62698e66fafe716e6a62a705d4ddd9f327c31f3d86f31d8db",
+    "backend/readonly_snapshot.py": "803c9551e3e31407497c06a44e6fe898a82f08518bfbdd265e89efdb5c535123",
+    "backend/schema_reconciliation.py": "2674a3804ab5a5e99b00061f48086f99f286e1ecbb07b741ec91f449f0aaa78f",
+    "docs/REVIEWED_PAR_INSTALL_CATALOG.json": "8a18effb17929604c76817ed7478b112033df4886e4434c0c1e6a4cce01e8e17",
+    "docs/RUNTIME_PERMISSION_CANDIDATE.json": "c745e62caf86790a701fcf483fb4bbb1669c5121ee89758463f22b7f6c105763",
+    "migrations/20261004_actual_inventory_corrections.sql": "93ab20d57cc4cef8650314a4e9710bdfeb05009165cd7028fb9020138a507e16",
+    "migrations/20261004_actual_inventory_counts.sql": "38b65a0dc69f93ad8a90fab6ce4c9319bb0631f33825f7be2ae11974fee156a4",
+    "migrations/20261004_actual_inventory_scope_bridges.sql": "a6fd5805a3f6bc1e933fcd202294292a17ae3e84113bc36d3085f4c102e01559",
+    "migrations/20261004_native_purchase_import.sql": "7e2d67ae995209b9157be495e97fc490e173f0fce9f84cbf72bbf4958b7abf55",
+    "migrations/20261004_posted_invoice_corrections.sql": "6c71eb93cd3bd04c20f0f72c2c7a7696c3d4d8acf16d54387596450115f92171",
+    "migrations/20261005_manual_purchase_sources.sql": "b7227b7f9958b5e5067fceeec82caeb069c020126ece581da746a7f5dfdace15",
+    "migrations/20261005_native_order_receiving.sql": "cfe4f6afab42d50a6b1633ec813a6bc6f1d4e8e44c2cf9e48e5e6e089b1978c5",
+    "migrations/20261005_po_receipt_reconciliation.sql": "1ec859496d02d93e0d0ab86ddc095d677fd53f970ab1ede8d5ef158152f67af9",
+    "migrations/20261005_prep_batch_events.sql": "ae1f9cc3036894780f4cf8691068817f28e24ecfc44819a8e01b3a4484b9a68c",
+    "migrations/20261005_prep_mapping_foundation.sql": "34303c021ce4f2ca2eb6aa24d81127402ab04f2ceec7b185cdb78fdd0dff2de7",
+    "migrations/20261005_prep_observations.sql": "7bf0be77c5abc28ba3f0c1b6d6b497cddf14f7a41f07ff6e1f21e8e60df559af",
+    "migrations/20261005_prep_opening_sources.sql": "2cd4591031d0b2c9d613988947ef4bcb2e89e7dcd8906683d416ac83ab198769",
+    "migrations/20261005_prep_period_journal.sql": "8dfb9f84dd2c2e8ec9a27675d3f33ad6f7cdad48d05a3f4b4ffac35dcd462abf",
+    "migrations/20261005_staff_count_drafts.sql": "7b38fbfbff0f1caf3d96705c393b7324472c603ae3a36fdfdc8bab4792ad6803",
+    "migrations/20261006_order_commands.sql": "48fa8d7c2f0cca44578d28ba48af708b5435a8e968fa0ea6fc47da4c4796dafd",
+    "migrations/20261006_shared_catalog.sql": "27285007adace38b7802cde106d894c5e384bc208e0bf54884c240d2403bccf8",
+    "migrations/20261006_supplier_contacts.sql": "18f2e20de47870a3058f49c141112f70c1dff5b12a3228f50da30491f2a971ed",
+    "migrations/20261006_supplier_price_history.sql": "beb3820209079c7525087dad2f22a300518b3bc4fc07d29e4aded66f218144d8",
+    "migrations/20261007_container_waste.sql": "cd239e111b17d2638eaad55075fb1b66206a9ecf6575626f61c9e23d523099cd",
+    "migrations/20261007_native_private_access.sql": "0bc563d002299aec7a8d964841a528c754041f8f980901c0dc838c1948ddbfe5",
+    "migrations/20261007_prep_containers.sql": "2656b0dc21ecfc6161851ba7549b9848945ea2ba0803e8c2191e1a7d53d27f1b",
+    "migrations/20261007_prep_day_tasks.sql": "d70521e952a31e4c19a7cab9ba122bdb11a964cf1643d5f4bb92375b55dbea7d",
+    "migrations/20261007_prep_execution.sql": "f6204beedc54305b42891d91783216e5e597f774229e4d51079d8492ee41e391",
+    "migrations/20261007_prep_planning.sql": "049d4d10eed34aed8817414e91bdc107b7555a3130ca0b934f95dbcadde1036a",
+    "migrations/20261007_prep_progress.sql": "33539f954c6e8113d537ca8b9fd64bcdc8ea27930d1ca57d9d3f9e3da75c21ad",
+    "migrations/20261007_staff_prep_counts.sql": "3ef8a2fd7e5f36e16c0432a196b4b662edffe1e63fdf30ed5bb8db4cbfd9e9b2",
+    "migrations/20261007_staff_prep_production.sql": "a459ca18cf9c7b4aadc821db13437af96b290c29657201851e32b81039b11ce8",
+    "migrations/20261007_staff_prep_tasks.sql": "1c97b54f1f61780c3b0e11ec42658a4ca7a647f6f59a5dd2d622d7d55098cab0",
+    "migrations/20261008_container_waste_corrections.sql": "5305cac1d00297f18a512959a0674d1ec277ae9c905b9ad4f0534d57e37028e0",
+    "migrations/20261013_purchase_source_lookup_index.sql": "2e9ea948fd2fb0c7f298ef3484fe838ec710ddbbeacf4bada7bb31241ba2eb97",
+    "migrations/20261018_reviewed_inventory_pars.sql": "84814517f75bb58940a36facdbf5a7934036ff5b388e97a820038e837416506e",
+    "tools/ops/apply_additive_migration.py": "586976afd3384be39f97212b2c3cdf01bd51e5dbe56024a0944d0fe15e165731",
+    "tools/ops/apply_reviewed_par_migration.py": "5e0b8499a8694470d5ebda80e7ca3608af60b0ecab80c61ed5df058f028a7b8a",
+    "tools/ops/hosted_additive_index.py": "8c4e08e2d699826c1dbbe370beb5153081e83a3659e55f807239945227f24521",
+    "tools/ops/hosted_reviewed_pars.py": "ce2e7d65b649cd0d37d94976e526b54e5be4f75aadde636e66699af340cae987"
+  },
+  "migration": {
+    "bodyBytes": 4407,
+    "bodySha256": "3a189a8b2a352cbd560cea88194dbde1940f160a54e7bcd4616d719c47b88c48",
+    "dependencyPosition": 31,
+    "path": "migrations/20261018_reviewed_inventory_pars.sql",
+    "rawSha256": "84814517f75bb58940a36facdbf5a7934036ff5b388e97a820038e837416506e"
+  },
+  "migrationDependencyOrder": [
+    "20261004_native_purchase_import.sql",
+    "20261004_actual_inventory_counts.sql",
+    "20261004_actual_inventory_corrections.sql",
+    "20261004_actual_inventory_scope_bridges.sql",
+    "20261004_posted_invoice_corrections.sql",
+    "20261005_manual_purchase_sources.sql",
+    "20261005_native_order_receiving.sql",
+    "20261005_po_receipt_reconciliation.sql",
+    "20261005_staff_count_drafts.sql",
+    "20261005_prep_mapping_foundation.sql",
+    "20261005_prep_batch_events.sql",
+    "20261005_prep_observations.sql",
+    "20261005_prep_opening_sources.sql",
+    "20261005_prep_period_journal.sql",
+    "20261006_shared_catalog.sql",
+    "20261006_supplier_price_history.sql",
+    "20261006_order_commands.sql",
+    "20261006_supplier_contacts.sql",
+    "20261007_prep_planning.sql",
+    "20261007_prep_day_tasks.sql",
+    "20261007_prep_execution.sql",
+    "20261007_prep_progress.sql",
+    "20261007_staff_prep_counts.sql",
+    "20261007_prep_containers.sql",
+    "20261007_staff_prep_tasks.sql",
+    "20261007_container_waste.sql",
+    "20261007_staff_prep_production.sql",
+    "20261008_container_waste_corrections.sql",
+    "20261007_native_private_access.sql",
+    "20261013_purchase_source_lookup_index.sql",
+    "20261018_reviewed_inventory_pars.sql"
+  ],
+  "notExecutableInstallerPlan": true,
+  "planningDateEastern": "2026-10-21",
+  "privateConfigurationRead": false,
+  "reference": {
+    "addedGroupCounts": {
+      "columns": 28,
+      "constraints": 17,
+      "extensions": 0,
+      "functions": 1,
+      "indexes": 6,
+      "internal_trigger_states": 12,
+      "policies": 0,
+      "relations": 7,
+      "schemas": 0,
+      "sequence_definitions": 0,
+      "triggers": 3,
+      "types": 0,
+      "views": 0
+    },
+    "path": "docs/REVIEWED_PAR_INSTALL_CATALOG.json",
+    "postgresMajor": 17,
+    "sha256": "8a18effb17929604c76817ed7478b112033df4886e4434c0c1e6a4cce01e8e17"
+  },
+  "sqlExecuted": false,
+  "userTriggers": [
+    {
+      "definition_sha256": "16f0cb19e18d62bbde399a443d0e8378d65d6750e42b1da906b34bedb1e11972",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions",
+      "tgenabled": "O",
+      "tgname": "immutable_inventory_par"
+    },
+    {
+      "definition_sha256": "2c288190d35e31990c0fb3848d68d07bfb89e739b8898a8fe0acc938ffb6e82c",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions",
+      "tgenabled": "O",
+      "tgname": "valid_inventory_par"
+    },
+    {
+      "definition_sha256": "b3faf85fdfc45fc719f07b48ba91fd34d206b81afa3a750c4dd0db7e1651708a",
+      "nspname": "purchasing",
+      "relname": "inventory_par_versions",
+      "tgenabled": "O",
+      "tgname": "retained_inventory_par"
+    }
+  ]
+}

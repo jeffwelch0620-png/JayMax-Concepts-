@@ -35,3 +35,6 @@ supabase/schema.sql text eol=crlf
 docs/REVIEWED_PAR_INSTALL_CATALOG.json text eol=lf
 tools/ops/apply_reviewed_par_migration.py text eol=lf
 tools/ops/hosted_reviewed_pars.py text eol=lf
+
+# Keep the new public content-pin manifest reproducible across checkouts.
+docs/PAR_QUALIFICATION_SOURCE_PINS.json text eol=lf

@@ -1,6 +1,71 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local candidate: bounded submitted par recovery
+## Local qualification operator handoff
+
+The [source-bound packet builder/verifier](docs/PAR_QUALIFICATION_EXECUTION_PACKET.md)
+prepares the fresh supervised handoff for the proposed maintenance window.
+It binds 56 actual local source-file byte hashes plus the proposal, rejects
+source/gate/template drift, and leaves every hosted approval false. Accepted
+Python/JSON content permits only LF/CRLF checkout differences; SQL stays byte-exact
+and each generated packet still binds the exact local bytes. The packet contains
+separate export, isolated-restore and read-only qualification argv templates; it
+cannot execute them or verify live authorization/state. Manual producer controls,
+strict drain, local restore lifecycle, current resources and a new window approval
+remain required. No hosted, credential, grant, schema or application change is
+included. The new fictional-only suite is selected by offline CI.
+
+The [validation record](docs/PAR_QUALIFICATION_PACKET_VALIDATION_20261022.md)
+records the final complete **1,261-case offline pass**, the corrected local
+Uvicorn test environment and the retained initial refusal. Draft publication,
+fresh CI and any hosted maintenance remain separate approvals.
+
+## October 22 maintenance proposal ready for review
+
+The [fresh qualification proposal](docs/REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md)
+is prepared locally with a [non-executable packet](docs/REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.json).
+It proposes a separately approved 45-minute pause/drain, fresh encrypted
+backup/disposable restore and read-only par qualification window, followed by
+restoration of original writers. It does not include schema application. Local
+memory headroom, renewed writer/owner availability confirmation and a fresh
+source-bound execution packet are prerequisites before any outage. No window,
+hosted request, service pause or credential/grant/schema change occurred in this
+preparation. All execution approvals remain false.
+
+## Read-only API role and writer follow-up
+
+The [October 21 follow-up](docs/API_ROLE_WRITER_REVIEW_20261021.md) verified that
+Render's primary API connection is configured as `postgres` through the existing
+Supabase shared pooler on port 6543, with PostgreSQL mode enabled. The known
+application writers remain API plus enabled Toast jobs 3/4. Two snapshots showed
+six other sessions consistent with Supabase services and no identifiable extra
+application client; no writer drain or exhaustive inventory is claimed. Reviewed
+restricted-role checks do not describe the current owner-connected API. No API
+session was connected for independent per-process identity proof. Service pauses,
+credential/grant/schema changes and further hosted work stay held.
+
+## Bounded read-only hosted preflight completed
+
+The [October 21 preflight](docs/REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md) observed
+both Render services Live at accepted PR53 `46461e5`. All 16 scoped role checks
+passed; reviewed client private-access counts were zero. Supabase still has 55
+ledger versions, no reviewed-par table, a valid existing source index and enabled
+Toast jobs 3/4. Both read-only connections closed cleanly; the initial metadata
+probe error and corrected completion are retained separately. At that first read,
+API identity and exhaustive writer attribution remained unproven; the follow-up
+above resolves the configured primary role. This is not full
+installer readiness. Service pauses, further hosted work and credential, grant
+and schema changes remain held; ordering stays manual and par editing frozen.
+
+## Local installation and acceptance proposal
+
+The [reviewed-par installation and acceptance proposal](docs/REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
+pins accepted PR53 `46461e5`, the unchanged additive SQL, exact new-object
+inventory and separate read-only, maintenance, exact-plan and fictional acceptance
+approvals. Its [source audit](docs/REVIEWED_PAR_PROPOSAL_SOURCE_AUDIT_20261021.json)
+checks saved source only. No hosted work, credential/grant/schema change, delivery
+version or executable plan is authorized or created by this local preparation.
+
+## Accepted PR53 submitted par recovery
 
 The owner-authorized [par recovery follow-up](docs/PAR_SAVE_RELOAD_RECOVERY.md)
 retains exact submitted confirm/withdraw requests in an actor/location-scoped
@@ -16,9 +81,12 @@ confirmed-save cleanup/refresh failures cannot cause another command.
 The authenticated backend status reader uses a read-only transaction and the
 same fingerprint/validation rules as the existing guarded writer. No migration SQL,
 permission candidate, credentials, feature flags or hosting settings change.
-The implementation is published as draft PR53; its local-discard amendment is
-validated separately. Fresh amended-head CI and merge/hosted acceptance remain
-separate. Hosted work and credential/grant/schema changes stay held.
+PR53 merged as `46461e5`, matching reviewed `5c8e3ea` exactly. Reviewed-head and
+merged-main CI each passed all four checks: 1,079 frontend tests / 83 suites plus
+strict build, 1,180 Windows offline cases and 242 backend/PostgreSQL cases.
+Automatic Render test deployment was approved; both services were subsequently
+observed Live at the accepted merge in the scoped read-only preflight above.
+Further hosted work and credential/grant/schema changes stay held.
 Ordinary unsent typing and closed-tab/browser-restart/cross-device recovery are
 outside this slice. Par editing remains frozen on the hosted build and ordering
 manual. The amendment's full frontend run passed 1,079 tests across 83 suites.
