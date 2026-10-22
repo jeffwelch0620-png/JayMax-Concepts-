@@ -1,0 +1,594 @@
+{
+  "acceptedMain": "ec0480b67a89103ded95805bd194a50f676a3480",
+  "attribution": "inclusive function totals overlap; exclusive groups partition measured driver calls; counts/seconds only, no SQL/parameters/rows",
+  "candidatePacketFormat": "jaymax-par-qualification-operator-packet-v2",
+  "candidatePacketSha256": "96ff1b4d302f1893a89ca0fad78db3f1190fa8af4e8cc9f44e9dfebd5b8d124e",
+  "cleanupErrors": [],
+  "completedAt": "2026-10-22T23:55:35.989561+00:00",
+  "credentialsChanged": false,
+  "format": "jaymax-local-par-attribution-timing-v1",
+  "hostedConnection": false,
+  "hostedExecutionAuthorized": false,
+  "hostedGrantsChanged": false,
+  "hostedSchemaChanged": false,
+  "hostedTimingProven": false,
+  "hostedWrites": false,
+  "installerSourcesMatched": 49,
+  "instrumentationSha256": "ee1ced537ea3dd9c6ad856ffc7a28da78c83b4e1b3e4028e08bc5a11f123e1c3",
+  "ledgerRowsAdded": 1,
+  "measurementLimit": "execute/fetch/fetchval/fetchrow await time only; cursor/transaction protocol traffic excluded; sequence group zero does not mean no sequence work; no server/network-time separation",
+  "memoryAtServerStart": {
+    "freeMiB": 1335.1,
+    "freePercent": 22.14
+  },
+  "memoryBefore": {
+    "freeMiB": 1500.0,
+    "freePercent": 24.88
+  },
+  "networkGuard": {
+    "loopbackConnections": 7,
+    "nonloopbackAttempts": 0
+  },
+  "newParRows": 0,
+  "operationLimitSeconds": 600,
+  "originalLocalInventoryRestored": true,
+  "originalRowsSequencesCatalogPreserved": true,
+  "ownedLocalServerStopped": true,
+  "packetSourcesMatched": 56,
+  "privateReceiptSha256": "87eb6e5f09257e5113afe067272c39fe4c00cc19e771652c41ee48420622146c",
+  "restore": {
+    "archiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+    "catalogGroupsMatched": 13,
+    "majorVersionMatched": true,
+    "managedRecoveryVerified": false,
+    "operationalReleaseApproved": false,
+    "patchVersionMatched": false,
+    "rowsMatched": 45648,
+    "status": "verified_application_restore",
+    "tablesMatched": 120
+  },
+  "restoreMeasured": false,
+  "retainedEncryptedArchiveUnchanged": true,
+  "retainedWindowReceiptUnchanged": true,
+  "runnerSha256": "b1750f68f3ffad2fcb81aec30686c85e3b559a4bebeff13baa2bbc8aee0d06d0",
+  "sourceArchiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+  "sourceRevision": "c85b7f21ddfaea366885d8d5ea153dfd32d74ae8",
+  "startedAt": "2026-10-22T23:52:41.828152+00:00",
+  "status": "passed_local_restored_data_timing_rehearsal",
+  "timings": {
+    "applyAndIndependentVerification": {
+      "elapsedSeconds": 75.047,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 9,
+          "querySeconds": 0.031
+        },
+        "apply_ddl": {
+          "queryCalls": 1,
+          "querySeconds": 0.078
+        },
+        "backend_permissions": {
+          "queryCalls": 42,
+          "querySeconds": 0.062
+        },
+        "backup_catalog": {
+          "queryCalls": 45,
+          "querySeconds": 0.516
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 359,
+          "querySeconds": 33.25
+        },
+        "capture_catalog": {
+          "queryCalls": 39,
+          "querySeconds": 0.579
+        },
+        "fingerprints": {
+          "queryCalls": 359,
+          "querySeconds": 37.859
+        },
+        "identity": {
+          "queryCalls": 5,
+          "querySeconds": 0.015
+        },
+        "index_state": {
+          "queryCalls": 6,
+          "querySeconds": 0.094
+        },
+        "ledger": {
+          "queryCalls": 64,
+          "querySeconds": 0.453
+        },
+        "locks": {
+          "queryCalls": 7,
+          "querySeconds": 0.016
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.0
+        },
+        "original_columns": {
+          "queryCalls": 6,
+          "querySeconds": 0.111
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 4,
+          "querySeconds": 0.016
+        },
+        "readiness": {
+          "queryCalls": 120,
+          "querySeconds": 0.217
+        },
+        "readiness_check": {
+          "queryCalls": 18,
+          "querySeconds": 0.094
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 16,
+          "querySeconds": 0.015
+        },
+        "writer_guard": {
+          "queryCalls": 9,
+          "querySeconds": 0.047
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 42,
+          "querySeconds": 0.062
+        },
+        "backup_catalog": {
+          "queryCalls": 404,
+          "querySeconds": 33.766
+        },
+        "backup_compare": {
+          "queryCalls": 407,
+          "querySeconds": 33.766
+        },
+        "backup_fingerprints": {
+          "queryCalls": 359,
+          "querySeconds": 33.25
+        },
+        "capture_catalog": {
+          "queryCalls": 39,
+          "querySeconds": 0.579
+        },
+        "fingerprints": {
+          "queryCalls": 362,
+          "querySeconds": 37.907
+        },
+        "identity": {
+          "queryCalls": 2,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 3,
+          "querySeconds": 0.079
+        },
+        "ledger": {
+          "queryCalls": 63,
+          "querySeconds": 0.453
+        },
+        "locks": {
+          "queryCalls": 1,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.0
+        },
+        "original_columns": {
+          "queryCalls": 6,
+          "querySeconds": 0.111
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 446,
+          "querySeconds": 25.72
+        },
+        "readiness": {
+          "queryCalls": 132,
+          "querySeconds": 0.312
+        },
+        "readiness_check": {
+          "queryCalls": 192,
+          "querySeconds": 0.468
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 9,
+          "querySeconds": 0.047
+        }
+      },
+      "passed": true,
+      "queryCalls": 1112,
+      "querySeconds": 73.453
+    },
+    "prepare": {
+      "elapsedSeconds": 24.359,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 3,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 14,
+          "querySeconds": 0.031
+        },
+        "backup_catalog": {
+          "queryCalls": 15,
+          "querySeconds": 0.188
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 119,
+          "querySeconds": 11.077
+        },
+        "capture_catalog": {
+          "queryCalls": 13,
+          "querySeconds": 0.172
+        },
+        "fingerprints": {
+          "queryCalls": 119,
+          "querySeconds": 11.89
+        },
+        "identity": {
+          "queryCalls": 2,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 2,
+          "querySeconds": 0.093
+        },
+        "ledger": {
+          "queryCalls": 23,
+          "querySeconds": 0.108
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        },
+        "original_columns": {
+          "queryCalls": 2,
+          "querySeconds": 0.032
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 40,
+          "querySeconds": 0.125
+        },
+        "readiness_check": {
+          "queryCalls": 6,
+          "querySeconds": 0.016
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 6,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.031
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 14,
+          "querySeconds": 0.031
+        },
+        "backup_catalog": {
+          "queryCalls": 134,
+          "querySeconds": 11.265
+        },
+        "backup_compare": {
+          "queryCalls": 135,
+          "querySeconds": 11.265
+        },
+        "backup_fingerprints": {
+          "queryCalls": 119,
+          "querySeconds": 11.077
+        },
+        "capture_catalog": {
+          "queryCalls": 13,
+          "querySeconds": 0.172
+        },
+        "fingerprints": {
+          "queryCalls": 120,
+          "querySeconds": 11.906
+        },
+        "identity": {
+          "queryCalls": 1,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 1,
+          "querySeconds": 0.078
+        },
+        "ledger": {
+          "queryCalls": 23,
+          "querySeconds": 0.108
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        },
+        "original_columns": {
+          "queryCalls": 2,
+          "querySeconds": 0.032
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 44,
+          "querySeconds": 0.203
+        },
+        "readiness_check": {
+          "queryCalls": 64,
+          "querySeconds": 0.25
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.031
+        }
+      },
+      "passed": true,
+      "queryCalls": 370,
+      "querySeconds": 23.779
+    },
+    "restore": {
+      "elapsedSeconds": 41.25,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_catalog": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "capture_catalog": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "fingerprints": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "identity": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "ledger": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "original_columns": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_catalog": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "capture_catalog": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "fingerprints": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "identity": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "ledger": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "original_columns": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        }
+      },
+      "passed": true,
+      "queryCalls": 0,
+      "querySeconds": 0
+    }
+  }
+}
