@@ -12,6 +12,15 @@ import test_native_backup as recovery
 
 
 class InventoryParValidationTests(unittest.TestCase):
+    def test_recovery_identity_preserves_decimal_scale_and_actor_version(self):
+        unit=uuid4();key_body=dict(unit_profile_id=unit,quantity='1.00',coverage_note='Fictional coverage',verified=True)
+        body=pars.Review(**key_body)
+        digest=pars.request_digest('berts','F01','actor',body,0)
+        self.assertEqual(digest,pars.fingerprint(pars.serial(dict(store='berts',item='F01',actor='actor',expected=0,body=body.model_dump()))))
+        for changed in [pars.request_digest('berts','F01','other',body,0),pars.request_digest('berts','F01','actor',body,1),
+                        pars.request_digest('berts','F01','actor',pars.Review(**(key_body|{'quantity':'1.0'})),0)]:
+            with self.subTest():self.assertNotEqual(digest,changed)
+
     def test_response_decimals_are_fixed_without_mutating_evidence_or_fingerprints(self):
         value=dict(legacy_quantity=Decimal('0E-10'),review=dict(quantity=Decimal('1E-7'),factor=Decimal('1E-7'),base_quantity=Decimal('1E-14')))
         before=pars.fingerprint(pars.serial(value))
@@ -64,6 +73,67 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
 
     async def read(self):
         r=await self.catalog.get('/api/pg/purchases/berts/inventory-pars');self.assertEqual(r.status_code,200,r.text);return r.json()
+
+    async def status(self,body,key,version=0,store='berts',client=None):
+        return await (client or self.catalog).post(f'/api/pg/purchases/{store}/inventory-pars/test_food/status',json=body,
+            headers={'If-Match':str(version),'Idempotency-Key':key})
+
+    async def test_recovery_status_is_readonly_and_exact_retries_preserve_accounting(self):
+        _,a,b=await self.pair();report=(await self.report(a,b)).json()
+        key=str(uuid4());body=self.review(quantity='0');original=pars.review_values
+        async def checked_reader(conn,*args):
+            self.assertEqual(await conn.fetchval('SHOW transaction_read_only'),'on')
+            self.assertEqual(await conn.fetchval('SHOW transaction_isolation'),'repeatable read')
+            return await original(conn,*args)
+        async with self.pool.acquire() as c:
+            before=await c.fetchval("SELECT revision FROM store_state WHERE store_id='berts'")
+        with patch.object(pars,'review_values',checked_reader):status=await self.status(body,key)
+        self.assertEqual(status.status_code,200,status.text);self.assertEqual(status.json()['outcome'],'retry_available')
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval("SELECT revision FROM store_state WHERE store_id='berts'"),before)
+            self.assertEqual(await c.fetchval('SELECT count(*) FROM purchasing.inventory_par_versions'),0)
+        posted=await self.edit(body,key=key);self.assertEqual(posted.status_code,200,posted.text)
+        self.assertEqual((await self.status(body,key)).json()['outcome'],'saved_current')
+        replay=await self.edit(body,key=key);self.assertTrue(replay.json()['replayed'])
+        self.assertEqual(posted.json()['review'],replay.json()['review'])
+        self.assertEqual(report,(await self.report(a,b)).json())
+
+    async def test_recovery_distinguishes_saved_superseded_and_unsaved_fenced_requests(self):
+        body=self.review();key=str(uuid4());missing=str(uuid4())
+        self.assertEqual((await self.edit(body,key=key)).status_code,200)
+        self.assertEqual((await self.edit(self.review(quantity='2'),version=1)).status_code,200)
+        saved=(await self.status(body,key)).json();self.assertEqual(saved['outcome'],'saved_superseded')
+        self.assertEqual(saved['review']['revision'],1);self.assertEqual(saved['current_review']['revision'],2)
+        absent=(await self.status(body,missing)).json();self.assertEqual(absent['outcome'],'not_saved_superseded')
+        self.assertIsNone(absent['review']);self.assertEqual(absent['current_review']['revision'],2)
+        self.assertEqual((await self.edit(body,key=missing)).status_code,409)
+
+    async def test_recovery_rejects_changed_identity_and_holds_changed_profiles(self):
+        key=str(uuid4());body=self.review()
+        self.assertEqual((await self.edit(body,key=key)).status_code,200)
+        for attempted,client in [(self.review(quantity='9'),self.catalog),(body,self.other)]:
+            held=(await self.status(attempted,key,client=client)).json()
+            self.assertEqual(held['outcome'],'held');self.assertIsNone(held['review']);self.assertIsNone(held['current_review'])
+        async with self.pool.acquire() as c:
+            await c.execute("UPDATE store_items SET count_unit='bag' WHERE store_id='berts' AND item_code='test_food'")
+        self.assertEqual((await self.status(body,str(uuid4()),version=1)).json()['outcome'],'held')
+        self.assertEqual((await self.status(body,key)).json()['outcome'],'saved_current')
+
+    async def test_recovery_withdrawal_authorization_and_missing_storage(self):
+        self.assertEqual((await self.edit()).status_code,200)
+        body=dict(action='withdraw',coverage_note='Fictional review withdrawal',verified=True);key=str(uuid4())
+        self.assertEqual((await self.status(body,key,version=1)).json()['outcome'],'retry_available')
+        self.assertEqual((await self.edit(body,key=key,version=1)).status_code,200)
+        result=(await self.status(body,key,version=1)).json()
+        self.assertEqual(result['outcome'],'saved_current');self.assertFalse(result['review']['confirmed'])
+        for role,locations in [('readonly',['berts']),('manager',['rudds'])]:
+            token=server._token(dict(id='synthetic-denied',role=role,locations=locations,email='test@example.invalid'))
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app),base_url='http://test',headers={'Authorization':'Bearer '+token}) as client:
+                self.assertEqual((await self.status(body,key,version=1,client=client)).status_code,403)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app),base_url='http://test') as client:
+            self.assertEqual((await self.status(body,key,version=1,client=client)).status_code,401)
+        with patch.object(pars,'installed',return_value=False):
+            self.assertEqual((await self.status(body,key,version=1)).json()['outcome'],'held')
 
     async def test_unconfirmed_legacy_default_and_missing_installation_are_not_zero_targets(self):
         self.assertFalse(self.before_install['available'])

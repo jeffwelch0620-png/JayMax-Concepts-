@@ -1,5 +1,13 @@
 # Reviewed purchased-inventory par units
 
+**October 21 local recovery candidate:** the separately authorized
+[submitted-request recovery follow-up](PAR_SAVE_RELOAD_RECOVERY.md) retains exact
+confirm/withdraw requests across reload and same-account sign-in in the same tab,
+with explicit read-only status checks and original-key retry. This is local,
+unpublished work; the older within-view recovery limitation below describes the
+accepted baseline. No schema, grant, credential or hosted change is included.
+Par editing remains frozen on the hosted build and ordering remains manual.
+
 **October 19 maintenance outcome:** the approved 12:21:26-1:06:26 a.m. Eastern window [closed at 12:39:21 AM Eastern](REVIEWED_PAR_WINDOW_20261019.md) with original API/Toast states restored. Strict writer drain and a fresh encrypted backup/disposable restore passed (120 relations, 13 catalog groups, 45,608 rows). Read-only par-plan preparation held on the trusted Inventory backend role being evaluated under private-client denial checks. No executable plan, schema SQL, grant change or connection cutover occurred. Review role classification locally before another window; retain browser denial, backend ledger denial and strict writer guards. Par editing remains held and ordering manual. Earlier pending/active stages below are dated history.
 
 **Read-only IPv6 validation passed October 19:** see the

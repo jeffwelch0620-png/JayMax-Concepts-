@@ -57,7 +57,7 @@ const ITEM_GROUPS = [
   { label: "catalog participation", fields: ["active", "countActive", "orderEnabled", "salesTracked"] },
 ];
 
-export function SetupTab({ items, revision = 0, persistItems, areas, persistAreas, showToast, showError = () => {}, drafts, rid, onCatalogLinked, onVerifySupplier }) {
+export function SetupTab({ items, revision = 0, persistItems, areas, persistAreas, showToast, showError = () => {}, drafts, rid, actorId, onCatalogLinked, onVerifySupplier }) {
   const [form, editForm, clearForm, , reconcileForm] = useRetainedDraft(`item:${rid}`, emptyForm(areas), drafts);
   const [editingKey, setEditingCN, clearEditing] = useRetainedDraft(`item-edit:${rid}`, null, drafts);
   const editingCN = editingKey || form.draftBase?.controlNumber || null;
@@ -204,7 +204,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
       {api.catalogMappingEnabled && <SharedCatalogLink key={`catalog-${rid}`} restaurantId={rid} drafts={drafts} onLinked={onCatalogLinked} showToast={showToast} />}
       {error && <p role="alert">{error}</p>}
       {api.actualInventoryEnabled && <NativeInventoryPosition key={`inventory-position-${rid}`} restaurantId={rid} />}
-      {api.actualInventoryEnabled && <InventoryParSetup rid={rid} drafts={drafts} onSaved={onCatalogLinked} showToast={showToast}/>}
+      {api.actualInventoryEnabled && <InventoryParSetup rid={rid} actorId={actorId} drafts={drafts} onSaved={onCatalogLinked} showToast={showToast}/>}
       {api.prepSetupEnabled && <PreparedItemSetup key={`prep-${rid}`} restaurantId={rid} />}
       {api.prepPlanningEnabled && <PrepPlanning rid={rid} drafts={drafts} showToast={showToast}/>}
       {api.prepBatchesEnabled && <PreparedBatchLedger key={`prep-batches-${rid}`} restaurantId={rid} />}

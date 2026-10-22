@@ -1,5 +1,25 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
+## Current status — October 21
+
+The [readiness review](REVIEWED_PAR_READINESS_20261021.md) reconciles accepted
+PR51 `07daa29`, the completed 16-check role observation and the separately
+approved fresh encrypted backup/disposable restore. Recovery matched 120 tables,
+45,638 rows and 13 catalog groups; the window closed at 8:02:45 p.m. Eastern with
+the API owner-confirmed Live at 07daa29 and both Toast jobs restored/enabled.
+There is no active window, concrete executable par plan or new schema approval.
+
+The saved par table is absent; its unchanged SQL/reference match source. Full
+installer readiness, exact historical-ledger/index checks and later restricted
+runtime-role permissions remain separate gates. This is not a live preflight
+pass or permission repair. Hosted work, credentials, grants and schema changes
+remain held; ordering manual and par editing frozen. Any later schema window
+needs fresh approval, drain and backup/restore; the October 21 archive is dated
+recovery evidence after writers resume. Earlier dated planning stages below do
+not reopen an expired window or make the completed backup pending again.
+
+## Earlier planning records
+
 **October 20 gate:** PR48 merged as `cbe8e88` with reviewed-head and merged-main
 CI green. The local [N1/N2 diagnostic and preflight-record work](PAR_BACKEND_HOLD_DIAGNOSTICS.md)
 does not run a hosted preflight or authorize another window. First review the
