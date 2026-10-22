@@ -134,9 +134,69 @@ collection sections. The historical index installer and hosted adapter are uncha
 
 ## Next gate
 
-Complete the resource-held function timing and verify final-head CI before
-returning the amended draft PR55 for separate owner merge approval.
+The function-timing rerun passed. Verify final-head CI before returning the
+amended draft PR55 for separate owner merge approval.
 Even improved loopback timings do not prove hosted fit; retain the separate
 health, writer/drain, fresh backup/restore, exact-plan, installation-window and
 fictional live acceptance approvals in the
 [installation runbook](REVIEWED_PAR_INSTALLATION_RUNBOOK_20261022.md).
+
+
+## PR55 review amendments
+
+The branch was merged normally with accepted main ed62beb in a4adba8. That
+merge's tree is exactly the original reviewed 84fd182 tree; no rebase or
+force-push was used. The bounded code amendments are 0153381. The packet CLI
+now refuses Python below 3.12 before parsing arguments or reading/writing files.
+All 18 portable core Python/JSON paths are LF-pinned; all 31 exact migration
+hashes and their reviewed LF/CRLF rules are unchanged. Historical manifests,
+receipts and approved-source hashes are retained. Fresh byte-bound packets and
+plans remain required after any checkout-byte change.
+
+Local validation passed **1,276 offline cases** (453 methods + 823 subtests),
+with no failures/errors/skips, in 84.93 seconds. The focused packet/readiness/
+instrumentation selection passed 33 methods + 63 subtests, overlapping the full
+profile. The three PostgreSQL regression methods and 12 subtests passed (15
+reported cases) in 82.20 seconds, with original local inventories restored and
+the owned server stopped. No Supabase/Render connection or service control was
+used. Fresh CI, exact-head review and owner merge approval remain separate.
+
+The [new instrumented local receipt](REVIEWED_PAR_QUERY_REDUCTION_FUNCTION_TIMING_20261022.json)
+retains counts and seconds without SQL, parameters or row values. Earlier
+receipts are unchanged. Preparation measured **370 calls /
+24.766 seconds**; apply plus fresh-connection independent
+verification measured **1112 calls / 75.938
+seconds**. The original rows, sequences, catalog and security were preserved,
+the new local table was empty and the ledger delta was exactly one. All original
+local inventories were restored, the owned server stopped and cleanup had no
+errors. This diagnostic run is not a controlled speed comparison or hosted proof.
+The initial attempt held before database startup at 971.3 MiB free; it is retained
+as a resource refusal, not counted as a passed rehearsal.
+
+Exclusive groups below attribute every measured driver method exactly once;
+their counts and unrounded seconds reconcile to each phase total. The JSON also
+contains inclusive function totals, which overlap and must not be added together.
+ACL/index groups outside leaf catalog/fingerprint/ledger functions are classified
+by fixed local query shapes; query text itself is never retained. Await time mixes
+server work, transport and client scheduling. Cursor/transaction protocol traffic
+is excluded, matching the earlier method-count boundary. Restore is uninstrumented.
+
+| Exclusive group | Prepare calls | Prepare seconds | Apply/verify calls | Apply/verify seconds |
+| --- | ---: | ---: | ---: | ---: |
+| acl | 6 | 0.015000 | 18 | 0.048000 |
+| capture_catalog | 13 | 0.172000 | 39 | 0.502000 |
+| fingerprints | 120 | 12.078000 | 362 | 37.827000 |
+| index_state | 2 | 0.109000 | 6 | 0.077000 |
+| ledger | 17 | 0.063000 | 49 | 0.328000 |
+| other | 152 | 11.440000 | 458 | 35.045000 |
+| readiness | 42 | 0.140000 | 126 | 0.251000 |
+| readiness_check | 18 | 0.062000 | 54 | 0.125000 |
+
+The original candidate's hosted-derived additive estimate is about 532 seconds
+(69.859 + 1,112 x 0.415529). Substituting this diagnostic run's measured elapsed
+time gives about **538.007 seconds**. Neither is a hosted prediction. Both
+exceed the proposed **450-second planning threshold**, so installation remains
+held. The 600-second limit and every preservation check remain unchanged.
+A separately authorized bounded read-only hosted probe may inform a later
+proposal; no such probe is authorized or performed here. Par editing remains
+frozen, ordering manual and Track 1 independent.

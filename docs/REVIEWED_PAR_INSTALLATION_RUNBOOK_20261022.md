@@ -307,5 +307,15 @@ in that earlier documentation-only step.
 
 The subsequent [PR55 amendment record](PR55_REVIEW_AMENDMENTS.md) reports the
 resolved branch conflict, supported-runtime/newline checks, fresh local and CI
-results, and the remaining resource-held function-timing rerun. Hosted execution
+results, and the completed local function-timing rerun. Hosted execution
 and installation remain held independently of the code review.
+
+## PR55 amendment evidence
+
+The [amendment report](REVIEWED_PAR_QUERY_REDUCTION.md#pr55-review-amendments)
+and [function timing receipt](REVIEWED_PAR_QUERY_REDUCTION_FUNCTION_TIMING_20261022.json)
+record the local-only diagnostic rerun and supported-runtime/newline checks.
+The modeled hosted duration remains above the proposed 450-second planning
+threshold. Installing is held independently of whether the code PR is merged.
+Fresh CI and separate merge approval are required; hosted/service/credential/
+grant/schema changes remain held. No prior maintenance window can be reused.

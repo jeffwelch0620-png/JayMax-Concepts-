@@ -50,33 +50,43 @@ At code amendment 0153381fc33c82b0de93e1236cb8ccc1fa71563e:
   and tree-preservation checks passed. New v2 packet generation verified all
   49 core / 56 total source bindings; every execution approval remains false.
 
-## Remaining before a merge recommendation
+## Completed restored-data function timing
 
-The real restored-data function-timing rerun has **not completed**. Its first
-attempt held before database startup because loaded memory was **971.3 MiB**,
-below the existing **1,024 MiB / 15%** start requirement. No connection was made
-and the server remained stopped. That refusal is not counted as a passed timing
-run. Protected refusal-receipt SHA-256:
-`e41ca7f50d5fed84d3efd8a27c1b40c498f923f753f99ed959cc3c5d2a33488e`.
+After the owner freed memory, fresh loaded-process observations passed and the
+loopback-only restored-data run completed at a8f9e3d. The production/tooling
+sources at that head are unchanged from green code commit 0153381; a8f9e3d's
+four [fresh CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39871230590)
+also passed separately, with the same profile counts.
 
-Keep the original timing receipts unchanged. Once a fresh loaded-process
-resource observation passes, run the prepared loopback-only restored-data
-rehearsal, verify preservation and complete owned cleanup, then publish a new
-count/time-only function breakdown with both exclusive and inclusive semantics.
-Bind the harness to the then-reviewed source tree and verify a fresh packet;
-do not bypass source checks or weaken the resource floor.
+The [new function-timing receipt](REVIEWED_PAR_QUERY_REDUCTION_FUNCTION_TIMING_20261022.json)
+and [exclusive breakdown](REVIEWED_PAR_QUERY_REDUCTION.md#pr55-review-amendments)
+record 370 preparation calls and 1,112 apply/fresh-verification calls. The latter
+took **75.938 seconds** on loopback. Inclusive function totals overlap;
+exclusive counts/seconds reconcile to phase totals. Await times are not pure
+server execution or network latency. No SQL, parameters or row values are in
+the public breakdown, and production tools do not import the instrumentation.
 
-The retained candidate had 1,112 calls / 69.859 seconds. The arithmetic
-69.859 + 1,112 x ((311.766 - 15.078) / 714) gives **531.928 seconds** — about
-68 seconds (11%) remaining under 600. This exceeds the proposed 450-second
-planning screen. The estimate mixes transport, server and scheduling costs
-from different runs; the rise in local cost per call does not establish its
-cause. Instrumentation alone cannot prove hosted timing. A future bounded
-read-only hosted probe requires separate owner approval and cannot authorize DDL.
+Original rows, sequences, catalog/security and complete local inventories were
+preserved; the new local par table was empty and ledger delta exactly one. The
+owned server stopped, cleanup had no errors, retained encrypted backup and
+closed-window evidence were unchanged, and there were no nonloopback attempts.
+The original timing receipts remain unchanged. The first attempt held before
+database startup at 971.3 MiB free, below the unchanged 1,024 MiB/15% start floor;
+it remains refusal evidence and is not counted as a successful timing run.
 
-PR55 should remain draft until the remaining timing evidence and final-head CI
-are verified and the owner separately approves merge/automatic test deployment.
-Installation remains held independently of a code merge. No old maintenance
-window or dated backup may be reused as current authority. Par editing remains
-frozen, ordering manual and Track 1 accounting independent. O1/G04/G13 and live
-functional acceptance remain separate workflows.
+The original 69.859-second candidate gives a 531.928-second additive sensitivity
+estimate using the older hosted preparer. Substituting this diagnostic run gives
+approximately **538.007 seconds**. These are not hosted forecasts and do not
+establish why local cost per call changed. Both exceed the proposed **450-second
+planning screen**. Hosted application therefore remains held independently of
+whether this code/documentation PR is merged. No timeout or preservation check
+was relaxed. A later bounded read-only hosted probe requires separate approval.
+
+## Remaining approvals
+
+Verify all four checks at the final documentation head, then return PR55 for
+separate owner merge/automatic test-deployment approval. Keep the PR draft until
+authorized. No hosted request, service control or real credential/grant/schema/
+connection change occurred. No maintenance window is active, and no dated backup
+or old window is current authority. Par editing remains frozen, ordering manual
+and Track 1 independent. O1/G04/G13 and live acceptance remain separate workflows.

@@ -4,10 +4,12 @@
 
 PR55 review amendments are [recorded here](docs/PR55_REVIEW_AMENDMENTS.md).
 The main-branch conflict is resolved, Python 3.12 and LF rules are enforced,
-and all four fresh code-head CI checks passed. The restored-data function-timing
-rerun is still resource-held before database startup; PR55 remains draft and is
-not yet recommended for merge. Hosted work and credential/grant/schema changes
-remain held.
+and fresh code-head CI and the restored-data function-timing rerun passed. The
+rerun measured 1,112 apply/verification calls / 75.938 seconds on loopback;
+the public breakdown retains counts/time only. Modeled hosted timing still
+exceeds the proposed 450-second planning screen. PR55 remains draft pending
+final-head CI and separate merge approval; hosted work and credential/grant/
+schema changes remain held.
 
 The [tooling follow-up](docs/REVIEWED_PAR_QUERY_REDUCTION.md) batches migration
 object-existence checks, avoids a discarded catalog capture and reuses original
