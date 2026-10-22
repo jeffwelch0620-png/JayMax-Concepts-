@@ -2,6 +2,11 @@
 
 ## Current checkpoint — October 21
 
+**October 22 planning update:** the [fresh qualification proposal](REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md)
+is local-only and awaits review. It proposes no schema application, credential
+change or runtime grant repair. A fresh execution packet, resource headroom and
+new writer/window approval are required before any hosted work.
+
 The later [API role/writer follow-up](API_ROLE_WRITER_REVIEW_20261021.md) confirms
 the configured primary API role is postgres through the existing pooler. Known
 application writers remain API plus Toast jobs 3/4; no additional application

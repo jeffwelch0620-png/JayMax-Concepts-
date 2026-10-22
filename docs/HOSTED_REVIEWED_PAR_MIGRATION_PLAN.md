@@ -2,6 +2,11 @@
 
 ## Current status — October 21
 
+**October 22 planning update:** the [fresh qualification proposal](REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md)
+is ready for owner review. Its proposed window covers fresh backup/restore and
+read-only qualification, not schema application. Service pauses and all hosted
+execution/credential/grant/schema changes remain held; no window is active.
+
 The later [API role/writer follow-up](API_ROLE_WRITER_REVIEW_20261021.md) confirms
 the configured primary API role is postgres through the existing pooler. The
 known controllable writers remain API and Toast jobs 3/4; no extra application

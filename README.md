@@ -1,5 +1,17 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## October 22 maintenance proposal ready for review
+
+The [fresh qualification proposal](docs/REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md)
+is prepared locally with a [non-executable packet](docs/REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.json).
+It proposes a separately approved 45-minute pause/drain, fresh encrypted
+backup/disposable restore and read-only par qualification window, followed by
+restoration of original writers. It does not include schema application. Local
+memory headroom, renewed writer/owner availability confirmation and a fresh
+source-bound execution packet are prerequisites before any outage. No window,
+hosted request, service pause or credential/grant/schema change occurred in this
+preparation. All execution approvals remain false.
+
 ## Read-only API role and writer follow-up
 
 The [October 21 follow-up](docs/API_ROLE_WRITER_REVIEW_20261021.md) verified that

@@ -1,5 +1,9 @@
 # API database role and writer review
 
+The subsequent [October 22 local maintenance proposal](REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md)
+is ready for review. This dated role/writer observation does not authorize that
+window or substitute for its fresh confirmation and live control checks.
+
 ## Findings
 
 The separately owner-approved read-only follow-up completed October 21, 2026,

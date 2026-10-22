@@ -1,5 +1,14 @@
 # Reviewed par installation and acceptance proposal
 
+**October 22 qualification proposal:** the
+[fresh maintenance proposal](REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md) supplies
+the current next-window scope and stage cutoffs while schema changes remain held.
+It includes backup/restore and read-only qualification only; it supersedes the
+earlier installation-inclusive timing suggestion below for that proposed window.
+The exact migration delta and later separate installation/acceptance gates here
+remain unchanged. No executable packet, active window or application approval is
+created by either proposal.
+
 ## Decision and current authority
 
 Prepare one additive installation of the already-reviewed par migration, then
