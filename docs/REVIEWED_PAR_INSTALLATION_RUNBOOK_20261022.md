@@ -289,7 +289,7 @@ ACL/RLS adoption, G04 security/personal-login acceptance, managed Supabase recov
 Companion adoption and operational release are separate unfinished workflows.
 Installation alone closes none of them.
 
-## Local validation and collaborator records
+## Historical timing/runbook validation and collaborator records
 
 The corrected restored-data rehearsal passed as recorded above; nine isolated
 connector checks passed with no database connection. JSON receipt assertions,
@@ -302,4 +302,10 @@ rerun for this documentation/evidence-only update.
 JMax root, Inventory workflow, progress and hosted-par proposal records were
 reconciled and read back after access recovered. The earlier active-window
 claims were replaced with closure and local timing findings. Unrelated Companion
-history remains intact. No new PR, hosted request or live acceptance was performed.
+history remains intact. No new PR, hosted request or live acceptance was performed
+in that earlier documentation-only step.
+
+The subsequent [PR55 amendment record](PR55_REVIEW_AMENDMENTS.md) reports the
+resolved branch conflict, supported-runtime/newline checks, fresh local and CI
+results, and the remaining resource-held function-timing rerun. Hosted execution
+and installation remain held independently of the code review.

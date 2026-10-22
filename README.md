@@ -2,6 +2,13 @@
 
 ## Local installer query-reduction candidate
 
+PR55 review amendments are [recorded here](docs/PR55_REVIEW_AMENDMENTS.md).
+The main-branch conflict is resolved, Python 3.12 and LF rules are enforced,
+and all four fresh code-head CI checks passed. The restored-data function-timing
+rerun is still resource-held before database startup; PR55 remains draft and is
+not yet recommended for merge. Hosted work and credential/grant/schema changes
+remain held.
+
 The [tooling follow-up](docs/REVIEWED_PAR_QUERY_REDUCTION.md) batches migration
 object-existence checks, avoids a discarded catalog capture and reuses original
 row fingerprints only within the same outcome snapshot after exact column/type
@@ -15,7 +22,8 @@ dropped 714 → 370; apply plus independent verification dropped 2,396 → 1,112
 (53.6%). The latter took 69.859 s under the 600 s local limit, versus 58.578 s
 previously; no elapsed-time speedup or hosted timing proof is claimed. The same
 120-table / 45,648-row snapshot matched and original local inventory/server state
-was restored. Full CI remains pending approved publication.
+was restored. These original local results are historical; see the amendment
+record for fresh CI and the remaining timing gate.
 Hosted work and credential, grant and schema changes remain on hold. No PR has
 been pushed; independent review, CI, merge and hosted approval are separate.
 

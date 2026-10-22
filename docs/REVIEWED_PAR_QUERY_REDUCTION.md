@@ -4,8 +4,9 @@
 
 Owner-authorized local tooling changes, regression tests, restored-data timing
 rehearsal and JMax updates only. Hosted work and credential, grant and schema
-changes remain held. No publication is authorized until the owner approves a
-new draft PR. Fictional regression targets and owned disposable local restores
+changes remain held. The owner subsequently approved draft PR55 publication and
+the [review amendments](PR55_REVIEW_AMENDMENTS.md); merge approval remains separate.
+Fictional regression targets and owned disposable local restores
 are the only database execution scope.
 
 The previous [local timing receipt](REVIEWED_PAR_LOCAL_TIMING_20261022.json)
@@ -133,8 +134,8 @@ collection sections. The historical index installer and hosted adapter are uncha
 
 ## Next gate
 
-Return the completed local evidence and current source revision for owner
-approval before pushing a draft PR. Fresh CI and merge remain later gates.
+Complete the resource-held function timing and verify final-head CI before
+returning the amended draft PR55 for separate owner merge approval.
 Even improved loopback timings do not prove hosted fit; retain the separate
 health, writer/drain, fresh backup/restore, exact-plan, installation-window and
 fictional live acceptance approvals in the
