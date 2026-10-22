@@ -1,5 +1,15 @@
 # Reviewed par installation and acceptance proposal
 
+**October 22 status:** PR54 `ed62beb` is now the accepted application baseline,
+tree-identical to tested `02ac4c0`. The separately approved qualification-only
+window passed and closed at 3:04:43 p.m. Eastern with producers restored and no
+schema application. Its backup/restore matched 120 tables, 45,648 table rows and
+13 catalog groups. The [current installation runbook](REVIEWED_PAR_INSTALLATION_RUNBOOK_20261022.md)
+records the local timing rehearsal and remaining application/acceptance gates.
+The PR53 references and timing proposal below describe the earlier planning
+checkpoint; immutable source audits and qualification packets are preserved.
+Hosted work and credential, grant and schema changes remain on hold.
+
 The subsequent [local operator handoff](PAR_QUALIFICATION_EXECUTION_PACKET.md)
 provides source-bound templates and local verification for supervised
 qualification. It is not a migration controller or hosted approval. The proposed

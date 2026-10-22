@@ -2,12 +2,56 @@
 import os
 import unittest
 from uuid import uuid4
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
 from pathlib import Path
 import asyncpg
 import deployment_readiness as readiness
 import native_backup as backup
 import test_native_backup as fixtures
+
+
+async def individual_object_presence(conn,entries):
+    """Independent oracle: original per-object SQL, used only by tests."""
+    result={kind:set() for kind in ('tables','functions','triggers','indexes')}
+    for entry in entries:
+        for table in entry['tables']:
+            if await conn.fetchval('SELECT to_regclass($1) IS NOT NULL',table):result['tables'].add(table)
+        for name in entry['functions']:
+            schema,fn=name.split('.')
+            if await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$1 AND p.proname=$2)',schema,fn):result['functions'].add(name)
+        for name,table in entry['triggers']:
+            if await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid=to_regclass($1) AND tgname=$2)',table,name):result['triggers'].add((name,table))
+        for name,table in entry['indexes']:
+            if await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_index WHERE indexrelid=to_regclass($1) AND indrelid=to_regclass($2))',table.split('.')[0]+'.'+name,table):result['indexes'].add((name,table))
+    return result
+
+
+class ReadinessBatchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_empty_and_large_duplicate_inputs_have_four_bounded_calls(self):
+        entry={'tables':['public.test_only'], 'functions':['public.test_only_fn'],
+            'triggers':[('test_only_trigger','public.test_only')],
+            'indexes':[('test_only_index','public.test_only')]}
+        for entries in ([],[entry]*1000):
+            with self.subTest(empty=not entries):
+                conn=SimpleNamespace(fetch=AsyncMock(return_value=[]))
+                result=await readiness.migration_object_presence(conn,entries)
+                self.assertEqual(result,{k:set() for k in entry})
+                self.assertEqual(conn.fetch.await_count,4)
+                self.assertTrue(all(len(arg)<=1 for call in conn.fetch.await_args_list for arg in call.args[1:]))
+
+    async def test_fresh_inspections_do_not_reuse_previous_presence(self):
+        conn=SimpleNamespace(fetch=AsyncMock(side_effect=[
+            [{'name':'public.test_only'}],[],[],[],[],[],[],[]]))
+        entries=[{'tables':['public.test_only'],'functions':[],'triggers':[],'indexes':[]}]
+        self.assertEqual((await readiness.migration_object_presence(conn,entries))['tables'],{'public.test_only'})
+        self.assertEqual((await readiness.migration_object_presence(conn,entries))['tables'],set())
+        self.assertEqual(conn.fetch.await_count,8)
+
+    async def test_query_failures_are_not_treated_as_missing_or_success(self):
+        conn=SimpleNamespace(fetch=AsyncMock(side_effect=ConnectionError('TEST ONLY refused')))
+        with self.assertRaises(ConnectionError):await readiness.migration_object_presence(conn,[])
+        self.assertEqual(conn.fetch.await_count,1)
 
 
 class ReadinessConfigurationTests(unittest.TestCase):

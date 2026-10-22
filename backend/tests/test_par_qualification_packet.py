@@ -55,9 +55,28 @@ class ParQualificationPacketTests(unittest.TestCase):
             self.assertIsNone(data['window']['startsAt'])
             self.assertIsNone(data['deliveryVersion'])
             self.assertIsNone(data['executableInstallationPlanSha256'])
+            self.assertEqual(data['toolingReviewStatus'],'candidate_requires_independent_review')
+            self.assertEqual(set(data['toolingAmendments']),{
+                'backend/deployment_readiness.py','tools/ops/apply_reviewed_par_migration.py'})
 
     def test_generation_is_deterministic(self):
         self.assertEqual(packet.json_bytes(packet.build(self.root)), packet.json_bytes(packet.build(self.root)))
+
+    def test_unsupported_python_is_held_before_arguments_or_file_io(self):
+        for version in ((3, 10), (3, 11)):
+            with self.subTest(version=version), patch.object(packet.sys, 'version_info', version), \
+                    patch.object(packet.Path, 'read_bytes') as reads, \
+                    patch.object(packet.Path, 'open') as opens, \
+                    patch.object(packet.argparse.ArgumentParser, 'parse_args') as arguments, \
+                    redirect_stdout(io.StringIO()) as output:
+                code = packet.main(['prepare', '--output', 'TEST_ONLY_NEVER_CREATED.json'])
+                self.assertEqual(code, 2)
+                result = json.loads(output.getvalue())
+                self.assertEqual(result['status'], 'held')
+                self.assertEqual(result['reason'], 'Python 3.12 or newer required')
+                self.assertFalse(result['hostedActionsPerformed'])
+                self.assertFalse(result['readyForHostedExecution'])
+                reads.assert_not_called(); opens.assert_not_called(); arguments.assert_not_called()
 
     def test_existing_output_and_evidence_are_never_overwritten(self):
         with TemporaryDirectory() as tmp:
@@ -78,7 +97,8 @@ class ParQualificationPacketTests(unittest.TestCase):
         finally: path.write_bytes(original)
 
     def test_changed_core_sql_catalog_or_runtime_source_prevents_generation(self):
-        for name in ('migrations/20261018_reviewed_inventory_pars.sql',
+        for name in ('backend/deployment_readiness.py','tools/ops/apply_reviewed_par_migration.py',
+                     'migrations/20261018_reviewed_inventory_pars.sql',
                      'docs/REVIEWED_PAR_INSTALL_CATALOG.json', 'backend/maintenance_connection.py'):
             with self.subTest(source=name):
                 path = self.root/name
@@ -152,6 +172,19 @@ class ParQualificationPacketTests(unittest.TestCase):
             path.write_bytes(packet.json_bytes(value))
             with self.assertRaises(packet.PacketHeld): packet.build(self.root)
         finally: path.write_bytes(original)
+
+    def test_legacy_packet_and_changed_amendment_are_refused(self):
+        with TemporaryDirectory() as tmp:
+            value=packet.build(self.root)
+            value['format']='jaymax-par-qualification-operator-packet-v1'
+            path,sha=self.artifact(tmp,value=value)
+            with self.assertRaises(packet.PacketHeld):packet.verify(path,sha,self.root)
+        changed=deepcopy(packet.TOOLING_AMENDMENTS)
+        changed['backend/deployment_readiness.py']['priorContentSha256']='0'*64
+        with patch.object(packet,'TOOLING_AMENDMENTS',changed),self.assertRaises(packet.PacketHeld):packet.build(self.root)
+        changed=deepcopy(packet.TOOLING_AMENDMENTS)
+        changed['backend/deployment_readiness.py']['contentSha256']='0'*64
+        with patch.object(packet,'TOOLING_AMENDMENTS',changed),self.assertRaises(packet.PacketHeld):packet.build(self.root)
 
     def test_unsafe_source_paths_are_refused(self):
         for name in ('../TEST_ONLY.env', '/TEST_ONLY.env', 'C:/TEST_ONLY.env',
@@ -238,7 +271,7 @@ class ParQualificationPacketTests(unittest.TestCase):
 
     def test_module_cannot_open_connections_spawn_commands_or_load_credentials(self):
         tree = ast.parse((ROOT/'tools/ops/par_qualification_packet.py').read_text())
-        allowed = {'argparse','hashlib','json','pathlib','re'}
+        allowed = {'argparse','hashlib','json','pathlib','re','sys'}
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 self.assertTrue(all(n.name in allowed for n in node.names))

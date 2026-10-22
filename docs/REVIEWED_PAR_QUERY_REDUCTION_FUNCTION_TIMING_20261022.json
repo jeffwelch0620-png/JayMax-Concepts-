@@ -1,0 +1,288 @@
+{
+  "attribution": "inclusive function totals overlap; exclusive groups reconcile; no SQL/parameters/rows retained",
+  "candidatePacketFormat": "jaymax-par-qualification-operator-packet-v2",
+  "candidatePacketSha256": "e40a06eb822e861a4177ccf8e0cd2fa378e21825615a503ee2646831a4ee39a1",
+  "cleanupErrors": [],
+  "completedAt": "2026-10-22T23:28:24.968841+00:00",
+  "credentialsChanged": false,
+  "format": "jaymax-local-par-function-timing-v1",
+  "hostedConnection": false,
+  "hostedExecutionAuthorized": false,
+  "hostedGrantsChanged": false,
+  "hostedSchemaChanged": false,
+  "hostedTimingProven": false,
+  "hostedWrites": false,
+  "installerSourcesMatched": 49,
+  "instrumentationSha256": "6a1e0054ed14b0981b5a15c1ee7841873d367ff5d61a05086d994ac3dc6183d3",
+  "ledgerRowsAdded": 1,
+  "measurementLimit": "execute/fetch/fetchval/fetchrow driver-method await time; cursor/transaction protocol traffic excluded; not pure server or network time",
+  "memoryAtServerStart": {
+    "freeMiB": 1752.4,
+    "freePercent": 29.06
+  },
+  "memoryBefore": {
+    "freeMiB": 1775.8,
+    "freePercent": 29.45
+  },
+  "networkGuard": {
+    "loopbackConnections": 7,
+    "nonloopbackAttempts": 0
+  },
+  "newParRows": 0,
+  "operationLimitSeconds": 600,
+  "originalLocalInventoryRestored": true,
+  "originalRowsSequencesCatalogPreserved": true,
+  "ownedLocalServerStopped": true,
+  "packetSourcesMatched": 56,
+  "priorAttempt": {
+    "freeMiB": 971.3,
+    "freePercent": 16.11,
+    "reason": "loaded_memory_below_1024_MiB",
+    "receiptSha256": "e41ca7f50d5fed84d3efd8a27c1b40c498f923f753f99ed959cc3c5d2a33488e",
+    "status": "held_before_database_start"
+  },
+  "privateReceiptSha256": "1c8fce5f56ecdb438ce5acdf720dd4ecdc0b396ca8eeba1f2119d5e495e5ffe1",
+  "restore": {
+    "archiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+    "catalogGroupsMatched": 13,
+    "majorVersionMatched": true,
+    "managedRecoveryVerified": false,
+    "operationalReleaseApproved": false,
+    "patchVersionMatched": false,
+    "rowsMatched": 45648,
+    "status": "verified_application_restore",
+    "tablesMatched": 120
+  },
+  "restoreMeasured": false,
+  "retainedEncryptedArchiveUnchanged": true,
+  "retainedWindowReceiptUnchanged": true,
+  "runnerSha256": "d44373601c897cb9ab8f3c0c952ba2142da558415824c9af743fb161af4dd9e2",
+  "sourceArchiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+  "sourceRevision": "a8f9e3d3349d4085ea5799623c32376ec42c253b",
+  "startedAt": "2026-10-22T23:25:28.915455+00:00",
+  "status": "passed_local_restored_data_timing_rehearsal",
+  "timings": {
+    "applyAndIndependentVerification": {
+      "elapsedSeconds": 75.938,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 18,
+          "querySeconds": 0.048
+        },
+        "capture_catalog": {
+          "queryCalls": 39,
+          "querySeconds": 0.502
+        },
+        "fingerprints": {
+          "queryCalls": 362,
+          "querySeconds": 37.827
+        },
+        "index_state": {
+          "queryCalls": 6,
+          "querySeconds": 0.077
+        },
+        "ledger": {
+          "queryCalls": 49,
+          "querySeconds": 0.328
+        },
+        "other": {
+          "queryCalls": 458,
+          "querySeconds": 35.045
+        },
+        "readiness": {
+          "queryCalls": 126,
+          "querySeconds": 0.251
+        },
+        "readiness_check": {
+          "queryCalls": 54,
+          "querySeconds": 0.125
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "capture_catalog": {
+          "queryCalls": 39,
+          "querySeconds": 0.502
+        },
+        "fingerprints": {
+          "queryCalls": 362,
+          "querySeconds": 37.827
+        },
+        "index_state": {
+          "queryCalls": 3,
+          "querySeconds": 0.062
+        },
+        "ledger": {
+          "queryCalls": 49,
+          "querySeconds": 0.328
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 132,
+          "querySeconds": 0.313
+        },
+        "readiness_check": {
+          "queryCalls": 192,
+          "querySeconds": 0.454
+        }
+      },
+      "passed": true,
+      "queryCalls": 1112,
+      "querySeconds": 74.203
+    },
+    "prepare": {
+      "elapsedSeconds": 24.766,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 6,
+          "querySeconds": 0.015
+        },
+        "capture_catalog": {
+          "queryCalls": 13,
+          "querySeconds": 0.172
+        },
+        "fingerprints": {
+          "queryCalls": 120,
+          "querySeconds": 12.078
+        },
+        "index_state": {
+          "queryCalls": 2,
+          "querySeconds": 0.109
+        },
+        "ledger": {
+          "queryCalls": 17,
+          "querySeconds": 0.063
+        },
+        "other": {
+          "queryCalls": 152,
+          "querySeconds": 11.44
+        },
+        "readiness": {
+          "queryCalls": 42,
+          "querySeconds": 0.14
+        },
+        "readiness_check": {
+          "queryCalls": 18,
+          "querySeconds": 0.062
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "capture_catalog": {
+          "queryCalls": 13,
+          "querySeconds": 0.172
+        },
+        "fingerprints": {
+          "queryCalls": 120,
+          "querySeconds": 12.078
+        },
+        "index_state": {
+          "queryCalls": 1,
+          "querySeconds": 0.094
+        },
+        "ledger": {
+          "queryCalls": 17,
+          "querySeconds": 0.063
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 44,
+          "querySeconds": 0.234
+        },
+        "readiness_check": {
+          "queryCalls": 64,
+          "querySeconds": 0.296
+        }
+      },
+      "passed": true,
+      "queryCalls": 370,
+      "querySeconds": 24.079
+    },
+    "restore": {
+      "elapsedSeconds": 42.344,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "capture_catalog": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "fingerprints": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "ledger": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "capture_catalog": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "fingerprints": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "ledger": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        }
+      },
+      "passed": true,
+      "queryCalls": 0,
+      "querySeconds": 0
+    }
+  }
+}

@@ -1,5 +1,60 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local installer query-reduction candidate
+
+PR55 review amendments are [recorded here](docs/PR55_REVIEW_AMENDMENTS.md).
+The main-branch conflict is resolved, Python 3.12 and LF rules are enforced,
+and fresh code-head CI and the restored-data function-timing rerun passed. The
+rerun measured 1,112 apply/verification calls / 75.938 seconds on loopback;
+the public breakdown retains counts/time only. Modeled hosted timing still
+exceeds the proposed 450-second planning screen. PR55 remains draft pending
+final-head CI and separate merge approval; hosted work and credential/grant/
+schema changes remain held.
+
+The [tooling follow-up](docs/REVIEWED_PAR_QUERY_REDUCTION.md) batches migration
+object-existence checks, avoids a discarded catalog capture and reuses original
+row fingerprints only within the same outcome snapshot after exact column/type
+validation. Separate pre-DDL, post-DDL and fresh-connection checks remain. The
+migration, fingerprint formats, timeouts, locks, credentials and runtime grants
+are unchanged. Historical source manifests remain intact; v2 qualification
+packets disclose two exact candidate source amendments and refuse old packets.
+Regression and restored-data timing evidence are recorded in the follow-up.
+All 1,269 offline and 117 disposable PostgreSQL cases passed. Preparation calls
+dropped 714 → 370; apply plus independent verification dropped 2,396 → 1,112
+(53.6%). The latter took 69.859 s under the 600 s local limit, versus 58.578 s
+previously; no elapsed-time speedup or hosted timing proof is claimed. The same
+120-table / 45,648-row snapshot matched and original local inventory/server state
+was restored. These original local results are historical; see the amendment
+record for fresh CI and the remaining timing gate.
+Hosted work and credential, grant and schema changes remain on hold. No PR has
+been pushed; independent review, CI, merge and hosted approval are separate.
+
+## Current reviewed-par installation position — October 22
+
+PR54 is accepted as `ed62beb`, with the same file tree as tested `02ac4c0`.
+Its qualification-only window closed at **3:04:43 p.m. Eastern**, after
+22 minutes 56 seconds. Fresh encrypted backup/disposable restore matched
+120 tables, 45,648 table rows and 13 catalog groups; read-only qualification
+passed without applying SQL. Original Toast job states were restored/verified,
+and the owner confirmed API Live at `ed62beb`. One bounded anonymous health
+request timed out, so functional API recovery remains unverified.
+
+The [current installation runbook](docs/REVIEWED_PAR_INSTALLATION_RUNBOOK_20261022.md)
+separates this completed qualification from the owner-authorized local timing
+rehearsal, future exact-plan application and fictional acceptance. Earlier
+proposals below remain dated records. The closed window and its retained plan
+cannot authorize another hosted action. Hosted work and credential, grant and
+schema changes remain held. Ordering stays manual; par editing remains frozen.
+
+The local restored-data rehearsal passed: restore **25.047 s**, preparation
+**15.078 s**, apply plus independent verification **58.578 s** under the unchanged
+600-second limit, with exact preservation and owned cleanup. However, the last
+stage made **2,396 database calls** versus preparation's 714; the earlier hosted
+preparation took 311.766 s. Local success does not prove the hosted timing budget.
+The [runbook and public receipt](docs/REVIEWED_PAR_INSTALLATION_RUNBOOK_20261022.md)
+recommend a local review of repeated query/scan cost before any installation
+outage. No application/tooling code or hosted state changed in this follow-up.
+
 ## Local qualification operator handoff
 
 The [source-bound packet builder/verifier](docs/PAR_QUALIFICATION_EXECUTION_PACKET.md)

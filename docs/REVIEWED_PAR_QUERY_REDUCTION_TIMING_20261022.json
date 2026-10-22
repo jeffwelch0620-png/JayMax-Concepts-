@@ -1,0 +1,87 @@
+{
+  "automaticRetry": false,
+  "candidatePacketFormat": "jaymax-par-qualification-operator-packet-v2",
+  "candidatePacketSha256": "7cebd3528398acec1d85b4aed727fc5f7702d5a91138778d678e502d1eb16e43",
+  "cleanupErrors": [],
+  "completedAt": "2026-10-22T22:35:12.449493+00:00",
+  "credentialsChanged": false,
+  "format": "jaymax-local-par-query-reduction-timing-v1",
+  "hostedConnection": false,
+  "hostedExecutionAuthorized": false,
+  "hostedGrantsChanged": false,
+  "hostedSchemaChanged": false,
+  "hostedTimingProven": false,
+  "hostedWrites": false,
+  "installerSourcesMatched": 49,
+  "ledgerRowsAdded": 1,
+  "localCommitAcknowledged": true,
+  "localDisposableDdlOnly": true,
+  "localOutcome": "verified_applied",
+  "memoryAtServerStart": {
+    "freeMiB": 1384.2,
+    "freePercent": 22.95
+  },
+  "memoryBefore": {
+    "freeMiB": 1424.9,
+    "freePercent": 23.63
+  },
+  "memorySamples": [
+    {
+      "freeMiB": 1424.9,
+      "freePercent": 23.63
+    },
+    {
+      "freeMiB": 1384.2,
+      "freePercent": 22.95
+    }
+  ],
+  "networkGuard": {
+    "loopbackConnections": 7,
+    "nonloopbackAttempts": 0
+  },
+  "networkGuardInstalledBeforeDatabaseWork": true,
+  "newParRows": 0,
+  "operationLimitSeconds": 600,
+  "originalLocalInventoryRestored": true,
+  "originalRowsSequencesCatalogPreserved": true,
+  "ownedLocalServerStopped": true,
+  "packetSourcesMatched": 56,
+  "privateReceiptSha256": "c82b80085f54a5b52d0df7cd1de21072b117086efdd8fa7a11b0770e73e4ad0f",
+  "restore": {
+    "archiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+    "catalogGroupsMatched": 13,
+    "majorVersionMatched": true,
+    "managedRecoveryVerified": false,
+    "operationalReleaseApproved": false,
+    "patchVersionMatched": false,
+    "rowsMatched": 45648,
+    "status": "verified_application_restore",
+    "tablesMatched": 120
+  },
+  "retainedEncryptedArchiveUnchanged": true,
+  "retainedWindowReceiptUnchanged": true,
+  "runnerSha256": "0aca748f4dc13b4ab6bc9240065d53b04cdcd4992423aa2621371df1e20fa0f8",
+  "sourceArchiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+  "startedAt": "2026-10-22T22:32:26.961580+00:00",
+  "status": "passed_local_restored_data_timing_rehearsal",
+  "timings": {
+    "applyAndIndependentVerification": {
+      "elapsedSeconds": 69.859,
+      "passed": true,
+      "queryCalls": 1112,
+      "querySeconds": 68.376
+    },
+    "prepare": {
+      "elapsedSeconds": 23.985,
+      "passed": true,
+      "queryCalls": 370,
+      "querySeconds": 23.378
+    },
+    "restore": {
+      "elapsedSeconds": 40.031,
+      "passed": true,
+      "queryCalls": 0,
+      "querySeconds": 0
+    }
+  }
+}

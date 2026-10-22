@@ -8,13 +8,24 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FORMAT = 'jaymax-par-qualification-operator-packet-v1'
+FORMAT = 'jaymax-par-qualification-operator-packet-v2'
 PROPOSAL = 'docs/REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.json'
 PROPOSAL_CONTENT_SHA256 = '95ecfcee657ae81266b9170f24f92e761a02dd04379a398655aa1cf8c92707e1'
 CORE_PINS = 'docs/PAR_QUALIFICATION_SOURCE_PINS.json'
 CORE_PINS_SHA256 = '4bf0c694812102e897c0ac23133240866e000820896b987ba8aaa0de70455d00'
+# Explicit candidate amendments; never rewrite the historical proposal/pins.
+# These content hashes are independently reviewable source, not execution approval.
+TOOLING_AMENDMENTS = {
+    'backend/deployment_readiness.py': {
+        'priorContentSha256': '53cd1518b490eed146a43625f816414bfb6a0bbc951cc1b062e50a7b8bd43bfb',
+        'contentSha256': '2b5c1bf90ba3159ee38eaf142e0da3f988334d27ecb4db80ec69c7841f1e5458'},
+    'tools/ops/apply_reviewed_par_migration.py': {
+        'priorContentSha256': '5e0b8499a8694470d5ebda80e7ca3608af60b0ecab80c61ed5df058f028a7b8a',
+        'contentSha256': '80a1f1fd170b905b31af849b5b56742565453a40ae549f61b11cf21040e0d307'},
+}
 MAX_BYTES = 256 * 1024
 EXTRA_SOURCES = (
     '.gitattributes',
@@ -138,8 +149,15 @@ def build(root=ROOT):
         raw = source_file(root, path).read_bytes()
         mode = 'crlf_to_lf' if PurePosixPath(path).suffix in ('.py', '.json') else 'exact_bytes'
         compared = raw.replace(b'\r\n', b'\n') if mode == 'crlf_to_lf' else raw
+        amendment = TOOLING_AMENDMENTS.get(path)
+        expected_content = content_pin['contentSha256']
+        if amendment is not None:
+            if (mode != 'crlf_to_lf'
+                    or amendment['priorContentSha256'] != expected_content):
+                raise PacketHeld('Tooling amendment differs from the retained baseline')
+            expected_content = amendment['contentSha256']
         if (content_pin['reviewedRawSha256'] != expected or content_pin['comparison'] != mode
-                or digest(compared) != checked_sha(content_pin['contentSha256'])):
+                or digest(compared) != checked_sha(expected_content)):
             raise PacketHeld('Reviewed executable or catalog source changed')
         sources[path] = digest(raw)
     for path in EXTRA_SOURCES:
@@ -149,9 +167,11 @@ def build(root=ROOT):
         'purpose': 'source-bound supervised qualification handoff',
         'proposal': {'path': PROPOSAL, 'contentSha256': PROPOSAL_CONTENT_SHA256,
             'rawSha256': digest(proposal_path.read_bytes())},
-        'comparison': 'SQL byte-exact; accepted Python/JSON LF/CRLF-only; packet binds all actual local bytes',
+        'comparison': 'SQL byte-exact; historical Python/JSON plus explicit candidate amendments LF/CRLF-only; packet binds all actual local bytes',
         'acceptedApplicationCommit': proposal['acceptedCommit'],
         'acceptedApplicationTree': proposal['acceptedTree'],
+        'toolingAmendments': {path:dict(value) for path,value in TOOLING_AMENDMENTS.items()},
+        'toolingReviewStatus': 'candidate_requires_independent_review',
         'sourceHashes': dict(sorted(sources.items())),
         'coreSourceCount': len(core),
         'orderedMigrations': proposal['migrationDependencyOrder'],
@@ -221,6 +241,10 @@ def verify(packet, expected_sha256, root=ROOT):
 
 
 def main(argv=None):
+    if sys.version_info < (3, 12):
+        print(json.dumps({'status': 'held', 'reason': 'Python 3.12 or newer required',
+            'hostedActionsPerformed': False, 'readyForHostedExecution': False}))
+        return 2
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='mode', required=True)
     sub.add_parser('prepare').add_argument('--output', type=Path, required=True)
