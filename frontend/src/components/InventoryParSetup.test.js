@@ -229,3 +229,130 @@ test('contradictory saved-current proof is retained without another write',async
   await click(button('Check saved par status'));
   expect(pendingParJournal(actorId,'berts').list()).toHaveLength(1);expect(toast).not.toHaveBeenCalled();expect(button('Retry same par review').disabled).toBe(true);
 });
+
+function recoveryStatus(record,outcome='held',current_review=null){
+  return {store_id:'berts',item_code:record.code,actor:actorId,request_key:record.key,expected_revision:record.version,
+    outcome,review:null,current_review,message:'Count conversion changed or is unconfirmed.'};
+}
+async function prepareDiscard(){
+  api.reviewInventoryPar.mockRejectedValueOnce({response:{status:409,data:{detail:'Count conversion changed'}}});
+  await form();await click(button('Confirm inventory par'));
+  const record=pendingParJournal(actorId,'berts').list()[0];
+  expect(button("Discard this tab's retained par request")).toBeUndefined();
+  api.checkInventoryParStatus.mockResolvedValue(recoveryStatus(record));
+  await click(button('Check saved par status'));await click(button("Discard this tab's retained par request"));
+  return record;
+}
+
+test('held conversion refusal can be discarded locally after fresh status and current-value reads',async()=>{
+  const record=await prepareDiscard();
+  const dialog=container.querySelector('[role="dialog"]');
+  expect(dialog.textContent).toContain(code);expect(dialog.textContent).toContain('6 bag');
+  expect(dialog.textContent).toContain(record.body.coverage_note);expect(dialog.textContent).toContain('may still complete');
+  expect(pendingParJournal(actorId,'berts').list()).toEqual([record]);
+  await click(button('Confirm discard retained par request'));
+  expect(api.checkInventoryParStatus).toHaveBeenCalledTimes(2);expect(api.inventoryPars).toHaveBeenCalledTimes(2);
+  expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);expect(toast).not.toHaveBeenCalled();
+  expect(pendingParJournal(actorId,'berts').list()).toEqual([]);expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(container.querySelector('fieldset').disabled).toBe(false);expect(container.querySelector('[aria-label="Par product"]').value).toBe('');
+  expect(container.querySelector('[aria-label="Par quantity"]').value).toBe('');expect(container.querySelector('[aria-label="Confirm par review"]').checked).toBe(false);
+  expect(button('Confirm inventory par').disabled).toBe(true);expect(container.textContent).toContain('was not cancelled and may still complete');
+});
+
+test('cancelling local discard retains evidence and sends no fresh check or write',async()=>{
+  const record=await prepareDiscard();await click(button('Keep retained par request'));
+  expect(container.querySelector('[role="dialog"]')).toBeNull();expect(pendingParJournal(actorId,'berts').list()).toEqual([record]);
+  expect(api.checkInventoryParStatus).toHaveBeenCalledTimes(1);expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);
+  expect(container.querySelector('fieldset').disabled).toBe(true);
+});
+
+test.each(['retry_available','not_saved_superseded'])('fresh %s permits local discard without resubmitting',async outcome=>{
+  const record=await prepareDiscard(),current=outcome==='not_saved_superseded'?{...saved,revision:2}:null;
+  api.checkInventoryParStatus.mockResolvedValue(recoveryStatus(record,outcome,current));
+  api.inventoryPars.mockResolvedValue(result(current));await click(button('Confirm discard retained par request'));
+  expect(pendingParJournal(actorId,'berts').list()).toEqual([]);expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);
+  expect(container.querySelector('[aria-label="Confirm par review"]').checked).toBe(false);
+});
+
+test.each(['saved_current','saved_superseded'])('fresh %s during discard resolves the committed request as saved',async outcome=>{
+  const record=await prepareDiscard(),current=outcome==='saved_current'?saved:{...saved,id:'44444444-4444-4444-8444-444444444444',revision:2};
+  api.checkInventoryParStatus.mockResolvedValue({...recoveryStatus(record,outcome,current),review:saved});
+  api.inventoryPars.mockResolvedValue(result(current));await click(button('Confirm discard retained par request'));
+  expect(toast).toHaveBeenCalledTimes(1);expect(pendingParJournal(actorId,'berts').list()).toEqual([]);
+  expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);expect(container.textContent).not.toContain('Recovery record removed');
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+test.each(['network','401','invalid proof'])('discard keeps evidence when its fresh status fails: %s',async failure=>{
+  const record=await prepareDiscard();
+  if(failure==='invalid proof')api.checkInventoryParStatus.mockResolvedValue({...recoveryStatus(record),actor:'another-user'});
+  else api.checkInventoryParStatus.mockRejectedValueOnce(failure==='401'?{response:{status:401,data:{detail:'Authentication required'}}}:new Error('Read failed'));
+  await click(button('Confirm discard retained par request'));
+  expect(pendingParJournal(actorId,'berts').list()).toEqual([record]);expect(container.querySelector('fieldset').disabled).toBe(true);
+  expect(api.inventoryPars).toHaveBeenCalledTimes(1);expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);expect(toast).not.toHaveBeenCalled();
+});
+
+test('held request survives reload and needs a new explicit check before discard',async()=>{
+  const record=await prepareDiscard();await act(async()=>root.render(<div/>));
+  await act(async()=>root.render(<InventoryParSetup actorId={actorId} rid="berts" drafts={new Map()}/>));
+  expect(container.textContent).toContain('Retained confirm review');expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(button("Discard this tab's retained par request")).toBeUndefined();expect(pendingParJournal(actorId,'berts').list()).toEqual([record]);
+  await click(button('Check saved par status'));expect(button("Discard this tab's retained par request")).toBeDefined();
+});
+
+test('discard retains the request if the current-value refresh fails',async()=>{
+  const record=await prepareDiscard();api.inventoryPars.mockRejectedValueOnce(new Error('Current read failed'));
+  await click(button('Confirm discard retained par request'));
+  expect(pendingParJournal(actorId,'berts').list()).toEqual([record]);expect(container.textContent).toContain('has not been discarded');
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);
+});
+
+test('discard cleanup failure preserves the journal and blocks new writes',async()=>{
+  const record=await prepareDiscard(),spy=jest.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('Cleanup quota');});
+  try{
+    await click(button('Confirm discard retained par request'));
+    expect(pendingParJournal(actorId,'berts').list()).toEqual([record]);expect(container.querySelector('fieldset').disabled).toBe(true);
+    expect(button('Confirm discard retained par request').disabled).toBe(true);expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);
+  }finally{spy.mockRestore();}
+});
+
+test.each(['actor','location'])('late discard status cannot clear the old request after a %s change',async changed=>{
+  const record=await prepareDiscard();let finish;
+  api.checkInventoryParStatus.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+  act(()=>button('Confirm discard retained par request').click());
+  api.inventoryPars.mockResolvedValue(changed==='actor'?result():{store_id:'rudds',available:true,items:[]});
+  await act(async()=>root.render(<InventoryParSetup actorId={changed==='actor'?'another-user':actorId} rid={changed==='location'?'rudds':'berts'} showToast={toast}/>));
+  await act(async()=>finish(recoveryStatus(record)));
+  expect(pendingParJournal(actorId,'berts').list()).toEqual([record]);expect(toast).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="dialog"]')).toBeNull();expect(container.textContent).not.toContain('Recovery record removed');
+});
+
+test('withdrawal discard shows frozen predecessor quantities, units and note',async()=>{
+  api.inventoryPars.mockResolvedValue(result(saved));await click(button('Reload latest par review'));
+  await form();api.reviewInventoryPar.mockRejectedValueOnce(new Error('Withdrawal response lost'));
+  await click(button('Withdraw par confirmation'));const record=pendingParJournal(actorId,'berts').list()[0];
+  api.checkInventoryParStatus.mockResolvedValue(recoveryStatus(record,'held',saved));
+  await click(button('Check saved par status'));await click(button("Discard this tab's retained par request"));
+  expect(container.querySelector('[role="dialog"]').textContent).toContain('withdraw. Quantity: 6 bag. Physical quantity: 30 lb');
+  expect(container.querySelector('[role="dialog"]').textContent).toContain(record.body.coverage_note);
+  await click(button('Confirm discard retained par request'));expect(pendingParJournal(actorId,'berts').list()).toEqual([]);
+  expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);expect(container.querySelector('[aria-label="Confirm par review"]').checked).toBe(false);
+});
+
+test('a commit after the negative status can appear on refresh without being called cancelled or causing another write',async()=>{
+  await prepareDiscard();api.inventoryPars.mockResolvedValue(result(saved));
+  await click(button('Confirm discard retained par request'));
+  await fill('Par product',code);
+  expect(container.textContent).toContain('6 bag = 30 lb');expect(container.textContent).toContain('may still complete');
+  expect(container.querySelector('[aria-label="Par quantity"]').value).toBe('');expect(button('Confirm inventory par').disabled).toBe(true);
+  expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);expect(toast).not.toHaveBeenCalled();
+});
+
+test('discard clears only the selected request and keeps the location frozen for another retained product',async()=>{
+  const record=await prepareDiscard(),other={...record,code:'other_food',key:'66666666-6666-4666-8666-666666666666'};
+  pendingParJournal(actorId,'berts').save(other);await act(async()=>root.render(<div/>));
+  await act(async()=>root.render(<InventoryParSetup actorId={actorId} rid="berts"/>));
+  await click(button('Check saved par status'));await click(button("Discard this tab's retained par request"));await click(button('Confirm discard retained par request'));
+  expect(pendingParJournal(actorId,'berts').list()).toEqual([other]);expect(container.querySelector('fieldset').disabled).toBe(true);
+  expect(container.textContent).toContain('Retained confirm review for other_food');expect(api.reviewInventoryPar).toHaveBeenCalledTimes(1);
+});

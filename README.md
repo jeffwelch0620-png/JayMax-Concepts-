@@ -7,19 +7,24 @@ retains exact submitted confirm/withdraw requests in an actor/location-scoped
 sessionStorage journal before sending. Reload/sign-in recovery requires an
 explicit saved-status check; retry uses the original body/key/revision and
 checks status again before sending. Saved-but-superseded, revision-fenced and
-held requests have separate controls. HTTP failures retain unresolved evidence;
+held requests have separate controls. Explicit local discard rechecks status and
+refreshes current values before removing only this tab's recovery record; it does
+not cancel the earlier request or delete saved history. The affected form and
+confirmation reset before another review. HTTP failures retain unresolved evidence;
 confirmed-save cleanup/refresh failures cannot cause another command.
 
 The authenticated backend status reader uses a read-only transaction and the
 same fingerprint/validation rules as the existing guarded writer. No migration SQL,
 permission candidate, credentials, feature flags or hosting settings change.
-The implementation is local and unpublished; fresh CI and merge/hosted acceptance
-remain separate. Hosted work and credential/grant/schema changes stay held.
+The implementation is published as draft PR53; its local-discard amendment is
+validated separately. Fresh amended-head CI and merge/hosted acceptance remain
+separate. Hosted work and credential/grant/schema changes stay held.
 Ordinary unsent typing and closed-tab/browser-restart/cross-device recovery are
 outside this slice. Par editing remains frozen on the hosted build and ordering
-manual. Local validation passed 1,062 frontend tests across 83 suites, all 1,180
-offline cases and all 28 disposable PostgreSQL cases. Final strict build evidence
-and overlapping-run limitations are recorded in the linked contract.
+manual. The amendment's full frontend run passed 1,079 tests across 83 suites.
+Original baseline validation passed 1,180 offline cases and 28 disposable
+PostgreSQL cases; the backend is unchanged by this frontend amendment. Strict
+build evidence and overlapping-run limitations are recorded in the linked contract.
 
 ## October 21 checkpoint: PR51 accepted, recovery verified; par rollout held
 

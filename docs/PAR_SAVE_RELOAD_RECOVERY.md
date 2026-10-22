@@ -4,8 +4,8 @@
 
 Local follow-up to accepted PR51 `07daa29` and the
 [October 21 readiness review](REVIEWED_PAR_READINESS_20261021.md). The owner
-authorized a bounded recovery implementation and local testing, with a prompt
-before any draft PR push. **Hosted work, credentials, grants and schema changes
+authorized a bounded recovery implementation and local testing, then approved
+publication as draft PR53 and the reviewed frontend amendment. **Hosted work, credentials, grants and schema changes
 remain on hold.** No migration, hosted connection, credential file or permission
 candidate is changed. Existing fictional test fixtures use only disposable local
 databases; application and hosted schemas are untouched.
@@ -58,7 +58,7 @@ Status checks do not bypass or replace any command-time authority check.
 | `saved_superseded` | The exact request saved, and a later review is current. Show the later-review notice and refresh current state; never resubmit the old target as a new review. |
 | `retry_available` | No saved key was visible and the exact retained command passes the snapshot's current validation. Offer an explicit retry with the same body/key/revision. This does not assert cancellation or prevent the original from completing later. |
 | `not_saved_superseded` | The key is absent and the immutable current revision is greater than the retained expected revision. The old expected revision can no longer append. An explicit compare/review action checks status again and refreshes the current head before returning retained values to an unconfirmed draft. |
-| `held` | Key/actor/body mismatch, storage unavailability, changed conversion, inactive/invalid item or other validation hold. Keep the record. Do not expose another request's record, generate a replacement key or offer an unknown-outcome discard. |
+| `held` | Key/actor/body mismatch, storage unavailability, changed conversion, inactive/invalid item or other validation hold. Keep the record until an explicit local-discard confirmation passes fresh status and current-value reads. This does not establish absence or cancel a server request. Do not expose another request's record or silently generate a replacement key. |
 
 An exact saved-key lookup precedes mutable profile eligibility: a later profile
 change does not make the original committed review disappear. Response validation
@@ -86,6 +86,23 @@ never erase the unresolved journal simply because of an HTTP status category.
    refresh fails. Cleanup failure blocks new commands; a later status check can
    resolve the same evidence. Read failures are reported as refresh problems,
    never used to manufacture another review or repeat a confirmed write.
+6. After a valid `held`, `retry_available` or `not_saved_superseded` check,
+   **Discard this tab's retained par request** opens a confirmation showing the
+   product, action, exact quantity/unit or withdrawal predecessor, and review note.
+   Confirmation checks status again; a saved result resolves as saved. Otherwise
+   require a valid fresh current-value read before clearing only that exact local
+   record. Read/authentication/validation failures retain the record; cleanup
+   failure keeps the form blocked. Cancel does not check, write or clear anything.
+   Clear the affected form and reset confirmation; another product's unsent draft
+   is preserved with confirmation reset and its revision refreshed. Other retained
+   requests still freeze the location. No new command or replacement key is sent.
+
+Local discard abandons this tab's recovery tracking only. It does not delete saved
+par history or cancel an earlier request, which may commit even after a fresh
+negative read. The warning remains visible after cleanup. A new review requires
+reading the current par, entering values and explicitly confirming again. The
+existing revision fence remains the server's concurrency guard. This amendment
+does not add per-product availability while another request is retained.
 
 The par form is paused while its location has retained requests or recovery
 storage is unavailable. Other application workflows and manual ordering retain
@@ -103,7 +120,7 @@ shared validation, original-key replay, revision fencing, identity/profile holds
 withdrawal and authorization, plus unchanged fictional Food Cost and existing
 history/backup coverage. New database methods are included in the CI selection.
 
-Final local evidence (October 21 Eastern / October 22 UTC):
+Original candidate local evidence at `f4dee10` (October 21 Eastern / October 22 UTC):
 
 | Check | Result | Evidence prefix outside Git |
 | --- | --- | --- |
@@ -126,3 +143,35 @@ merge approval, any automatic Render
 deployment consequence, hosted schema installation and live acceptance remain
 separate gates. O1 restricted-role ACL/RLS work and G04 acceptance stay open.
 Track 1 actual accounting remains independent of these planning targets.
+
+## PR53 review amendment: explicit local discard
+
+The review's held-request dead end is corrected in the frontend only. The
+location-wide freeze remains while any request is retained or the journal is
+unavailable. A valid held result is not proof that nothing saved: local discard
+only abandons tracking after a fresh checked status and current-value read.
+Malformed or failed reads never enable it. Saved outcomes resolve through the
+existing saved path; only the selected exact record can be removed. No server
+request is cancelled, no saved history is deleted and no new PUT is sent.
+
+The added regression coverage includes confirm/withdraw disclosure, cancel,
+fresh held/retryable/revision-fenced results, late saved/current and superseded
+results, delayed commit after a negative read, failed status/current reads,
+authentication/identity refusals, reload, scope changes, cleanup failure,
+confirmation reset and preserving a different retained product. The first
+focused run passed 158/159 cases and caught a warning being cleared on product
+selection. The warning now has separate state; the final full frontend rerun
+passed **1,079/1,079 tests across 83 suites**. The initial external log printer
+also hit Windows console encoding; using UTF-8 restored reporting without
+changing application behavior or hiding the failing test.
+
+Passing frontend evidence: `par-recovery-front-all-20261022T014250511370Z`.
+The final strict CI/ESLint production build passed as `main.221b3e02.js`;
+evidence: `par-recovery-build-20261022T014409305312Z`. No warning suppression
+was added. Generated review guides, all 141 relative Markdown links in the two
+amended documents, UTF-8 integrity, protected-source scope and whitespace checks
+passed.
+The original backend/offline/PostgreSQL evidence above remains dated baseline
+coverage; no backend, journal, schema, credential or grant source changed in
+this amendment. Fresh amended-head CI must run all jobs again before merge
+approval. Hosted installation and live acceptance remain held.
