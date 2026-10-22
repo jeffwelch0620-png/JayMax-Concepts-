@@ -1,5 +1,31 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Current reviewed-par installation position — October 22
+
+PR54 is accepted as `ed62beb`, with the same file tree as tested `02ac4c0`.
+Its qualification-only window closed at **3:04:43 p.m. Eastern**, after
+22 minutes 56 seconds. Fresh encrypted backup/disposable restore matched
+120 tables, 45,648 table rows and 13 catalog groups; read-only qualification
+passed without applying SQL. Original Toast job states were restored/verified,
+and the owner confirmed API Live at `ed62beb`. One bounded anonymous health
+request timed out, so functional API recovery remains unverified.
+
+The [current installation runbook](docs/REVIEWED_PAR_INSTALLATION_RUNBOOK_20261022.md)
+separates this completed qualification from the owner-authorized local timing
+rehearsal, future exact-plan application and fictional acceptance. Earlier
+proposals below remain dated records. The closed window and its retained plan
+cannot authorize another hosted action. Hosted work and credential, grant and
+schema changes remain held. Ordering stays manual; par editing remains frozen.
+
+The local restored-data rehearsal passed: restore **25.047 s**, preparation
+**15.078 s**, apply plus independent verification **58.578 s** under the unchanged
+600-second limit, with exact preservation and owned cleanup. However, the last
+stage made **2,396 database calls** versus preparation's 714; the earlier hosted
+preparation took 311.766 s. Local success does not prove the hosted timing budget.
+The [runbook and public receipt](docs/REVIEWED_PAR_INSTALLATION_RUNBOOK_20261022.md)
+recommend a local review of repeated query/scan cost before any installation
+outage. No application/tooling code or hosted state changed in this follow-up.
+
 ## Local qualification operator handoff
 
 The [source-bound packet builder/verifier](docs/PAR_QUALIFICATION_EXECUTION_PACKET.md)

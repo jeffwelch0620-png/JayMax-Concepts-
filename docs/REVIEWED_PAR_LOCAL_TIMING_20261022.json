@@ -1,0 +1,85 @@
+{
+  "automaticRetry": false,
+  "cleanupErrors": [],
+  "completedAt": "2026-10-22T19:25:42.898868+00:00",
+  "credentialsChanged": false,
+  "format": "jaymax-local-par-timing-v1",
+  "hostedConnection": false,
+  "hostedExecutionAuthorized": false,
+  "hostedGrantsChanged": false,
+  "hostedSchemaChanged": false,
+  "hostedTimingProven": false,
+  "hostedWrites": false,
+  "installerSourcesMatched": 49,
+  "ledgerRowsAdded": 1,
+  "localCommitAcknowledged": true,
+  "localDisposableDdlOnly": true,
+  "localOutcome": "verified_applied",
+  "memoryAtServerStart": {
+    "freeMiB": 1254.5,
+    "freePercent": 20.8
+  },
+  "memoryBefore": {
+    "freeMiB": 1259.6,
+    "freePercent": 20.89
+  },
+  "memorySamples": [
+    {
+      "freeMiB": 1259.6,
+      "freePercent": 20.89
+    },
+    {
+      "freeMiB": 1254.5,
+      "freePercent": 20.8
+    }
+  ],
+  "networkGuard": {
+    "loopbackConnections": 7,
+    "nonloopbackAttempts": 0
+  },
+  "networkGuardInstalledBeforeDatabaseWork": true,
+  "newParRows": 0,
+  "operationLimitSeconds": 600,
+  "originalLocalInventoryRestored": true,
+  "originalRowsSequencesCatalogPreserved": true,
+  "ownedLocalServerStopped": true,
+  "packetSourcesMatched": 56,
+  "privateReceiptSha256": "9d7b68867dceae1534cdaa28480a42687bb6543129cc0537c64d42a5a867b3e4",
+  "restore": {
+    "archiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+    "catalogGroupsMatched": 13,
+    "majorVersionMatched": true,
+    "managedRecoveryVerified": false,
+    "operationalReleaseApproved": false,
+    "patchVersionMatched": false,
+    "rowsMatched": 45648,
+    "status": "verified_application_restore",
+    "tablesMatched": 120
+  },
+  "retainedEncryptedArchiveUnchanged": true,
+  "retainedWindowReceiptUnchanged": true,
+  "runnerSha256": "17d523284b1781b74e0cf3834d21286618a173a96e4240ccfaa6cb8bc97111c6",
+  "sourceArchiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+  "startedAt": "2026-10-22T19:23:45.086672+00:00",
+  "status": "passed_local_restored_data_timing_rehearsal",
+  "timings": {
+    "applyAndIndependentVerification": {
+      "elapsedSeconds": 58.578,
+      "passed": true,
+      "queryCalls": 2396,
+      "querySeconds": 57.466
+    },
+    "prepare": {
+      "elapsedSeconds": 15.078,
+      "passed": true,
+      "queryCalls": 714,
+      "querySeconds": 14.626
+    },
+    "restore": {
+      "elapsedSeconds": 25.047,
+      "passed": true,
+      "queryCalls": 0,
+      "querySeconds": 0
+    }
+  }
+}
