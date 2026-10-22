@@ -91,6 +91,38 @@ def migration_plan():
 def index_mismatches(actual,expected):
     return sorted(key for key,value in expected.items() if actual.get(key)!=value)
 
+async def migration_object_presence(conn,entries):
+    """Four snapshot-local queries; retain each original existence predicate.
+
+    Results are never cached between inspections or across a DDL boundary.
+    Duplicate references still produce their original per-file diagnostics.
+    """
+    tables=sorted({name for entry in entries for name in entry['tables']})
+    functions=sorted({tuple(name.split('.')) for entry in entries for name in entry['functions']})
+    triggers=sorted({(name,table) for entry in entries for name,table in entry['triggers']})
+    indexes=sorted({(name,table) for entry in entries for name,table in entry['indexes']})
+    present_tables=await conn.fetch('''SELECT requested.name FROM unnest($1::text[]) requested(name)
+        WHERE to_regclass(requested.name) IS NOT NULL''',tables)
+    present_functions=await conn.fetch('''SELECT requested.schema_name||'.'||requested.name AS name
+        FROM unnest($1::text[],$2::text[]) requested(schema_name,name)
+        WHERE EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+            WHERE n.nspname=requested.schema_name AND p.proname=requested.name)''',
+        [schema for schema,name in functions],[name for schema,name in functions])
+    present_triggers=await conn.fetch('''SELECT requested.name,requested.table_name
+        FROM unnest($1::text[],$2::text[]) requested(name,table_name)
+        WHERE EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid=to_regclass(requested.table_name)
+            AND tgname=requested.name)''',[name for name,table in triggers],[table for name,table in triggers])
+    present_indexes=await conn.fetch('''SELECT requested.name,requested.table_name
+        FROM unnest($1::text[],$2::text[],$3::text[]) requested(name,table_name,index_name)
+        WHERE EXISTS(SELECT 1 FROM pg_index WHERE indexrelid=to_regclass(requested.index_name)
+            AND indrelid=to_regclass(requested.table_name))''',
+        [name for name,table in indexes],[table for name,table in indexes],
+        [table.split('.')[0]+'.'+name for name,table in indexes])
+    return {'tables':{row['name'] for row in present_tables},
+        'functions':{row['name'] for row in present_functions},
+        'triggers':{(row['name'],row['table_name']) for row in present_triggers},
+        'indexes':{(row['name'],row['table_name']) for row in present_indexes}}
+
 async def inspect_index_contracts(conn):
     issues=[]
     for name,expected in INDEX_CONTRACTS.items():
@@ -128,17 +160,17 @@ async def inspect(conn,client_roles=('anon','authenticated'),stores=(),*,migrati
         await conn.execute("SET LOCAL statement_timeout='20s'")
         await conn.execute("SET LOCAL search_path=pg_catalog")
         role=await conn.fetchrow('SELECT current_user AS name,rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')
+        present=await migration_object_presence(conn,plan['migrations'])
         for entry in plan['migrations']:
             missing=[]
             for table in entry['tables']:
-                if not await conn.fetchval('SELECT to_regclass($1) IS NOT NULL',table):missing.append(table)
+                if table not in present['tables']:missing.append(table)
             for name in entry['functions']:
-                schema,fn=name.split('.')
-                if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$1 AND p.proname=$2)',schema,fn):missing.append(name+'()')
+                if name not in present['functions']:missing.append(name+'()')
             for name,table in entry['triggers']:
-                if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid=to_regclass($1) AND tgname=$2)',table,name):missing.append(table+':'+name)
+                if (name,table) not in present['triggers']:missing.append(table+':'+name)
             for name,table in entry['indexes']:
-                if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM pg_index WHERE indexrelid=to_regclass($1) AND indrelid=to_regclass($2))',table.split('.')[0]+'.'+name,table):
+                if (name,table) not in present['indexes']:
                     missing.append(table+':'+name)
             installed.append({'file':entry['file'],'missingObjects':missing,'status':'missing_or_partial' if missing else 'objects_present_not_checksum_proof'})
             if missing:issues.append({'kind':'schema','file':entry['file'],'missingObjects':missing})

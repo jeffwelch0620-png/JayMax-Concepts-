@@ -158,8 +158,18 @@ async def snapshot(conn):
 
 
 async def _snapshot(conn):
-    value = await prior.snapshot(conn)
-    value['catalog'] = await capture_catalog(conn)
+    # Collect the same preservation fields directly. prior.snapshot also builds
+    # a different catalog/access report that this par snapshot would discard.
+    identity = dict(await conn.fetchrow("SELECT current_database() AS database,current_user AS actor,"
+                    "(SELECT oid::bigint FROM pg_database WHERE datname=current_database()) AS database_oid,"
+                    "inet_server_addr()::text AS server_address,inet_server_port() AS server_port,"
+                    "current_setting('server_version_num') AS server_version"))
+    columns = await preservation.original_columns(conn)
+    value = {'identity': identity, 'ledger': await preservation.ledger_fingerprints(conn),
+        'ledgerCatalog': await preservation.ledger_contract(conn),
+        'columns': [{'schema': k[0], 'table': k[1], 'columns': v} for k,v in sorted(columns.items())],
+        'rows': await preservation.fingerprints(conn,columns),
+        'catalog': await capture_catalog(conn)}
     # Table ACLs do not include column grants or schema default privileges.
     # The par migration adds neither; preserve these separately and exactly.
     value['columnAcl'] = [dict(row) for row in await conn.fetch('''SELECT n.nspname,c.relname,a.attname,
@@ -381,15 +391,18 @@ async def _verify_outcome(conn, plan):
         row = await conn.fetchrow('SELECT name,statements FROM supabase_migrations.schema_migrations WHERE version=$1', version)
         if row['name'] != plan['migration']['name'] or row['statements'] != [sql_body(source_bytes())]:
             raise ValueError('Installed par ledger body changed')
-        old_columns = {(x['schema'], x['table']): x['columns'] for x in base['columns']}
-        old_rows = await preservation.fingerprints(conn, old_columns)
-        if old_rows != base['rows']:
-            raise ValueError('Original application rows changed')
         expected_columns = base['columns'] + [{'schema': 'purchasing', 'table': 'inventory_par_versions',
             'columns': [{'name':r['attname'],'type':r['type']} for r in sorted(reference()['added']['columns'], key=lambda r:r['attnum'])
                         if r['relname']=='inventory_par_versions']}]
         if sorted(current['columns'],key=lambda r:(r['schema'],r['table'])) != sorted(expected_columns,key=lambda r:(r['schema'],r['table'])):
             raise ValueError('Unexpected application columns or relations changed')
+        # Only after proving identical original projections may we reuse the
+        # fingerprints just collected in this same outcome snapshot. A later
+        # phase/fresh connection always captures its own complete snapshot.
+        old_rows = {x['schema']+'.'+x['table']: current['rows'][x['schema']+'.'+x['table']]
+                    for x in base['columns']}
+        if old_rows != base['rows']:
+            raise ValueError('Original application rows changed')
         if await conn.fetchval('SELECT count(*) FROM purchasing.inventory_par_versions') != 0:
             raise ValueError('Par installation must not create review records')
         delta = normalize_owner(catalog_delta(base['catalog'], current['catalog']), current['identity']['actor'])

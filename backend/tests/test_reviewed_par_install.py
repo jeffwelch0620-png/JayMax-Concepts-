@@ -401,6 +401,68 @@ class ParInstallDatabaseTests(unittest.IsolatedAsyncioTestCase):
         await self.conn.execute('GRANT EXECUTE ON FUNCTION purchasing.text_cells(jsonb) TO '+role)
         return role
 
+    async def test_batched_readiness_matches_original_predicates_and_diagnostics(self):
+        from test_deployment_readiness import individual_object_presence
+        ready=engine.readiness
+        # Compare complete reports under both historical/current contracts,
+        # before and after the par boundary. No result crosses that boundary.
+        for installed in (False,True):
+            if installed:await engine.apply(self.conn,await self.plan())
+            for baseline in ('source_index_v1','current'):
+                with self.subTest(installed=installed,baseline=baseline):
+                    async with self.conn.transaction(isolation='repeatable_read',readonly=True):
+                        expected=await ready.inspect(self.conn,migration_baseline=baseline)
+                        with patch.object(ready,'migration_object_presence',side_effect=individual_object_presence):
+                            original=await ready.inspect(self.conn,migration_baseline=baseline)
+                        self.assertEqual(expected,original)
+        await self.conn.execute('''CREATE TABLE public.test_only_bulk_a(id integer);
+            CREATE TABLE public.test_only_bulk_b(id integer);
+            CREATE FUNCTION public.test_only_bulk_fn(integer) RETURNS integer LANGUAGE sql AS 'SELECT $1';
+            CREATE FUNCTION public.test_only_bulk_fn(text) RETURNS text LANGUAGE sql AS 'SELECT $1';
+            CREATE FUNCTION public.test_only_bulk_trigger() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END';
+            CREATE TRIGGER test_only_shared BEFORE INSERT ON public.test_only_bulk_a FOR EACH ROW EXECUTE FUNCTION public.test_only_bulk_trigger();
+            CREATE INDEX test_only_shared_index ON public.test_only_bulk_b(id)''')
+        entry={'file':'TEST ONLY','tables':['public.test_only_bulk_a','public.test_only_missing'],
+            'functions':['public.test_only_bulk_fn','purchasing.test_only_bulk_fn'],
+            'triggers':[('test_only_shared','public.test_only_bulk_a'),('test_only_shared','public.test_only_bulk_b')],
+            'indexes':[('test_only_shared_index','public.test_only_bulk_a'),('test_only_shared_index','public.test_only_bulk_b')]}
+        # Repeated inputs, overloads, wrong schemas/parents and fresh drops.
+        for action in (None,'DROP FUNCTION public.test_only_bulk_fn(integer)',
+                'DROP FUNCTION public.test_only_bulk_fn(text)',
+                'DROP TRIGGER test_only_shared ON public.test_only_bulk_a',
+                'DROP INDEX public.test_only_shared_index'):
+            if action:await self.conn.execute(action)
+            with self.subTest(action=action):
+                actual=await ready.migration_object_presence(self.conn,[entry,entry])
+                self.assertEqual(actual,await individual_object_presence(self.conn,[entry,entry]))
+
+    async def test_direct_snapshot_retains_legacy_fields_without_discarded_capture(self):
+        async with self.conn.transaction(isolation='repeatable_read',readonly=True):
+            original=await engine.prior.snapshot(self.conn)
+            original['catalog']=await engine.capture_catalog(self.conn)
+            with patch.object(engine.prior,'snapshot',side_effect=AssertionError('Discarded capture called')):
+                optimized=await engine.snapshot(self.conn)
+            self.assertEqual({k:optimized[k] for k in original},original)
+            self.assertEqual(set(optimized)-set(original),{'columnAcl','defaultAcl','serverMajor','indexStates'})
+
+    async def test_outcome_reuses_only_current_validated_projection_and_reads_fresh(self):
+        plan=await self.plan();await engine.apply(self.conn,plan)
+        with patch.object(engine.preservation,'fingerprints',wraps=engine.preservation.fingerprints) as scans:
+            self.assertEqual((await self.verify(plan))['status'],'verified_applied')
+            self.assertEqual(scans.await_count,1)
+        for sql,reason in [("UPDATE public.stores SET name='TEST ONLY late row change' WHERE id='berts'",'Original application rows'),
+                ('ALTER TABLE public.stores ADD COLUMN test_only_extra text','columns or relations'),
+                ('ALTER TABLE public.stores ALTER COLUMN name TYPE varchar','columns or relations')]:
+            tx=self.conn.transaction(isolation='repeatable_read');await tx.start()
+            try:
+                await self.conn.execute(sql)
+                with self.subTest(sql=sql),self.assertRaisesRegex(ValueError,reason):
+                    await engine._verify_outcome(self.conn,plan)
+            finally:await tx.rollback()
+        # A later independent read cannot reuse the earlier success.
+        await self.conn.execute("UPDATE public.stores SET name='TEST ONLY committed late row' WHERE id='berts'")
+        with self.assertRaisesRegex(ValueError,'Original application rows'):await self.verify(plan)
+
     async def test_backend_hold_rules_classify_real_catalog_refusals(self):
         role=await self.backend_role()
         changes=[('flags','ALTER ROLE '+role+' NOLOGIN'),('membership','GRANT anon TO '+role),

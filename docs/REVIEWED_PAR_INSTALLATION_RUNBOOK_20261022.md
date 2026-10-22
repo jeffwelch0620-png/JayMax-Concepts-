@@ -1,10 +1,23 @@
 # Reviewed-par installation runbook — October 22, 2026
 
+**Subsequent local-only follow-up:** the owner authorized the three tooling
+changes, regression tests and another timing rehearsal described in
+[the query-reduction record](REVIEWED_PAR_QUERY_REDUCTION.md). The original
+timings below remain the comparison baseline. No new hosted authorization or
+schema plan is created by that local implementation.
+The candidate passed 1,269 offline and 117 disposable PostgreSQL cases; apply
+plus fresh-connection verification used 1,112 calls / 69.859 s. Calls decreased
+53.6% while elapsed time increased; hosted timing remains unproven. The local
+performance design-review action below is now implemented and awaiting draft
+publication approval/independent review; it is not another authorization to edit
+or execute hosted work. All application gates and holds remain in place.
+
 ## Status and authority
 
 **No hosted action is authorized by this runbook.** Hosted work and credential,
 grant and schema changes remain on hold. The owner's current authorization is
-local timing rehearsal and documentation refresh only. Rehearsal DDL/ACL replay
+local tooling optimization, regression testing, timing rehearsal and
+documentation refresh only. Rehearsal DDL/ACL replay
 and temporary role stubs belong only to an owned disposable loopback database;
 no existing credential, hosted role, grant, connection or schema is changed.
 

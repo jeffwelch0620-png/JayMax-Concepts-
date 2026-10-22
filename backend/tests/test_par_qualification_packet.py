@@ -55,6 +55,9 @@ class ParQualificationPacketTests(unittest.TestCase):
             self.assertIsNone(data['window']['startsAt'])
             self.assertIsNone(data['deliveryVersion'])
             self.assertIsNone(data['executableInstallationPlanSha256'])
+            self.assertEqual(data['toolingReviewStatus'],'candidate_requires_independent_review')
+            self.assertEqual(set(data['toolingAmendments']),{
+                'backend/deployment_readiness.py','tools/ops/apply_reviewed_par_migration.py'})
 
     def test_generation_is_deterministic(self):
         self.assertEqual(packet.json_bytes(packet.build(self.root)), packet.json_bytes(packet.build(self.root)))
@@ -78,7 +81,8 @@ class ParQualificationPacketTests(unittest.TestCase):
         finally: path.write_bytes(original)
 
     def test_changed_core_sql_catalog_or_runtime_source_prevents_generation(self):
-        for name in ('migrations/20261018_reviewed_inventory_pars.sql',
+        for name in ('backend/deployment_readiness.py','tools/ops/apply_reviewed_par_migration.py',
+                     'migrations/20261018_reviewed_inventory_pars.sql',
                      'docs/REVIEWED_PAR_INSTALL_CATALOG.json', 'backend/maintenance_connection.py'):
             with self.subTest(source=name):
                 path = self.root/name
@@ -152,6 +156,19 @@ class ParQualificationPacketTests(unittest.TestCase):
             path.write_bytes(packet.json_bytes(value))
             with self.assertRaises(packet.PacketHeld): packet.build(self.root)
         finally: path.write_bytes(original)
+
+    def test_legacy_packet_and_changed_amendment_are_refused(self):
+        with TemporaryDirectory() as tmp:
+            value=packet.build(self.root)
+            value['format']='jaymax-par-qualification-operator-packet-v1'
+            path,sha=self.artifact(tmp,value=value)
+            with self.assertRaises(packet.PacketHeld):packet.verify(path,sha,self.root)
+        changed=deepcopy(packet.TOOLING_AMENDMENTS)
+        changed['backend/deployment_readiness.py']['priorContentSha256']='0'*64
+        with patch.object(packet,'TOOLING_AMENDMENTS',changed),self.assertRaises(packet.PacketHeld):packet.build(self.root)
+        changed=deepcopy(packet.TOOLING_AMENDMENTS)
+        changed['backend/deployment_readiness.py']['contentSha256']='0'*64
+        with patch.object(packet,'TOOLING_AMENDMENTS',changed),self.assertRaises(packet.PacketHeld):packet.build(self.root)
 
     def test_unsafe_source_paths_are_refused(self):
         for name in ('../TEST_ONLY.env', '/TEST_ONLY.env', 'C:/TEST_ONLY.env',

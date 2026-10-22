@@ -20,7 +20,7 @@ OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrit
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests',
-                    'par_role_preflight::ParRolePreflightGuards']
+                    'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests']
 DATABASE_CASES = (
  ('inventory_pars','InventoryParTests','test_recovery_status_is_readonly_and_exact_retries_preserve_accounting'),
  ('inventory_pars','InventoryParTests','test_recovery_distinguishes_saved_superseded_and_unsaved_fenced_requests'),
@@ -138,6 +138,9 @@ DATABASE_CASES += tuple(('par_role_preflight', 'ParRolePreflightDatabaseTests', 
  'test_public_and_extensions_findings_are_observed_without_waiving_installer_rules',
  'test_injected_write_is_refused_and_connection_is_closed_without_a_report'))
 DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name) for name in (
+ 'test_batched_readiness_matches_original_predicates_and_diagnostics',
+ 'test_direct_snapshot_retains_legacy_fields_without_discarded_capture',
+ 'test_outcome_reuses_only_current_validated_projection_and_reads_fresh',
  'test_explicit_backend_access_survives_prepare_apply_reconcile_without_new_par_access',
  'test_backend_classification_and_plan_bindings_cannot_be_omitted_or_relabelled',
  'test_backend_ledger_table_and_column_exposure_hold_before_plan',
