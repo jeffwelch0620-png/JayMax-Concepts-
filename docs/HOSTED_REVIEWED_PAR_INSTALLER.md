@@ -2,6 +2,14 @@
 
 ## Current checkpoint — October 21
 
+The [current installation and acceptance proposal](REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
+pins PR53 `46461e5` and the unchanged installer/SQL/reference. Reviewed-head and
+merged-main CI passed separately. The new [offline source audit](REVIEWED_PAR_PROPOSAL_SOURCE_AUDIT_20261021.json)
+checks 49 installer-source hashes and the exact proposed object inventory; it is
+not an executable hosted plan. New-object RLS/revocations belong in any later
+explicit installation approval; runtime grants remain separate O1 work. All
+hosted, credential, grant and schema holds remain in force.
+
 [Offline readiness review](REVIEWED_PAR_READINESS_20261021.md): PR51 `07daa29`
 is accepted; all 16 narrow role checks passed under separate approval. The new
 encrypted backup/disposable restore matched 120 tables, 45,638 rows and 13 catalog

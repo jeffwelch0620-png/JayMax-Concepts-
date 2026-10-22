@@ -2,6 +2,15 @@
 
 ## Current status — October 21
 
+The [current installation and acceptance proposal](REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
+supersedes the next-action wording in earlier planning records below. Accepted
+main is PR53 `46461e5`, tree-identical to reviewed `5c8e3ea`; reviewed-head and
+merged-main CI passed all four checks. Bounded submitted-request recovery and
+the explicit local-discard exit are merged. Render completion, complete live
+installer readiness, exact executable plan/hash, schema application and fictional
+acceptance remain separately held. This is local planning only; no new window
+or delivery version has been allocated.
+
 The [readiness review](REVIEWED_PAR_READINESS_20261021.md) reconciles accepted
 PR51 `07daa29`, the completed 16-check role observation and the separately
 approved fresh encrypted backup/disposable restore. Recovery matched 120 tables,

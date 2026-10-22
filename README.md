@@ -1,6 +1,15 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local candidate: bounded submitted par recovery
+## Local installation and acceptance proposal
+
+The [reviewed-par installation and acceptance proposal](docs/REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
+pins accepted PR53 `46461e5`, the unchanged additive SQL, exact new-object
+inventory and separate read-only, maintenance, exact-plan and fictional acceptance
+approvals. Its [source audit](docs/REVIEWED_PAR_PROPOSAL_SOURCE_AUDIT_20261021.json)
+checks saved source only. No hosted work, credential/grant/schema change, delivery
+version or executable plan is authorized or created by this local preparation.
+
+## Accepted PR53 submitted par recovery
 
 The owner-authorized [par recovery follow-up](docs/PAR_SAVE_RELOAD_RECOVERY.md)
 retains exact submitted confirm/withdraw requests in an actor/location-scoped
@@ -16,9 +25,11 @@ confirmed-save cleanup/refresh failures cannot cause another command.
 The authenticated backend status reader uses a read-only transaction and the
 same fingerprint/validation rules as the existing guarded writer. No migration SQL,
 permission candidate, credentials, feature flags or hosting settings change.
-The implementation is published as draft PR53; its local-discard amendment is
-validated separately. Fresh amended-head CI and merge/hosted acceptance remain
-separate. Hosted work and credential/grant/schema changes stay held.
+PR53 merged as `46461e5`, matching reviewed `5c8e3ea` exactly. Reviewed-head and
+merged-main CI each passed all four checks: 1,079 frontend tests / 83 suites plus
+strict build, 1,180 Windows offline cases and 242 backend/PostgreSQL cases.
+Automatic Render test deployment was approved; its completion remains unverified.
+Further hosted work and credential/grant/schema changes stay held.
 Ordinary unsent typing and closed-tab/browser-restart/cross-device recovery are
 outside this slice. Par editing remains frozen on the hosted build and ordering
 manual. The amendment's full frontend run passed 1,079 tests across 83 suites.
