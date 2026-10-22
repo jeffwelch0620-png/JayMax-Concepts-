@@ -2,6 +2,12 @@
 
 ## Current status — October 21
 
+The later [API role/writer follow-up](API_ROLE_WRITER_REVIEW_20261021.md) confirms
+the configured primary API role is postgres through the existing pooler. The
+known controllable writers remain API and Toast jobs 3/4; no extra application
+client was identifiable. No API session was connected for process-level proof.
+No pause, credential/grant/schema change or new window is authorized.
+
 The separately approved [bounded read-only preflight](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md)
 now confirms both Render deployments Live at PR53, all 16 scoped role checks
 passing and par storage absent. The runtime API role and exhaustive writer

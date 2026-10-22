@@ -1,5 +1,17 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Read-only API role and writer follow-up
+
+The [October 21 follow-up](docs/API_ROLE_WRITER_REVIEW_20261021.md) verified that
+Render's primary API connection is configured as `postgres` through the existing
+Supabase shared pooler on port 6543, with PostgreSQL mode enabled. The known
+application writers remain API plus enabled Toast jobs 3/4. Two snapshots showed
+six other sessions consistent with Supabase services and no identifiable extra
+application client; no writer drain or exhaustive inventory is claimed. Reviewed
+restricted-role checks do not describe the current owner-connected API. No API
+session was connected for independent per-process identity proof. Service pauses,
+credential/grant/schema changes and further hosted work stay held.
+
 ## Bounded read-only hosted preflight completed
 
 The [October 21 preflight](docs/REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md) observed
@@ -7,8 +19,9 @@ both Render services Live at accepted PR53 `46461e5`. All 16 scoped role checks
 passed; reviewed client private-access counts were zero. Supabase still has 55
 ledger versions, no reviewed-par table, a valid existing source index and enabled
 Toast jobs 3/4. Both read-only connections closed cleanly; the initial metadata
-probe error and corrected completion are retained separately. Actual API runtime
-identity and exhaustive writer attribution remain unproven. This is not full
+probe error and corrected completion are retained separately. At that first read,
+API identity and exhaustive writer attribution remained unproven; the follow-up
+above resolves the configured primary role. This is not full
 installer readiness. Service pauses, further hosted work and credential, grant
 and schema changes remain held; ordering stays manual and par editing frozen.
 

@@ -1,0 +1,221 @@
+{
+  "acceptedCommit": "46461e51ea8803b61c5b1d0a2cd7c5564d3a48dd",
+  "activitySnapshots": [
+    {
+      "at": "2026-10-22T02:52:14.595635+00:00",
+      "fullActivityVisibility": true,
+      "groups": [
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "PostgREST 14.5",
+          "backendType": "client backend",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "authenticator",
+          "sessions": 1,
+          "state": "idle"
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "blank",
+          "backendType": "client backend",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "pgbouncer",
+          "sessions": 1,
+          "state": "idle"
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "other-labelled-client",
+          "backendType": "pg_net 0.20.4 worker",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "postgres",
+          "sessions": 1,
+          "state": "idle"
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "blank",
+          "backendType": "client backend",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "supabase_admin",
+          "sessions": 1,
+          "state": "idle"
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "pg_cron scheduler",
+          "backendType": "pg_cron launcher",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "supabase_admin",
+          "sessions": 1,
+          "state": null
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "postgres_exporter",
+          "backendType": "client backend",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "supabase_admin",
+          "sessions": 1,
+          "state": "idle"
+        }
+      ],
+      "listingComplete": true,
+      "observerExcluded": true,
+      "writerDrainClaimed": false
+    },
+    {
+      "at": "2026-10-22T02:52:17.713801+00:00",
+      "fullActivityVisibility": true,
+      "groups": [
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "PostgREST 14.5",
+          "backendType": "client backend",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "authenticator",
+          "sessions": 1,
+          "state": "idle"
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "blank",
+          "backendType": "client backend",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "pgbouncer",
+          "sessions": 1,
+          "state": "idle"
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "other-labelled-client",
+          "backendType": "pg_net 0.20.4 worker",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "postgres",
+          "sessions": 1,
+          "state": "idle"
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "blank",
+          "backendType": "client backend",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "supabase_admin",
+          "sessions": 1,
+          "state": "idle"
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "pg_cron scheduler",
+          "backendType": "pg_cron launcher",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "supabase_admin",
+          "sessions": 1,
+          "state": null
+        },
+        {
+          "activeReadOrFunctionCalls": 0,
+          "activeWriteOrDDLCommands": 0,
+          "application": "postgres_exporter",
+          "backendType": "client backend",
+          "openTransactions": 0,
+          "otherActiveCommands": 0,
+          "role": "supabase_admin",
+          "sessions": 1,
+          "state": "idle"
+        }
+      ],
+      "listingComplete": true,
+      "observerExcluded": true,
+      "writerDrainClaimed": false
+    }
+  ],
+  "additionalActiveCronJobs": 0,
+  "appConnectionChanged": false,
+  "approvalReference": "owner-readonly-runtime-role-writer-list-20261021",
+  "automaticRetry": false,
+  "businessRowsQueried": false,
+  "cleanupHeld": false,
+  "completedAt": "2026-10-22T02:52:17.928209+00:00",
+  "connectedWorkSeconds": 6.282,
+  "connectionAttempts": 2,
+  "connections": [
+    {
+      "clientClosed": true,
+      "closeAttempted": true,
+      "nativeIPv6Verified": true,
+      "readOnlyVerified": true,
+      "tlsVerified": true
+    },
+    {
+      "clientClosed": true,
+      "closeAttempted": true,
+      "firstBackendAbsenceVerified": true,
+      "nativeIPv6Verified": true,
+      "readOnlyVerified": true,
+      "tlsVerified": true
+    }
+  ],
+  "credentialGrantSchemaChanges": false,
+  "cronListingComplete": true,
+  "format": "jaymax-pr53-runtime-writer-readonly-v1",
+  "inProgressCronRuns": [],
+  "inProgressListingComplete": true,
+  "jobs": [
+    {
+      "databaseRole": "postgres",
+      "enabled": true,
+      "expectedBindingMatches": true,
+      "jobId": 3,
+      "present": true
+    },
+    {
+      "databaseRole": "postgres",
+      "enabled": true,
+      "expectedBindingMatches": true,
+      "jobId": 4,
+      "present": true
+    }
+  ],
+  "localEvidenceCommit": "56cc5a1a7fe4a713841cf16000226f57c43d743e",
+  "maintenanceWindowActive": false,
+  "originalInputsUnchanged": true,
+  "ownerRoleAttributes": {
+    "rolbypassrls": true,
+    "rolcanlogin": true,
+    "rolcreatedb": true,
+    "rolcreaterole": true,
+    "rolreplication": true,
+    "rolsuper": false
+  },
+  "parInstalled": false,
+  "receiptSha256": "65d084ceaca19270ca3799d015f4ca1963b72155d33387908a4fcc489fc5749d",
+  "runnerSha256": "2ff26525a2d9505d2f4aa95ebd1a529282be16402ece2a6b73e91db32672447e",
+  "serviceControlsChanged": false,
+  "startedAt": "2026-10-22T02:52:09.954339+00:00",
+  "status": "observations_recorded",
+  "unfinishedToastSyncs": 0,
+  "writerDrainClaimed": false
+}

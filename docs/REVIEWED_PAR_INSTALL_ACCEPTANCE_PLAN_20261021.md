@@ -11,6 +11,12 @@ which completed with the runtime API identity still unproven. Further hosted
 work and credential, grant and schema changes remain on owner hold. No new application
 code, migration, grant policy or connection change is proposed.
 
+The later separately approved [API role/writer review](API_ROLE_WRITER_REVIEW_20261021.md)
+verified the configured primary API identity as `postgres` through the existing
+shared pooler. Both Toast jobs remain enabled; no additional application writer
+was identifiable. No API session was connected for independent process-level
+identity proof, and exhaustive external-writer inventory is not claimed.
+
 Accepted source is PR53 merge `46461e51ea8803b61c5b1d0a2cd7c5564d3a48dd`, tree
 `00051925cd20183613586911ca6431fe594dad80`, identical to reviewed `5c8e3ea`.
 [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39707534584)
@@ -89,7 +95,7 @@ The hosted/core v2 formats and all source/backup/window guards remain unchanged.
 
 | Gate | Concrete scope to present for later approval |
 | --- | --- |
-| 1. Bounded read-only hosted preparation | Completed within the owner's approved two-connection scope: both Render services Live at 46461e5; 16 role checks passed; reviewed client private-access counts zero; existing source index valid; par table absent; Toast jobs 3/4 unchanged/enabled. Actual API runtime role/connection and exhaustive writer inventory remain unproven. Resolve those identity/inventory gaps before maintenance; the scoped result is not full preparer readiness. No service pause, new private config, grant, credential, feature flag or SQL change occurred. |
+| 1. Bounded read-only hosted preparation | Completed within separate owner-approved scopes: both services Live at PR53; 16 reviewed candidate-role checks passed; client private-access counts zero; source index valid; par table absent. Follow-up confirms configured primary API role postgres through the existing pooler, not either restricted candidate. Known application writers remain API plus unchanged/enabled Toast jobs 3/4; snapshots identify no extra application client. No per-process API proof or exhaustive external inventory is claimed. Reconfirm writers/controls before maintenance; this is not full preparer readiness. No service pause, private config, grant, credential, feature flag or SQL change occurred. |
 | 2. Fresh maintenance window | Reconfirm API plus Toast jobs 3/4, Companion's local-only status and every manual/script/other writer. Present exact producer controls, original states, owner availability for Render suspend/resume, measured local memory/process readiness, private storage and recovery route. Request a new 45-minute window plus no-other-writes commitment; no window starts from this proposal. |
 | 3. Exact installation approval | After approved pause/drain, fresh encrypted backup/disposable restore and complete preparer checks, present the actual target, verified delta, next ledger version, artifact bindings and generated plan SHA-256. Obtain approval for that exact schema/new-object security plan before any DDL. |
 | 4. Fictional live acceptance | After a known verified install and writer restoration, present the exact two labelled Bert's fixture identities, profile conversions, initial par/store revisions and scoped mutation list. Obtain separate permission for normal app writes and any transport-fault controls. |
@@ -197,9 +203,11 @@ counts, accounting comparison and test-control cleanup recorded separately.
 Neither means operational release, O1/G04 closure or Companion adoption.
 
 Review the [completed bounded preflight findings](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md)
-before moving forward. The next proposed scope is read-only confirmation of the
-actual API runtime binding and current potential writers. No maintenance window
-or installation is authorized. All remaining holds stay in force.
+and [API role/writer follow-up](API_ROLE_WRITER_REVIEW_20261021.md) before moving
+forward. The configured owner-connected build path is documented. The next
+proposed scope is a fresh maintenance proposal with current writer confirmation
+and exact controls. No maintenance window or installation is authorized; all
+remaining holds stay in force.
 
 Local validation passed all 49 source-hash checks, the 31-migration ordering and
 exact object counts, accepted SQL/reference byte comparisons, all 187 relative

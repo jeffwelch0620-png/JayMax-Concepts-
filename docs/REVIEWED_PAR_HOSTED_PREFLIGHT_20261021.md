@@ -1,5 +1,11 @@
 # Reviewed par bounded hosted preflight
 
+**Subsequent approved follow-up:** the
+[API role and writer review](API_ROLE_WRITER_REVIEW_20261021.md) resolves the
+configured primary role as `postgres` through the existing shared pooler. The
+initial observation below retains its dated scope; per-process API attribution
+and exhaustive external-writer proof are not claimed.
+
 ## Finding and decision
 
 The owner-authorized read-only observation completed on October 21, 2026, at
@@ -30,7 +36,7 @@ retains the exact intended database delta and later approval gates.
 | Migration ledger | Present with 55 versions, maximum `20261015175921`. Ledger counts/max alone do not verify every historical body, name and fingerprint. |
 | Reviewed-par storage | `purchasing.inventory_par_versions` absent. No migration version was allocated and no executable application plan was produced. |
 | Toast | Jobs 3 and 4 present, enabled and matching their expected identity/schedule/actor/database/command-hash bindings. No additional active cron jobs; no unfinished Toast syncs reported. Neither job was changed or replayed. |
-| Activity | Complete visible snapshot contained six sessions across six groups, including the observer; zero sessions matched the two reviewed backend roles and five belonged to other named roles. This neither attributes the API nor establishes writer drain. No platform session was terminated. |
+| Activity | Complete visible snapshot contained six other sessions across six groups, excluding the observer; zero sessions matched the two reviewed backend roles and five belonged to other named roles. This neither attributes the API nor establishes writer drain. No platform session was terminated. |
 
 ## Remaining uncertainty before maintenance
 
