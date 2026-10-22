@@ -4,9 +4,11 @@
 
 Prepare one additive installation of the already-reviewed par migration, then
 separately accept its owner-facing workflow with labelled fictional data.
-**This is a local proposal, not an executable installer plan or permission to
-connect, pause services, run SQL or test the hosted app.** Hosted work and
-credential, grant and schema changes remain on owner hold. No new application
+**This proposal is not an executable installer plan or permission to pause
+services, apply SQL or test the hosted app.** The owner subsequently approved
+the [bounded read-only hosted preflight](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md),
+which completed with the runtime API identity still unproven. Further hosted
+work and credential, grant and schema changes remain on owner hold. No new application
 code, migration, grant policy or connection change is proposed.
 
 Accepted source is PR53 merge `46461e51ea8803b61c5b1d0a2cd7c5564d3a48dd`, tree
@@ -16,7 +18,8 @@ and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actio
 each passed all four checks: 1,079 frontend tests / 83 suites and strict build,
 1,180 Windows offline cases, and 242 backend/disposable PostgreSQL cases.
 These profiles overlap. Automatic Render test deployment was owner-approved;
-its completion has not been inspected.
+both services were subsequently observed Live at the accepted merge under the
+separate read-only preflight. This does not establish functional acceptance.
 
 The October 21 backup window closed at 8:02:45 p.m. Eastern with the original
 writers restored. Its verified 120-table / 45,638-row / 13-catalog-group recovery
@@ -86,7 +89,7 @@ The hosted/core v2 formats and all source/backup/window guards remain unchanged.
 
 | Gate | Concrete scope to present for later approval |
 | --- | --- |
-| 1. Bounded read-only hosted preparation | Verify actual Render frontend/API revisions, current writer inventory and existing connection identity/access using accepted tooling. Confirm whether the build still uses its existing owner-connected API path; refresh relevant role/client-denial observations. No service pause, new private config, grant, credential, feature flag or SQL change. This gate itself is currently held. |
+| 1. Bounded read-only hosted preparation | Completed within the owner's approved two-connection scope: both Render services Live at 46461e5; 16 role checks passed; reviewed client private-access counts zero; existing source index valid; par table absent; Toast jobs 3/4 unchanged/enabled. Actual API runtime role/connection and exhaustive writer inventory remain unproven. Resolve those identity/inventory gaps before maintenance; the scoped result is not full preparer readiness. No service pause, new private config, grant, credential, feature flag or SQL change occurred. |
 | 2. Fresh maintenance window | Reconfirm API plus Toast jobs 3/4, Companion's local-only status and every manual/script/other writer. Present exact producer controls, original states, owner availability for Render suspend/resume, measured local memory/process readiness, private storage and recovery route. Request a new 45-minute window plus no-other-writes commitment; no window starts from this proposal. |
 | 3. Exact installation approval | After approved pause/drain, fresh encrypted backup/disposable restore and complete preparer checks, present the actual target, verified delta, next ledger version, artifact bindings and generated plan SHA-256. Obtain approval for that exact schema/new-object security plan before any DDL. |
 | 4. Fictional live acceptance | After a known verified install and writer restoration, present the exact two labelled Bert's fixture identities, profile conversions, initial par/store revisions and scoped mutation list. Obtain separate permission for normal app writes and any transport-fault controls. |
@@ -193,14 +196,16 @@ Acceptance completes only with the approved case results, exact append/revision
 counts, accounting comparison and test-control cleanup recorded separately.
 Neither means operational release, O1/G04 closure or Companion adoption.
 
-The next decision is whether to authorize the bounded **read-only hosted
-preparation in Gate 1** after reviewing this proposal. It does not authorize a
-window or installation. All holds remain until the owner changes their scope.
+Review the [completed bounded preflight findings](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md)
+before moving forward. The next proposed scope is read-only confirmation of the
+actual API runtime binding and current potential writers. No maintenance window
+or installation is authorized. All remaining holds stay in force.
 
 Local validation passed all 49 source-hash checks, the 31-migration ordering and
 exact object counts, accepted SQL/reference byte comparisons, all 187 relative
 links across the amended/new Markdown, generated review guides and whitespace.
 No frontend/backend suite was rerun for documentation-only changes.
-No database/server,
-hosted request, backup, restore, schema/grant change or application test is run.
+That original local planning step opened no database/server or hosted request.
+The later separately approved read-only preflight is recorded independently;
+no backup, restore, schema/grant change or application test accompanied it.
 Earlier CI and recovery results remain dated evidence.

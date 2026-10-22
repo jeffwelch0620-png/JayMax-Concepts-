@@ -1,0 +1,197 @@
+{
+  "acceptedCommit": "46461e51ea8803b61c5b1d0a2cd7c5564d3a48dd",
+  "activityObservation": {
+    "appAttributionProven": false,
+    "listingComplete": true,
+    "otherNamedRoleSessions": 5,
+    "reviewedBackendSessions": 0,
+    "sessionGroups": 6,
+    "sessions": 6,
+    "writerDrainClaimed": false
+  },
+  "additionalActiveCronJobs": 0,
+  "appConnectionsChanged": false,
+  "approvalReference": "owner-bounded-readonly-hosted-preflight-20261021",
+  "automaticApply": false,
+  "automaticRetry": false,
+  "backendAliases": [
+    {
+      "alias": "B1",
+      "checks": {
+        "ddl": "passed",
+        "default_acl": "passed",
+        "flags": "passed",
+        "membership": "passed",
+        "new_par_access": "passed",
+        "ownership": "passed"
+      },
+      "managedObservations": {
+        "globalPublicDefaultGrant": false,
+        "schemas": [
+          {
+            "can_create": false,
+            "future_grant": false,
+            "owns_function": false,
+            "owns_relation": false,
+            "owns_schema": false,
+            "present": true,
+            "schema": "public"
+          },
+          {
+            "can_create": false,
+            "future_grant": false,
+            "owns_function": false,
+            "owns_relation": false,
+            "owns_schema": false,
+            "present": true,
+            "schema": "extensions"
+          }
+        ],
+        "status": "observed"
+      }
+    },
+    {
+      "alias": "B2",
+      "checks": {
+        "ddl": "passed",
+        "default_acl": "passed",
+        "flags": "passed",
+        "membership": "passed",
+        "new_par_access": "passed",
+        "ownership": "passed"
+      },
+      "managedObservations": {
+        "globalPublicDefaultGrant": false,
+        "schemas": [
+          {
+            "can_create": false,
+            "future_grant": false,
+            "owns_function": false,
+            "owns_relation": false,
+            "owns_schema": false,
+            "present": true,
+            "schema": "public"
+          },
+          {
+            "can_create": false,
+            "future_grant": false,
+            "owns_function": false,
+            "owns_relation": false,
+            "owns_schema": false,
+            "present": true,
+            "schema": "extensions"
+          }
+        ],
+        "status": "observed"
+      }
+    }
+  ],
+  "backupRestorePerformed": false,
+  "businessFactRowsQueried": false,
+  "capturedAt": "2026-10-22T02:27:18.127889+00:00",
+  "catalogObservations": {
+    "cron_present": true,
+    "ledger_present": true,
+    "par_installed": false,
+    "sync_metadata_present": true
+  },
+  "cleanupHeld": false,
+  "clientPrivateAccessCounts": [
+    {
+      "alias": "C1",
+      "column_access": 0,
+      "function_access": 0,
+      "relation_access": 0,
+      "schema_usage": 0,
+      "sequence_access": 0
+    },
+    {
+      "alias": "C2",
+      "column_access": 0,
+      "function_access": 0,
+      "relation_access": 0,
+      "schema_usage": 0,
+      "sequence_access": 0
+    }
+  ],
+  "completedAt": "2026-10-22T02:29:56.811470+00:00",
+  "completionConnectionWindowSeconds": 10.625,
+  "completionStartedAt": "2026-10-22T02:29:45.209966+00:00",
+  "completionWorkBudgetSeconds": 110,
+  "connectionAttempts": 2,
+  "connectionBudget": 2,
+  "connectionWindowSeconds": 3.578,
+  "correctedProbeOnly": true,
+  "credentialGrantSchemaChanges": false,
+  "cronListingComplete": true,
+  "firstConnection": {
+    "activityVisibilityVerified": true,
+    "clientClosed": true,
+    "closeAttempted": true,
+    "identityVerified": true,
+    "nativeIPv6Verified": true,
+    "readOnlyVerified": true,
+    "serverMajor": 17,
+    "tlsVerified": true
+  },
+  "firstProbeHeld": {
+    "errorType": "WrongObjectTypeError",
+    "receiptSha256": "d5b2dafcabf53f14ba6371b2951cf3d2f6cb7ac8485ac66282d0d6254346132f",
+    "sqlState": "42809"
+  },
+  "format": "jaymax-approved-pr53-readonly-preflight-v1",
+  "fullInstallerReadiness": false,
+  "jobs": [
+    {
+      "active": true,
+      "identityMatches": true,
+      "jobId": 3,
+      "present": true
+    },
+    {
+      "active": true,
+      "identityMatches": true,
+      "jobId": 4,
+      "present": true
+    }
+  ],
+  "ledgerObservation": {
+    "maximum": "20261015175921",
+    "versions": 55
+  },
+  "localPlanCommit": "fb1a1603e68f03a4421befc5b3a47991fcbfe695",
+  "maintenanceWindowActive": false,
+  "observerConnection": {
+    "clientClosed": true,
+    "closeAttempted": true,
+    "firstBackendAbsenceVerified": true,
+    "identityVerified": true,
+    "nativeIPv6Verified": true,
+    "readOnlyVerified": true,
+    "tlsVerified": true
+  },
+  "operationalMetadataQueried": true,
+  "operationalReleaseApproved": false,
+  "originalInputsUnchanged": true,
+  "permissionSummary": {
+    "automaticApply": false,
+    "checks": {
+      "held": 0,
+      "not_evaluated": 0,
+      "passed": 16
+    },
+    "format": "jaymax-par-role-preflight-v1",
+    "fullReadinessEvaluated": false,
+    "managedFindings": 0,
+    "managedObservationRoles": 2,
+    "operationalReleaseApproved": false,
+    "status": "observations_recorded"
+  },
+  "receiptSha256": "602da862d01efa24a59eb5634d1e0c1650d02e38b4f9753fca72e0159b9b7241",
+  "runnerSha256": "8c7788f2c85f5562373fff6f96b7585bcb9d94b5674fc7eaf960400e8d879029",
+  "serviceControlsChanged": false,
+  "sourceIndexIssues": [],
+  "status": "observations_recorded",
+  "totalConnectedWorkSeconds": 14.203,
+  "unfinishedToastSyncs": 0
+}

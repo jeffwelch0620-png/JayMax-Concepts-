@@ -1,5 +1,17 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Bounded read-only hosted preflight completed
+
+The [October 21 preflight](docs/REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md) observed
+both Render services Live at accepted PR53 `46461e5`. All 16 scoped role checks
+passed; reviewed client private-access counts were zero. Supabase still has 55
+ledger versions, no reviewed-par table, a valid existing source index and enabled
+Toast jobs 3/4. Both read-only connections closed cleanly; the initial metadata
+probe error and corrected completion are retained separately. Actual API runtime
+identity and exhaustive writer attribution remain unproven. This is not full
+installer readiness. Service pauses, further hosted work and credential, grant
+and schema changes remain held; ordering stays manual and par editing frozen.
+
 ## Local installation and acceptance proposal
 
 The [reviewed-par installation and acceptance proposal](docs/REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
@@ -28,7 +40,8 @@ permission candidate, credentials, feature flags or hosting settings change.
 PR53 merged as `46461e5`, matching reviewed `5c8e3ea` exactly. Reviewed-head and
 merged-main CI each passed all four checks: 1,079 frontend tests / 83 suites plus
 strict build, 1,180 Windows offline cases and 242 backend/PostgreSQL cases.
-Automatic Render test deployment was approved; its completion remains unverified.
+Automatic Render test deployment was approved; both services were subsequently
+observed Live at the accepted merge in the scoped read-only preflight above.
 Further hosted work and credential/grant/schema changes stay held.
 Ordinary unsent typing and closed-tab/browser-restart/cross-device recovery are
 outside this slice. Par editing remains frozen on the hosted build and ordering

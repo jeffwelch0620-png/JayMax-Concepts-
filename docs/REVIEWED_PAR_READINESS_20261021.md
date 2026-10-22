@@ -1,5 +1,12 @@
 # Reviewed-par readiness review — October 21, 2026
 
+**Later live observation:** the owner-approved
+[bounded read-only preflight](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md) verified
+both Render services Live at PR53 and repeated all 16 scoped permission checks
+successfully. Par storage is still absent. Actual API runtime identity and full
+installer readiness remain unproven; the saved-artifact review below retains its
+original local-only scope. All remaining holds continue.
+
 **Subsequent accepted work:** the owner separately authorized the
 [bounded submitted par recovery fix](PAR_SAVE_RELOAD_RECOVERY.md), its reviewed
 local-discard amendment and PR53 merge `46461e5`; reviewed-head and merged-main

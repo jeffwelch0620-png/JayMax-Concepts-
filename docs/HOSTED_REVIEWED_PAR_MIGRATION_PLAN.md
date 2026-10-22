@@ -2,11 +2,17 @@
 
 ## Current status — October 21
 
+The separately approved [bounded read-only preflight](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md)
+now confirms both Render deployments Live at PR53, all 16 scoped role checks
+passing and par storage absent. The runtime API role and exhaustive writer
+attribution remain unproven. This scoped observation creates no executable plan
+or authority for maintenance, grants, credentials or schema application.
+
 The [current installation and acceptance proposal](REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
 supersedes the next-action wording in earlier planning records below. Accepted
 main is PR53 `46461e5`, tree-identical to reviewed `5c8e3ea`; reviewed-head and
 merged-main CI passed all four checks. Bounded submitted-request recovery and
-the explicit local-discard exit are merged. Render completion, complete live
+the explicit local-discard exit are merged. Complete live
 installer readiness, exact executable plan/hash, schema application and fictional
 acceptance remain separately held. This is local planning only; no new window
 or delivery version has been allocated.

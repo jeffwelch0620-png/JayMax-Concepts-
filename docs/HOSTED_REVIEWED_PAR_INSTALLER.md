@@ -2,6 +2,12 @@
 
 ## Current checkpoint — October 21
 
+The subsequent [bounded hosted preflight](REVIEWED_PAR_HOSTED_PREFLIGHT_20261021.md)
+observed both Render services Live at PR53, all 16 scoped role checks passing,
+par storage absent and Toast jobs 3/4 unchanged/enabled. Actual API runtime
+identity and exhaustive writer attribution remain unproven. No full preparer,
+maintenance window, backup or SQL application ran; all remaining holds persist.
+
 The [current installation and acceptance proposal](REVIEWED_PAR_INSTALL_ACCEPTANCE_PLAN_20261021.md)
 pins PR53 `46461e5` and the unchanged installer/SQL/reference. Reviewed-head and
 merged-main CI passed separately. The new [offline source audit](REVIEWED_PAR_PROPOSAL_SOURCE_AUDIT_20261021.json)
