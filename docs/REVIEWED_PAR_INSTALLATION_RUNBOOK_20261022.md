@@ -142,6 +142,35 @@ recent hosted preparation took 311.766 seconds, versus 15.078 locally. Server
 load, network latency, caching and transport differ, so neither ratio is a
 reliable hosted application forecast.
 
+The original numbers below are historical. The query-reduction candidate uses
+1,112 apply/verification calls and took 69.859 seconds locally, versus the older
+2,396 calls / 58.578 seconds. The candidate has fewer calls but no measured
+elapsed-time speedup. Its [retained receipt](REVIEWED_PAR_QUERY_REDUCTION_TIMING_20261022.json)
+is unchanged. For planning only:
+
+| Candidate sensitivity | Modeled apply/verification total |
+| --- | ---: |
+| Hosted-derived extra cost: (311.766 - 15.078) / 714, about 0.416 seconds per call | About 532 seconds |
+| Proposed installation planning gate | At most 450 seconds, leaving at least 25% of the 600-second limit |
+
+This simple additive estimate leaves only about 68 seconds (11%) and does not
+meet the proposed gate. It mixes network delay, server work and scheduling from
+different runs; it is not a latency measurement or a guaranteed upper bound.
+Larger batched queries may have different server costs, but these measurements
+do not establish what caused the increase in elapsed time. A model below 450
+seconds is a necessary planning screen, not sufficient installation approval.
+Keep hosted application held until evidence supports that headroom and the
+owner approves all separate window and exact-plan gates. Never raise the
+600-second limit or remove preservation checks to pass the screen.
+
+Local diagnostic instrumentation reports counts and seconds for readiness,
+fingerprints, catalog capture, ACL/index checks, ledger and readiness_check.
+Inclusive function totals overlap; exclusive groups attribute every measured
+driver method once and must reconcile to phase totals. It retains no SQL,
+parameters or row values. A separately owner-approved bounded read-only hosted
+probe could later distinguish server work from round-trip costs; none is
+authorized or performed by this PR.
+
 For planning sensitivity only, add a fixed extra delay to each measured local
 application call; this arithmetic is not a delay-injected or hosted execution:
 

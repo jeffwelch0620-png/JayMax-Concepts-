@@ -67,6 +67,15 @@ attributes. A newline change after creation invalidates that packet too. Moving
 between checkouts may require a newly generated/reviewed packet; a matching
 portable content baseline is not permission to reuse a different byte-bound hash.
 
+The CLI requires Python 3.12 or newer. Older runtimes return a fixed held
+receipt and exit 2 before argument processing or source/output file access.
+Checkout attributes pin the portable core Python/JSON entries to LF, while
+preserving each reviewed migration's existing exact LF or CRLF rule. Do not
+apply LF normalization to SQL or rewrite historical raw hashes. Source content
+pins establish equivalence; generated packets and installation-plan sourceHashes
+still bind the actual local bytes. Generate and review fresh artifacts after
+any checkout-byte change; old plans/packets are not portable approvals.
+
 ## Supervised stages and evidence
 
 The packet contains separate argv templates for accepted backup `export`,

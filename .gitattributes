@@ -38,3 +38,27 @@ tools/ops/hosted_reviewed_pars.py text eol=lf
 
 # Keep the new public content-pin manifest reproducible across checkouts.
 docs/PAR_QUALIFICATION_SOURCE_PINS.json text eol=lf
+
+# Pin portable Python/JSON core sources; preserve byte-exact SQL rules above.
+backend/db_tls.py text eol=lf
+backend/deployment_readiness.py text eol=lf
+backend/hosted_backup.py text eol=lf
+backend/hosted_install_preservation.py text eol=lf
+backend/hosted_native_install.py text eol=lf
+backend/hosted_test_trial.py text eol=lf
+backend/install_lock.py text eol=lf
+backend/maintenance_connection.py text eol=lf
+backend/managed_development.py text eol=lf
+backend/native_backup.py text eol=lf
+backend/readonly_snapshot.py text eol=lf
+backend/schema_reconciliation.py text eol=lf
+docs/RUNTIME_PERMISSION_CANDIDATE.json text eol=lf
+tools/ops/apply_additive_migration.py text eol=lf
+tools/ops/hosted_additive_index.py text eol=lf
+.gitattributes text eol=lf
+tools/ops/par_qualification_packet.py text eol=lf
+tools/ops/local_query_metrics.py text eol=lf
+tools/run_review_tests.py text eol=lf
+backend/hosted_backup_cli.py text eol=lf
+backend/tests/test_par_qualification_packet.py text eol=lf
+backend/tests/test_local_query_metrics.py text eol=lf

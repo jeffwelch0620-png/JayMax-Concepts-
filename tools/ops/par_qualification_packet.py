@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 FORMAT = 'jaymax-par-qualification-operator-packet-v2'
@@ -240,6 +241,10 @@ def verify(packet, expected_sha256, root=ROOT):
 
 
 def main(argv=None):
+    if sys.version_info < (3, 12):
+        print(json.dumps({'status': 'held', 'reason': 'Python 3.12 or newer required',
+            'hostedActionsPerformed': False, 'readyForHostedExecution': False}))
+        return 2
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='mode', required=True)
     sub.add_parser('prepare').add_argument('--output', type=Path, required=True)

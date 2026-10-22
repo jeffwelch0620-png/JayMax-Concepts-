@@ -62,6 +62,22 @@ class ParQualificationPacketTests(unittest.TestCase):
     def test_generation_is_deterministic(self):
         self.assertEqual(packet.json_bytes(packet.build(self.root)), packet.json_bytes(packet.build(self.root)))
 
+    def test_unsupported_python_is_held_before_arguments_or_file_io(self):
+        for version in ((3, 10), (3, 11)):
+            with self.subTest(version=version), patch.object(packet.sys, 'version_info', version), \
+                    patch.object(packet.Path, 'read_bytes') as reads, \
+                    patch.object(packet.Path, 'open') as opens, \
+                    patch.object(packet.argparse.ArgumentParser, 'parse_args') as arguments, \
+                    redirect_stdout(io.StringIO()) as output:
+                code = packet.main(['prepare', '--output', 'TEST_ONLY_NEVER_CREATED.json'])
+                self.assertEqual(code, 2)
+                result = json.loads(output.getvalue())
+                self.assertEqual(result['status'], 'held')
+                self.assertEqual(result['reason'], 'Python 3.12 or newer required')
+                self.assertFalse(result['hostedActionsPerformed'])
+                self.assertFalse(result['readyForHostedExecution'])
+                reads.assert_not_called(); opens.assert_not_called(); arguments.assert_not_called()
+
     def test_existing_output_and_evidence_are_never_overwritten(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp)/'TEST_ONLY_PACKET.json'
@@ -255,7 +271,7 @@ class ParQualificationPacketTests(unittest.TestCase):
 
     def test_module_cannot_open_connections_spawn_commands_or_load_credentials(self):
         tree = ast.parse((ROOT/'tools/ops/par_qualification_packet.py').read_text())
-        allowed = {'argparse','hashlib','json','pathlib','re'}
+        allowed = {'argparse','hashlib','json','pathlib','re','sys'}
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 self.assertTrue(all(n.name in allowed for n in node.names))
