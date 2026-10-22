@@ -74,8 +74,68 @@ async def setup(conn,store):
     return par_response(dict(store_id=store,available=available,items=result))
 
 
+def request_digest(store,code,actor,body,expected):
+    return fingerprint(serial(dict(store=store,item=code,actor=actor,expected=expected,body=body.model_dump())))
+
+
+async def review_values(conn,store,code,body,expected):
+    """Shared validation only; the writer owns locks, the status reader writes nothing."""
+    item=await conn.fetchrow('''SELECT i.item_type,si.active FROM public.items i JOIN public.store_items si ON si.item_code=i.code
+        WHERE si.store_id=$1 AND i.code=$2''',store,code)
+    if not item or item['item_type']!='raw':raise HTTPException(422,'Choose a purchased product at this location')
+    previous=await current(conn,store,code)
+    if (previous['revision'] if previous else 0)!=expected:raise HTTPException(409,'Par review changed. Reload and review your retained values.')
+    if body.action=='withdraw':
+        if body.quantity is not None or body.unit_profile_id is not None:raise HTTPException(422,'Withdrawal cannot change quantities or units')
+        if not previous or not previous['confirmed']:raise HTTPException(409,'Only a previously confirmed par can be withdrawn')
+        values=previous
+    else:
+        if not item['active']:raise HTTPException(409,'Review the inactive product before confirming a target')
+        if body.quantity is None or body.unit_profile_id is None:raise HTTPException(422,'Enter a quantity, including explicit zero, and select a verified count unit')
+        profile=next((p for p in await native_units.profiles(conn,store) if p['item_code']==code and p['profile_kind']=='count'),None)
+        if not profile or profile['id']!=body.unit_profile_id or profile['stale']:raise HTTPException(409,'Count conversion changed or is unconfirmed. Review it in Invoice Master first.')
+        factor=profile['base_units_per_source_unit']
+        if body.quantity>=Decimal('1e16') or factor>=Decimal('1e16'):raise HTTPException(422,'Par quantity or conversion exceeds supported exact range')
+        with localcontext() as ctx:
+            ctx.prec=80
+            base=body.quantity*factor
+        values=dict(unit_profile_id=profile['id'],source_unit=profile['source_unit'],quantity=body.quantity,
+                    factor=factor,base_unit=profile['base_unit'],base_quantity=base)
+    return previous,values
+
+
+async def saved_status(pool,store,code,actor,body,key,expected):
+    digest=request_digest(store,code,actor,body,expected)
+    result=dict(store_id=store,item_code=code,actor=actor,request_key=key,expected_revision=expected,
+                outcome='held',review=None,current_review=None)
+    async with pool.acquire() as conn,conn.transaction(isolation='repeatable_read',readonly=True):
+        await conn.execute("SET LOCAL statement_timeout='20s'")
+        if not catalog_mapping.enabled() or not await installed(conn):
+            return par_response(dict(result,message='Par storage is unavailable. Retain this request.'))
+        prior=await conn.fetchrow('SELECT * FROM purchasing.inventory_par_versions WHERE request_key=$1',key)
+        if prior:
+            if prior['request_fingerprint']!=digest:
+                return par_response(dict(result,message='The retained request identity needs manager review.'))
+            latest=await current(conn,store,code)
+            return par_response(dict(result,outcome='saved_current' if latest and latest['id']==prior['id'] else 'saved_superseded',
+                review=dict(prior),current_review=latest))
+        latest=await current(conn,store,code)
+        if latest and latest['revision']>expected:
+            # The immutable head has advanced: an old expected revision cannot append.
+            return par_response(dict(result,outcome='not_saved_superseded',current_review=latest,
+                message='Another review advanced this product. Compare current values before a new review.'))
+        try:
+            await review_values(conn,store,code,body,expected)
+        except HTTPException as error:
+            if error.status_code not in (409,422):raise
+            return par_response(dict(result,current_review=latest,message=error.detail))
+        # Absence in this snapshot does not cancel a delayed/in-flight request.
+        return par_response(dict(result,outcome='retry_available',current_review=latest,
+            message='No saved request was visible. Retry only this exact request; an earlier attempt may still complete.'))
+
+
 async def save(pool,store,code,actor,body,key,expected):
-    digest=fingerprint(serial(dict(store=store,item=code,actor=actor,expected=expected,body=body.model_dump())))
+    digest=request_digest(store,code,actor,body,expected)
     async with pool.acquire() as conn,conn.transaction():
         if not catalog_mapping.enabled() or not await installed(conn):raise HTTPException(503,'Reviewed inventory par setup is awaiting installation')
         await catalog_mapping.lock_catalog(conn);await native_units.lock_store(conn,store)
@@ -84,27 +144,7 @@ async def save(pool,store,code,actor,body,key,expected):
             if prior['request_fingerprint']!=digest:raise HTTPException(409,'Par review key belongs to another request')
             return par_response(dict(request_key=key,review=dict(prior),current_review=await current(conn,store,code),replayed=True))
         await conn.execute('LOCK TABLE public.items,public.store_items IN SHARE MODE')
-        item=await conn.fetchrow('''SELECT i.item_type,si.active FROM public.items i JOIN public.store_items si ON si.item_code=i.code
-            WHERE si.store_id=$1 AND i.code=$2''',store,code)
-        if not item or item['item_type']!='raw':raise HTTPException(422,'Choose a purchased product at this location')
-        previous=await current(conn,store,code)
-        if (previous['revision'] if previous else 0)!=expected:raise HTTPException(409,'Par review changed. Reload and review your retained values.')
-        if body.action=='withdraw':
-            if body.quantity is not None or body.unit_profile_id is not None:raise HTTPException(422,'Withdrawal cannot change quantities or units')
-            if not previous or not previous['confirmed']:raise HTTPException(409,'Only a previously confirmed par can be withdrawn')
-            values=previous
-        else:
-            if not item['active']:raise HTTPException(409,'Review the inactive product before confirming a target')
-            if body.quantity is None or body.unit_profile_id is None:raise HTTPException(422,'Enter a quantity, including explicit zero, and select a verified count unit')
-            profile=next((p for p in await native_units.profiles(conn,store) if p['item_code']==code and p['profile_kind']=='count'),None)
-            if not profile or profile['id']!=body.unit_profile_id or profile['stale']:raise HTTPException(409,'Count conversion changed or is unconfirmed. Review it in Invoice Master first.')
-            factor=profile['base_units_per_source_unit']
-            if body.quantity>=Decimal('1e16') or factor>=Decimal('1e16'):raise HTTPException(422,'Par quantity or conversion exceeds supported exact range')
-            with localcontext() as ctx:
-                ctx.prec=80
-                base=body.quantity*factor
-            values=dict(unit_profile_id=profile['id'],source_unit=profile['source_unit'],quantity=body.quantity,
-                        factor=factor,base_unit=profile['base_unit'],base_quantity=base)
+        previous,values=await review_values(conn,store,code,body,expected)
         row=await conn.fetchrow('''INSERT INTO purchasing.inventory_par_versions(store_id,item_code,revision,predecessor_id,
             unit_profile_id,source_unit,quantity,factor,base_unit,base_quantity,confirmed,coverage_note,actor,request_key,request_fingerprint)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *''',store,code,expected+1,
@@ -114,6 +154,12 @@ async def save(pool,store,code,actor,body,key,expected):
 
 
 def install_routes(router,context):
+    @router.post('/{store_id}/inventory-pars/{item_code}/status')
+    async def check_saved_par(store_id:str,item_code:str,body:Review,request:Request,idempotency_key:UUID=Header(...)):
+        actor,pool=await context(request,store_id,True)
+        from prep_planning import version
+        return await saved_status(pool,store_id,item_code,actor,body,idempotency_key,version(request))
+
     @router.get('/{store_id}/inventory-pars')
     async def read_pars(store_id:str,request:Request):
         _,pool=await context(request,store_id)

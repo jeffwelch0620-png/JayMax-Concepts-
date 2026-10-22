@@ -1,5 +1,23 @@
 # Reviewed-par permission preflight packet
 
+## Current result — October 21
+
+PR51 merged as `07daa29`, tree-identical to reviewed `b331d31`, with separate
+green reviewed-head/merged-main CI. Its separately approved read-only role
+observation passed all 16 scoped checks with no supplemental findings and
+bounded owned-client cleanup. No role/grant/schema or application credential
+was changed by the observation. The subsequent backup/restore-only window
+passed and closed with original producers restored; see the
+[readiness and recovery review](REVIEWED_PAR_READINESS_20261021.md).
+
+The result does not establish full client-private-schema denial, complete
+installer readiness, runtime RLS/O1 or G04 acceptance. No current hosted action
+is authorized; hosted work and credential/grant/schema changes remain held.
+The original proposed execution and earlier preparation text below are dated
+records, not pending permission to rerun the completed narrow check.
+
+## Historical preparation and scope
+
 October 21, 2026. **Local preparation only; hosted work and credential changes
 remain on owner hold.** Existing draft PR51 publication was approved separately;
 the owner has now authorized its main merge, missing-role diagnostic and update

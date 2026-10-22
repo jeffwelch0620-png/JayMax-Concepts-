@@ -22,6 +22,10 @@ OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrit
 OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests',
                     'par_role_preflight::ParRolePreflightGuards']
 DATABASE_CASES = (
+ ('inventory_pars','InventoryParTests','test_recovery_status_is_readonly_and_exact_retries_preserve_accounting'),
+ ('inventory_pars','InventoryParTests','test_recovery_distinguishes_saved_superseded_and_unsaved_fenced_requests'),
+ ('inventory_pars','InventoryParTests','test_recovery_rejects_changed_identity_and_holds_changed_profiles'),
+ ('inventory_pars','InventoryParTests','test_recovery_withdrawal_authorization_and_missing_storage'),
  ('runtime_permissions','RuntimePermissionTests','test_later_par_schema_is_held_without_inheriting_candidate_access'),
  ('inventory_pars','InventoryParTests','test_unconfirmed_legacy_default_and_missing_installation_are_not_zero_targets'),
  ('inventory_pars','InventoryParTests','test_exact_target_zero_withdrawal_and_actor_are_metadata_only'),

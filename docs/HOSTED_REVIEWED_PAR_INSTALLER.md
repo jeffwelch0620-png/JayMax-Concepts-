@@ -1,5 +1,20 @@
 # Guarded reviewed-par installer and local rehearsal
 
+## Current checkpoint — October 21
+
+[Offline readiness review](REVIEWED_PAR_READINESS_20261021.md): PR51 `07daa29`
+is accepted; all 16 narrow role checks passed under separate approval. The new
+encrypted backup/disposable restore matched 120 tables, 45,638 rows and 13 catalog
+groups; the window closed at 8:02:45 p.m. Eastern with original producers restored.
+The saved snapshot has 55 ledger versions and no reviewed-par storage/reference
+name collisions. These observations do not replace full live readiness, exact
+ledger/index reconciliation or fresh writer/backup guards. No executable plan,
+schema application or O1 cutover was performed. G04 acceptance remains open.
+Keep hosted work, credentials, grants and schema changes held, par editing frozen
+and ordering manual. The historical stages below retain their original scope.
+
+## Earlier implementation and rehearsal records
+
 **PR48 merged; local N1/N2 follow-up:** merge `cbe8e88` matches reviewed `12dba79`
 and both CI runs passed. [Private role/rule diagnostics and preflight records](PAR_BACKEND_HOLD_DIAGNOSTICS.md)
 preserve all permission/transaction guards. Managed role memberships, schema

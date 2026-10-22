@@ -1,6 +1,56 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## PR52 merged; PR51 role-preflight follow-up
+## Local candidate: bounded submitted par recovery
+
+The owner-authorized [par recovery follow-up](docs/PAR_SAVE_RELOAD_RECOVERY.md)
+retains exact submitted confirm/withdraw requests in an actor/location-scoped
+sessionStorage journal before sending. Reload/sign-in recovery requires an
+explicit saved-status check; retry uses the original body/key/revision and
+checks status again before sending. Saved-but-superseded, revision-fenced and
+held requests have separate controls. HTTP failures retain unresolved evidence;
+confirmed-save cleanup/refresh failures cannot cause another command.
+
+The authenticated backend status reader uses a read-only transaction and the
+same fingerprint/validation rules as the existing guarded writer. No migration SQL,
+permission candidate, credentials, feature flags or hosting settings change.
+The implementation is local and unpublished; fresh CI and merge/hosted acceptance
+remain separate. Hosted work and credential/grant/schema changes stay held.
+Ordinary unsent typing and closed-tab/browser-restart/cross-device recovery are
+outside this slice. Par editing remains frozen on the hosted build and ordering
+manual. Local validation passed 1,062 frontend tests across 83 suites, all 1,180
+offline cases and all 28 disposable PostgreSQL cases. Final strict build evidence
+and overlapping-run limitations are recorded in the linked contract.
+
+## October 21 checkpoint: PR51 accepted, recovery verified; par rollout held
+
+Accepted source is PR51 merge `07daa299b4bc99e33a1b959c201e0801458f9e62`,
+tree-identical to reviewed `b331d31` and including PR52. Reviewed-head and
+merged-main CI each passed all four checks. The separately approved role
+observation passed 16 scoped checks; it is not full installer or runtime readiness.
+
+The fresh backup/restore-only window closed at **8:02:45 p.m. Eastern on October
+21**, before its deadline. The encrypted application backup and disposable local
+restore matched **120 tables, 45,638 rows and 13 catalog groups**. Local cleanup
+passed, Toast jobs 3/4 are restored and verified enabled, and Jeff confirmed
+`jaymax-api` Live again at `07daa29`. API recovery is owner-reported Render
+evidence; frontend deployment and functional security acceptance were not
+rechecked in that window. No migration was planned or applied.
+
+The [local readiness review](docs/REVIEWED_PAR_READINESS_20261021.md) authenticated
+the saved archive and source bindings without network or database access. It
+confirms 55 archived ledger versions and no par table/reference-name collisions
+in the snapshot, while retaining full live installer checks as unrun. G04
+security acceptance and O1 restricted-role/par permissions remain separate open
+gates. The current review includes documentation only, not permission repair.
+
+**Hosted work, credential/grant/schema changes remain on owner hold.** No window
+is active; ordinary manual writes may resume. Par editing remains frozen and
+ordering manual. A later approved installation window needs current writer
+guards, a fresh backup/restore and separate exact-plan application approval.
+Earlier sections below preserve their original dated stages and counts; they
+do not make completed merges or recovery pending again.
+
+## Historical PR52 merge / PR51 pre-merge preparation
 
 Accepted main is PR52 `cc88899f0e32faca0da4e93a640a9e077d0ef6e2`, tree-identical
 to approved `a173c68`. All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39664731594)
