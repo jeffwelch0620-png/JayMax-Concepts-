@@ -1,5 +1,13 @@
 # Reviewed par maintenance qualification proposal
 
+**Subsequent local packet preparation:** the
+[operator handoff builder/verifier](PAR_QUALIFICATION_EXECUTION_PACKET.md) now
+supplies source-bound command templates and explicit manual evidence gates.
+It does not execute the templates, validate live state or confer approval.
+The original JSON proposal below remains an immutable planning input; its
+`executionPacket.ready=false` describes the preparation checkpoint when written.
+The new handoff is prepared for review, while hosted execution remains held.
+
 ## Decision for review
 
 Prepare a **new, maximum 45-minute qualification window** to pause the known

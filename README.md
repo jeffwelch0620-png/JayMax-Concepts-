@@ -1,5 +1,24 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
+## Local qualification operator handoff
+
+The [source-bound packet builder/verifier](docs/PAR_QUALIFICATION_EXECUTION_PACKET.md)
+prepares the fresh supervised handoff for the proposed maintenance window.
+It binds 56 actual local source-file byte hashes plus the proposal, rejects
+source/gate/template drift, and leaves every hosted approval false. Accepted
+Python/JSON content permits only LF/CRLF checkout differences; SQL stays byte-exact
+and each generated packet still binds the exact local bytes. The packet contains
+separate export, isolated-restore and read-only qualification argv templates; it
+cannot execute them or verify live authorization/state. Manual producer controls,
+strict drain, local restore lifecycle, current resources and a new window approval
+remain required. No hosted, credential, grant, schema or application change is
+included. The new fictional-only suite is selected by offline CI.
+
+The [validation record](docs/PAR_QUALIFICATION_PACKET_VALIDATION_20261022.md)
+records the final complete **1,261-case offline pass**, the corrected local
+Uvicorn test environment and the retained initial refusal. Draft publication,
+fresh CI and any hosted maintenance remain separate approvals.
+
 ## October 22 maintenance proposal ready for review
 
 The [fresh qualification proposal](docs/REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md)

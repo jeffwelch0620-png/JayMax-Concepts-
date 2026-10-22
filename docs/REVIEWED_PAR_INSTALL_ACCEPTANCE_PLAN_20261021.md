@@ -1,5 +1,11 @@
 # Reviewed par installation and acceptance proposal
 
+The subsequent [local operator handoff](PAR_QUALIFICATION_EXECUTION_PACKET.md)
+provides source-bound templates and local verification for supervised
+qualification. It is not a migration controller or hosted approval. The proposed
+qualification window still requires fresh resources/writer confirmation and
+separate approval; schema application stays held.
+
 **October 22 qualification proposal:** the
 [fresh maintenance proposal](REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md) supplies
 the current next-window scope and stage cutoffs while schema changes remain held.
