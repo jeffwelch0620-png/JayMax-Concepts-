@@ -76,6 +76,17 @@ pins establish equivalence; generated packets and installation-plan sourceHashes
 still bind the actual local bytes. Generate and review fresh artifacts after
 any checkout-byte change; old plans/packets are not portable approvals.
 
+Pulling new checkout attributes does not rewrite files already present in an
+existing working copy. Prefer a fresh clone of the accepted revision for
+maintenance tooling. When retaining an existing checkout, save tracked,
+staged and untracked work first, verify the checkout is clean, and refresh only
+the explicit pinned Python/JSON files from the accepted revision. Check
+`git ls-files --eol -- <core paths>`: every LF-pinned Python/JSON entry must show
+`w/lf` before generating a new packet or installation plan. Preserve the
+separately reviewed LF/CRLF SQL rules and verify their exact byte hashes.
+Generate fresh byte-bound artifacts after the refresh; retained packets/plans
+remain dated evidence and do not acquire approval from newline equivalence.
+
 ## Supervised stages and evidence
 
 The packet contains separate argv templates for accepted backup `export`,
