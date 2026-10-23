@@ -1,0 +1,1016 @@
+{
+  "acceptedMain": "54ce10c1ca2e4d040c217a0132d78264ce7624ac",
+  "candidateCoreSourcesChanged": 4,
+  "candidatePacketFormat": "jaymax-par-qualification-operator-packet-v2",
+  "candidatePacketSha256": "2c764723e901115b8a7afc8b9820549aab0025da9007ccfc2b2f3cb3081ec616",
+  "chunkSize": 2,
+  "cleanupErrors": [],
+  "completedAt": "2026-10-23T01:47:57.823994+00:00",
+  "credentialsChanged": false,
+  "format": "jaymax-local-par-batched-fingerprint-timing-v1",
+  "fourRelationPrototype": {
+    "elapsedSeconds": 44.0,
+    "largestUnbatchedFingerprintAwaitSeconds": 6.172,
+    "privateReceiptSha256": "238cac1664af86a9daf91cb80482817f9f160b6be8ae4ceea8f0f05bfa1253ed",
+    "queryCalls": 585,
+    "reason": "two-relation default chosen for more statement headroom",
+    "selectedForPublication": false,
+    "sourceRevision": "64337e767a9ff4978b1e00dae973337a656cbfe2"
+  },
+  "historicalFingerprintFunctionsUnchanged": true,
+  "hostedConnection": false,
+  "hostedExecutionAuthorized": false,
+  "hostedGrantsChanged": false,
+  "hostedSchemaChanged": false,
+  "hostedTimingProven": false,
+  "hostedWrites": false,
+  "installerSourcesMatched": 49,
+  "instrumentationSha256": "d7a81ed4b9bae8732f86412881616d48fd7728602515fb74c12510acc7e094fb",
+  "latencyCoefficientRecalibrated": false,
+  "ledgerRowsAdded": 1,
+  "maximumSupportedTestChunkSize": 4,
+  "measurementLimit": "Query methods and public cursor/transaction API operations only; no network round trips, SQL, parameters, identifiers, row values or exception text. Maximum observed query await includes instrumentation/client scheduling, not server execution time. Extra local unbatched probe is not part of apply/verification elapsed time.",
+  "memoryAtServerStart": {
+    "freeMiB": 1201.5,
+    "freePercent": 19.92
+  },
+  "memoryBefore": {
+    "freeMiB": 1237.8,
+    "freePercent": 20.53
+  },
+  "migrationSqlUnchanged": true,
+  "networkGuard": {
+    "loopbackConnections": 6,
+    "nonloopbackAttempts": 0
+  },
+  "newParRows": 0,
+  "operationLimitSeconds": 600,
+  "operationMeasurement": "public API calls/outcomes/seconds, not network round trips; no batch inference or revised latency coefficient",
+  "originalLocalInventoryRestored": true,
+  "originalRowsSequencesCatalogPreserved": true,
+  "ownedLocalServerStopped": true,
+  "packetSourcesMatched": 56,
+  "priorPr57Comparison": {
+    "controlledElapsedBenchmark": false,
+    "elapsedSeconds": 75.218,
+    "queryCalls": 1112,
+    "queryMethodReductionPercent": 31.29
+  },
+  "privateReceiptSha256": "f71b8d30531b908d94a5462c522945310fa8767004d5db3e2302e0a5670b3969",
+  "protocolRoundTripsMeasured": false,
+  "readyForHostedExecution": false,
+  "restore": {
+    "archiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+    "catalogGroupsMatched": 13,
+    "majorVersionMatched": true,
+    "managedRecoveryVerified": false,
+    "operationalReleaseApproved": false,
+    "patchVersionMatched": false,
+    "rowsMatched": 45648,
+    "status": "verified_application_restore",
+    "tablesMatched": 120
+  },
+  "restoreElapsedSeconds": 24.922,
+  "restoreInstrumented": false,
+  "retainedEncryptedArchiveUnchanged": true,
+  "retainedWindowReceiptUnchanged": true,
+  "runnerSha256": "f5dbc7d7b43dab2c44e93f537ef5e466b620f0bec55567ed4f9d3caa3e81528f",
+  "sensitivity": {
+    "coefficientSecondsPerMethodCall": 0.4155294117647059,
+    "cursorTransactionCountsAdded": false,
+    "hostedTimingProven": false,
+    "modeledSeconds": 362.527,
+    "name": "dated additive driver-method planning arithmetic",
+    "planningScreenPassed": true,
+    "planningScreenSeconds": 450,
+    "readyForHostedExecution": false
+  },
+  "sourceArchiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+  "sourceRevision": "569ade9f2ce485e7b7bd8d9b189f337211cf16bd",
+  "sparseOperationGroups": true,
+  "startedAt": "2026-10-23T01:46:07.857911+00:00",
+  "status": "passed_local_restored_data_timing_rehearsal",
+  "timings": {
+    "applyAndIndependentVerification": {
+      "driverOperationGroups": {
+        "sequences": {
+          "cursor_create": {
+            "calls": 3,
+            "cancelled": 0,
+            "completed": 3,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_iter": {
+            "calls": 3,
+            "cancelled": 0,
+            "completed": 3,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_next": {
+            "calls": 6,
+            "cancelled": 0,
+            "completed": 3,
+            "errors": 0,
+            "exhausted": 3,
+            "seconds": 0.0
+          }
+        },
+        "transaction_control": {
+          "transaction_commit": {
+            "calls": 14,
+            "cancelled": 0,
+            "completed": 14,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.016
+          },
+          "transaction_create": {
+            "calls": 14,
+            "cancelled": 0,
+            "completed": 14,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_start": {
+            "calls": 14,
+            "cancelled": 0,
+            "completed": 14,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          }
+        }
+      },
+      "driverOperations": {
+        "cursor_create": {
+          "calls": 3,
+          "cancelled": 0,
+          "completed": 3,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_iter": {
+          "calls": 3,
+          "cancelled": 0,
+          "completed": 3,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_next": {
+          "calls": 6,
+          "cancelled": 0,
+          "completed": 3,
+          "errors": 0,
+          "exhausted": 3,
+          "seconds": 0.0
+        },
+        "transaction_commit": {
+          "calls": 14,
+          "cancelled": 0,
+          "completed": 14,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.016
+        },
+        "transaction_create": {
+          "calls": 14,
+          "cancelled": 0,
+          "completed": 14,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_start": {
+          "calls": 14,
+          "cancelled": 0,
+          "completed": 14,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        }
+      },
+      "elapsedSeconds": 45.063,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 9,
+          "querySeconds": 0.032
+        },
+        "apply_ddl": {
+          "queryCalls": 1,
+          "querySeconds": 0.031
+        },
+        "backend_permissions": {
+          "queryCalls": 42,
+          "querySeconds": 0.045
+        },
+        "backup_catalog": {
+          "queryCalls": 48,
+          "querySeconds": 0.33
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 185,
+          "querySeconds": 20.156
+        },
+        "capture_catalog": {
+          "queryCalls": 39,
+          "querySeconds": 0.374
+        },
+        "fingerprints": {
+          "queryCalls": 182,
+          "querySeconds": 22.407
+        },
+        "identity": {
+          "queryCalls": 5,
+          "querySeconds": 0.016
+        },
+        "index_state": {
+          "queryCalls": 6,
+          "querySeconds": 0.063
+        },
+        "ledger": {
+          "queryCalls": 64,
+          "querySeconds": 0.297
+        },
+        "locks": {
+          "queryCalls": 7,
+          "querySeconds": 0.016
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.0
+        },
+        "original_columns": {
+          "queryCalls": 6,
+          "querySeconds": 0.031
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 4,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 120,
+          "querySeconds": 0.14
+        },
+        "readiness_check": {
+          "queryCalls": 18,
+          "querySeconds": 0.048
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 16,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 9,
+          "querySeconds": 0.015
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 42,
+          "querySeconds": 0.045
+        },
+        "backup_catalog": {
+          "queryCalls": 233,
+          "querySeconds": 20.486
+        },
+        "backup_compare": {
+          "queryCalls": 236,
+          "querySeconds": 20.486
+        },
+        "backup_fingerprints": {
+          "queryCalls": 185,
+          "querySeconds": 20.156
+        },
+        "capture_catalog": {
+          "queryCalls": 39,
+          "querySeconds": 0.374
+        },
+        "fingerprints": {
+          "queryCalls": 185,
+          "querySeconds": 22.407
+        },
+        "identity": {
+          "queryCalls": 2,
+          "querySeconds": 0.016
+        },
+        "index_state": {
+          "queryCalls": 3,
+          "querySeconds": 0.063
+        },
+        "ledger": {
+          "queryCalls": 63,
+          "querySeconds": 0.297
+        },
+        "locks": {
+          "queryCalls": 1,
+          "querySeconds": 0.016
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.0
+        },
+        "original_columns": {
+          "queryCalls": 6,
+          "querySeconds": 0.031
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 328,
+          "querySeconds": 15.657
+        },
+        "readiness": {
+          "queryCalls": 132,
+          "querySeconds": 0.203
+        },
+        "readiness_check": {
+          "queryCalls": 192,
+          "querySeconds": 0.296
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 9,
+          "querySeconds": 0.015
+        }
+      },
+      "passed": true,
+      "queryCalls": 764,
+      "queryMaxObservedAwaitSeconds": {
+        "acl": 0.016,
+        "apply_ddl": 0.031,
+        "backend_permissions": 0.015,
+        "backup_catalog": 0.031,
+        "backup_fingerprints": 6.141,
+        "capture_catalog": 0.031,
+        "fingerprints": 6.453,
+        "identity": 0.016,
+        "index_state": 0.032,
+        "ledger": 0.016,
+        "locks": 0.016,
+        "object_guard": 0.0,
+        "original_columns": 0.016,
+        "outcome_check": 0.0,
+        "readiness": 0.016,
+        "readiness_check": 0.016,
+        "session_settings": 0.0,
+        "writer_guard": 0.015
+      },
+      "querySeconds": 44.001
+    },
+    "prepare": {
+      "driverOperationGroups": {
+        "sequences": {
+          "cursor_create": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_iter": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_next": {
+            "calls": 2,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 1,
+            "seconds": 0.0
+          }
+        },
+        "transaction_control": {
+          "transaction_commit": {
+            "calls": 6,
+            "cancelled": 0,
+            "completed": 6,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_create": {
+            "calls": 6,
+            "cancelled": 0,
+            "completed": 6,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_start": {
+            "calls": 6,
+            "cancelled": 0,
+            "completed": 6,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          }
+        }
+      },
+      "driverOperations": {
+        "cursor_create": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_iter": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_next": {
+          "calls": 2,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 1,
+          "seconds": 0.0
+        },
+        "transaction_commit": {
+          "calls": 6,
+          "cancelled": 0,
+          "completed": 6,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_create": {
+          "calls": 6,
+          "cancelled": 0,
+          "completed": 6,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_start": {
+          "calls": 6,
+          "cancelled": 0,
+          "completed": 6,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        }
+      },
+      "elapsedSeconds": 14.141,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 3,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 14,
+          "querySeconds": 0.016
+        },
+        "backup_catalog": {
+          "queryCalls": 16,
+          "querySeconds": 0.093
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 61,
+          "querySeconds": 6.578
+        },
+        "capture_catalog": {
+          "queryCalls": 13,
+          "querySeconds": 0.156
+        },
+        "fingerprints": {
+          "queryCalls": 60,
+          "querySeconds": 6.797
+        },
+        "identity": {
+          "queryCalls": 2,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 2,
+          "querySeconds": 0.016
+        },
+        "ledger": {
+          "queryCalls": 23,
+          "querySeconds": 0.077
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        },
+        "original_columns": {
+          "queryCalls": 2,
+          "querySeconds": 0.0
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 40,
+          "querySeconds": 0.078
+        },
+        "readiness_check": {
+          "queryCalls": 6,
+          "querySeconds": 0.0
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 6,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 14,
+          "querySeconds": 0.016
+        },
+        "backup_catalog": {
+          "queryCalls": 77,
+          "querySeconds": 6.671
+        },
+        "backup_compare": {
+          "queryCalls": 78,
+          "querySeconds": 6.671
+        },
+        "backup_fingerprints": {
+          "queryCalls": 61,
+          "querySeconds": 6.578
+        },
+        "capture_catalog": {
+          "queryCalls": 13,
+          "querySeconds": 0.156
+        },
+        "fingerprints": {
+          "queryCalls": 61,
+          "querySeconds": 6.797
+        },
+        "identity": {
+          "queryCalls": 1,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 1,
+          "querySeconds": 0.016
+        },
+        "ledger": {
+          "queryCalls": 23,
+          "querySeconds": 0.077
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        },
+        "original_columns": {
+          "queryCalls": 2,
+          "querySeconds": 0.0
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 44,
+          "querySeconds": 0.094
+        },
+        "readiness_check": {
+          "queryCalls": 64,
+          "querySeconds": 0.11
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        }
+      },
+      "passed": true,
+      "queryCalls": 254,
+      "queryMaxObservedAwaitSeconds": {
+        "acl": 0.0,
+        "backend_permissions": 0.016,
+        "backup_catalog": 0.016,
+        "backup_fingerprints": 5.875,
+        "capture_catalog": 0.031,
+        "fingerprints": 6.047,
+        "identity": 0.0,
+        "index_state": 0.016,
+        "ledger": 0.016,
+        "object_guard": 0.016,
+        "original_columns": 0.0,
+        "readiness": 0.016,
+        "readiness_check": 0.0,
+        "session_settings": 0.0,
+        "writer_guard": 0.016
+      },
+      "querySeconds": 13.843
+    },
+    "unbatchedProbe": {
+      "driverOperationGroups": {
+        "sequences": {
+          "cursor_create": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_iter": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_next": {
+            "calls": 2,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 1,
+            "seconds": 0.0
+          }
+        },
+        "transaction_control": {
+          "transaction_commit": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_create": {
+            "calls": 2,
+            "cancelled": 0,
+            "completed": 2,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_enter": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_exit": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_start": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          }
+        }
+      },
+      "driverOperations": {
+        "cursor_create": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_iter": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_next": {
+          "calls": 2,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 1,
+          "seconds": 0.0
+        },
+        "transaction_commit": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_create": {
+          "calls": 2,
+          "cancelled": 0,
+          "completed": 2,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_enter": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_exit": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_start": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        }
+      },
+      "elapsedSeconds": 14.547,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_catalog": {
+          "queryCalls": 15,
+          "querySeconds": 0.172
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 119,
+          "querySeconds": 6.656
+        },
+        "capture_catalog": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "fingerprints": {
+          "queryCalls": 119,
+          "querySeconds": 7.703
+        },
+        "identity": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "ledger": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "original_columns": {
+          "queryCalls": 2,
+          "querySeconds": 0.016
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_catalog": {
+          "queryCalls": 134,
+          "querySeconds": 6.828
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 119,
+          "querySeconds": 6.656
+        },
+        "capture_catalog": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "fingerprints": {
+          "queryCalls": 120,
+          "querySeconds": 7.703
+        },
+        "identity": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "ledger": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "original_columns": {
+          "queryCalls": 2,
+          "querySeconds": 0.016
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        }
+      },
+      "passed": true,
+      "queryCalls": 255,
+      "queryMaxObservedAwaitSeconds": {
+        "backup_catalog": 0.031,
+        "backup_fingerprints": 5.938,
+        "fingerprints": 6.297,
+        "original_columns": 0.016
+      },
+      "querySeconds": 14.547
+    }
+  }
+}
