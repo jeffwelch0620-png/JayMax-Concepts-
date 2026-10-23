@@ -1,6 +1,14 @@
 # Inventory workflow checkpoint and remaining work
 
-**Current October 21 continuation:** accepted main is PR52
+**Current October 23 routing:** accepted main is PR60 b056e88. The approved S1
+attempt returned partial metadata/owner-login evidence and stopped on timeout;
+all PIN/role probes and audit review remain incomplete. See the
+[local diagnostics follow-up](S1_LOCAL_DIAGNOSTICS_20261023.md) and
+[current JMAX workflow](https://chatgpt.com/space/page_1e9f0baababc8191a6f628ce4799af7a).
+This local slice changes no hosted system, credential, grant or schema. The
+earlier checkpoints below retain their dated results and approval boundaries.
+
+**Historical October 21 continuation:** accepted main was PR52
 `cc88899f0e32faca0da4e93a640a9e077d0ef6e2`, with green
 [reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39664731594)
 and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39666352459).
