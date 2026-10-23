@@ -1,0 +1,120 @@
+{
+  "format": "jmax-local-document-validation-v1",
+  "baseCommit": "c3b429a2da8d1880ecdbcf34ccb5b28033978c6c",
+  "status": "passed",
+  "scope": "documentation/checklist/provenance validation only",
+  "checks": {
+    "verbatimGitArchives": 3,
+    "currentMarkdownDocuments": 8,
+    "localLinks": 33,
+    "parInstallerSourceBindings": 49,
+    "fixedSqlAndCatalogDigests": true,
+    "windowArithmetic": true,
+    "reviewAmendmentAssertions": true,
+    "correctedSourceSemantics": true,
+    "nonExecutablePermissionDelta": true,
+    "narrowNewDocumentSecretScan": true,
+    "existingTrackedDiffWhitespace": true,
+    "onlyDocumentationPathsChanged": true
+  },
+  "sourcePinAmendments": 0,
+  "runtimeTestsRun": 0,
+  "databaseTestsRun": 0,
+  "companionReferenceCommit": "b73a80d63adde989babee3c75c198e3148bf6ce9",
+  "companionReferenceFiles": {
+    "companion-SECURITY_RECOVERY_DECISION_DESIGN.md": "80723e4f9f7aa0d5000854126b4adf9b523728ba3f55812c3af9d157924f5521",
+    "companion-SHARED_EMPLOYEE_IDENTITY_ACCESS_DESIGN.md": "82b49343e87f86a4ae13af2cd9e5e1922cd0bcf0d6dc414acc7fd9764715eb16",
+    "companion-SHARED_IDENTITY_ADOPTION_HANDOFF.md": "baa365866210bf765c6e540efe4a13843f4ddbab8c47418a4d3fd2168f2156ff",
+    "companion-SHARED_IDENTITY_SOURCE_REVIEW.md": "05e0f8bffb45b7d825a1e2ce6afa76eb33b2a9eb9d6a9a844780b4a666de76d8"
+  },
+  "hostedRequests": 0,
+  "serviceControls": 0,
+  "credentialReadsOrChanges": 0,
+  "grantChanges": 0,
+  "schemaChanges": 0,
+  "ciRun": false,
+  "pushApproved": false,
+  "executionApprovals": {
+    "S1": false,
+    "S2a": false,
+    "P1": false,
+    "P2": false,
+    "P3": false,
+    "R1": false,
+    "S2": false,
+    "I1": false
+  },
+  "historicalArchiveNote": "Archives preserve original text/links/whitespace, including obsolete claims; no new authority or refreshed evidence",
+  "initialValidationCorrection": "Narrow stale-gate assertion to active section; dated 45-minute archive disclaimer is intentionally preserved",
+  "jmaxReconciliation": {
+    "format": "jmax-document-reconciliation-v1",
+    "archivePage": "https://chatgpt.com/space/page_1f74b494bbb88191b02ef3f35ce5cc88",
+    "archiveVerified": true,
+    "historySnapshotsVerbatim": true,
+    "visualRenderingVerified": false,
+    "pageReadback": "Complete normalized-text comparison of every replacement; unrelated blocks compared by original hashes",
+    "pages": [
+      {
+        "name": "root",
+        "url": "https://chatgpt.com/space/page_6abd230d4bc481919e9aae8e1fce4d12",
+        "oldBlockCount": 41,
+        "newBlockCount": 42,
+        "verifiedReplacementOperations": 1,
+        "unrelatedBlocksPreserved": 40
+      },
+      {
+        "name": "workflow",
+        "url": "https://chatgpt.com/space/page_1e9f0baababc8191a6f628ce4799af7a",
+        "oldBlockCount": 172,
+        "newBlockCount": 197,
+        "verifiedReplacementOperations": 10,
+        "unrelatedBlocksPreserved": 86
+      },
+      {
+        "name": "progress",
+        "url": "https://chatgpt.com/space/page_91d649ac1b588191a5abcd0a8b694dca",
+        "oldBlockCount": 16,
+        "newBlockCount": 17,
+        "verifiedReplacementOperations": 2,
+        "unrelatedBlocksPreserved": 14
+      },
+      {
+        "name": "par",
+        "url": "https://chatgpt.com/space/page_bf76a977beb08191821f3e6a93247ad9",
+        "oldBlockCount": 131,
+        "newBlockCount": 77,
+        "verifiedReplacementOperations": 2,
+        "unrelatedBlocksPreserved": 0
+      }
+    ],
+    "historySnapshots": [
+      {
+        "name": "ROOT",
+        "sha256": "94b9da7f8181e27d6ade6f9d0a0e53c72f1c1a8eaca78c4ab6eeb5a6389e36a4",
+        "bytes": 44715,
+        "reference": "library-file:fde1_bGliZmlsZV9tSllhajNWTk8tTnpqN1VjRUlTdTNn_FileDrive_0af3095ffea88191a1f8d7f0a2ce6f8e"
+      },
+      {
+        "name": "WORKFLOW",
+        "sha256": "762b487edc2c2bd2acf48f70a547ba28be6a7c50eb8ff3ac5fd80deedbec1cc2",
+        "bytes": 256312,
+        "reference": "library-file:fde1_bGliZmlsZV92cTRBWm9sWUJlLVRaOFd4STAzTWZ3_FileDrive_0af3095ffea88191a1f8d7f0a2ce6f8e"
+      },
+      {
+        "name": "PROGRESS",
+        "sha256": "38cb58848cd0d01079d35fe389976bc4a81a718c33305b2ff5c1492754071e12",
+        "bytes": 40652,
+        "reference": "library-file:fde1_bGliZmlsZV9mTjc1aE54T3RuLWctaGM1LV9FRTFR_FileDrive_0af3095ffea88191a1f8d7f0a2ce6f8e"
+      },
+      {
+        "name": "PAR",
+        "sha256": "b83b606547a7eb9a701e41e51483c3db5162f6aa3b95db3a5418a94b4bf9dcbd",
+        "bytes": 112838,
+        "reference": "library-file:fde1_bGliZmlsZV9VcUo0dlc1ekFnbE42NlhsbWhtSl93_FileDrive_0af3095ffea88191a1f8d7f0a2ce6f8e"
+      }
+    ],
+    "currentDownloadCount": 7,
+    "allHostedApplicationWorkHeld": true,
+    "credentialGrantSchemaChanges": 0
+  }
+}

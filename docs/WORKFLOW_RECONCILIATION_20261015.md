@@ -509,9 +509,9 @@ action was used, and absence of the eight keys was verified after page reload.
 No deployment was triggered. This removes future build access; it does not
 rewrite historical builds or revoke any credential.
 
-A prior dashboard tool-output capture exposed a database credential, as already
-reported to the owner. Rotation remains recommended and explicitly deferred;
-no secret value is reproduced in this guide, and no rotation is claimed.
+Credential-retirement scope, evidence and action status are maintained in the
+owner-held record. The public workflow records package-level decisions only;
+any live action requires its exact approval. No secret values are included here.
 
 ## Reconciliation of the original review
 

@@ -1,0 +1,23 @@
+{
+  "format": "jmax-verbatim-document-archives-v1",
+  "archives": {
+    "README_HISTORY_20261023.md": {
+      "source": "README.md",
+      "commit": "c3b429a2da8d1880ecdbcf34ccb5b28033978c6c",
+      "sha256": "7b1ee89fce0202b835609c3afde29bfc08bdcaee9a1b5af2af73219eaf03a67a",
+      "verbatimGitBytes": true
+    },
+    "docs/HOSTED_REVIEWED_PAR_MIGRATION_PLAN_HISTORY_20261023.md": {
+      "source": "docs/HOSTED_REVIEWED_PAR_MIGRATION_PLAN.md",
+      "commit": "c3b429a2da8d1880ecdbcf34ccb5b28033978c6c",
+      "sha256": "3ae2a6382ac73a278b3191fdc0b586ee649ff0b8815a38f1d41b74c606459252",
+      "verbatimGitBytes": true
+    },
+    "docs/REVIEWED_PAR_INSTALLATION_RUNBOOK_HISTORY_20261023.md": {
+      "source": "docs/REVIEWED_PAR_INSTALLATION_RUNBOOK_20261022.md",
+      "commit": "c3b429a2da8d1880ecdbcf34ccb5b28033978c6c",
+      "sha256": "cf1d0becb898339e074e7bf4a5d2d11bc83f41751ff2d1c3ce51163d0da12dcf",
+      "verbatimGitBytes": true
+    }
+  }
+}
