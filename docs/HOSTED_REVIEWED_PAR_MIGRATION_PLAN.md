@@ -1,6 +1,19 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
-## Current status — October 21
+## Current status — October 22
+
+PR56 is accepted as 86a44d4 with separately green reviewed-head and merged-main
+CI. The [local measurement follow-up](LOCAL_PAR_OPERATION_MEASUREMENT_20261022.md)
+separately records public cursor/transaction operations; it leaves the query-method
+boundary, fingerprint algorithms, SQL and limits unchanged. All 1,323 offline and
+13 targeted PostgreSQL cases passed, along with guarded restored-data preservation
+and cleanup. API operations must not be counted as network round trips or added to
+the old coefficient without calibration. The follow-up is local pending draft-push
+approval; hosted work/service controls and credential/grant/schema changes remain
+held. No maintenance window is active. Earlier dated planning/qualification records
+below confer no current execution authority.
+
+## Earlier planning status — October 21–22
 
 **October 22 planning update:** the [fresh qualification proposal](REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.md)
 is ready for owner review. Its proposed window covers fresh backup/restore and

@@ -1,0 +1,629 @@
+{
+  "acceptedMain": "86a44d4914107db6b3a958c19f8442caba767aaa",
+  "candidatePacketFormat": "jaymax-par-qualification-operator-packet-v2",
+  "candidatePacketSha256": "dce56844b5eb886623740c24746a4e3e9c891c8b3505ca04456cae19535ef9d4",
+  "cleanupErrors": [],
+  "completedAt": "2026-10-23T00:39:17.403790+00:00",
+  "credentialsChanged": false,
+  "format": "jaymax-local-par-operation-timing-v1",
+  "hostedConnection": false,
+  "hostedExecutionAuthorized": false,
+  "hostedGrantsChanged": false,
+  "hostedSchemaChanged": false,
+  "hostedTimingProven": false,
+  "hostedWrites": false,
+  "installerSourcesMatched": 49,
+  "instrumentationSha256": "c8e87387796578aedf93eea4b8550ee1592468d64161bff7bf78076bcbdf7782",
+  "latencyCoefficientRecalibrated": false,
+  "ledgerRowsAdded": 1,
+  "measurementLimit": "Public API operations, not network round trips or inferred batches. Query-method boundary unchanged. No SQL, parameters, row values, identifiers or exception text retained. Zero rounded seconds is not zero work.",
+  "memoryAtServerStart": {
+    "freeMiB": 1156.4,
+    "freePercent": 19.18
+  },
+  "memoryBefore": {
+    "freeMiB": 1168.1,
+    "freePercent": 19.37
+  },
+  "networkGuard": {
+    "loopbackConnections": 7,
+    "nonloopbackAttempts": 0
+  },
+  "newParRows": 0,
+  "operationLimitSeconds": 600,
+  "operationMeasurement": "public API calls/outcomes/seconds, not network round trips; no batch inference or revised latency coefficient",
+  "originalFingerprintsAndSqlUnchanged": true,
+  "originalLocalInventoryRestored": true,
+  "originalRowsSequencesCatalogPreserved": true,
+  "ownedLocalServerStopped": true,
+  "packetSourcesMatched": 56,
+  "privateReceiptSha256": "66dc36129a17810732fedb1e86fbf3e0f5c586f0f41dc78ca517c17142cf1584",
+  "protocolRoundTripsMeasured": false,
+  "readyForHostedExecution": false,
+  "restore": {
+    "archiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+    "catalogGroupsMatched": 13,
+    "majorVersionMatched": true,
+    "managedRecoveryVerified": false,
+    "operationalReleaseApproved": false,
+    "patchVersionMatched": false,
+    "rowsMatched": 45648,
+    "status": "verified_application_restore",
+    "tablesMatched": 120
+  },
+  "restoreInstrumented": false,
+  "retainedEncryptedArchiveUnchanged": true,
+  "retainedWindowReceiptUnchanged": true,
+  "runnerSha256": "accbf953a18e140319d583be8e8a7c38d4f5d517731288e44bbccdbf51f113c7",
+  "sourceArchiveSha256": "77beabc6a2fa88db317dc32ea798fc5c9546ff115a774940851faba842d746df",
+  "sourceRevision": "0674d899c9fed6ed3bcc6fbe47e848cb797084bb",
+  "sparseOperationGroups": true,
+  "startedAt": "2026-10-23T00:36:22.239086+00:00",
+  "status": "passed_local_restored_data_timing_rehearsal",
+  "timings": {
+    "applyAndIndependentVerification": {
+      "driverOperationGroups": {
+        "sequences": {
+          "cursor_create": {
+            "calls": 3,
+            "cancelled": 0,
+            "completed": 3,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_iter": {
+            "calls": 3,
+            "cancelled": 0,
+            "completed": 3,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_next": {
+            "calls": 6,
+            "cancelled": 0,
+            "completed": 3,
+            "errors": 0,
+            "exhausted": 3,
+            "seconds": 0.016
+          }
+        },
+        "transaction_control": {
+          "transaction_commit": {
+            "calls": 14,
+            "cancelled": 0,
+            "completed": 14,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_create": {
+            "calls": 14,
+            "cancelled": 0,
+            "completed": 14,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_start": {
+            "calls": 14,
+            "cancelled": 0,
+            "completed": 14,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          }
+        }
+      },
+      "driverOperations": {
+        "cursor_create": {
+          "calls": 3,
+          "cancelled": 0,
+          "completed": 3,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_iter": {
+          "calls": 3,
+          "cancelled": 0,
+          "completed": 3,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_next": {
+          "calls": 6,
+          "cancelled": 0,
+          "completed": 3,
+          "errors": 0,
+          "exhausted": 3,
+          "seconds": 0.016
+        },
+        "transaction_commit": {
+          "calls": 14,
+          "cancelled": 0,
+          "completed": 14,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_create": {
+          "calls": 14,
+          "cancelled": 0,
+          "completed": 14,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_start": {
+          "calls": 14,
+          "cancelled": 0,
+          "completed": 14,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        }
+      },
+      "elapsedSeconds": 75.218,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 9,
+          "querySeconds": 0.016
+        },
+        "apply_ddl": {
+          "queryCalls": 1,
+          "querySeconds": 0.063
+        },
+        "backend_permissions": {
+          "queryCalls": 42,
+          "querySeconds": 0.062
+        },
+        "backup_catalog": {
+          "queryCalls": 45,
+          "querySeconds": 0.548
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 359,
+          "querySeconds": 33.218
+        },
+        "capture_catalog": {
+          "queryCalls": 39,
+          "querySeconds": 0.499
+        },
+        "fingerprints": {
+          "queryCalls": 359,
+          "querySeconds": 37.828
+        },
+        "identity": {
+          "queryCalls": 5,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 6,
+          "querySeconds": 0.125
+        },
+        "ledger": {
+          "queryCalls": 64,
+          "querySeconds": 0.482
+        },
+        "locks": {
+          "queryCalls": 7,
+          "querySeconds": 0.06
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        },
+        "original_columns": {
+          "queryCalls": 6,
+          "querySeconds": 0.111
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 4,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 120,
+          "querySeconds": 0.219
+        },
+        "readiness_check": {
+          "queryCalls": 18,
+          "querySeconds": 0.063
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 16,
+          "querySeconds": 0.016
+        },
+        "writer_guard": {
+          "queryCalls": 9,
+          "querySeconds": 0.063
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 42,
+          "querySeconds": 0.062
+        },
+        "backup_catalog": {
+          "queryCalls": 404,
+          "querySeconds": 33.766
+        },
+        "backup_compare": {
+          "queryCalls": 407,
+          "querySeconds": 33.766
+        },
+        "backup_fingerprints": {
+          "queryCalls": 359,
+          "querySeconds": 33.218
+        },
+        "capture_catalog": {
+          "queryCalls": 39,
+          "querySeconds": 0.499
+        },
+        "fingerprints": {
+          "queryCalls": 362,
+          "querySeconds": 37.876
+        },
+        "identity": {
+          "queryCalls": 2,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 3,
+          "querySeconds": 0.109
+        },
+        "ledger": {
+          "queryCalls": 63,
+          "querySeconds": 0.482
+        },
+        "locks": {
+          "queryCalls": 1,
+          "querySeconds": 0.015
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        },
+        "original_columns": {
+          "queryCalls": 6,
+          "querySeconds": 0.111
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 446,
+          "querySeconds": 25.985
+        },
+        "readiness": {
+          "queryCalls": 132,
+          "querySeconds": 0.328
+        },
+        "readiness_check": {
+          "queryCalls": 192,
+          "querySeconds": 0.453
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 9,
+          "querySeconds": 0.063
+        }
+      },
+      "passed": true,
+      "queryCalls": 1112,
+      "querySeconds": 73.389
+    },
+    "prepare": {
+      "driverOperationGroups": {
+        "sequences": {
+          "cursor_create": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_iter": {
+            "calls": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "cursor_next": {
+            "calls": 2,
+            "cancelled": 0,
+            "completed": 1,
+            "errors": 0,
+            "exhausted": 1,
+            "seconds": 0.0
+          }
+        },
+        "transaction_control": {
+          "transaction_commit": {
+            "calls": 6,
+            "cancelled": 0,
+            "completed": 6,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.016
+          },
+          "transaction_create": {
+            "calls": 6,
+            "cancelled": 0,
+            "completed": 6,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          },
+          "transaction_start": {
+            "calls": 6,
+            "cancelled": 0,
+            "completed": 6,
+            "errors": 0,
+            "exhausted": 0,
+            "seconds": 0.0
+          }
+        }
+      },
+      "driverOperations": {
+        "cursor_create": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_iter": {
+          "calls": 1,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "cursor_next": {
+          "calls": 2,
+          "cancelled": 0,
+          "completed": 1,
+          "errors": 0,
+          "exhausted": 1,
+          "seconds": 0.0
+        },
+        "transaction_commit": {
+          "calls": 6,
+          "cancelled": 0,
+          "completed": 6,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.016
+        },
+        "transaction_create": {
+          "calls": 6,
+          "cancelled": 0,
+          "completed": 6,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        },
+        "transaction_start": {
+          "calls": 6,
+          "cancelled": 0,
+          "completed": 6,
+          "errors": 0,
+          "exhausted": 0,
+          "seconds": 0.0
+        }
+      },
+      "elapsedSeconds": 24.703,
+      "exclusiveGroups": {
+        "acl": {
+          "queryCalls": 3,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 14,
+          "querySeconds": 0.031
+        },
+        "backup_catalog": {
+          "queryCalls": 15,
+          "querySeconds": 0.234
+        },
+        "backup_compare": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backup_fingerprints": {
+          "queryCalls": 119,
+          "querySeconds": 11.719
+        },
+        "capture_catalog": {
+          "queryCalls": 13,
+          "querySeconds": 0.187
+        },
+        "fingerprints": {
+          "queryCalls": 119,
+          "querySeconds": 11.406
+        },
+        "identity": {
+          "queryCalls": 2,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 2,
+          "querySeconds": 0.11
+        },
+        "ledger": {
+          "queryCalls": 23,
+          "querySeconds": 0.124
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        },
+        "original_columns": {
+          "queryCalls": 2,
+          "querySeconds": 0.032
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 40,
+          "querySeconds": 0.14
+        },
+        "readiness_check": {
+          "queryCalls": 6,
+          "querySeconds": 0.015
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 6,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.047
+        }
+      },
+      "functionsInclusive": {
+        "acl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "apply_ddl": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "backend_permissions": {
+          "queryCalls": 14,
+          "querySeconds": 0.031
+        },
+        "backup_catalog": {
+          "queryCalls": 134,
+          "querySeconds": 11.953
+        },
+        "backup_compare": {
+          "queryCalls": 135,
+          "querySeconds": 11.953
+        },
+        "backup_fingerprints": {
+          "queryCalls": 119,
+          "querySeconds": 11.719
+        },
+        "capture_catalog": {
+          "queryCalls": 13,
+          "querySeconds": 0.187
+        },
+        "fingerprints": {
+          "queryCalls": 120,
+          "querySeconds": 11.422
+        },
+        "identity": {
+          "queryCalls": 1,
+          "querySeconds": 0.0
+        },
+        "index_state": {
+          "queryCalls": 1,
+          "querySeconds": 0.11
+        },
+        "ledger": {
+          "queryCalls": 23,
+          "querySeconds": 0.124
+        },
+        "locks": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "object_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.016
+        },
+        "original_columns": {
+          "queryCalls": 2,
+          "querySeconds": 0.032
+        },
+        "other": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "outcome_check": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "readiness": {
+          "queryCalls": 44,
+          "querySeconds": 0.25
+        },
+        "readiness_check": {
+          "queryCalls": 64,
+          "querySeconds": 0.296
+        },
+        "sequences": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "session_settings": {
+          "queryCalls": 0,
+          "querySeconds": 0.0
+        },
+        "writer_guard": {
+          "queryCalls": 3,
+          "querySeconds": 0.047
+        }
+      },
+      "passed": true,
+      "queryCalls": 370,
+      "querySeconds": 24.061
+    }
+  }
+}
