@@ -1,15 +1,33 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Local installer query-reduction candidate
+## Current local attribution follow-up
+
+[PR55](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/55) merged with
+owner approval as ec0480b on October 22 at 7:44:35 p.m. Eastern. Its tree matches
+reviewed 25f1e14; reviewed-head and merged-main CI each passed all four checks.
+The approved existing automatic Render test deployment has not been inspected.
+
+The [local attribution follow-up](docs/LOCAL_PAR_ATTRIBUTION_20261022.md) is
+published as [draft PR56](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/56)
+with owner approval, for independent review and fresh CI; merge remains separate.
+All 1,289 offline cases passed. The guarded restored-data run measured 370
+preparation calls / 24.359 s and 1,112 apply/fresh-verification calls / 75.047 s,
+with zero unclassified calls, exact preservation and owned cleanup. The two
+fingerprint families dominate measured time; their formats remain independent.
+No execution reduction or speedup is claimed. Runtime/SQL/timeouts/guards are
+unchanged. Hosted work and credential/grant/schema changes remain held; the
+additive sensitivity remains about 537 s, above the proposed 450 s screen.
+
+## Accepted PR55 query reduction and historical evidence
 
 PR55 review amendments are [recorded here](docs/PR55_REVIEW_AMENDMENTS.md).
 The main-branch conflict is resolved, Python 3.12 and LF rules are enforced,
 and fresh code-head CI and the restored-data function-timing rerun passed. The
 rerun measured 1,112 apply/verification calls / 75.938 seconds on loopback;
 the public breakdown retains counts/time only. Modeled hosted timing still
-exceeds the proposed 450-second planning screen. PR55 remains draft pending
-final-head CI and separate merge approval; hosted work and credential/grant/
-schema changes remain held.
+exceeds the proposed 450-second planning screen. PR55 is now merged with green
+reviewed-head and merged-main CI; hosted work and credential/grant/schema changes
+remain held.
 
 The [tooling follow-up](docs/REVIEWED_PAR_QUERY_REDUCTION.md) batches migration
 object-existence checks, avoids a discarded catalog capture and reuses original
@@ -25,14 +43,14 @@ dropped 714 → 370; apply plus independent verification dropped 2,396 → 1,112
 previously; no elapsed-time speedup or hosted timing proof is claimed. The same
 120-table / 45,648-row snapshot matched and original local inventory/server state
 was restored. These original local results are historical; see the amendment
-record for fresh CI and the remaining timing gate.
-Hosted work and credential, grant and schema changes remain on hold. No PR has
-been pushed; independent review, CI, merge and hosted approval are separate.
+record for fresh CI and the completed merge. Hosted work and credential, grant
+and schema changes remain on hold. The separate attribution follow-up is now
+draft PR56; fresh CI, independent review, merge and hosted approval are separate.
 
 ## Current reviewed-par installation position — October 22
 
-PR54 is accepted as `ed62beb`, with the same file tree as tested `02ac4c0`.
-Its qualification-only window closed at **3:04:43 p.m. Eastern**, after
+Accepted main is PR55 `ec0480b`, tree-identical to tested `25f1e14`. The earlier
+PR54 `ed62beb` qualification-only window closed at **3:04:43 p.m. Eastern**, after
 22 minutes 56 seconds. Fresh encrypted backup/disposable restore matched
 120 tables, 45,648 table rows and 13 catalog groups; read-only qualification
 passed without applying SQL. Original Toast job states were restored/verified,
@@ -46,14 +64,15 @@ proposals below remain dated records. The closed window and its retained plan
 cannot authorize another hosted action. Hosted work and credential, grant and
 schema changes remain held. Ordering stays manual; par editing remains frozen.
 
-The local restored-data rehearsal passed: restore **25.047 s**, preparation
+The earlier local restored-data rehearsal passed: restore **25.047 s**, preparation
 **15.078 s**, apply plus independent verification **58.578 s** under the unchanged
 600-second limit, with exact preservation and owned cleanup. However, the last
 stage made **2,396 database calls** versus preparation's 714; the earlier hosted
 preparation took 311.766 s. Local success does not prove the hosted timing budget.
 The [runbook and public receipt](docs/REVIEWED_PAR_INSTALLATION_RUNBOOK_20261022.md)
 recommend a local review of repeated query/scan cost before any installation
-outage. No application/tooling code or hosted state changed in this follow-up.
+outage. Later local tooling and attribution evidence is recorded above; no
+hosted installation or credential/grant/schema change has been performed.
 
 ## Local qualification operator handoff
 
