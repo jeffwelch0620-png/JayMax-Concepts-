@@ -45,6 +45,14 @@ class Stream(httpx.AsyncByteStream):
 
 
 class ProbeGuards(unittest.IsolatedAsyncioTestCase):
+    def test_generated_artifacts_never_overwrite_or_repair_existing_file(self):
+        with TemporaryDirectory() as directory:
+            path=Path(directory)/'TEST_ONLY_existing.json'; path.write_bytes(b'TEST ONLY unchanged')
+            with patch.object(probe.subprocess,'run') as acl:
+                with self.assertRaises(FileExistsError): probe._fresh_private_file(path)
+                acl.assert_not_called()
+            self.assertEqual(path.read_bytes(),b'TEST ONLY unchanged')
+
     async def test_real_private_evidence_acl_and_refusal_of_broad_read_grant(self):
         if os.name != 'nt':
             with self.assertRaises(probe.Held): probe.private_path('TEST_ONLY')
@@ -63,6 +71,7 @@ class ProbeGuards(unittest.IsolatedAsyncioTestCase):
             modified=probe.subprocess.run(['icacls.exe',str(receipt),'/grant','*S-1-1-0:(R)'],
                 capture_output=True,timeout=20,creationflags=probe.subprocess.CREATE_NO_WINDOW)
             self.assertEqual(modified.returncode,0)
+            with self.assertRaises(FileExistsError): probe._fresh_private_file(receipt)
             with self.assertRaises(probe.Held): probe.private_path(receipt)
 
     def test_cli_only_prepares_checks_packets_and_never_executes_or_overwrites(self):
@@ -108,7 +117,7 @@ class ProbeGuards(unittest.IsolatedAsyncioTestCase):
                         raise preservation.wrap_fingerprint_timeout(original,'backup',(('public','TEST_ONLY_PRIVATE'),))
                     return {'coverageComplete':True,'metrics':{g:{'queryCalls':1,'cursorOperations':0,
                              'cursorEnvelopes':0,'maxSeconds':1} for g in probe.GROUPS}}
-                with patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
+                with patch.object(probe,'_fresh_private_file',side_effect=lambda p:Path(p).open('xb')), patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
                      patch.object(probe,'resources',return_value={}), \
                      patch('dotenv.dotenv_values',return_value={'MAINTENANCE_DATABASE_URL':
                         'postgresql://postgres:TEST_ONLY@db.abcdefghijklmnopqrst.supabase.co:5432/postgres'}), \
@@ -138,7 +147,7 @@ class ProbeGuards(unittest.IsolatedAsyncioTestCase):
         value=probe.packet('calibration',project='abcdefghijklmnopqrst',health_sha=probe.digest(health))
         with TemporaryDirectory() as directory:
             path=Path(directory); auth=approval(value,path)
-            with patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
+            with patch.object(probe,'_fresh_private_file',side_effect=lambda p:Path(p).open('xb')), patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
                  patch.object(probe,'resources',return_value={}), \
                  patch('dotenv.dotenv_values',return_value={'DATABASE_URL':'TEST ONLY must not fall back'}), \
                  patch.object(maintenance,'connect',AsyncMock()) as connect:
@@ -308,7 +317,7 @@ class ProbeGuards(unittest.IsolatedAsyncioTestCase):
     async def test_private_exclusive_claim_prevents_second_request_and_public_redacts(self):
         with TemporaryDirectory() as directory:
             path=Path(directory); value=probe.packet('health'); auth=approval(value,path)
-            with patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
+            with patch.object(probe,'_fresh_private_file',side_effect=lambda p:Path(p).open('xb')), patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
                  patch.object(probe,'resources',return_value={}), \
                  patch.object(probe,'health_observation',AsyncMock(return_value={'status':'ok'})) as request:
                 result=await probe.execute_approved(value,auth,evidence_directory=path)
@@ -326,7 +335,7 @@ class ProbeGuards(unittest.IsolatedAsyncioTestCase):
         for failure in (RuntimeError('TEST ONLY password raw SQL'),asyncio.CancelledError()):
             with TemporaryDirectory() as directory:
                 path=Path(directory); value=probe.packet('health'); auth=approval(value,path)
-                with patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
+                with patch.object(probe,'_fresh_private_file',side_effect=lambda p:Path(p).open('xb')), patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
                      patch.object(probe,'resources',return_value={}), \
                      patch.object(probe,'health_observation',AsyncMock(side_effect=failure)):
                     if isinstance(failure,asyncio.CancelledError):

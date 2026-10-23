@@ -387,6 +387,42 @@ def private_path(path, *, directory=False):
     return path
 
 
+def _fresh_private_file(path):
+    """Only an exclusively created artifact may receive a generated private ACL.
+
+    Never repair a supplied file or credential. A failed preparation retains the
+    fresh artifact and closes its handle, before any configuration/network read.
+    """
+    stream = Path(path).open('xb')
+    try:
+        if os.name == 'nt':
+            shell = shutil.which('pwsh')
+            if not shell:
+                raise Held('PowerShell private output preparation required')
+            script = """$ErrorActionPreference='Stop'; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User;
+            $acl=[Security.AccessControl.FileSecurity]::new();
+            $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false);
+            foreach($id in @($sid.Value,'S-1-5-18')) {
+              $rule=[Security.AccessControl.FileSystemAccessRule]::new(
+                [Security.Principal.SecurityIdentifier]::new($id),'FullControl','Allow');
+              $acl.AddAccessRule($rule) };
+            Set-Acl -LiteralPath $env:JAYMAX_PROBE_PRIVATE -AclObject $acl"""
+            result = subprocess.run([shell,'-NoProfile','-NonInteractive','-Command',script],
+                env={**os.environ,'JAYMAX_PROBE_PRIVATE':str(path)},capture_output=True,timeout=20,
+                creationflags=subprocess.CREATE_NO_WINDOW)
+            if result.returncode:
+                raise Held('Fresh private artifact preparation held')
+        else:
+            # Portable unit fixtures only. The hosted execution boundary requires
+            # Windows directory/ACL verification before reaching this helper.
+            os.fchmod(stream.fileno(),0o600)
+        private_path(path)
+        return stream
+    except BaseException:
+        stream.close()
+        raise
+
+
 def public_summary(receipt):
     # Explicit allowlist; do not forward driver text, private members or identifiers.
     result = {'format': FORMAT, 'stage': receipt['stage'], 'status': receipt['status'],
@@ -421,20 +457,14 @@ async def execute_approved(value, approval, *, evidence_directory, config_path=N
     claim = directory/('probe-'+digest(approval))
     # The approval binds this directory, so its exclusive marker cannot be moved
     # to a new directory to repeat the same owner-approved attempt.
-    with claim.open('xb') as stream:
+    with _fresh_private_file(claim) as stream:
         stream.write(sha.encode())
         stream.flush()
         os.fsync(stream.fileno())
-    private_path(claim)
     # Establish and verify a fresh empty receipt before any network/config read.
     # Failed writes retain the consumed claim and never permit automatic replay.
     receipt_path = claim.with_suffix('.json')
-    receipt_stream = receipt_path.open('xb')
-    try:
-        private_path(receipt_path)
-    except BaseException:
-        receipt_stream.close()
-        raise
+    receipt_stream = _fresh_private_file(receipt_path)
     started = time.monotonic(); conn = None; observer = None; cancelled = None
     receipt = {'format': FORMAT, 'stage': value['stage'], 'status': 'held',
                'packetSha256': sha, 'sourcesSha256': digest(value['sources']),

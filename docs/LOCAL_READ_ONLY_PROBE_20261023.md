@@ -1,6 +1,38 @@
 # Local read-only health and calibration probe — October 23, 2026
 
-## Scope and approval boundary
+## PR59 publication and generated-artifact ownership follow-up
+
+The owner approved publication as
+[draft PR59](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/59)
+at tested head `70bbc85`. Its first CI run passed frontend/build and backend
+checks, but the Windows ACL fixture exposed a fresh-file ownership difference:
+an elevated Windows process can assign its administrator group as owner even
+inside a protected directory. The existing verification correctly held.
+
+The follow-up exclusively creates each new claim/receipt, explicitly assigns
+current-user ownership and current-user/SYSTEM-only protected ACLs, then applies
+the unchanged verifier. It never repairs a supplied/existing artifact or
+credential; an existing path refuses before any ACL operation. Failed preparation
+retains the fresh artifact, closes its handle and stops before configuration or
+network access. The receipt handle stays bound to that exclusive creation.
+
+The focused follow-up passed **65 cases** (20 methods + 45 subtests) in 23.21
+seconds, including real Windows generated-artifact ACL handling, broad-grant
+refusal and existing-file no-overwrite/no-repair coverage. The fresh broad
+offline rerun passed **1,443 cases** (495 methods/items + 948 subtests) in 92.95
+seconds, zero failures/errors/skips. Profiles overlap. No database/SQL/application
+behavior changed; the earlier 18-case owned PostgreSQL preservation run remains
+applicable local evidence, not a fresh hosted observation. Corrected-head CI
+remains separate from the first failed run.
+
+The corrected 91-source public health packet verifies with execution approval
+false; SHA-256
+`c8d80ea8bbd0527851463136991236cae21ea18bf56be9c56324147713cd47c2`.
+Earlier packets below are retained superseded evidence and cannot authorize
+execution. Hosted execution, service controls and real credential/grant/schema/
+connection changes remain held. Fresh CI and merge approval stay separate.
+
+## Original local scope and approval boundary
 
 The owner approved implementation/testing of the
 [reviewed local design](READ_ONLY_HEALTH_CALIBRATION_PROPOSAL_20261023.md), based
@@ -62,7 +94,7 @@ Windows private-evidence ACL acceptance and broad-read-grant refusal on temporar
 fictional files. The focused selection covers the final receipt-handle,
 connection-monitor, simultaneous primary-error preservation, durable claim and
 cleanup-cancellation refinements after the broad run;
-totals overlap. The final public health packet is generated and checked locally
+totals overlap. The original public health packet was generated and checked locally
 before publication with every execution approval false. Its 91 source bindings
 verified; packet SHA-256 is
 `1144b5f3e0b24e2aa681108765194ad51bfd69e139bcdb57e3e379cb10ff521a`.
@@ -86,8 +118,8 @@ slice. Fresh CI remains a publication gate, not hosted proof.
 
 ## Next gates
 
-Prompt the owner before pushing a draft PR. Then obtain independent review and
-fresh CI; merge remains separate. Only later may the owner approve an exact
+The owner approved pushing draft PR59; obtain independent review and fresh CI
+at the corrected head. Merge remains separate. Only later may the owner approve an exact
 health packet. Review that result before preparing/approving the calibration
 packet bound to its fresh private health receipt and exact target/scope.
 The API and Toast stay running. No maintenance window or installation authority
