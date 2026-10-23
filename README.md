@@ -16,8 +16,10 @@ cases** passed. The guarded restored-data rehearsal passed with exact preservati
 and complete owned cleanup: 370 prepare calls / 24.703 s and 1,112 apply/fresh-
 verification calls / 75.218 s. The new API operation counts are not network round
 trips and are not added to the old latency model. Runtime/SQL/fingerprints/limits
-are unchanged. This follow-up remains local pending owner approval to push a draft;
-fresh CI and merge are separate. Hosted work/service controls and credential,
+are unchanged. The owner approved publication as
+[draft PR57](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/57);
+fresh exact-head CI, independent review and merge are separate. Hosted work/service
+controls and credential,
 grant and schema changes remain held.
 
 ## Accepted PR56 attribution and historical evidence

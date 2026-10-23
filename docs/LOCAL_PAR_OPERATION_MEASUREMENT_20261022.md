@@ -13,10 +13,13 @@ Windows offline cases and 257 backend/disposable PostgreSQL cases. Profiles
 overlap. The merge permits the existing automatic Render test deployment;
 deployment completion and hosted behavior were not inspected.
 
-The owner authorized this local measurement follow-up and reserved approval
-before the next draft push. Measured source is
+The owner authorized this local measurement follow-up and subsequently approved
+publication as [draft PR57](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/57).
+The original tested publication head is 0b860314b2ecf3c59b006972ea6556ab4429f554.
+The publication-link update changes documentation only. Measured source is
 0674d899c9fed6ed3bcc6fbe47e848cb797084bb on
-codex/par-local-operation-metrics. Nothing from this follow-up has been pushed.
+codex/par-local-operation-metrics. The branch is published for independent review;
+fresh exact-head CI and merge approval remain separate.
 Hosted work/service controls and credential/grant/schema/connection changes
 remain held. No maintenance window is active.
 
@@ -79,7 +82,8 @@ task-local. Rounded zero seconds does not mean no work occurred.
   execution approvals remain false. Historical packets/pins/receipts are unchanged.
 - No new local frontend/build or broad database run was needed for this isolated
   instrumentation change. Accepted-main CI above is baseline coverage, not fresh
-  CI on this unpushed follow-up. Publication, fresh CI and merge remain later gates.
+  CI on this follow-up. PR57 CI is verified separately after publication;
+  independent review and merge remain later gates.
 
 ## Restored-data measurements
 
@@ -135,7 +139,8 @@ unchanged snapshots, fail-closed timeout behavior and explicit source amendments
 Do not remove verification, cache across phases or introduce parallel target
 connections. A later hosted calibration probe needs separate owner approval.
 
-Next action: ask the owner before pushing a new draft PR. Hosted work, service
+Next action: complete fresh exact-head CI and independent review of draft PR57,
+then return for separate owner merge approval. Hosted work, service
 controls and credential/grant/schema/connection changes stay held. Par editing
 stays frozen, ordering manual and Track 1 independent. O1, G04/G13, functional
 health, managed recovery and live acceptance remain separate open workflows.

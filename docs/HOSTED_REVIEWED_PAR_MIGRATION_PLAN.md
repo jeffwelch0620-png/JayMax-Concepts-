@@ -8,8 +8,9 @@ separately records public cursor/transaction operations; it leaves the query-met
 boundary, fingerprint algorithms, SQL and limits unchanged. All 1,323 offline and
 13 targeted PostgreSQL cases passed, along with guarded restored-data preservation
 and cleanup. API operations must not be counted as network round trips or added to
-the old coefficient without calibration. The follow-up is local pending draft-push
-approval; hosted work/service controls and credential/grant/schema changes remain
+the old coefficient without calibration. The owner approved publication as
+[draft PR57](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/57), for fresh
+CI and independent review; hosted work/service controls and credential/grant/schema changes remain
 held. No maintenance window is active. Earlier dated planning/qualification records
 below confer no current execution authority.
 
