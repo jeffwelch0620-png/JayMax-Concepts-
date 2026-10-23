@@ -415,7 +415,7 @@ async def relation_fingerprint(conn, quoted, kind, row_hashes=True, *, server_ag
 
 
 async def relation_fingerprints_batched(conn, relations, row_hashes=True, *,
-                                      server_aggregation=True, chunk_size=4):
+                                      server_aggregation=True, chunk_size=2):
     """Par-only batches; preserve each backup probe, fallback and path counter."""
     from hosted_install_preservation import checked_fingerprint_chunk, checked_fingerprint_chunk_size
     chunk_size = checked_fingerprint_chunk_size(chunk_size)

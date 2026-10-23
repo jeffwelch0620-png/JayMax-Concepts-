@@ -93,7 +93,7 @@ def checked_fingerprint_chunk(rows, positions, *, max_rows=None):
     return result
 
 
-async def fingerprints_batched(conn, baseline, *, exclude_synthetic=None, chunk_size=4):
+async def fingerprints_batched(conn, baseline, *, exclude_synthetic=None, chunk_size=2):
     """Par-only original projections; the historical algorithm above is intact.
 
     No probe, row limit or cursor fallback is added to this hash format. The

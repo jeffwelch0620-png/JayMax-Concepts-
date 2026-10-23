@@ -31,10 +31,10 @@ MAX_BYTES = 256 * 1024
 FOLLOWUP_TOOLING_AMENDMENTS = {
     'backend/hosted_backup.py': {
         'priorContentSha256': 'e1fbae51c519d7fda7d182d68df550e38a8644b4992ab9d8c346d62ed1ab6c09',
-        'contentSha256': '6105ada25f292a340e7e0cd19a27ee6d43cd7da9cf65701bfafba95b75e831b1'},
+        'contentSha256': '5dd2201b9ed6941ea569da64a14795a486f6bc9bd12643310343e55e9ab29688'},
     'backend/hosted_install_preservation.py': {
         'priorContentSha256': 'de5ba5bd6abf8e377910cef5f2f2bd43ea5a0feee1ee821da7da137740ac9745',
-        'contentSha256': '540242548578d83ad24d8141e6613f176d2df9d530cb7cea49c222e6c6e1e92f'},
+        'contentSha256': '19c9c7ec439440a76da2881e3586081c3b3e09f8648571b9b6f2aaa374bb87cd'},
     'tools/ops/apply_reviewed_par_migration.py': {
         'priorContentSha256': '80a1f1fd170b905b31af849b5b56742565453a40ae549f61b11cf21040e0d307',
         'contentSha256': '2b332f27bcf720616d1e4efa2b81b9ebced806a004f06a904e6d14871923c3b0'},
