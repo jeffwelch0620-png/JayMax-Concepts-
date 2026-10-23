@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-OFFLINE_MODULES = ('local_query_metrics par_qualification_packet maintenance_connection planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
+OFFLINE_MODULES = ('probe_reproducibility read_only_probe local_query_metrics par_qualification_packet maintenance_connection planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
  'managed_development rotate_build_connections provision_build_connections staff_response staff_pin_security pg_routes pg_migrations '
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
@@ -23,6 +23,13 @@ OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_insta
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
                     'batched_fingerprints::BatchedFingerprintGuards']
 DATABASE_CASES = (
+ ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_complete_two_families_preserve_rows_catalog_sequence_and_independent_hash_formats'),
+ ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_full_cursor_fallback_and_sequences_are_included_in_envelopes'),
+ ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_unknown_inventory_or_unapproved_discovery_refuses_before_hashing'),
+ ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_missing_original_and_backup_catalog_or_relation_results_fail_closed'),
+ ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_snapshot_enforces_readonly_and_refuses_every_mutation_and_sequence_advance'),
+ ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_timeout_cancel_and_resource_failure_rollback_without_retry'),
+ ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_observed_slow_query_holds_and_later_family_never_runs'),
  ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_original_projection_oracle_exclusions_and_chunk_boundaries'),
  ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_backup_oracle_fallback_sequences_and_path_counters'),
  ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_late_rows_and_original_columns_detect_drift'),

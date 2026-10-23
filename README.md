@@ -1,6 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Current local bounded fingerprint follow-up
+## Current position — October 23, 2026
+
+PR58 is accepted as `3bdf8be`; its tree matches reviewed `a9a786d`.
+[Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39961425193)
+and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39963132885)
+each passed all four checks: 1,079 frontend tests plus strict build, 1,378 Windows
+offline cases and 320 backend/PostgreSQL cases. Automatic test deployment was
+authorized; completion and live behavior have not been inspected.
+
+The owner-approved [local probe implementation](docs/LOCAL_READ_ONLY_PROBE_20261023.md)
+separates health/calibration, exact-stage approval/source bindings, complete scope,
+per-read/cursor-envelope timing and bounded owned cleanup. It is published with
+owner approval as [draft PR59](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/59).
+The review amendment adds reproducible LF source packets, preserves primary
+timeout diagnostics under cleanup holds and propagates control interrupts after
+receipt handling. All 1,448 broad offline and 70 focused cases passed; ten child
+interrupt scenarios are included inside the focused profile. The 31 pinned
+migration files, schema snapshot and public CA retain their reviewed bytes.
+The prior guarded PostgreSQL run passed 18; profiles overlap. Fresh exact-head
+CI and owner merge approval remain separate. Hosted
+execution, service pauses and credential/grant/schema/connection changes stay held.
+
+## Dated bounded fingerprint implementation evidence
 
 [PR58 review amendments](docs/PR58_REVIEW_AMENDMENTS.md) restore private timeout
 attribution, preserve SQLSTATE/cleanup and public redaction, and add an explicitly
@@ -24,8 +46,8 @@ owned cleanup: **764 apply/fresh-verification query calls / 45.063 seconds**,
 31.29% fewer calls than PR57's dated 1,112 / 75.218 seconds. The
 old sensitivity gives 362.527 seconds; this is planning arithmetic,
 not hosted timing proof. API operations are not network round trips. The owner
-approved publication as [draft PR58](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/58)
-for fresh CI and independent review; merge approval remains separate. Hosted work/service controls
+approved publication as [PR58](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/58),
+subsequently reviewed and merged as recorded above. Hosted work/service controls
 and credential, grant, schema and connection changes remain held.
 
 ### Accepted PR57 measurement evidence
