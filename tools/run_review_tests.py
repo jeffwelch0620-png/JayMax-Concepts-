@@ -22,6 +22,11 @@ OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrit
 OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests',
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests']
 DATABASE_CASES = (
+ ('local_query_metrics_pg','LocalQueryMetricsDatabaseTests','test_iteration_cached_uncached_empty_exact_batch_and_early_exit'),
+ ('local_query_metrics_pg','LocalQueryMetricsDatabaseTests','test_awaited_cursor_manual_fetch_forward_and_driver_refusals'),
+ ('local_query_metrics_pg','LocalQueryMetricsDatabaseTests','test_nested_context_and_manual_transactions_preserve_commit_and_rollback'),
+ ('local_query_metrics_pg','LocalQueryMetricsDatabaseTests','test_timeout_and_cancellation_are_propagated_and_connection_recovers'),
+ ('local_query_metrics_pg','LocalQueryMetricsDatabaseTests','test_actual_backup_sequence_and_fallback_match_unwrapped_results'),
  ('inventory_pars','InventoryParTests','test_recovery_status_is_readonly_and_exact_retries_preserve_accounting'),
  ('inventory_pars','InventoryParTests','test_recovery_distinguishes_saved_superseded_and_unsaved_fenced_requests'),
  ('inventory_pars','InventoryParTests','test_recovery_rejects_changed_identity_and_holds_changed_profiles'),

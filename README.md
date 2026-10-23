@@ -1,6 +1,28 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Current local attribution follow-up
+## Current local cursor and transaction measurement follow-up
+
+[PR56](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/56) merged with
+owner approval as 86a44d4 on October 22 at 8:25:45 p.m. Eastern. Its tree matches
+reviewed c5e1b38; reviewed-head and
+[merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39878059249)
+each passed all four checks: 1,079 frontend tests plus strict build, 1,289 offline
+cases and 257 backend/PostgreSQL cases. Deployment completion was not inspected.
+
+The [local measurement follow-up](docs/LOCAL_PAR_OPERATION_MEASUREMENT_20261022.md)
+adds actual-module binding checks and separate public cursor/transaction API
+counts/outcomes/time. All **1,323 offline cases** and **13 targeted PostgreSQL
+cases** passed. The guarded restored-data rehearsal passed with exact preservation
+and complete owned cleanup: 370 prepare calls / 24.703 s and 1,112 apply/fresh-
+verification calls / 75.218 s. The new API operation counts are not network round
+trips and are not added to the old latency model. Runtime/SQL/fingerprints/limits
+are unchanged. The owner approved publication as
+[draft PR57](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/57);
+fresh exact-head CI, independent review and merge are separate. Hosted work/service
+controls and credential,
+grant and schema changes remain held.
+
+## Accepted PR56 attribution and historical evidence
 
 [PR55](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/55) merged with
 owner approval as ec0480b on October 22 at 7:44:35 p.m. Eastern. Its tree matches
@@ -8,8 +30,8 @@ reviewed 25f1e14; reviewed-head and merged-main CI each passed all four checks.
 The approved existing automatic Render test deployment has not been inspected.
 
 The [local attribution follow-up](docs/LOCAL_PAR_ATTRIBUTION_20261022.md) is
-published as [draft PR56](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/56)
-with owner approval, for independent review and fresh CI; merge remains separate.
+accepted in [PR56](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/56)
+with owner approval; its dated local evidence follows.
 All 1,289 offline cases passed. The guarded restored-data run measured 370
 preparation calls / 24.359 s and 1,112 apply/fresh-verification calls / 75.047 s,
 with zero unclassified calls, exact preservation and owned cleanup. The two
