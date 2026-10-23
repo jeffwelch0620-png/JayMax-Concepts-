@@ -1,6 +1,14 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
-## Current status - October 22
+## Current status - October 23
+
+PR58 is accepted as `3bdf8be`, with an identical tree to reviewed `a9a786d` and
+separately green reviewed-head/merged-main CI. Deployment completion was not
+inspected. The [local health/calibration proposal](READ_ONLY_HEALTH_CALIBRATION_PROPOSAL_20261023.md)
+is prepared for owner design review before implementation. It separates one
+bounded anonymous health observation from a later independently approved,
+source-bound read-only calibration. No hosted execution, service pause or
+credential/grant/schema/connection change is authorized. The current holds remain.
 
 The [PR58 review amendments](PR58_REVIEW_AMENDMENTS.md) add private timeout
 attribution and refresh the installation runbook. All 1,378 offline and 141
@@ -22,8 +30,8 @@ observations and planning arithmetic, not calibrated hosted timing or approval.
 Public cursor/transaction API counts are not protocol round trips.
 
 The owner approved publication as
-[draft PR58](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/58).
-Next: fresh exact-head CI and independent review, then separate merge approval. Hosted work/service
+[PR58](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/58), now reviewed
+and merged. Next: review the local proposal above before implementation. Hosted work/service
 controls and credential, grant, schema and connection changes remain held. No
 maintenance window is active. Earlier dated planning/qualification records below
 confer no current execution authority.
