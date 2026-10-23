@@ -31,17 +31,16 @@ PIN/session fixes must replace the old review's unsafe-path description, while
 its deployed acceptance, source-to-installed reconciliation and identity gaps
 remain open. Do not repeat the old implementation or reintroduce session minting.
 
-The October 15 record confirms eight backend-only variables were removed from
-the Render static service. It also records a database credential exposed in an
-earlier dashboard tool capture; rotation was deferred. Historical negative bundle
-scans and removal of build variables do not revoke a credential. Current key
-presence, consumers and deployment remain to be rechecked under S1.
+The earlier build-variable cleanup and its limits remain dated evidence.
+Current key presence, consumers and deployment require the separately approved
+S1 check. S2a's scope, affected credential and supporting evidence belong in the
+owner-held record; public progress text carries package-level status only.
+No secret values or private record addresses belong in this repository.
 
-Last verified API configuration used owner-connected `postgres` through the
-existing pooler. Today's calibration used the separate maintenance path; it
-does not prove the running API's current database actor. The 30-migration runtime
-candidate excludes the par table. These are explicit O1 inputs, not reasons to
-delay the independently reviewed par installation on the current build path.
+The calibration used a separate maintenance path and does not establish the
+running API's current actor or consumer bindings. Keep those actual bindings in
+the owner-held S1 record. The 30-migration runtime candidate excludes the par
+table; that remains an O1 design input, not a new par-installer prerequisite.
 
 ## Approval packages and sequence
 
@@ -50,15 +49,15 @@ delay the independently reviewed par installation on the current build path.
 | **S1 — security acceptance and current configuration inventory** | Bounded Inventory app checks, private evidence review and metadata-only deployment/role inventory below; no credential/grant/schema edits. | **Yes: exact bounded scope below.** A fresh execution start/deadline and user-handled personal sign-ins are still required. |
 | **P1/P2/P3 — par rollout** | See the companion par proposal: new 60-minute window, fresh backup/restore/qualification; separate exact-hash DDL approval; later labelled acceptance. | P1 is reviewable. P2 needs its freshly generated executable plan. P3 needs exact fixture identities/baseline. |
 | **R1 — restricted runtime candidate** | Locally reconcile the complete per-object inventory and auxiliary account candidates, add par dependencies, meaningful allow/deny tests and code review. | **No live grants/cutover yet.** Final SQL, actual role names, installed-object matrix and recovery evidence are required. |
-| **S2a — targeted exposed-credential retirement** | After S1 inventories every consumer, prepare rotation of the one previously exposed owner database credential independently of R1. Keep it outside P1. | **Not ready / not approved.** Exact consumers, pooler/old-login proof, recovery operator and separate window need a reviewed packet and owner decision. |
+| **S2a — targeted credential retirement** | Prepare after S1 consumer inventory, independently of R1 and outside P1. Scope, affected credential and evidence are held in the owner record. | **Not ready / not approved.** Exact consumers, pooler/old-login proof, recovery operator and separate window need a reviewed packet and owner decision. |
 | **S2 — restricted connection cutover** | After R1, stage limited inventory/account connections, validate both bindings and retire superseded app credentials. | **Not ready / not approved.** Reviewed role/grant artifacts and consumer/recovery evidence remain required. |
 | **I1 — first shared identity/feature slice** | Reconcile canonical identities privately, implement verified server actor resolution and port one integrated workflow. | **No shared DDL/account linking/provider cutover yet.** Decisions, local implementation, exact migration/row set and tests are required. |
 
 Recommended sequence: amend/review these documents, separately approve S1,
 then review a targeted S2a packet before the fresh P1/P2/P3 par sequence. This is
 a recommendation, not approval or an automatic new installer gate. R1 and I1
-local design can progress alongside it. Do not delay retirement of a known
-exposed credential merely to finish the full R1 permission redesign. Do not
+local design can progress alongside it. Assess S2a priority from the owner-held
+record rather than making its preparation wait for the full R1 redesign. Do not
 combine credential rotation, PIN policy changes, grants or identity cutover into
 the par window. R1's final policies must match the installed schema. No new PR is published without the requested push
 prompt, and merge/automatic deployment remain separately approved.
@@ -161,11 +160,11 @@ item, not an automatic consequence of this checklist or a successful personal lo
   bounded minimized audit read below. No SET ROLE, DDL/DML, membership changes,
   backend termination or broad employee export.
 - Privately review at most **200 existing manager/owner audit records** from
-  **October 15, 2026 or the earliest established exposure date if earlier**, through
-  the approved check. Use minimized time/actor/action/status fields, without
+  **covering the period identified in the owner-held record**, through the
+  approved check. Use minimized time/actor/action/status fields, without
   request bodies or credentials, inside the same connection/time budget. Record
   actual earliest/latest retained evidence, row cap, ordering and any uncovered
-  exposure interval. A capped sample is not an exhaustive investigation; missing
+  required review interval. A capped sample is not an exhaustive investigation; missing
   older provider/database logs remain an explicit gap, not evidence of no misuse.
   No evidence deletion, retention change or incident-resolution claim is included.
 - `public.activity_log` covers authenticated requests that reach its middleware
@@ -231,6 +230,23 @@ permits VACUUM/ANALYZE/REINDEX/CLUSTER/REFRESH and broader lock modes. Par histo
 keeps MAINTAIN denied. A change to these privileges requires R1 candidate,
 validator, catalog/security expectations and allowed/denied tests together.
 
+### Future R1 audit-failure visibility — design only
+
+Before a restricted-role cutover, implement a bounded, saturating in-process
+audit-write failure counter (or equivalent monitored alert), surfaced only to an
+authenticated authorized operator through readiness/monitoring. Keep anonymous
+`/api/health` unchanged. Expose only a boolean/count and process epoch, never
+actor IDs, credentials, SQL or request data. A zero count after restart is not
+proof that earlier requests were audited; retain explicit reset/epoch context.
+The final route/alert contract and tests belong in R1, not this docs-only PR.
+
+Retain startup privilege/policy checks. After the cutover, one controlled
+authenticated request must create **exactly one** attributable activity_log row.
+The negative local case must make audit-write failure visible even if HTTP
+succeeds, and cover restart/reset, bounded cardinality and unauthorized-read
+denial. This is not a change to request success/failure policy or a claim that
+the indicator already exists.
+
 Required local R1 acceptance specifications (not tests run in this docs slice):
 
 1. An authenticated allowed request under the restricted primary role succeeds
@@ -264,48 +280,30 @@ pool restart. Freeze the final per-object SQL/RLS matrix and source hashes in a
 separate reviewed PR. No live grants are approval-ready until those artifacts
 and the actual target-role bindings exist.
 
-## S2a: targeted exposed-credential retirement — prepare after S1, independent of R1
+## S2a: targeted credential retirement — after S1, independent of R1
 
-**Recommended priority, not approved execution.** Map the one affected credential
-before rotation; do not make its retirement wait for a full new role design.
-The final S2a packet must bind these concrete items for owner approval:
+Scope, affected credential, evidence, consumer bindings, review interval and
+priority are held in the owner record. Prepare the exact packet after S1's
+consumer inventory, independently of R1 and **outside P1**. Public documents
+must not infer or publish a particular credential's security/rotation state.
 
-- Every actual consumer and custodian: API DATABASE_URL; AUXILIARY_DATABASE_URL
-  if it uses that login; protected maintenance configuration; local scripts;
-  each relevant Toast/integration path. A job using another credential is recorded
-  as unaffected, not rotated speculatively. Companion remains local-only at the
-  last confirmation; reconfirm consumers before execution.
-- Exact target credential label, consumer count/private digests, service/config
-  targets, supported password-change mechanism and explicit recovery operator.
-  Do not display old/new passwords or full URLs. Do not disable/demote platform
-  postgres or change grants while changing its password.
-- A separate bounded writer/cutover window if the consumer paths need one;
-  original-state capture, pause/resume consequence, pool close/restart behavior,
-  supported direct/pooler validation paths, stop thresholds and restoration plan.
-  Existing pooled sessions may survive password change. Unexplained pooler errors
-  or timeouts are not evidence of revocation; no automatic retry or session kill.
-- Proof that the old password fails an independently established **new connection**
-  and the new secret authenticates through each approved consumer path. Reuse of
-  an old pool is not that test. If provider/session termination is necessary,
-  return with its exact scope for separate approval; never kill platform sessions.
-- Core personal-login and workflow checks, expected audit effects, accounting
-  preservation, owned cleanup and a route to recover legitimate access through
-  approved non-compromised credentials. Do not adopt a known exposed password as
-  the long-term rollback or rotate all accounts/PINs/vendor keys automatically.
-- New protected maintenance-config revision/digest and **regeneration of affected
-  P1/health/calibration/qualification packets** after the rotation. Old receipts
-  remain dated evidence, not renewed authority. S2a stays outside the par window.
+The owner packet must name actual consumers and configuration targets, supported
+pooler behavior, bounded stop conditions, recovery operator and validation that
+the replacement works and the retired credential cannot open a **new connection**.
+Existing pooled sessions are not that proof. Any pause, restart, provider action
+or configuration mutation needs its own concrete approval. Do not rotate other
+accounts, PINs or vendor keys by implication.
 
-Do not wait for a complete incident investigation to prepare containment; retain
-any unavailable historical audit coverage as a named limitation. If consumer or
-recovery prerequisites cannot be established, report the exact hold and present
-the smallest viable containment alternative for owner decision. No S2a mutation,
-new hosted inspection or credential read is authorized by this document.
+After an approved change, regenerate affected maintenance configuration and
+P1/health/calibration/qualification packets against their new private bindings.
+Prior receipts remain dated evidence; they do not authorize another run. If
+consumer/recovery prerequisites are incomplete, return the exact gap and
+alternative for owner decision. No S2a operation is authorized here.
 
 ## S2: restricted-role connection cutover — after reviewed R1
 
 1. Freeze actual role names, reviewed grant/policy artifacts, private consumer
-   bindings, supported pooler behavior and non-compromised recovery access.
+   bindings, supported pooler behavior and approved recovery access.
 2. Under a separate exact approval, stage restricted inventory/account credentials
    and prove independent new authentication plus required allowed/denied work.
 3. Under its separately approved window, change only the API's approved
@@ -313,7 +311,7 @@ new hosted inspection or credential read is authorized by this document.
    hosting and flags. Name restart/deployment effects explicitly. Verify personal
    login, core transactions, actor separation and preserved accounting baseline.
 4. Retire superseded dedicated app-role logins only after every consumer and new
-   pool passes. Owner credential S2a is independent, not postponed until here.
+   pool passes. The separate S2a package is independent, not postponed until here.
 5. Rotate signing/bootstrap/vendor secrets only if evidence identifies that exact
    affected key. Signing rotation has explicit reauthentication/recovery effects;
    it does not rewrite account IDs, saved request keys or history.

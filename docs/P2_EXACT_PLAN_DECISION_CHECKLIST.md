@@ -55,8 +55,8 @@ alone. Index attribute records are not extra table columns.
 | Original producer states and recovery operator are captured and available | private receipt: ________________ | ____ |
 | Active window start / deadline | ______ / ______ UTC; ______ / ______ Eastern | ____ |
 | Current time / remaining seconds at decision | time: ______; remaining: ______ s | ____ |
-| Apply starts by relative 39:00; at least **1,200 s remaining** for work/restoration | projected start / remaining: ______ | ____ |
-| Separate cleanup margin fits: 600 s work + 15 s cleanup + 600 s restoration, with closing margin | remaining at apply start: ______ s; minimum 1,215 s plus closure | ____ |
+| Apply starts by relative 39:00; at least **1,215 s plus 45 s closing margin (1,260 s total)** remaining | projected start / remaining: ______ | ____ |
+| Same reserve rule verified: 600 s work + 15 s cleanup + 600 s restoration + 45 s closure | remaining at apply start: ______ s; minimum **1,215 s plus 45 s closing margin (1,260 s total)** | ____ |
 | No configuration/credential/source change invalidated the current packet | current private revision/digests: ______ | ____ |
 | Owner explicitly approves this exact plan SHA before any DDL | owner decision / time: __________ | ____ |
 

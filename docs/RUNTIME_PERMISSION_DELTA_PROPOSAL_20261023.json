@@ -90,7 +90,16 @@
     "requiredTests": [
       "Allowed request creates exactly one attributable row",
       "Denied INSERT/policy yields no row and sanitized logging failure; HTTP may succeed"
-    ]
+    ],
+    "failureVisibilityDesign": {
+      "implemented": false,
+      "counter": "bounded saturating process-local counter, or equivalent monitored alert",
+      "visibility": "authenticated authorized operator readiness/monitoring only; anonymous /api/health unchanged",
+      "fields": "boolean/count and process epoch only; no actor/request/SQL/credential data",
+      "resetSemantics": "zero after restart is not historical audit proof",
+      "acceptance": "one controlled authenticated post-cutover request creates exactly one attributable audit row",
+      "negativeCase": "missing INSERT/policy is visible even when HTTP succeeds; startup refusal tested separately"
+    }
   },
   "dependencySecurity": {
     "purchasing.unit_profiles": {

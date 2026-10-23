@@ -110,7 +110,7 @@ not a new controller or promises that every stage will use its full budget.
 | 16:15–26:30 | Disposable local restore/verification and owned cleanup, within the remaining stage reserve. Compare rows, sequences, catalogs, ledger and access guards; refuse a nonempty target. |
 | 26:30–36:45 | Full current qualification, source/baseline reconciliation and exact P2 plan preparation. Any stale/missing/changed baseline holds. |
 | 36:45–38:45 | Present P2 target/delta/version/plan SHA/backup bindings for owner approval. No response is not approval. |
-| **By 39:00** | Hard latest start of apply/independent verification, only with exact P2 approval, at least 1,200 s for work/restoration **plus 15 s cleanup**, and the closing margin. At 39:00 the 60-minute window has 1,260 s left. If late or reserves do not fit, do not apply; restore writers and close. |
+| **By 39:00** | Hard latest start of apply/independent verification, only with exact P2 approval, at least **1,215 s plus 45 s closing margin (1,260 s total)**: 600 s work + 15 s cleanup + 600 s restoration + 45 s closure. If late or reserves do not fit, do not apply; restore writers and close. |
 | 39:00–49:15 | At most the existing 600-second apply/verification budget and bounded cleanup. No retry after an ambiguous commit. |
 | 49:15–59:15 | Restore and verify original writers, including the owner-reported Render Live commit. |
 | 59:15–60:00 | Closure evidence and remaining uncertainty. No deadline extension. |

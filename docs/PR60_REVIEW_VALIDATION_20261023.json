@@ -1,0 +1,48 @@
+{
+  "format": "pr60-review-doc-validation-v1",
+  "baseCommit": "c3b429a2da8d1880ecdbcf34ccb5b28033978c6c",
+  "previousHead": "19b16368c0cd32deb18196b93d09b849b98c30c7",
+  "status": "passed",
+  "checks": {
+    "verbatimArchives": 3,
+    "currentMarkdownDocuments": 9,
+    "localLinks": 35,
+    "unchangedInstallerSourceBindings": 49,
+    "publicPackageWording": true,
+    "genericKeywordMatchesReviewed": [
+      {
+        "file": "docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md",
+        "line": 75
+      },
+      {
+        "file": "docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md",
+        "line": 148
+      },
+      {
+        "file": "docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md",
+        "line": 204
+      },
+      {
+        "file": "docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md",
+        "line": 238
+      }
+    ],
+    "legacyAddedTextNeutral": true,
+    "unifiedReserveSeconds": 1260,
+    "auditVisibilityDesignOnly": true,
+    "secretPatternScan": true,
+    "diffWhitespace": true,
+    "docsOnly": true
+  },
+  "ownerOnlyRecordAccessVerified": true,
+  "privateRecordAddressPublished": false,
+  "sharingPermissionChanges": 0,
+  "runtimeChanges": 0,
+  "runtimeTestsRunLocally": 0,
+  "databaseTestsRunLocally": 0,
+  "hostedApplicationRequests": 0,
+  "credentialGrantSchemaChanges": 0,
+  "publicationApproved": true,
+  "freshCiStatus": "pending after amendment push",
+  "liveApprovalsRemainHeld": true
+}
