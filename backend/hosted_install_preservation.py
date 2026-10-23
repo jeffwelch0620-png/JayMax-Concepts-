@@ -4,8 +4,11 @@ Metadata and digests only; no rows, SQL defaults or connection values returned.
 New fields are excluded explicitly, while removed/retyped original fields hold.
 """
 import asyncpg
+from dataclasses import dataclass
 from readonly_snapshot import readonly_snapshot
+from readonly_snapshot import error_details
 import json
+import re
 from uuid import UUID
 import schema_reconciliation as reconciliation
 
@@ -60,6 +63,160 @@ async def fingerprints(conn, baseline, *, exclude_synthetic=None):
                 suffix=' WHERE NOT coalesce('+quoted(field)+'=ANY($1::'+identity_type+'[]),false)';args=[values]
             row = await conn.fetchrow("SELECT count(*) AS rows,encode(sha256(convert_to(coalesce(string_agg(h,'' ORDER BY h),''),'UTF8')),'hex') AS sha256 FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS h FROM (SELECT "+projection+' FROM '+table+suffix+") t) x",*args)
             result['.'.join(key)] = dict(row)
+    return result
+
+
+class FingerprintBatchTimeout(ValueError):
+    """Fixed public message; candidate members belong only in private metadata."""
+
+
+@dataclass(frozen=True)
+class _FingerprintTimeoutContext:
+    family: str
+    members: tuple
+    cause_type: str | None
+
+
+def _checked_timeout_members(family, members):
+    if (family not in ('original_projection', 'backup') or type(members) is not tuple
+            or not 1 <= len(members) <= 4
+            or any(type(pair) is not tuple or len(pair) != 2
+                   or any(not isinstance(name, str) or not name or len(name.encode('utf-8')) > 63
+                          for name in pair) for pair in members)
+            or len(set(members)) != len(members)):
+        raise ValueError('Invalid fingerprint timeout metadata')
+    return members
+
+
+def wrap_fingerprint_timeout(original, family, members, *, error_type=FingerprintBatchTimeout):
+    """Do not stringify a driver error, retry, or change cancellation semantics."""
+    members = _checked_timeout_members(family, members)
+    details = error_details(original)
+    error = error_type('Fingerprint batch timed out; inspect the private receipt')
+    error.sqlstate = details['sqlState']
+    for key, value in details.items():
+        if key not in ('errorType', 'sqlState') and value is not None:
+            setattr(error, key, value)
+    error.fingerprintTimeout = _FingerprintTimeoutContext(family, members, details['errorType'])
+    # Compatibility for private in-memory inspection; serialization uses the
+    # immutable typed context, never arbitrary driver attributes or this list.
+    error.failureObjects = ['.'.join(pair) for pair in members]
+    return error
+
+
+def private_fingerprint_timeout_details(error):
+    """Explicit opt-in for private par receipts; shared public sanitizer is unchanged."""
+    context = getattr(error, 'fingerprintTimeout', None)
+    if not isinstance(context, _FingerprintTimeoutContext):
+        return {}
+    try:
+        members = _checked_timeout_members(context.family, context.members)
+    except (TypeError, ValueError, UnicodeError):
+        return {}
+    if context.cause_type is not None and (not isinstance(context.cause_type, str)
+            or re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,127}', context.cause_type) is None):
+        return {}
+    return {'fingerprintTimeout': {'family': context.family,
+        'candidateObjects': ['.'.join(pair) for pair in members],
+        'causeErrorType': context.cause_type}}
+
+
+def checked_fingerprint_chunk_size(value):
+    """Fixed small statement bound, independent of data/aggregate memory size."""
+    if type(value) is not int or not 1 <= value <= 4:
+        raise ValueError('Fingerprint chunk size must be between one and four')
+    return value
+
+
+def checked_fingerprint_chunk(rows, positions, *, max_rows=None):
+    """Refuse missing/duplicate/extra positions and malformed digest facts."""
+    expected = set(positions)
+    if len(expected) != len(positions) or any(type(p) is not int for p in positions):
+        raise ValueError('Ambiguous fingerprint positions')
+    result = {}
+    for row in rows:
+        value = dict(row)
+        if set(value) != {'position', 'rows', 'sha256'}:
+            raise ValueError('Fingerprint result shape differs')
+        position, count, digest = value['position'], value['rows'], value['sha256']
+        if (type(position) is not int or position not in expected or position in result
+                or type(count) is not int or count < 0
+                or max_rows is not None and count > max_rows
+                or not isinstance(digest, str) or re.fullmatch('[a-f0-9]{64}', digest) is None):
+            raise ValueError('Fingerprint result is incomplete or ambiguous')
+        result[position] = {'rows': count, 'sha256': digest}
+    if set(result) != expected:
+        raise ValueError('Fingerprint result coverage differs')
+    return result
+
+
+async def fingerprints_batched(conn, baseline, *, exclude_synthetic=None, chunk_size=2):
+    """Par-only original projections; the historical algorithm above is intact.
+
+    No probe, row limit or cursor fallback is added to this hash format. The
+    relation-count bound is not a memory bound. Each statement retains 20s SQL
+    enforcement and every phase owns/retains the same repeatable-read snapshot.
+    """
+    chunk_size = checked_fingerprint_chunk_size(chunk_size)
+    result = {}; exclude_synthetic = exclude_synthetic or {}
+    permitted = {('public','stores'):'id', ('public','items'):'code',
+        ('public','store_items'):'store_id', ('public','store_state'):'store_id',
+        ('public','activity_log'):'user_id', ('public','staff_members'):'id'}
+    for key, (field, value) in exclude_synthetic.items():
+        values = [value] if isinstance(value, str) else value
+        if (permitted.get(key) != field or not isinstance(values, list) or not values
+                or any(not isinstance(v, str) or not v for v in values)
+                or len(set(values)) != len(values) or key not in baseline):
+            raise ValueError('Only exact invented store/item/audit identities may be excluded')
+    async with readonly_snapshot(conn):
+        await conn.execute("SET LOCAL statement_timeout='20s'; SET LOCAL TIME ZONE 'UTC'")
+        current = await original_columns(conn)
+        entries = list(baseline.items())
+        # Validate the entire original projection before building query chunks.
+        identities = {}
+        for key, columns in entries:
+            if key not in current:
+                raise ValueError('Original application table was removed')
+            actual = {column['name']:column['type'] for column in current[key]}
+            if not columns or len({c['name'] for c in columns}) != len(columns):
+                raise ValueError('Original column identity is ambiguous')
+            if any(actual.get(c['name']) != c['type'] for c in columns):
+                raise ValueError('Original application column was removed or retyped')
+            if key in exclude_synthetic:
+                field, value = exclude_synthetic[key]
+                identity_type = actual.get(field)
+                if identity_type not in ('text', 'uuid'):
+                    raise ValueError('Synthetic identity must use an original text/UUID column')
+                values = [value] if isinstance(value, str) else value
+                if identity_type == 'uuid':
+                    if key != ('public','staff_members') or any(str(UUID(v)) != v for v in values):
+                        raise ValueError('Synthetic roster identity must be a canonical UUID')
+                    values = [UUID(v) for v in values]
+                identities[key] = field, identity_type, values
+        for start in range(0, len(entries), chunk_size):
+            queries, args = [], []
+            chunk = entries[start:start + chunk_size]
+            for offset, (key, columns) in enumerate(chunk):
+                table = '.'.join(quoted(value) for value in key)
+                projection = ','.join(quoted(c['name']) for c in columns)
+                suffix = ''
+                if key in identities:
+                    field, identity_type, values = identities[key]
+                    args.append(values)
+                    suffix = (' WHERE NOT coalesce(' + quoted(field) + '=ANY($' +
+                              str(len(args)) + '::' + identity_type + '[]),false)')
+                queries.append('(SELECT ' + str(start + offset) + '::integer AS position, '
+                    "count(*) AS rows,encode(sha256(convert_to(coalesce(string_agg(h,'' ORDER BY h),''),'UTF8')),'hex') AS sha256 "
+                    "FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS h FROM (SELECT "
+                    + projection + ' FROM ' + table + suffix + ') t) x)')
+            try:
+                rows = await conn.fetch(' UNION ALL '.join(queries), *args)
+            except (TimeoutError, asyncpg.QueryCanceledError) as exc:
+                raise wrap_fingerprint_timeout(exc, 'original_projection',
+                    tuple(key for key, _ in chunk)) from exc
+            facts = checked_fingerprint_chunk(rows, list(range(start, start + len(chunk))))
+            for offset, (key, _) in enumerate(chunk):
+                result['.'.join(key)] = facts[start + offset]
     return result
 
 

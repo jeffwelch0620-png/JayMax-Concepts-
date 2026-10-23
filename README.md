@@ -1,26 +1,40 @@
 # JayMax Restaurant Group — Inventory / Prep / Food-Costing App
 
-## Current local cursor and transaction measurement follow-up
+## Current local bounded fingerprint follow-up
 
-[PR56](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/56) merged with
-owner approval as 86a44d4 on October 22 at 8:25:45 p.m. Eastern. Its tree matches
-reviewed c5e1b38; reviewed-head and
-[merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39878059249)
-each passed all four checks: 1,079 frontend tests plus strict build, 1,289 offline
-cases and 257 backend/PostgreSQL cases. Deployment completion was not inspected.
+[PR58 review amendments](docs/PR58_REVIEW_AMENDMENTS.md) restore private timeout
+attribution, preserve SQLSTATE/cleanup and public redaction, and add an explicitly
+owner-gated read-only hosted calibration prerequisite. The runbook now separates
+current tooling from historical qualification. All 1,378 offline and 141
+PostgreSQL cases passed locally. Hosted execution remains held.
 
-The [local measurement follow-up](docs/LOCAL_PAR_OPERATION_MEASUREMENT_20261022.md)
-adds actual-module binding checks and separate public cursor/transaction API
-counts/outcomes/time. All **1,323 offline cases** and **13 targeted PostgreSQL
-cases** passed. The guarded restored-data rehearsal passed with exact preservation
-and complete owned cleanup: 370 prepare calls / 24.703 s and 1,112 apply/fresh-
-verification calls / 75.218 s. The new API operation counts are not network round
-trips and are not added to the old latency model. Runtime/SQL/fingerprints/limits
-are unchanged. The owner approved publication as
-[draft PR57](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/57);
-fresh exact-head CI, independent review and merge are separate. Hosted work/service
-controls and credential,
-grant and schema changes remain held.
+[PR57](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/57) merged with
+owner approval as 54ce10c on October 22 at 9:04:21 p.m. Eastern. Its tree matches
+reviewed a511b38; reviewed-head and
+[merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/39881885410)
+each passed all four checks: 1,079 frontend tests plus strict build, 1,323 offline
+cases and 270 backend/PostgreSQL cases. Deployment completion was not inspected.
+
+The [dated bounded fingerprint baseline](docs/LOCAL_PAR_BATCHED_FINGERPRINTS_20261022.md)
+uses two-relation statements in the par installer while preserving the two hash
+formats independently, the historical functions, snapshots, timeouts and exact
+source-amendment chain. All **1,352 offline** and **135 PostgreSQL cases**
+passed. The guarded retained-data rehearsal passed with exact preservation and
+owned cleanup: **764 apply/fresh-verification query calls / 45.063 seconds**,
+31.29% fewer calls than PR57's dated 1,112 / 75.218 seconds. The
+old sensitivity gives 362.527 seconds; this is planning arithmetic,
+not hosted timing proof. API operations are not network round trips. The owner
+approved publication as [draft PR58](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/58)
+for fresh CI and independent review; merge approval remains separate. Hosted work/service controls
+and credential, grant, schema and connection changes remain held.
+
+### Accepted PR57 measurement evidence
+
+The [dated operation measurement](docs/LOCAL_PAR_OPERATION_MEASUREMENT_20261022.md)
+records 1,323 offline / 13 targeted PostgreSQL cases and the earlier guarded
+370 prepare calls / 24.703 seconds, 1,112 apply/fresh-verification calls / 75.218
+seconds. Its separate cursor/transaction API counts do not recalibrate network
+latency or add exchanges to the old coefficient. Historical receipts stay intact.
 
 ## Accepted PR56 attribution and historical evidence
 

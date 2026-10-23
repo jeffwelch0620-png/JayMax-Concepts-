@@ -136,7 +136,7 @@ def validate(plan, review, reviewed_target, binding):
 
 async def backup_match(conn, facts, *, after=False):
     await conn.execute("SET LOCAL statement_timeout='20s'")
-    actual = await backup.fingerprint(conn, row_hashes=True)
+    actual = await backup.fingerprint_batched(conn, row_hashes=True)
     if after:
         # The core proves the exact new table/catalog and one ledger row.
         new = actual['tables'].get(engine.TABLE)
@@ -297,6 +297,7 @@ async def run(args):
         elif result['status'] != 'apply_in_progress_outcome_unknown':
             result['status'] = 'held'
         result.update(error_details(exc))
+        result.update(engine.preservation.private_fingerprint_timeout_details(exc))
         result.update(engine.backend_permission_details(exc))
         if isinstance(exc, (Held, MaintenanceConnectionError)):
             result['reason'] = str(exc)

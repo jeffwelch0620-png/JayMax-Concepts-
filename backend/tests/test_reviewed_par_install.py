@@ -141,7 +141,7 @@ class ParInstallGuards(unittest.TestCase):
 
 
 class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
-    async def backend_failure(self, rule, rollback_error=False):
+    async def backend_failure(self, rule, rollback_error=False, failure=None):
         tx=SimpleNamespace(start=AsyncMock(),commit=AsyncMock(),rollback=AsyncMock(
             side_effect=ConnectionError('TEST ONLY private rollback detail') if rollback_error else None))
         conn=SimpleNamespace(is_in_transaction=lambda:False,fetchval=AsyncMock(return_value=True),
@@ -151,7 +151,7 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(engine,'validate_plan',return_value='TEST ONLY DO NOT SEND'),\
              patch.object(engine,'snapshot',AsyncMock(return_value=plan['baseline'])),\
              patch.object(engine,'verify_prior',AsyncMock()),patch.object(engine,'absent',AsyncMock()),\
-             patch.object(engine,'readiness_check',AsyncMock(side_effect=engine.BackendPermissionHeld('test_only_backend',rule))),\
+             patch.object(engine,'readiness_check',AsyncMock(side_effect=failure if failure is not None else engine.BackendPermissionHeld('test_only_backend',rule))),\
              patch.object(engine.preservation,'lock_original_tables',AsyncMock()):
             with self.assertRaises(engine.AdditiveFailure) as result:await engine.apply(conn,plan)
         tx.commit.assert_not_awaited()
@@ -213,7 +213,37 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(hosted.Held):await hosted.apply(None,{},spec,{}, {},{})
             probe.assert_not_awaited();send.assert_not_awaited()
 
-    async def exercise(self, mode, *, direct=False, rule=None, console=None):
+    async def test_private_timeout_receipts_preserve_attribution_and_keep_stdout_redacted(self):
+        for family in ('original_projection', 'backup'):
+            for mode in ('backend_dryrun','backend_rollback','backend_rollback_unknown','backend_verify'):
+                for direct in (False,True):
+                    with self.subTest(family=family,phase=mode,direct=direct):
+                        cause=asyncpg.QueryCanceledError('TEST ONLY private SQL and password')
+                        cause.snapshotCleanupErrorType='ConnectionError'
+                        failure=engine.preservation.wrap_fingerprint_timeout(cause,family,
+                            (('public','test_only_private_a'),('public','test_only_private_b')),
+                            error_type=hosted.backup.BackupError if family=='backup' else engine.preservation.FingerprintBatchTimeout)
+                        console=StringIO()
+                        result,send,_=await self.exercise(mode,direct=direct,failure=failure,console=console)
+                        self.assertEqual(result['fingerprintTimeout']['candidateObjects'],
+                            ['public.test_only_private_a','public.test_only_private_b'])
+                        self.assertEqual(result['fingerprintTimeout']['family'],family)
+                        self.assertEqual(result['fingerprintTimeout']['causeErrorType'],'QueryCanceledError')
+                        self.assertEqual(result['sqlState'],'57014')
+                        self.assertEqual(result['snapshotCleanupErrorType'],'ConnectionError')
+                        self.assertNotIn('test_only_private',console.getvalue())
+                        self.assertNotIn('fingerprintTimeout',console.getvalue())
+                        self.assertNotIn('private SQL and password',json.dumps(result))
+                        if mode=='backend_dryrun':
+                            self.assertEqual(result['status'],'held');send.assert_not_awaited()
+                        elif mode=='backend_rollback':
+                            self.assertTrue(result['rollbackCompleted']);self.assertFalse(result['sqlCommitted'])
+                        elif mode=='backend_rollback_unknown':
+                            self.assertEqual(result['status'],'rollback_outcome_unknown');self.assertIsNone(result['sqlCommitted'])
+                        else:
+                            self.assertEqual(result['status'],'committed_verification_held');self.assertTrue(result['sqlCommitted'])
+
+    async def exercise(self, mode, *, direct=False, rule=None, console=None, failure=None):
         with TemporaryDirectory() as directory:
             root=Path(directory);out=root/'out';out.mkdir()
             spec=review();spec.update(originalReceipt=str(root/'original'),sourceIndexPlan=str(root/'index'),
@@ -243,7 +273,7 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(before['status'],'apply_in_progress_outcome_unknown')
                 self.assertIsNone(before['sqlCommitted'])
                 if mode in ('backend_rollback','backend_rollback_unknown'):
-                    raise await self.backend_failure(rule,rollback_error=mode=='backend_rollback_unknown')
+                    raise await self.backend_failure(rule,rollback_error=mode=='backend_rollback_unknown',failure=failure)
                 if mode=='lost_ack':
                     raise engine.AdditiveFailure({'status':'commit_outcome_unknown','commitAttempted':True,
                         'sqlCommitted':None,'automaticRetry':False,'errorType':'ConnectionError'})
@@ -256,9 +286,9 @@ class ParInstallReceiptTests(unittest.IsolatedAsyncioTestCase):
             with ExitStack() as stack:
                 if console is not None:stack.enter_context(redirect_stdout(console))
                 if mode=='backend_dryrun':
-                    stack.enter_context(patch.object(hosted,'prepare',AsyncMock(side_effect=engine.BackendPermissionHeld('test_only_backend',rule))))
+                    stack.enter_context(patch.object(hosted,'prepare',AsyncMock(side_effect=failure if failure is not None else engine.BackendPermissionHeld('test_only_backend',rule))))
                 if mode=='backend_verify':
-                    stack.enter_context(patch.object(hosted,'reconcile',AsyncMock(side_effect=engine.BackendPermissionHeld('test_only_backend',rule))))
+                    stack.enter_context(patch.object(hosted,'reconcile',AsyncMock(side_effect=failure if failure is not None else engine.BackendPermissionHeld('test_only_backend',rule))))
                 for obj,name,value in [(hosted.backup,'private_directory',lambda p,area:out),
                     (hosted,'write_private',lambda p,raw:Path(p).write_bytes(raw)),
                     (hosted,'private_file',Path),(hosted,'dotenv_values',lambda p,**kw:config),
@@ -447,7 +477,7 @@ class ParInstallDatabaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_outcome_reuses_only_current_validated_projection_and_reads_fresh(self):
         plan=await self.plan();await engine.apply(self.conn,plan)
-        with patch.object(engine.preservation,'fingerprints',wraps=engine.preservation.fingerprints) as scans:
+        with patch.object(engine.preservation,'fingerprints_batched',wraps=engine.preservation.fingerprints_batched) as scans:
             self.assertEqual((await self.verify(plan))['status'],'verified_applied')
             self.assertEqual(scans.await_count,1)
         for sql,reason in [("UPDATE public.stores SET name='TEST ONLY late row change' WHERE id='berts'",'Original application rows'),

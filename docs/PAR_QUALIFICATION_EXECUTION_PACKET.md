@@ -38,21 +38,34 @@ authorization; a successful verification is local source evidence only.
 ## Source integrity across checkouts
 
 The current builder emits **v2** packets. The historical proposal and content-pin
-manifest remain unchanged. Exactly two candidate tooling amendments are pinned
-explicitly in the builder: `backend/deployment_readiness.py` and
-`tools/ops/apply_reviewed_par_migration.py`. Each binds its historical content
-hash and its new candidate content hash. Packets disclose those amendments and
+manifest remain unchanged. The two earlier amendment links remain intact:
+`backend/deployment_readiness.py` and `tools/ops/apply_reviewed_par_migration.py`.
+Four additional prior-to-current links in `FOLLOWUP_TOOLING_AMENDMENTS` bind
+`backend/hosted_backup.py`, `backend/hosted_install_preservation.py`,
+`tools/ops/apply_reviewed_par_migration.py` and `tools/ops/hosted_reviewed_pars.py`
+for the bounded fingerprint candidate. The par engine's new link begins at the
+earlier amendment's resulting hash, preserving that chain. Every link is checked
+in order and disclosed in the packet. Packets retain
 `toolingReviewStatus: candidate_requires_independent_review`; this is not a claim
 that the changed tooling has already been accepted or approved for hosted work.
 Every other historical core source still requires its original content pin.
-Old v1 packets and altered amendment hashes are refused. Do not rewrite earlier
+Old v1 packets, stale v2 packets, missing follow-up links, unknown source paths
+and altered/disconnected amendment hashes are refused. Do not rewrite earlier
 packets, source audits, backup receipts or approval records to make them pass.
+
+PR58 review amendments add four `TIMEOUT_TOOLING_AMENDMENTS` links for those
+same four sources. Each starts at its `FOLLOWUP_TOOLING_AMENDMENTS` result;
+earlier links remain intact. V2 packets disclose `timeoutToolingAmendments` and
+refuse missing/stale timeout links. These changes only preserve private timeout
+diagnostics; they do not alter SQL, approval gates or source coverage. The full
+chain has two original, four fingerprint and four timeout links over five core
+files. No historical packet is rewritten to match the new source.
 
 The original proposal's saved 49-source audit includes Windows newline bytes.
 The [content pin manifest](PAR_QUALIFICATION_SOURCE_PINS.json) records those raw
 digests and independent content digests for the same accepted PR53 source.
 Generation verified the original raw digests locally and compared accepted Git
-content for the Python/JSON entries. Outside the two explicit amendments above,
+content for the Python/JSON entries. Outside the explicit amendment chain above,
 the builder permits only CRLF-to-LF equivalence for those text entries; other
 whitespace or content edits hold. Amended text has its own exact content pin
 with the same newline-only portability rule, never a blanket drift exemption.
@@ -60,8 +73,8 @@ All 31 SQL files retain their exact reviewed byte hashes. No SQL normalization,
 catalog/security modification or installer-guard relaxation occurs.
 
 Each output binds **all 56 actual local source-file byte hashes**, plus the exact
-proposal bytes separately. Those include the 49 core sources (with two disclosed
-candidate amendments), backup CLI,
+proposal bytes separately. Those include the 49 core sources (with two original,
+four fingerprint and four timeout amendment links spanning five source files), backup CLI,
 new verifier/tests, offline CI selection, this guide, content pins and checkout
 attributes. A newline change after creation invalidates that packet too. Moving
 between checkouts may require a newly generated/reviewed packet; a matching

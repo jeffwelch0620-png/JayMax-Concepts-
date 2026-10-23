@@ -75,6 +75,7 @@ def par_attribution_bindings(adapter):
         (engine.readiness, 'inspect', 'readiness'),
         (engine.readiness, 'inspect_index_contracts', 'index_state'),
         (engine.preservation, 'fingerprints', 'fingerprints'),
+        (engine.preservation, 'fingerprints_batched', 'fingerprints'),
         (engine.preservation, 'original_columns', 'original_columns'),
         (engine, 'capture_catalog', 'capture_catalog'),
         (engine.preservation, 'ledger_fingerprints', 'ledger'),
@@ -90,6 +91,8 @@ def par_attribution_bindings(adapter):
         (engine.preservation, 'lock_original_tables', 'locks'),
         (adapter, 'backup_match', 'backup_compare'),
         (adapter.backup, 'fingerprint', 'backup_catalog'),
+        (adapter.backup, 'fingerprint_batched', 'backup_catalog'),
+        (adapter.backup, 'relation_fingerprints_batched', 'backup_fingerprints'),
         (adapter.backup, 'relation_fingerprint', relation_group),
     ]
 

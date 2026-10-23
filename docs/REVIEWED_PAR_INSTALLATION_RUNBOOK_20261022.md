@@ -1,16 +1,15 @@
 # Reviewed-par installation runbook — October 22, 2026
 
-**Subsequent local-only follow-up:** the owner authorized the three tooling
-changes, regression tests and another timing rehearsal described in
-[the query-reduction record](REVIEWED_PAR_QUERY_REDUCTION.md). The original
-timings below remain the comparison baseline. No new hosted authorization or
-schema plan is created by that local implementation.
-The candidate passed 1,269 offline and 117 disposable PostgreSQL cases; apply
-plus fresh-connection verification used 1,112 calls / 69.859 s. Calls decreased
-53.6% while elapsed time increased; hosted timing remains unproven. The local
-performance design-review action below is now implemented and awaiting draft
-publication approval/independent review; it is not another authorization to edit
-or execute hosted work. All application gates and holds remain in place.
+**Current local tooling position:** accepted main is PR57 `54ce10c`, with
+separately green reviewed-head and merged-main CI. Owner-approved
+[draft PR58](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/58) adds
+bounded two-relation fingerprints. The dated retained-data rehearsal measured
+764 apply/fresh-verification query calls / 45.063 seconds; additive planning
+arithmetic is 362.527 seconds, below the proposed 450-second screen. This is
+not hosted timing proof. [PR58 review amendments](PR58_REVIEW_AMENDMENTS.md)
+add private timeout attribution and the hosted calibration gate below.
+Fresh amended-head CI, review and owner merge approval are separate gates.
+The historical measurements below remain intact and confer no new authority.
 
 ## Status and authority
 
@@ -21,7 +20,7 @@ documentation refresh only. Rehearsal DDL/ACL replay
 and temporary role stubs belong only to an owned disposable loopback database;
 no existing credential, hosted role, grant, connection or schema is changed.
 
-Accepted application main is PR54 `ed62beb943b29566dfad64e73915126324cfbb1f`,
+The historical qualification baseline was PR54 `ed62beb943b29566dfad64e73915126324cfbb1f`,
 tree-identical to reviewed `02ac4c00ee657410077eed51cb874bfd9bed00c6`:
 `323d5e8d345d2add34fa44da4112a0497dc75c35`. Both reviewed-head and merged-main
 CI passed all four checks: 1,079 frontend tests / 83 suites and strict build,
@@ -211,11 +210,29 @@ remains manual; the par-editing freeze ends only after installation and acceptan
 
 ## Before proposing an application window
 
-1. Review this local result and address the query/latency risk before an outage.
-   The current recommendation is a local performance design review, not hosted
-   application or changing timeouts. Obtain separate
+1. Review the bounded fingerprint result and address hosted timing before an
+   outage. The local planning screen passes; the older above-screen arithmetic
+   remains dated evidence. Obtain separate
    authority for a bounded read-only API health check; stop for review if recovery
    is not established. This runbook authorizes neither the check nor a repair.
+   Then, only under separate owner approval of a source-bound, bounded read-only
+   calibration proposal, measure both fingerprint families at chunk size two in
+   repeatable-read read-only snapshots. Cover every statement in the designated
+   relation scope and retain the largest observed driver query-await duration
+   for each family, total elapsed time and coverage, without public identifiers,
+   SQL or row data. Incomplete coverage, timeout or any guard failure holds.
+   No producer pause, DDL, credential, grant or app-connection change is included.
+   **Installation-window planning gate: each observed maximum must be at most
+   10 seconds**, a conservative 50% margin against the unchanged 20-second
+   statement limit. This is operating policy, not an empirically guaranteed
+   hosted bound; query await includes network/client overhead. Record workload
+   and cache limitations and revalidate changed source/data assumptions later.
+   Above 10 seconds, hold and consider chunk size one through a separately
+   reviewed source amendment; never fall back automatically. Re-measure both
+   per-statement and overall timing and re-evaluate the 450-second planning
+   screen, because extra calls may erase its margin. Keep the 600-second
+   operation limit and resource gates unchanged. The probe needs its own
+   proposal and approval; it is not implemented or authorized by this runbook.
 2. Review/merge any approved documentation follow-up through the usual separate
    PR gates. Rebind future source evidence to the accepted tree and exact bytes.
    The qualification packet's pinned qualification-only scope is unchanged;

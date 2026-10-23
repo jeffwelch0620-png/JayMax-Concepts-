@@ -1,18 +1,32 @@
 # Hosted reviewed-par migration plan - October 18, 2026
 
-## Current status — October 22
+## Current status - October 22
 
-PR56 is accepted as 86a44d4 with separately green reviewed-head and merged-main
-CI. The [local measurement follow-up](LOCAL_PAR_OPERATION_MEASUREMENT_20261022.md)
-separately records public cursor/transaction operations; it leaves the query-method
-boundary, fingerprint algorithms, SQL and limits unchanged. All 1,323 offline and
-13 targeted PostgreSQL cases passed, along with guarded restored-data preservation
-and cleanup. API operations must not be counted as network round trips or added to
-the old coefficient without calibration. The owner approved publication as
-[draft PR57](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/57), for fresh
-CI and independent review; hosted work/service controls and credential/grant/schema changes remain
-held. No maintenance window is active. Earlier dated planning/qualification records
-below confer no current execution authority.
+The [PR58 review amendments](PR58_REVIEW_AMENDMENTS.md) add private timeout
+attribution and refresh the installation runbook. All 1,378 offline and 141
+PostgreSQL cases passed locally. Before proposing a new install
+window, a separately approved read-only probe must record complete scope and
+at most 10-second observed query awaits for each two-relation fingerprint family.
+This is a conservative policy margin, not a hosted bound. A size-one amendment
+requires review and renewed statement/overall timing; there is no automatic
+fallback. API health, probe approval and all hosted changes remain separate holds.
+
+PR57 is accepted as 54ce10c with separately green reviewed-head and merged-main
+CI. The [local bounded fingerprint candidate](LOCAL_PAR_BATCHED_FINGERPRINTS_20261022.md)
+passed 1,352 offline and 135 PostgreSQL cases plus guarded retained-data
+preservation/cleanup. It uses two-relation statements, preserving distinct hash
+formats, historical functions, snapshots, limits and source-amendment guards.
+Apply/fresh verification measured 764 query calls / 45.063 seconds;
+dated additive sensitivity is 362.527 seconds. These are local
+observations and planning arithmetic, not calibrated hosted timing or approval.
+Public cursor/transaction API counts are not protocol round trips.
+
+The owner approved publication as
+[draft PR58](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/58).
+Next: fresh exact-head CI and independent review, then separate merge approval. Hosted work/service
+controls and credential, grant, schema and connection changes remain held. No
+maintenance window is active. Earlier dated planning/qualification records below
+confer no current execution authority.
 
 ## Earlier planning status — October 21–22
 

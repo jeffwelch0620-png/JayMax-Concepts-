@@ -62,6 +62,29 @@ class ParQualificationPacketTests(unittest.TestCase):
     def test_generation_is_deterministic(self):
         self.assertEqual(packet.json_bytes(packet.build(self.root)), packet.json_bytes(packet.build(self.root)))
 
+    def test_followup_source_chain_preserves_accepted_amendments_and_refuses_gaps(self):
+        value = packet.build(self.root)
+        self.assertEqual(value['toolingAmendments'], packet.TOOLING_AMENDMENTS)
+        self.assertEqual(set(value['followupToolingAmendments']), {
+            'backend/hosted_backup.py', 'backend/hosted_install_preservation.py',
+            'tools/ops/apply_reviewed_par_migration.py', 'tools/ops/hosted_reviewed_pars.py'})
+        self.assertEqual(value['followupToolingAmendments']['tools/ops/apply_reviewed_par_migration.py']['priorContentSha256'],
+                         value['toolingAmendments']['tools/ops/apply_reviewed_par_migration.py']['contentSha256'])
+        for field in ('priorContentSha256', 'contentSha256'):
+            changed = deepcopy(packet.FOLLOWUP_TOOLING_AMENDMENTS)
+            changed['backend/hosted_backup.py'][field] = '0' * 64
+            with self.subTest(field=field), patch.object(packet, 'FOLLOWUP_TOOLING_AMENDMENTS', changed), self.assertRaises(packet.PacketHeld):
+                packet.build(self.root)
+        changed = deepcopy(packet.FOLLOWUP_TOOLING_AMENDMENTS)
+        changed['TEST_ONLY_UNREVIEWED_SOURCE.py'] = {'priorContentSha256':'0'*64,'contentSha256':'1'*64}
+        with patch.object(packet,'FOLLOWUP_TOOLING_AMENDMENTS',changed), self.assertRaises(packet.PacketHeld):
+            packet.build(self.root)
+        with TemporaryDirectory() as tmp:
+            value = packet.build(self.root)
+            del value['followupToolingAmendments']
+            path, sha = self.artifact(tmp, value=value)
+            with self.assertRaises(packet.PacketHeld): packet.verify(path, sha, self.root)
+
     def test_unsupported_python_is_held_before_arguments_or_file_io(self):
         for version in ((3, 10), (3, 11)):
             with self.subTest(version=version), patch.object(packet.sys, 'version_info', version), \
@@ -77,6 +100,25 @@ class ParQualificationPacketTests(unittest.TestCase):
                 self.assertFalse(result['hostedActionsPerformed'])
                 self.assertFalse(result['readyForHostedExecution'])
                 reads.assert_not_called(); opens.assert_not_called(); arguments.assert_not_called()
+
+    def test_timeout_amendments_chain_from_fingerprint_links_and_refuse_stale_packets(self):
+        value=packet.build(self.root)
+        self.assertEqual(value['timeoutToolingAmendments'],packet.TIMEOUT_TOOLING_AMENDMENTS)
+        self.assertEqual(set(packet.TIMEOUT_TOOLING_AMENDMENTS),set(packet.FOLLOWUP_TOOLING_AMENDMENTS))
+        for name,link in value['timeoutToolingAmendments'].items():
+            self.assertEqual(link['priorContentSha256'],value['followupToolingAmendments'][name]['contentSha256'])
+        for field in ('priorContentSha256','contentSha256'):
+            bad=deepcopy(packet.TIMEOUT_TOOLING_AMENDMENTS)
+            bad['backend/hosted_backup.py'][field]='0'*64
+            with self.subTest(field=field),patch.object(packet,'TIMEOUT_TOOLING_AMENDMENTS',bad),self.assertRaises(packet.PacketHeld):
+                packet.build(self.root)
+        bad=deepcopy(packet.TIMEOUT_TOOLING_AMENDMENTS)
+        bad['TEST_ONLY_UNKNOWN_SOURCE.py']={'priorContentSha256':'0'*64,'contentSha256':'1'*64}
+        with patch.object(packet,'TIMEOUT_TOOLING_AMENDMENTS',bad),self.assertRaises(packet.PacketHeld):packet.build(self.root)
+        with TemporaryDirectory() as tmp:
+            del value['timeoutToolingAmendments']
+            path,sha=self.artifact(tmp,value=value)
+            with self.assertRaises(packet.PacketHeld):packet.verify(path,sha,self.root)
 
     def test_existing_output_and_evidence_are_never_overwritten(self):
         with TemporaryDirectory() as tmp:

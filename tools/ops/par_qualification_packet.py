@@ -27,6 +27,38 @@ TOOLING_AMENDMENTS = {
         'contentSha256': '80a1f1fd170b905b31af849b5b56742565453a40ae549f61b11cf21040e0d307'},
 }
 MAX_BYTES = 256 * 1024
+# Additional prior -> current links preserve the accepted PR55 amendments above.
+FOLLOWUP_TOOLING_AMENDMENTS = {
+    'backend/hosted_backup.py': {
+        'priorContentSha256': 'e1fbae51c519d7fda7d182d68df550e38a8644b4992ab9d8c346d62ed1ab6c09',
+        'contentSha256': '5dd2201b9ed6941ea569da64a14795a486f6bc9bd12643310343e55e9ab29688'},
+    'backend/hosted_install_preservation.py': {
+        'priorContentSha256': 'de5ba5bd6abf8e377910cef5f2f2bd43ea5a0feee1ee821da7da137740ac9745',
+        'contentSha256': '19c9c7ec439440a76da2881e3586081c3b3e09f8648571b9b6f2aaa374bb87cd'},
+    'tools/ops/apply_reviewed_par_migration.py': {
+        'priorContentSha256': '80a1f1fd170b905b31af849b5b56742565453a40ae549f61b11cf21040e0d307',
+        'contentSha256': '2b332f27bcf720616d1e4efa2b81b9ebced806a004f06a904e6d14871923c3b0'},
+    'tools/ops/hosted_reviewed_pars.py': {
+        'priorContentSha256': 'ce2e7d65b649cd0d37d94976e526b54e5be4f75aadde636e66699af340cae987',
+        'contentSha256': '2c0bff9a64bd84c52f133101127c6a882cc22bdbd6f3443821b33eb332963baa'},
+}
+
+# Review amendment: preserve every earlier link; bind timeout diagnostics separately.
+TIMEOUT_TOOLING_AMENDMENTS = {
+    'backend/hosted_backup.py': {
+        'priorContentSha256': '5dd2201b9ed6941ea569da64a14795a486f6bc9bd12643310343e55e9ab29688',
+        'contentSha256': '891164d236c56ad9388a2c943f630d06ff7fffcc92668f54e45c2020064048f8'},
+    'backend/hosted_install_preservation.py': {
+        'priorContentSha256': '19c9c7ec439440a76da2881e3586081c3b3e09f8648571b9b6f2aaa374bb87cd',
+        'contentSha256': '3e064e658235e8598cb86c408826ffa0400d03d1df77bd30e9a4114c299204fd'},
+    'tools/ops/apply_reviewed_par_migration.py': {
+        'priorContentSha256': '2b332f27bcf720616d1e4efa2b81b9ebced806a004f06a904e6d14871923c3b0',
+        'contentSha256': '0a284c224a4ed9d727d0504ca2bfff1c429dc43fb5858fdfd7e3336073afee24'},
+    'tools/ops/hosted_reviewed_pars.py': {
+        'priorContentSha256': '2c0bff9a64bd84c52f133101127c6a882cc22bdbd6f3443821b33eb332963baa',
+        'contentSha256': '4df71297ea91a573a5369aa06137825c7d896b84c9c6f9d0e493c1f5820b1e83'},
+}
+
 EXTRA_SOURCES = (
     '.gitattributes',
     CORE_PINS,
@@ -143,19 +175,22 @@ def build(root=ROOT):
             or set(pins['coreSources']) != set(core)):
         raise PacketHeld('Reviewed source manifest differs')
     sources = {}
+    if not (set(TOOLING_AMENDMENTS) | set(FOLLOWUP_TOOLING_AMENDMENTS) | set(TIMEOUT_TOOLING_AMENDMENTS)) <= set(core):
+        raise PacketHeld('Tooling amendments must name reviewed core sources')
     for path, expected in core.items():
         checked_sha(expected)
         content_pin = pins['coreSources'][path]
         raw = source_file(root, path).read_bytes()
         mode = 'crlf_to_lf' if PurePosixPath(path).suffix in ('.py', '.json') else 'exact_bytes'
         compared = raw.replace(b'\r\n', b'\n') if mode == 'crlf_to_lf' else raw
-        amendment = TOOLING_AMENDMENTS.get(path)
         expected_content = content_pin['contentSha256']
-        if amendment is not None:
-            if (mode != 'crlf_to_lf'
-                    or amendment['priorContentSha256'] != expected_content):
-                raise PacketHeld('Tooling amendment differs from the retained baseline')
-            expected_content = amendment['contentSha256']
+        for amendments in (TOOLING_AMENDMENTS, FOLLOWUP_TOOLING_AMENDMENTS, TIMEOUT_TOOLING_AMENDMENTS):
+            amendment = amendments.get(path)
+            if amendment is not None:
+                if (mode != 'crlf_to_lf'
+                        or amendment['priorContentSha256'] != expected_content):
+                    raise PacketHeld('Tooling amendment differs from the retained baseline')
+                expected_content = checked_sha(amendment['contentSha256'])
         if (content_pin['reviewedRawSha256'] != expected or content_pin['comparison'] != mode
                 or digest(compared) != checked_sha(expected_content)):
             raise PacketHeld('Reviewed executable or catalog source changed')
@@ -171,6 +206,8 @@ def build(root=ROOT):
         'acceptedApplicationCommit': proposal['acceptedCommit'],
         'acceptedApplicationTree': proposal['acceptedTree'],
         'toolingAmendments': {path:dict(value) for path,value in TOOLING_AMENDMENTS.items()},
+        'followupToolingAmendments': {path:dict(value) for path,value in FOLLOWUP_TOOLING_AMENDMENTS.items()},
+        'timeoutToolingAmendments': {path:dict(value) for path,value in TIMEOUT_TOOLING_AMENDMENTS.items()},
         'toolingReviewStatus': 'candidate_requires_independent_review',
         'sourceHashes': dict(sorted(sources.items())),
         'coreSourceCount': len(core),
