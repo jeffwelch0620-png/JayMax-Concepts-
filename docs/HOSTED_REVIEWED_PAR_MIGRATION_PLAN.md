@@ -5,10 +5,12 @@
 PR58 is accepted as `3bdf8be`, with an identical tree to reviewed `a9a786d` and
 separately green reviewed-head/merged-main CI. Deployment completion was not
 inspected. The [local health/calibration proposal](READ_ONLY_HEALTH_CALIBRATION_PROPOSAL_20261023.md)
-is prepared for owner design review before implementation. It separates one
-bounded anonymous health observation from a later independently approved,
-source-bound read-only calibration. No hosted execution, service pause or
-credential/grant/schema/connection change is authorized. The current holds remain.
+is accepted for local implementation only. The [separate probe](LOCAL_READ_ONLY_PROBE_20261023.md)
+implements source/stage approval bindings, complete read coverage, timing screens
+and bounded cleanup; 1,439 broad offline and 18 guarded PostgreSQL cases passed.
+Publication needs owner approval. One bounded health observation and later
+source-bound calibration still need separate execution approvals. No hosted
+execution, service pause or credential/grant/schema/connection change is authorized.
 
 The [PR58 review amendments](PR58_REVIEW_AMENDMENTS.md) add private timeout
 attribution and refresh the installation runbook. All 1,378 offline and 141

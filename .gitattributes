@@ -58,6 +58,7 @@ tools/ops/hosted_additive_index.py text eol=lf
 .gitattributes text eol=lf
 tools/ops/par_qualification_packet.py text eol=lf
 tools/ops/local_query_metrics.py text eol=lf
+tools/ops/read_only_probe.py text eol=lf
 tools/run_review_tests.py text eol=lf
 backend/hosted_backup_cli.py text eol=lf
 backend/tests/test_par_qualification_packet.py text eol=lf

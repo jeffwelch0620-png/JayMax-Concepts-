@@ -9,11 +9,12 @@ each passed all four checks: 1,079 frontend tests plus strict build, 1,378 Windo
 offline cases and 320 backend/PostgreSQL cases. Automatic test deployment was
 authorized; completion and live behavior have not been inspected.
 
-The [local health/calibration proposal](docs/READ_ONLY_HEALTH_CALIBRATION_PROPOSAL_20261023.md)
-is ready for owner design review. It proposes separately approved health and
-read-only fingerprint observations, with a locally tested opt-in harness first.
-No implementation, hosted execution, service pause or credential/grant/schema/
-connection change is authorized by the proposal. All holds remain in place.
+The owner-approved [local probe implementation](docs/LOCAL_READ_ONLY_PROBE_20261023.md)
+separates health/calibration, exact-stage approval/source bindings, complete scope,
+per-read/cursor-envelope timing and bounded owned cleanup. Broad offline checks
+passed 1,439 reported cases and the guarded PostgreSQL run passed 18; profiles
+overlap focused checks. Publication requires the owner's next approval. Hosted
+execution, service pauses and credential/grant/schema/connection changes stay held.
 
 ## Dated bounded fingerprint implementation evidence
 

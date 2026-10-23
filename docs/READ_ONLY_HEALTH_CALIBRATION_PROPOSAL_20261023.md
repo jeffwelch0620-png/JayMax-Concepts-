@@ -1,9 +1,12 @@
 # Read-only health and calibration proposal — October 23, 2026
 
-**Status: local proposal for owner review; no execution approval.** No health
+**Status: owner approved local implementation/testing only; no hosted execution approval.** No health
 request, Supabase connection, Render inspection, service pause or private-config
 read was performed to prepare this document. Credential, grant, schema and
-runtime-connection changes remain held. This proposal does not implement a probe.
+runtime-connection changes remain held. The original design below is retained;
+the [local implementation and test record](LOCAL_READ_ONLY_PROBE_20261023.md)
+describes the separate opt-in tool and its acceptance limits. Publication, CI,
+merge and both hosted stages remain separately gated.
 
 ## Recommendation and accepted baseline
 
@@ -147,9 +150,9 @@ gate; do not recalibrate its old latency coefficient from these awaits. Above
 review and separately approved calibration. No automatic fallback, cached reuse,
 timeout increase or weakening of the original/backup checks.
 
-## Local implementation and evidence gate — not yet approved
+## Local implementation and evidence gate — approved for local work only
 
-Before either hosted stage, implement only after owner acceptance of this design:
+The owner accepted this local implementation scope; neither hosted stage is approved:
 
 - A separate opt-in local operator harness with no app/runtime imports that start
   pools, no installer entrypoints, no default hosted execution, and exact source,
@@ -196,10 +199,12 @@ that is dated evidence, not a fresh writer check. Par editing remains frozen,
 ordering manual and Track 1 independent. Personal-login/G04/G13, managed recovery
 and fictional functional acceptance remain separate open work.
 
-## Local source anchors inspected
+## Accepted PR58 source anchors inspected
 
-These byte hashes identify inspected accepted source only; they grant no execution
-authority. Historical proposals, SQL, manifests and receipts are unchanged.
+These byte hashes identify inspected accepted PR58 source only; they grant no
+execution authority and are not the new probe's execution manifest. The probe
+generates a separate complete source set. Historical proposals, SQL, manifests
+and receipts are unchanged.
 
 | File | SHA-256 |
 | --- | --- |
