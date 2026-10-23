@@ -101,6 +101,25 @@ class ParQualificationPacketTests(unittest.TestCase):
                 self.assertFalse(result['readyForHostedExecution'])
                 reads.assert_not_called(); opens.assert_not_called(); arguments.assert_not_called()
 
+    def test_timeout_amendments_chain_from_fingerprint_links_and_refuse_stale_packets(self):
+        value=packet.build(self.root)
+        self.assertEqual(value['timeoutToolingAmendments'],packet.TIMEOUT_TOOLING_AMENDMENTS)
+        self.assertEqual(set(packet.TIMEOUT_TOOLING_AMENDMENTS),set(packet.FOLLOWUP_TOOLING_AMENDMENTS))
+        for name,link in value['timeoutToolingAmendments'].items():
+            self.assertEqual(link['priorContentSha256'],value['followupToolingAmendments'][name]['contentSha256'])
+        for field in ('priorContentSha256','contentSha256'):
+            bad=deepcopy(packet.TIMEOUT_TOOLING_AMENDMENTS)
+            bad['backend/hosted_backup.py'][field]='0'*64
+            with self.subTest(field=field),patch.object(packet,'TIMEOUT_TOOLING_AMENDMENTS',bad),self.assertRaises(packet.PacketHeld):
+                packet.build(self.root)
+        bad=deepcopy(packet.TIMEOUT_TOOLING_AMENDMENTS)
+        bad['TEST_ONLY_UNKNOWN_SOURCE.py']={'priorContentSha256':'0'*64,'contentSha256':'1'*64}
+        with patch.object(packet,'TIMEOUT_TOOLING_AMENDMENTS',bad),self.assertRaises(packet.PacketHeld):packet.build(self.root)
+        with TemporaryDirectory() as tmp:
+            del value['timeoutToolingAmendments']
+            path,sha=self.artifact(tmp,value=value)
+            with self.assertRaises(packet.PacketHeld):packet.verify(path,sha,self.root)
+
     def test_existing_output_and_evidence_are_never_overwritten(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp)/'TEST_ONLY_PACKET.json'

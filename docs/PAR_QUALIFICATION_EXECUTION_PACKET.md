@@ -53,6 +53,14 @@ Old v1 packets, stale v2 packets, missing follow-up links, unknown source paths
 and altered/disconnected amendment hashes are refused. Do not rewrite earlier
 packets, source audits, backup receipts or approval records to make them pass.
 
+PR58 review amendments add four `TIMEOUT_TOOLING_AMENDMENTS` links for those
+same four sources. Each starts at its `FOLLOWUP_TOOLING_AMENDMENTS` result;
+earlier links remain intact. V2 packets disclose `timeoutToolingAmendments` and
+refuse missing/stale timeout links. These changes only preserve private timeout
+diagnostics; they do not alter SQL, approval gates or source coverage. The full
+chain has two original, four fingerprint and four timeout links over five core
+files. No historical packet is rewritten to match the new source.
+
 The original proposal's saved 49-source audit includes Windows newline bytes.
 The [content pin manifest](PAR_QUALIFICATION_SOURCE_PINS.json) records those raw
 digests and independent content digests for the same accepted PR53 source.
@@ -65,8 +73,8 @@ All 31 SQL files retain their exact reviewed byte hashes. No SQL normalization,
 catalog/security modification or installer-guard relaxation occurs.
 
 Each output binds **all 56 actual local source-file byte hashes**, plus the exact
-proposal bytes separately. Those include the 49 core sources (with two earlier
-and four follow-up amendment links spanning five source files), backup CLI,
+proposal bytes separately. Those include the 49 core sources (with two original,
+four fingerprint and four timeout amendment links spanning five source files), backup CLI,
 new verifier/tests, offline CI selection, this guide, content pins and checkout
 attributes. A newline change after creation invalidates that packet too. Moving
 between checkouts may require a newly generated/reviewed packet; a matching

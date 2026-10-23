@@ -458,6 +458,7 @@ async def apply(conn, plan, *, guard=None):
         return report
     except Exception as exc:
         report.update(error_details(exc))
+        report.update(preservation.private_fingerprint_timeout_details(exc))
         report.update(backend_permission_details(exc))
         if report['commitAttempted']: report.update(status='commit_outcome_unknown',sqlCommitted=None)
         elif tx is not None:

@@ -297,6 +297,7 @@ async def run(args):
         elif result['status'] != 'apply_in_progress_outcome_unknown':
             result['status'] = 'held'
         result.update(error_details(exc))
+        result.update(engine.preservation.private_fingerprint_timeout_details(exc))
         result.update(engine.backend_permission_details(exc))
         if isinstance(exc, (Held, MaintenanceConnectionError)):
             result['reason'] = str(exc)

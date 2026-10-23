@@ -2,6 +2,12 @@
 
 ## Current local bounded fingerprint follow-up
 
+[PR58 review amendments](docs/PR58_REVIEW_AMENDMENTS.md) restore private timeout
+attribution, preserve SQLSTATE/cleanup and public redaction, and add an explicitly
+owner-gated read-only hosted calibration prerequisite. The runbook now separates
+current tooling from historical qualification. All 1,378 offline and 141
+PostgreSQL cases passed locally. Hosted execution remains held.
+
 [PR57](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/57) merged with
 owner approval as 54ce10c on October 22 at 9:04:21 p.m. Eastern. Its tree matches
 reviewed a511b38; reviewed-head and
@@ -9,7 +15,7 @@ reviewed a511b38; reviewed-head and
 each passed all four checks: 1,079 frontend tests plus strict build, 1,323 offline
 cases and 270 backend/PostgreSQL cases. Deployment completion was not inspected.
 
-The [local bounded fingerprint candidate](docs/LOCAL_PAR_BATCHED_FINGERPRINTS_20261022.md)
+The [dated bounded fingerprint baseline](docs/LOCAL_PAR_BATCHED_FINGERPRINTS_20261022.md)
 uses two-relation statements in the par installer while preserving the two hash
 formats independently, the historical functions, snapshots, timeouts and exact
 source-amendment chain. All **1,352 offline** and **135 PostgreSQL cases**

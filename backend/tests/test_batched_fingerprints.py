@@ -9,13 +9,13 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
 
 import asyncpg
 import hosted_backup as backup
 import hosted_install_preservation as preservation
-from readonly_snapshot import readonly_snapshot
+from readonly_snapshot import readonly_snapshot, error_details
 from apply_additive_migration import local_target
 from local_query_metrics import MeasuredConnection, finish, instrument_functions, par_attribution_bindings
 
@@ -163,10 +163,31 @@ class BatchedFingerprintGuards(unittest.TestCase):
                 preservation.checked_fingerprint_chunk(rows, [2], max_rows=3)
 
 
+    def test_private_timeout_context_is_bounded_typed_and_not_in_public_details(self):
+        for cause in (TimeoutError('TEST ONLY secret driver text'), asyncpg.QueryCanceledError('TEST ONLY SQL')):
+            cause.snapshotCleanupErrorType='ConnectionError'
+            error=preservation.wrap_fingerprint_timeout(cause,'original_projection',(('public','test_only_private'),))
+            self.assertEqual(error_details(error)['sqlState'],getattr(cause,'sqlstate',None))
+            self.assertEqual(error_details(error)['snapshotCleanupErrorType'],'ConnectionError')
+            error.failureObjects.append('TEST ONLY spoofed name')
+            private=preservation.private_fingerprint_timeout_details(error)
+            self.assertEqual(private['fingerprintTimeout']['candidateObjects'],['public.test_only_private'])
+            self.assertNotIn('test_only_private',json.dumps(error_details(error)))
+            self.assertNotIn('TEST ONLY',str(error))
+        spoof=TimeoutError('TEST ONLY')
+        spoof.fingerprintTimeout={'family':'backup','candidateObjects':['TEST ONLY fake']}
+        self.assertEqual(preservation.private_fingerprint_timeout_details(spoof),{})
+        for members in ((), (('public','a'),)*2, (('public','x'*64),), [('public','a')],
+                        (('public','a'),('public','b'),('public','c'),('public','d'),('public','e'))):
+            with self.subTest(members=members),self.assertRaises(ValueError):
+                preservation.wrap_fingerprint_timeout(TimeoutError(),'backup',members)
+
+
 class MutatingConnection:
-    def __init__(self, connection, mutate=None, *, timeout=False):
+    def __init__(self, connection, mutate=None, *, timeout=False, error=None):
         self.connection, self.mutate, self.timeout = connection, mutate, timeout
         self.cursor_calls = 0
+        self.error, self.batch_calls = error, 0
 
     def __getattr__(self, name): return getattr(self.connection, name)
 
@@ -179,6 +200,9 @@ class MutatingConnection:
     async def fetch(self, query, *args):
         if '::integer AS position' not in query:
             return await self.connection.fetch(query, *args)
+        self.batch_calls += 1
+        if self.error is not None:
+            raise self.error
         if self.timeout:
             query = 'SELECT f.* FROM (' + query + ') f CROSS JOIN (SELECT pg_sleep(.2)) slow'
         rows = await self.connection.fetch(query, *args)
@@ -327,19 +351,47 @@ class BatchedFingerprintDatabaseTests(unittest.IsolatedAsyncioTestCase):
                         else: await backup.relation_fingerprints_batched(conn, relations)
                 self.assertEqual(conn.cursor_calls, 0)
                 self.assertEqual(await self.conn.fetchval('SELECT 1'), 1)
+        # A timed-out full cursor/sequence read must retain attribution too,
+        # without re-probing or trying a different relation path.
+        async def failed_cursor():
+            raise TimeoutError('TEST ONLY private cursor text')
+            yield
+        for relation in [r for r in await self.relations() if r['relname'] in ('test_only_large','test_only_sequence')]:
+            conn=MutatingConnection(self.conn)
+            with self.subTest(cursor_kind=relation['kind']), patch.object(backup,'MAX_FINGERPRINT_AGGREGATE_BYTES',65), \
+                    patch.object(conn,'cursor',return_value=failed_cursor()) as cursor:
+                with self.assertRaises(backup.BackupError) as caught:
+                    async with readonly_snapshot(conn):
+                        await backup.relation_fingerprints_batched(conn,[relation])
+                self.assertEqual(caught.exception.failureObjects,[relation['nspname']+'.'+relation['relname']])
+                self.assertEqual(preservation.private_fingerprint_timeout_details(caught.exception)['fingerprintTimeout']['family'],'backup')
+                self.assertEqual(cursor.call_count,1)
+                self.assertEqual(await self.conn.fetchval('SELECT 1'),1)
 
     async def test_timeout_fails_closed_and_recovers_same_connection(self):
         await self.fixtures()
         baseline = await preservation.original_columns(self.conn)
         relations = [r for r in await self.relations() if r['kind'] != 'S']
         for family in ('original','backup'):
-            conn = MutatingConnection(self.conn, timeout=True)
-            with self.subTest(family=family), self.assertRaises(asyncpg.QueryCanceledError):
-                async with readonly_snapshot(conn):
-                    if family == 'original': await preservation.fingerprints_batched(conn, baseline)
-                    else: await backup.relation_fingerprints_batched(conn, relations)
-            self.assertEqual(conn.cursor_calls, 0)
-            self.assertEqual(await self.conn.fetchval('SELECT 1'), 1)
+            for injected in (None, TimeoutError('TEST ONLY private driver text'), asyncio.CancelledError()):
+                conn = MutatingConnection(self.conn, timeout=injected is None, error=injected)
+                expected_type=(asyncio.CancelledError if isinstance(injected,asyncio.CancelledError)
+                    else preservation.FingerprintBatchTimeout if family=='original' else backup.BackupError)
+                with self.subTest(family=family,error=type(injected).__name__), self.assertRaises(expected_type) as caught:
+                    async with readonly_snapshot(conn):
+                        if family == 'original': await preservation.fingerprints_batched(conn, baseline)
+                        else: await backup.relation_fingerprints_batched(conn, relations)
+                if isinstance(injected,asyncio.CancelledError):
+                    self.assertIs(caught.exception,injected)
+                else:
+                    members=list(baseline)[:2] if family=='original' else [(r['nspname'],r['relname']) for r in relations[:2]]
+                    self.assertEqual(caught.exception.failureObjects,['.'.join(k) for k in members])
+                    self.assertEqual(error_details(caught.exception)['sqlState'],'57014' if injected is None else None)
+                    self.assertNotIn('test_only',str(caught.exception))
+                    self.assertNotIn('private driver text',str(caught.exception))
+                self.assertEqual(conn.batch_calls,1)
+                self.assertEqual(conn.cursor_calls, 0)
+                self.assertEqual(await self.conn.fetchval('SELECT 1'), 1)
 
     async def test_new_metric_bindings_attribute_both_families(self):
         import hosted_reviewed_pars as adapter

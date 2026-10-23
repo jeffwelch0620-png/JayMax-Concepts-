@@ -417,7 +417,8 @@ async def relation_fingerprint(conn, quoted, kind, row_hashes=True, *, server_ag
 async def relation_fingerprints_batched(conn, relations, row_hashes=True, *,
                                       server_aggregation=True, chunk_size=2):
     """Par-only batches; preserve each backup probe, fallback and path counter."""
-    from hosted_install_preservation import checked_fingerprint_chunk, checked_fingerprint_chunk_size
+    from hosted_install_preservation import (
+        checked_fingerprint_chunk, checked_fingerprint_chunk_size, wrap_fingerprint_timeout)
     chunk_size = checked_fingerprint_chunk_size(chunk_size)
     if not conn.is_in_transaction():
         raise BackupError('Batched backup fingerprints require a caller snapshot')
@@ -444,30 +445,41 @@ async def relation_fingerprints_batched(conn, relations, row_hashes=True, *,
                 FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value
                     FROM {quoted} t LIMIT $1::bigint) hashed)''')
             positions.append(position)
-        facts = (checked_fingerprint_chunk(await conn.fetch(' UNION ALL '.join(queries), probe_rows),
-                                           positions, max_rows=probe_rows) if queries else {})
+        facts = {}
+        if queries:
+            try:
+                rows = await conn.fetch(' UNION ALL '.join(queries), probe_rows)
+            except (TimeoutError, asyncpg.QueryCanceledError) as exc:
+                raise wrap_fingerprint_timeout(exc, 'backup',
+                    tuple((entries[p]['nspname'], entries[p]['relname']) for p in positions),
+                    error_type=BackupError) from exc
+            facts = checked_fingerprint_chunk(rows, positions, max_rows=probe_rows)
         # Validate all fast results before using any member of this chunk. A
         # timeout/malformed result never causes a retry or cursor error fallback.
         for offset, relation in enumerate(chunk):
             name = relation['nspname'] + '.' + relation['relname']
             quoted = native.quoted(relation['nspname']) + '.' + native.quoted(relation['relname'])
-            if start + offset not in facts:
-                fact = await relation_fingerprint(conn, quoted, relation['kind'], row_hashes,
-                                                  server_aggregation=server_aggregation)
-            else:
-                fact = facts[start + offset]
-                if fact['rows'] < probe_rows:
-                    record_fingerprint_path('serverAggregateRelations')
+            try:
+                if start + offset not in facts:
+                    fact = await relation_fingerprint(conn, quoted, relation['kind'], row_hashes,
+                                                      server_aggregation=server_aggregation)
                 else:
-                    # Full probe is inconclusive. Discard its digest and stream
-                    # the entire relation with the original byte/order rules.
-                    sql = f'''SELECT value FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value FROM {quoted} t) hashed ORDER BY value COLLATE "C"'''
-                    count = 0
-                    sha = hashlib.sha256()
-                    async for row in conn.cursor(sql, prefetch=100):
-                        sha.update(row['value'].encode()); sha.update(b'\n'); count += 1
-                    fact = {'rows': count, 'sha256': sha.hexdigest()}
-                    record_fingerprint_path('cursorFallbackRelations')
+                    fact = facts[start + offset]
+                    if fact['rows'] < probe_rows:
+                        record_fingerprint_path('serverAggregateRelations')
+                    else:
+                        # Full probe is inconclusive. Discard its digest and stream
+                        # the entire relation with the original byte/order rules.
+                        sql = f'''SELECT value FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value FROM {quoted} t) hashed ORDER BY value COLLATE "C"'''
+                        count = 0
+                        sha = hashlib.sha256()
+                        async for row in conn.cursor(sql, prefetch=100):
+                            sha.update(row['value'].encode()); sha.update(b'\n'); count += 1
+                        fact = {'rows': count, 'sha256': sha.hexdigest()}
+                        record_fingerprint_path('cursorFallbackRelations')
+            except (TimeoutError, asyncpg.QueryCanceledError) as exc:
+                raise wrap_fingerprint_timeout(exc, 'backup',
+                    ((relation['nspname'], relation['relname']),), error_type=BackupError) from exc
             tables[name] = {**fact, 'kind': relation['kind']}
     return tables
 

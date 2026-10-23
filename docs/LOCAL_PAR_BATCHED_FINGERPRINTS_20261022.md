@@ -1,5 +1,14 @@
 # Local bounded par fingerprints - October 22, 2026
 
+**Subsequent review amendment:** [PR58 amendment evidence](PR58_REVIEW_AMENDMENTS.md)
+records private timeout attribution and regression checks. The measured code and
+receipts below remain the original dated baseline, not a new timing claim for
+the amended source. Before proposing installation, the separately approved
+read-only hosted probe must satisfy the runbook's 10-second observed per-family
+statement-headroom gate; otherwise hold and review/re-measure a size-one source
+amendment, including its effect on the overall 450-second screen. The threshold
+is a conservative policy margin, not hosted timing proof. No probe is authorized.
+
 ## Accepted baseline and publication boundary
 
 [PR57](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/57) merged with

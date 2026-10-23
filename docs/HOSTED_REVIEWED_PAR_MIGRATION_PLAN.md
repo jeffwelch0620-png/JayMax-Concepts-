@@ -2,6 +2,15 @@
 
 ## Current status - October 22
 
+The [PR58 review amendments](PR58_REVIEW_AMENDMENTS.md) add private timeout
+attribution and refresh the installation runbook. All 1,378 offline and 141
+PostgreSQL cases passed locally. Before proposing a new install
+window, a separately approved read-only probe must record complete scope and
+at most 10-second observed query awaits for each two-relation fingerprint family.
+This is a conservative policy margin, not a hosted bound. A size-one amendment
+requires review and renewed statement/overall timing; there is no automatic
+fallback. API health, probe approval and all hosted changes remain separate holds.
+
 PR57 is accepted as 54ce10c with separately green reviewed-head and merged-main
 CI. The [local bounded fingerprint candidate](LOCAL_PAR_BATCHED_FINGERPRINTS_20261022.md)
 passed 1,352 offline and 135 PostgreSQL cases plus guarded retained-data

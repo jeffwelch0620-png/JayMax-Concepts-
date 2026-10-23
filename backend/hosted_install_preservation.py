@@ -4,7 +4,9 @@ Metadata and digests only; no rows, SQL defaults or connection values returned.
 New fields are excluded explicitly, while removed/retyped original fields hold.
 """
 import asyncpg
+from dataclasses import dataclass
 from readonly_snapshot import readonly_snapshot
+from readonly_snapshot import error_details
 import json
 import re
 from uuid import UUID
@@ -62,6 +64,61 @@ async def fingerprints(conn, baseline, *, exclude_synthetic=None):
             row = await conn.fetchrow("SELECT count(*) AS rows,encode(sha256(convert_to(coalesce(string_agg(h,'' ORDER BY h),''),'UTF8')),'hex') AS sha256 FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS h FROM (SELECT "+projection+' FROM '+table+suffix+") t) x",*args)
             result['.'.join(key)] = dict(row)
     return result
+
+
+class FingerprintBatchTimeout(ValueError):
+    """Fixed public message; candidate members belong only in private metadata."""
+
+
+@dataclass(frozen=True)
+class _FingerprintTimeoutContext:
+    family: str
+    members: tuple
+    cause_type: str | None
+
+
+def _checked_timeout_members(family, members):
+    if (family not in ('original_projection', 'backup') or type(members) is not tuple
+            or not 1 <= len(members) <= 4
+            or any(type(pair) is not tuple or len(pair) != 2
+                   or any(not isinstance(name, str) or not name or len(name.encode('utf-8')) > 63
+                          for name in pair) for pair in members)
+            or len(set(members)) != len(members)):
+        raise ValueError('Invalid fingerprint timeout metadata')
+    return members
+
+
+def wrap_fingerprint_timeout(original, family, members, *, error_type=FingerprintBatchTimeout):
+    """Do not stringify a driver error, retry, or change cancellation semantics."""
+    members = _checked_timeout_members(family, members)
+    details = error_details(original)
+    error = error_type('Fingerprint batch timed out; inspect the private receipt')
+    error.sqlstate = details['sqlState']
+    for key, value in details.items():
+        if key not in ('errorType', 'sqlState') and value is not None:
+            setattr(error, key, value)
+    error.fingerprintTimeout = _FingerprintTimeoutContext(family, members, details['errorType'])
+    # Compatibility for private in-memory inspection; serialization uses the
+    # immutable typed context, never arbitrary driver attributes or this list.
+    error.failureObjects = ['.'.join(pair) for pair in members]
+    return error
+
+
+def private_fingerprint_timeout_details(error):
+    """Explicit opt-in for private par receipts; shared public sanitizer is unchanged."""
+    context = getattr(error, 'fingerprintTimeout', None)
+    if not isinstance(context, _FingerprintTimeoutContext):
+        return {}
+    try:
+        members = _checked_timeout_members(context.family, context.members)
+    except (TypeError, ValueError, UnicodeError):
+        return {}
+    if context.cause_type is not None and (not isinstance(context.cause_type, str)
+            or re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,127}', context.cause_type) is None):
+        return {}
+    return {'fingerprintTimeout': {'family': context.family,
+        'candidateObjects': ['.'.join(pair) for pair in members],
+        'causeErrorType': context.cause_type}}
 
 
 def checked_fingerprint_chunk_size(value):
@@ -152,8 +209,12 @@ async def fingerprints_batched(conn, baseline, *, exclude_synthetic=None, chunk_
                     "count(*) AS rows,encode(sha256(convert_to(coalesce(string_agg(h,'' ORDER BY h),''),'UTF8')),'hex') AS sha256 "
                     "FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS h FROM (SELECT "
                     + projection + ' FROM ' + table + suffix + ') t) x)')
-            facts = checked_fingerprint_chunk(await conn.fetch(' UNION ALL '.join(queries), *args),
-                                              list(range(start, start + len(chunk))))
+            try:
+                rows = await conn.fetch(' UNION ALL '.join(queries), *args)
+            except (TimeoutError, asyncpg.QueryCanceledError) as exc:
+                raise wrap_fingerprint_timeout(exc, 'original_projection',
+                    tuple(key for key, _ in chunk)) from exc
+            facts = checked_fingerprint_chunk(rows, list(range(start, start + len(chunk))))
             for offset, (key, _) in enumerate(chunk):
                 result['.'.join(key)] = facts[start + offset]
     return result
