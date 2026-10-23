@@ -6,6 +6,7 @@ from datetime import timedelta
 import json
 import io
 import os
+import subprocess
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -45,6 +46,91 @@ class Stream(httpx.AsyncByteStream):
 
 
 class ProbeGuards(unittest.IsolatedAsyncioTestCase):
+    def test_process_control_interrupts_persist_receipts_then_propagate_in_isolated_process(self):
+        # A real asyncio Task treats KeyboardInterrupt/SystemExit specially. Run
+        # both in a child so a regression cannot abort the surrounding suite.
+        code=r'''
+import asyncio, json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+import read_only_probe as probe
+import maintenance_connection as maintenance
+from test_read_only_probe import approval, health_receipt
+
+async def main():
+    count=0
+    for kind in (KeyboardInterrupt,SystemExit):
+        for phase in ('health','monitor','close','terminate','receipt'):
+            with TemporaryDirectory() as directory:
+                path=Path(directory); health=health_receipt(); failure=kind('TEST ONLY private interrupt')
+                stage='calibration' if phase in ('close','terminate') else 'health'
+                value=probe.packet(stage,**({'project':'abcdefghijklmnopqrst',
+                    'health_sha':probe.digest(health)} if stage=='calibration' else {}))
+                conn=SimpleNamespace(maintenance_peer=('2001:db8::1',5432,0,0),maintenance_tls=True,
+                    close=AsyncMock(),terminate=lambda:None)
+                if phase=='close': conn.close.side_effect=failure
+                if phase=='terminate':
+                    conn.close.side_effect=OSError('TEST ONLY private close')
+                    def terminate(): raise failure
+                    conn.terminate=terminate
+                async def observe():
+                    if phase in ('health','receipt'): raise failure
+                    if phase=='monitor': await asyncio.Event().wait()
+                    return {'status':'ok','database':'connected'}
+                guards=0
+                def resources(**kwargs):
+                    nonlocal guards
+                    guards+=1
+                    if phase=='monitor' and guards==3: raise failure
+                    return {}
+                class FailingReceipt:
+                    def __init__(self,stream): self.stream=stream
+                    def write(self,raw): raise OSError('TEST ONLY private disk failure')
+                    def close(self): self.stream.close()
+                def fresh(p):
+                    stream=Path(p).open('xb')
+                    return FailingReceipt(stream) if phase=='receipt' and Path(p).suffix=='.json' else stream
+                with patch.object(probe,'_fresh_private_file',side_effect=fresh), \
+                     patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
+                     patch.object(probe,'resources',side_effect=resources), \
+                     patch.object(probe,'health_observation',side_effect=observe), \
+                     patch('dotenv.dotenv_values',return_value={'MAINTENANCE_DATABASE_URL':
+                         'postgresql://postgres:TEST_ONLY@db.abcdefghijklmnopqrst.supabase.co:5432/postgres'}), \
+                     patch.object(maintenance,'connect',AsyncMock(return_value=conn)), \
+                     patch.object(probe,'calibration',AsyncMock(return_value={'coverageComplete':True})), \
+                     patch.dict('os.environ',{'DATABASE_SSL_ROOT_CERT':''}):
+                    try:
+                        await probe.execute_approved(value,approval(value,path),evidence_directory=path,
+                            **({'config_path':path/'fake','health':health} if stage=='calibration' else {}))
+                    except BaseException as caught:
+                        assert caught is failure,(phase,type(caught).__name__)
+                    else: raise AssertionError('Interrupt swallowed: '+phase)
+                receipt_path=next(path.glob('*.json'))
+                if phase=='receipt': assert receipt_path.read_bytes()==b''
+                else:
+                    receipt=json.loads(receipt_path.read_bytes())
+                    assert receipt['status']=='held'
+                    key='cleanupErrorType' if phase=='close' else 'error'
+                    if phase=='close': assert receipt[key]==kind.__name__
+                    elif phase=='terminate': assert receipt['terminateFailed'] is True
+                    else: assert receipt[key]['errorType']==kind.__name__
+                    assert 'private interrupt' not in json.dumps(receipt)
+                if stage=='calibration': conn.close.assert_awaited_once()
+                assert len(asyncio.all_tasks())==1,phase
+                count+=1
+    print('CONTROL_CASES_PASSED='+str(count))
+asyncio.run(main())
+'''
+        env={**os.environ,'PYTHON_DOTENV_DISABLED':'1',
+             'PYTHONPATH':os.pathsep.join((str(probe.ROOT/'tools/ops'),str(probe.ROOT/'backend'),
+                 str(probe.ROOT/'backend/tests'),os.environ.get('PYTHONPATH','')))}
+        result=subprocess.run([sys.executable,'-c',code],cwd=probe.ROOT,env=env,
+            capture_output=True,text=True,timeout=40)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout.strip(),'CONTROL_CASES_PASSED=10')
+
     def test_generated_artifacts_never_overwrite_or_repair_existing_file(self):
         with TemporaryDirectory() as directory:
             path=Path(directory)/'TEST_ONLY_existing.json'; path.write_bytes(b'TEST ONLY unchanged')
@@ -153,6 +239,80 @@ class ProbeGuards(unittest.IsolatedAsyncioTestCase):
                  patch.object(maintenance,'connect',AsyncMock()) as connect:
                 result=await probe.execute_approved(value,auth,evidence_directory=path,config_path=path/'fake',health=health)
                 self.assertEqual(result['status'],'held'); connect.assert_not_awaited()
+
+    async def test_primary_fingerprint_failure_survives_stubborn_monitor_cleanup_hold(self):
+        import maintenance_connection as maintenance
+        import hosted_install_preservation as preservation
+        entered=asyncio.Event(); release=asyncio.Event(); stopped=asyncio.Event()
+        async def stubborn_sleep(seconds):
+            self.assertEqual(seconds,1)
+            entered.set()
+            try: await release.wait()
+            except asyncio.CancelledError:
+                try: await release.wait()
+                finally: stopped.set()
+                raise
+        original=type('Driver',(RuntimeError,),{'sqlstate':'57014'})('TEST ONLY private SQL/password')
+        primary=preservation.wrap_fingerprint_timeout(original,'backup',(('public','TEST_ONLY_PRIVATE'),))
+        async def collect(*args,**kwargs):
+            await entered.wait()
+            raise primary
+        with TemporaryDirectory() as directory:
+            path=Path(directory); health=health_receipt()
+            value=probe.packet('calibration',project='abcdefghijklmnopqrst',health_sha=probe.digest(health))
+            conn=SimpleNamespace(maintenance_peer=('2001:db8::1',5432,0,0),maintenance_tls=True,
+                                 close=AsyncMock(),terminate=lambda:None)
+            with patch.object(probe,'_fresh_private_file',side_effect=lambda p:Path(p).open('xb')), \
+                 patch.object(probe,'private_path',side_effect=lambda p,**kw:Path(p)), \
+                 patch.object(probe,'resources',return_value={}), \
+                 patch('dotenv.dotenv_values',return_value={'MAINTENANCE_DATABASE_URL':
+                     'postgresql://postgres:TEST_ONLY@db.abcdefghijklmnopqrst.supabase.co:5432/postgres'}), \
+                 patch.object(maintenance,'connect',AsyncMock(return_value=conn)), \
+                 patch.object(probe,'calibration',side_effect=collect), \
+                 patch.object(probe.asyncio,'sleep',side_effect=stubborn_sleep), \
+                 patch.dict('os.environ',{'DATABASE_SSL_ROOT_CERT':''}):
+                try:
+                    result=await probe.execute_approved(value,approval(value,path),
+                        evidence_directory=path,config_path=path/'fake',health=health)
+                    self.assertEqual(result['status'],'held')
+                    self.assertFalse(result['cleanupConfirmed'])
+                    self.assertNotIn('TEST_ONLY_PRIVATE',json.dumps(result))
+                    self.assertNotIn('57014',json.dumps(result))
+                    receipt=json.loads(next(path.glob('*.json')).read_bytes())
+                    self.assertEqual(receipt['error']['errorType'],type(primary).__name__)
+                    self.assertEqual(receipt['error']['sqlState'],'57014')
+                    self.assertEqual(receipt['error']['snapshotCleanupErrorType'],'ObservationTaskCleanupHeld')
+                    self.assertEqual(receipt['error']['fingerprintTimeout']['candidateObjects'],['public.TEST_ONLY_PRIVATE'])
+                    self.assertNotIn('password',json.dumps(receipt))
+                    conn.close.assert_awaited_once()
+                finally:
+                    release.set()
+                    await asyncio.wait_for(stopped.wait(),1)
+
+    async def test_cleanup_only_hold_still_refuses_success(self):
+        entered=asyncio.Event(); release=asyncio.Event(); stopped=asyncio.Event()
+        async def sleep(seconds):
+            entered.set()
+            try: await release.wait()
+            except asyncio.CancelledError:
+                try: await release.wait()
+                finally: stopped.set()
+                raise
+        async def work(): await entered.wait(); return 'TEST ONLY completed'
+        wait=asyncio.wait
+        async def bounded_wait(*args,**kwargs):
+            if 'timeout' in kwargs:
+                self.assertEqual(kwargs['timeout'],5)
+                kwargs['timeout']=.01
+            return await wait(*args,**kwargs)
+        with patch.object(probe.asyncio,'sleep',side_effect=sleep), \
+             patch.object(probe.asyncio,'wait',side_effect=bounded_wait):
+            try:
+                with self.assertRaises(probe.Held) as caught: await probe.supervised(work(),lambda:None)
+                self.assertEqual(caught.exception.snapshotCleanupErrorType,'ObservationTaskCleanupHeld')
+            finally:
+                release.set()
+                await asyncio.wait_for(stopped.wait(),1)
 
     def test_source_manifest_covers_hash_sql_ca_and_operator_sources_without_importing_server(self):
         files=probe.sources()

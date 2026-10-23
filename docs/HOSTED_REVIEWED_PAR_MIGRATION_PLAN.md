@@ -7,9 +7,12 @@ separately green reviewed-head/merged-main CI. Deployment completion was not
 inspected. The [local health/calibration proposal](READ_ONLY_HEALTH_CALIBRATION_PROPOSAL_20261023.md)
 is accepted for local implementation only. The [separate probe](LOCAL_READ_ONLY_PROBE_20261023.md)
 implements source/stage approval bindings, complete read coverage, timing screens
-and bounded cleanup. Owner-approved draft PR59 is published; its generated-file
-ownership follow-up passed 1,443 broad offline and 65 focused cases, with the
-earlier 18 guarded PostgreSQL cases retained. Fresh CI/review and merge stay separate.
+and bounded cleanup. Owner-approved draft PR59 is being amended for reproducible
+LF source packets, retained primary timeout diagnostics during cleanup holds,
+and interrupt propagation after receipt handling. All 1,448 broad offline and
+70 focused cases passed; the earlier 18 guarded PostgreSQL cases are retained
+as dated evidence. Pinned SQL/snapshot/CA bytes and qualification hashing are
+unchanged. Fresh exact-head CI and owner merge approval stay separate.
 One bounded health observation and later
 source-bound calibration still need separate execution approvals. No hosted
 execution, service pause or credential/grant/schema/connection change is authorized.

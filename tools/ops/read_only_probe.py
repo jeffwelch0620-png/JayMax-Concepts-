@@ -72,8 +72,15 @@ def sources():
                      and '__pycache__' not in p.parts)
     if any(p.is_symlink() or not p.resolve().is_relative_to(ROOT) for p in paths):
         raise Held('Redirected source refused')
-    return {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(paths)}
+    result = {}
+    for path in sorted(paths):
+        raw = path.read_bytes()
+        # Hash execution bytes unchanged. Refuse stale CRLF working trees instead
+        # of silently normalizing evidence; .gitattributes pins this complete set.
+        if b'\r' in raw:
+            raise Held('Probe sources require the reviewed LF checkout refresh')
+        result[path.relative_to(ROOT).as_posix()] = hashlib.sha256(raw).hexdigest()
+    return result
 
 
 def packet(stage, *, project=None, health_sha=None, scope_sha=None):
@@ -332,32 +339,78 @@ async def calibration(conn, scope, *, observer=None):
             'coverageComplete': True, 'metrics': observer.summary()}
 
 
+class _TaskInterrupt:
+    """Carry process-control exceptions back to the receipt-owning coroutine."""
+    def __init__(self, error):
+        self.error = error
+
+
+async def _contained(awaitable):
+    # KeyboardInterrupt/SystemExit raised inside a Task otherwise stop its event
+    # loop before the operator can persist its receipt. Ordinary errors and task
+    # cancellation retain their normal asyncio semantics.
+    try:
+        return await awaitable
+    except BaseException as error:
+        if isinstance(error, (Exception, asyncio.CancelledError)):
+            raise
+        return _TaskInterrupt(error)
+
+
+def _unwrapped(result):
+    if isinstance(result, _TaskInterrupt):
+        raise result.error
+    return result
+
+
+def _task_result(task):
+    return _unwrapped(task.result())
+
+
 async def supervised(function, guard):
     async def monitor():
         while True:
             guard()
             await asyncio.sleep(1)
-    work, monitor_task = asyncio.create_task(function), asyncio.create_task(monitor())
+    work = asyncio.create_task(_contained(function))
+    monitor_task = asyncio.create_task(_contained(monitor()))
+    primary = None
     try:
         done, _ = await asyncio.wait((work, monitor_task), return_when=asyncio.FIRST_COMPLETED)
         # Preserve a simultaneous driver/cancellation failure and its typed
         # timeout context rather than replacing it with a resource category.
         if work in done and (work.cancelled() or work.exception() is not None):
-            return await work
+            return _task_result(work)
+        if work in done and isinstance(work.result(), _TaskInterrupt):
+            return _task_result(work)
         if monitor_task in done:
-            await monitor_task
-        return await work
+            _task_result(monitor_task)
+        await asyncio.wait((work,))
+        return _task_result(work)
+    except BaseException as error:
+        primary = error
+        raise
     finally:
         for task in (work, monitor_task):
             if not task.done(): task.cancel()
         done, pending = await asyncio.wait((work, monitor_task), timeout=5)
         # Retrieve failures without replacing the original work/monitor failure.
+        cleanup_interrupt = None
         for task in done:
-            if not task.cancelled(): task.exception()
+            if not task.cancelled() and task.exception() is None:
+                result = task.result()
+                if isinstance(result, _TaskInterrupt): cleanup_interrupt = result.error
+        if primary is None and cleanup_interrupt is not None:
+            primary = cleanup_interrupt
         if pending:
+            if primary is not None:
+                primary.snapshotCleanupErrorType = 'ObservationTaskCleanupHeld'
+                raise primary
             error = Held('Owned observation task cleanup held')
             error.snapshotCleanupErrorType = 'ObservationTaskCleanupHeld'
             raise error
+        if cleanup_interrupt is not None and primary is cleanup_interrupt:
+            raise cleanup_interrupt
 
 
 def private_path(path, *, directory=False):
@@ -465,7 +518,7 @@ async def execute_approved(value, approval, *, evidence_directory, config_path=N
     # Failed writes retain the consumed claim and never permit automatic replay.
     receipt_path = claim.with_suffix('.json')
     receipt_stream = _fresh_private_file(receipt_path)
-    started = time.monotonic(); conn = None; observer = None; cancelled = None
+    started = time.monotonic(); conn = None; observer = None; interrupted = None
     receipt = {'format': FORMAT, 'stage': value['stage'], 'status': 'held',
                'packetSha256': sha, 'sourcesSha256': digest(value['sources']),
                'target': value['target'], 'startedAt': utc().isoformat()}
@@ -506,19 +559,21 @@ async def execute_approved(value, approval, *, evidence_directory, config_path=N
             details = error_details(error.__cause__)
             if details['snapshotCleanupErrorType'] is not None:
                 receipt['error']['snapshotCleanupErrorType'] = details['snapshotCleanupErrorType']
-        if isinstance(error, asyncio.CancelledError): cancelled = error
+        if not isinstance(error, Exception): interrupted = error
     finally:
         try:
             if conn is not None:
-                await asyncio.wait_for(conn.close(timeout=5), 5)
+                _unwrapped(await asyncio.wait_for(_contained(conn.close(timeout=5)), 5))
             receipt['cleanupConfirmed'] = not any(v for k,v in receipt.get('error', {}).items()
                 if 'Cleanup' in k or 'Close' in k or 'Terminate' in k)
         except BaseException as error:
             receipt['status'] = 'held'; receipt['cleanupConfirmed'] = False
             receipt['cleanupErrorType'] = type(error).__name__
-            if isinstance(error, asyncio.CancelledError): cancelled = error
+            if not isinstance(error, Exception) and interrupted is None: interrupted = error
             try: conn.terminate()
-            except BaseException: receipt['terminateFailed'] = True
+            except BaseException as failure:
+                receipt['terminateFailed'] = True
+                if not isinstance(failure, Exception) and interrupted is None: interrupted = failure
         if observer is not None:
             receipt['reads'], receipt['cursorEnvelopes'] = observer.reads, observer.cursors
             receipt['metrics'] = observer.summary()
@@ -530,9 +585,12 @@ async def execute_approved(value, approval, *, evidence_directory, config_path=N
             receipt_stream.write(raw)
             receipt_stream.flush()
             os.fsync(receipt_stream.fileno())
+        except BaseException as failure:
+            if interrupted is not None: raise interrupted from failure
+            raise
         finally:
             receipt_stream.close()
-    if cancelled is not None: raise cancelled
+    if interrupted is not None: raise interrupted
     return public_summary(receipt)
 
 

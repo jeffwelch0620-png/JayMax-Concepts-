@@ -63,3 +63,14 @@ tools/run_review_tests.py text eol=lf
 backend/hosted_backup_cli.py text eol=lf
 backend/tests/test_par_qualification_packet.py text eol=lf
 backend/tests/test_local_query_metrics.py text eol=lf
+
+# Reproduce every text source in the opt-in read-only probe manifest.
+# These backend-only rules do not touch the migration/snapshot byte rules above.
+backend/**/*.py text eol=lf
+backend/**/*.sql text eol=lf
+backend/**/*.crt text eol=lf
+tools/ops/**/*.py text eol=lf
+tools/ops/**/*.sql text eol=lf
+tools/ops/**/*.crt text eol=lf
+backend/requirements.txt text eol=lf
+docs/READ_ONLY_HEALTH_CALIBRATION_PROPOSAL_20261023.md text eol=lf

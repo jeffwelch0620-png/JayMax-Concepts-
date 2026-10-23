@@ -1,5 +1,51 @@
 # Local read-only health and calibration probe — October 23, 2026
 
+## Current PR59 review amendment
+
+The owner approved amending the same draft PR for R1/L1/L2, local testing and
+publication, then returning for separate merge approval. Hosted execution and
+credential/grant/schema/connection changes remain held; no service was inspected
+or paused and no private configuration was read.
+
+- **R1:** LF rules cover the complete hashed text set; the probe still hashes raw
+  bytes and refuses an unrefreshed CRLF source. A public source-only Git fixture
+  verifies identical complete packets and source hashes against Git blobs in
+  fresh checkouts of the same commit with both autocrlf settings. A stale-CRLF
+  refusal leaves input bytes unchanged. The clean checkout refresh and dated
+  source-anchor distinction are documented in the design; qualification hashing
+  and pinned migration/snapshot bytes are unchanged.
+- **L1:** an observation cleanup hold attaches a safe cleanup category to the
+  original exception. The private receipt retains typed fingerprint timeout
+  context and SQLSTATE, while the public result excludes both. A cancellation-
+  resistant monitor remained pending through the real five-second cleanup bound;
+  the test then released its owned task. Cleanup-only holds still refuse success.
+- **L2:** task-local KeyboardInterrupt/SystemExit are relayed to the receipt owner,
+  then re-raised after bounded owned cleanup and best-effort receipt persistence.
+  Existing cancellation behavior remains. An isolated child verifies ten cases
+  across health, monitor, connection close, termination and receipt-write failure;
+  the caller receives the same interrupt object and no child task remains.
+
+The fresh broad offline run passed **1,448 cases** (500 methods/items + 948
+subtests), zero failures/errors/skips, in 104.48 seconds. The focused run passed
+**70 cases** (25 methods + 45 subtests) in 45.96 seconds; the ten isolated child
+scenarios are inside one method, not ten additional reported cases. Profiles
+overlap. The prior 18-case local PostgreSQL run remains dated evidence; no fresh
+local database run or hosted observation is claimed for these operator changes.
+Fresh exact-head CI remains a separate gate and includes the database profile.
+
+The refreshed health packet verifies all 91 source bindings with execution
+approval false; SHA-256
+`4507a15e599e3a97f9e949ae8fa1749fae4f9cafa3d17fc0cc66b9a9f74cadb3`.
+The former generated-ACL packet is correctly refused by the current checker.
+All 31 pinned migration SQL files, the schema snapshot and the public CA match
+their accepted byte rules. No qualification hash algorithm or historical receipt
+was changed. This prepared packet is public review material, not execution authority.
+
+Retained amendment reports outside Git: `pr59-amend-offline-20261023.xml` and
+`pr59-amend-focused-20261023.xml`. Earlier packet hashes and test records below
+are superseded historical evidence, not current approvals. The repository plan
+declaration is not proof of the current Render plan or a health failure's cause.
+
 ## PR59 publication and generated-artifact ownership follow-up
 
 The owner approved publication as

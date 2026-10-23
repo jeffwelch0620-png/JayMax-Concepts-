@@ -204,7 +204,9 @@ and fictional functional acceptance remain separate open work.
 These byte hashes identify inspected accepted PR58 source only; they grant no
 execution authority and are not the new probe's execution manifest. The probe
 generates a separate complete source set. Historical proposals, SQL, manifests
-and receipts are unchanged.
+and receipts are unchanged. These are dated working-tree byte anchors: the PR59
+LF checkout refresh changes formerly CRLF Python bytes without changing their Git
+blob content. They must not be substituted for the current probe source bindings.
 
 | File | SHA-256 |
 | --- | --- |
@@ -215,3 +217,43 @@ and receipts are unchanged.
 | `backend/hosted_install_preservation.py` | `3e064e658235e8598cb86c408826ffa0400d03d1df77bd30e9a4114c299204fd` |
 | `backend/hosted_backup.py` | `891164d236c56ad9388a2c943f630d06ff7fffcc92668f54e45c2020064048f8` |
 | `tools/ops/local_query_metrics.py` | `d7a81ed4b9bae8732f86412881616d48fd7728602515fb74c12510acc7e094fb` |
+
+## PR59 review amendments and reproducible packet handoff
+
+The probe continues hashing raw execution bytes. All hashed backend/operator
+Python, SQL and public CA text, requirements and this proposal are pinned to LF
+by `.gitattributes`. Existing migration/snapshot byte rules and qualification
+hashing are unchanged. There currently is no SQL beneath the probe's backend or
+operator roots; the public CA was already LF. A source containing CR now holds
+packet creation/checking before any execution or configuration access.
+
+Use a fresh checkout of the reviewed commit for packet reproduction. For an
+existing checkout, first preserve all edits and confirm each proposed refresh
+target is clean; compare its CRLF-to-LF bytes with its Git blob before replacing
+only that clean text file with the blob bytes. Never discard edits, normalize
+migration/snapshot SQL, run a broad destructive reset, or repair a credential.
+Recheck the pinned SQL/certificate hashes and Git diff afterward. This amendment
+refreshed 85 clean text files, including tests; 35 of the 91 hashed source bytes
+changed solely from CRLF to LF. No Git source content or protected SQL changed.
+The reproducibility test independently hashes Git blobs and compares complete
+packets from fresh checkouts of the same fixture commit with `core.autocrlf=true`
+and `false`. No private input or network operation is involved.
+
+Generate a new packet after the reviewed sources are stable; earlier packet
+hashes are superseded, not approvals. Reviewers can run the packet/check CLI in
+their fresh checkout and compare the complete source map and SHA-256. The CLI
+still cannot execute a health request or database calibration.
+
+On observation cleanup hold, retain the original exception and attach the safe
+cleanup category. Private fingerprint timeout context and SQLSTATE survive;
+public output remains allowlisted. Process-control interrupts, including
+KeyboardInterrupt/SystemExit and cancellation, propagate after bounded owned
+cleanup and best-effort private receipt persistence. Task-local control
+exceptions are relayed to the receipt-owning coroutine so asyncio cannot abort
+the loop before receipt handling. Receipt-write failure cannot swallow the
+original interrupt; the consumed approval is never automatically replayed.
+
+The repository's `render.yaml` plan declaration is not evidence of the current
+hosted plan or cold-start behavior. Hosted inspection remains on hold. A failed
+health observation returns for review rather than inferring its cause from that
+declaration or retrying automatically.

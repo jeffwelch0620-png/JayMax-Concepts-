@@ -13,9 +13,13 @@ The owner-approved [local probe implementation](docs/LOCAL_READ_ONLY_PROBE_20261
 separates health/calibration, exact-stage approval/source bindings, complete scope,
 per-read/cursor-envelope timing and bounded owned cleanup. It is published with
 owner approval as [draft PR59](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/59).
-The CI ownership follow-up protects only freshly created probe artifacts;
-1,443 broad offline and 65 focused cases passed. The prior guarded PostgreSQL
-run passed 18; profiles overlap. Fresh corrected-head CI and review remain separate. Hosted
+The review amendment adds reproducible LF source packets, preserves primary
+timeout diagnostics under cleanup holds and propagates control interrupts after
+receipt handling. All 1,448 broad offline and 70 focused cases passed; ten child
+interrupt scenarios are included inside the focused profile. The 31 pinned
+migration files, schema snapshot and public CA retain their reviewed bytes.
+The prior guarded PostgreSQL run passed 18; profiles overlap. Fresh exact-head
+CI and owner merge approval remain separate. Hosted
 execution, service pauses and credential/grant/schema/connection changes stay held.
 
 ## Dated bounded fingerprint implementation evidence
