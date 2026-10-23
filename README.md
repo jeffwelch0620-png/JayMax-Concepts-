@@ -8,7 +8,8 @@ reviewed 25f1e14; reviewed-head and merged-main CI each passed all four checks.
 The approved existing automatic Render test deployment has not been inspected.
 
 The [local attribution follow-up](docs/LOCAL_PAR_ATTRIBUTION_20261022.md) is
-complete locally and unpushed, pending the owner's next draft-push decision.
+published as [draft PR56](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/56)
+with owner approval, for independent review and fresh CI; merge remains separate.
 All 1,289 offline cases passed. The guarded restored-data run measured 370
 preparation calls / 24.359 s and 1,112 apply/fresh-verification calls / 75.047 s,
 with zero unclassified calls, exact preservation and owned cleanup. The two
@@ -43,8 +44,8 @@ previously; no elapsed-time speedup or hosted timing proof is claimed. The same
 120-table / 45,648-row snapshot matched and original local inventory/server state
 was restored. These original local results are historical; see the amendment
 record for fresh CI and the completed merge. Hosted work and credential, grant
-and schema changes remain on hold. The separate local attribution branch has
-not been pushed; publication, fresh CI, merge and hosted approval are separate.
+and schema changes remain on hold. The separate attribution follow-up is now
+draft PR56; fresh CI, independent review, merge and hosted approval are separate.
 
 ## Current reviewed-par installation position — October 22
 

@@ -332,8 +332,9 @@ and hosted behavior have not been inspected. The
 zero unclassified calls, exact preservation and complete owned cleanup. Only
 diagnostic attribution and checkout guidance changed; original-column/backup
 hash algorithms, source SQL, timeouts and guards remain unchanged. The new
-follow-up is unpushed and needs owner approval before draft publication, then
-fresh CI/independent review/merge. The approximately 537-second additive model
+follow-up is published with owner approval as draft PR56, with fresh CI,
+independent review and merge approval remaining separate. The approximately
+537-second additive model
 still exceeds the proposed 450-second planning screen; installation and all
 hosted/service/credential/grant/schema/connection changes remain held. No active
 maintenance window or hosted acceptance is created by these local results.

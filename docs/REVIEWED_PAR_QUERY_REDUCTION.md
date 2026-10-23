@@ -136,8 +136,9 @@ collection sections. The historical index installer and hosted adapter are uncha
 
 The function-timing rerun and all final-head/merged-main CI checks passed.
 PR55 merged with separate owner approval as ec0480b. The
-[local attribution follow-up](LOCAL_PAR_ATTRIBUTION_20261022.md) is complete
-locally and awaits owner approval before its next draft push.
+[local attribution follow-up](LOCAL_PAR_ATTRIBUTION_20261022.md) is published
+with owner approval as draft PR56, for independent review and fresh CI. Merge
+remains a separate owner decision.
 Even improved loopback timings do not prove hosted fit; retain the separate
 health, writer/drain, fresh backup/restore, exact-plan, installation-window and
 fictional live acceptance approvals in the
