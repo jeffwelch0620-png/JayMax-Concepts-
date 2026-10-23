@@ -136,7 +136,7 @@ def validate(plan, review, reviewed_target, binding):
 
 async def backup_match(conn, facts, *, after=False):
     await conn.execute("SET LOCAL statement_timeout='20s'")
-    actual = await backup.fingerprint(conn, row_hashes=True)
+    actual = await backup.fingerprint_batched(conn, row_hashes=True)
     if after:
         # The core proves the exact new table/catalog and one ledger row.
         new = actual['tables'].get(engine.TABLE)

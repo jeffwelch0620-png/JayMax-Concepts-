@@ -20,8 +20,16 @@ OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrit
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests',
-                    'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests']
+                    'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
+                    'batched_fingerprints::BatchedFingerprintGuards']
 DATABASE_CASES = (
+ ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_original_projection_oracle_exclusions_and_chunk_boundaries'),
+ ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_backup_oracle_fallback_sequences_and_path_counters'),
+ ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_late_rows_and_original_columns_detect_drift'),
+ ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_missing_duplicate_extra_malformed_positions_refuse_without_fallback'),
+ ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_timeout_fails_closed_and_recovers_same_connection'),
+ ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_new_metric_bindings_attribute_both_families'),
+ ('batched_fingerprints','BatchedFingerprintDatabaseTests','test_snapshot_phases_do_not_reuse_digests'),
  ('local_query_metrics_pg','LocalQueryMetricsDatabaseTests','test_iteration_cached_uncached_empty_exact_batch_and_early_exit'),
  ('local_query_metrics_pg','LocalQueryMetricsDatabaseTests','test_awaited_cursor_manual_fetch_forward_and_driver_refusals'),
  ('local_query_metrics_pg','LocalQueryMetricsDatabaseTests','test_nested_context_and_manual_transactions_preserve_commit_and_rollback'),

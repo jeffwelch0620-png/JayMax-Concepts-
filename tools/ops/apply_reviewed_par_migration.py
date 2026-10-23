@@ -168,7 +168,7 @@ async def _snapshot(conn):
     value = {'identity': identity, 'ledger': await preservation.ledger_fingerprints(conn),
         'ledgerCatalog': await preservation.ledger_contract(conn),
         'columns': [{'schema': k[0], 'table': k[1], 'columns': v} for k,v in sorted(columns.items())],
-        'rows': await preservation.fingerprints(conn,columns),
+        'rows': await preservation.fingerprints_batched(conn,columns),
         'catalog': await capture_catalog(conn)}
     # Table ACLs do not include column grants or schema default privileges.
     # The par migration adds neither; preserve these separately and exactly.

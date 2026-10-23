@@ -447,7 +447,7 @@ class ParInstallDatabaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_outcome_reuses_only_current_validated_projection_and_reads_fresh(self):
         plan=await self.plan();await engine.apply(self.conn,plan)
-        with patch.object(engine.preservation,'fingerprints',wraps=engine.preservation.fingerprints) as scans:
+        with patch.object(engine.preservation,'fingerprints_batched',wraps=engine.preservation.fingerprints_batched) as scans:
             self.assertEqual((await self.verify(plan))['status'],'verified_applied')
             self.assertEqual(scans.await_count,1)
         for sql,reason in [("UPDATE public.stores SET name='TEST ONLY late row change' WHERE id='berts'",'Original application rows'),

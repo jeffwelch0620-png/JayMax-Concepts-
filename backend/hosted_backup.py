@@ -414,6 +414,64 @@ async def relation_fingerprint(conn, quoted, kind, row_hashes=True, *, server_ag
     return {'rows': count, 'sha256': sha.hexdigest()}
 
 
+async def relation_fingerprints_batched(conn, relations, row_hashes=True, *,
+                                      server_aggregation=True, chunk_size=4):
+    """Par-only batches; preserve each backup probe, fallback and path counter."""
+    from hosted_install_preservation import checked_fingerprint_chunk, checked_fingerprint_chunk_size
+    chunk_size = checked_fingerprint_chunk_size(chunk_size)
+    if not conn.is_in_transaction():
+        raise BackupError('Batched backup fingerprints require a caller snapshot')
+    await conn.execute("SET LOCAL statement_timeout='20s'")
+    probe_rows = MAX_FINGERPRINT_AGGREGATE_BYTES // ROW_HASH_LINE_BYTES
+    if row_hashes and server_aggregation and probe_rows < 1:
+        raise BackupError('Fingerprint aggregate bound must allow a row')
+    tables = {}
+    entries = list(relations)
+    names = [r['nspname'] + '.' + r['relname'] for r in entries]
+    if len(set(names)) != len(names) or any(r['kind'] not in ('r','p','m','S') for r in entries):
+        raise BackupError('Ambiguous backup relation coverage')
+    for start in range(0, len(entries), chunk_size):
+        chunk = entries[start:start + chunk_size]
+        queries, positions = [], []
+        for offset, relation in enumerate(chunk):
+            if relation['kind'] == 'S' or not row_hashes or not server_aggregation:
+                continue
+            position = start + offset
+            quoted = native.quoted(relation['nspname']) + '.' + native.quoted(relation['relname'])
+            queries.append(f'''(SELECT {position}::integer AS position, count(*) AS rows,
+                encode(sha256(convert_to(coalesce(string_agg(value || E'\\n', ''
+                    ORDER BY value COLLATE "C"), ''), 'UTF8')), 'hex') AS sha256
+                FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value
+                    FROM {quoted} t LIMIT $1::bigint) hashed)''')
+            positions.append(position)
+        facts = (checked_fingerprint_chunk(await conn.fetch(' UNION ALL '.join(queries), probe_rows),
+                                           positions, max_rows=probe_rows) if queries else {})
+        # Validate all fast results before using any member of this chunk. A
+        # timeout/malformed result never causes a retry or cursor error fallback.
+        for offset, relation in enumerate(chunk):
+            name = relation['nspname'] + '.' + relation['relname']
+            quoted = native.quoted(relation['nspname']) + '.' + native.quoted(relation['relname'])
+            if start + offset not in facts:
+                fact = await relation_fingerprint(conn, quoted, relation['kind'], row_hashes,
+                                                  server_aggregation=server_aggregation)
+            else:
+                fact = facts[start + offset]
+                if fact['rows'] < probe_rows:
+                    record_fingerprint_path('serverAggregateRelations')
+                else:
+                    # Full probe is inconclusive. Discard its digest and stream
+                    # the entire relation with the original byte/order rules.
+                    sql = f'''SELECT value FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value FROM {quoted} t) hashed ORDER BY value COLLATE "C"'''
+                    count = 0
+                    sha = hashlib.sha256()
+                    async for row in conn.cursor(sql, prefetch=100):
+                        sha.update(row['value'].encode()); sha.update(b'\n'); count += 1
+                    fact = {'rows': count, 'sha256': sha.hexdigest()}
+                    record_fingerprint_path('cursorFallbackRelations')
+            tables[name] = {**fact, 'kind': relation['kind']}
+    return tables
+
+
 async def fingerprint(conn, row_hashes=True, *, server_aggregation=True):
     # Deparser output is session-sensitive (pg_dump uses quote_all_identifiers).
     # Normalize within the caller's snapshot, without changing role/app defaults.
@@ -452,6 +510,37 @@ async def fingerprint(conn, row_hashes=True, *, server_aggregation=True):
         tables[name] = {**fact, 'kind': relation['kind']}
     return {'tables': tables, 'catalog': catalog}
 
+
+async def fingerprint_batched(conn, row_hashes=True, *, server_aggregation=True):
+    if not conn.is_in_transaction():
+        raise BackupError("Batched backup fingerprint requires a caller snapshot")
+    await conn.execute("SET LOCAL statement_timeout='20s'")
+    # Deparser output is session-sensitive (pg_dump uses quote_all_identifiers).
+    # Normalize within the caller's snapshot, without changing role/app defaults.
+    await conn.execute("SET LOCAL quote_all_identifiers=off; SET LOCAL TIME ZONE 'UTC'; SET LOCAL search_path=pg_catalog; SET LOCAL DateStyle='ISO,YMD'; SET LOCAL IntervalStyle=postgres; SET LOCAL bytea_output=hex; SET LOCAL extra_float_digits=3; SET LOCAL standard_conforming_strings=on; SET LOCAL row_security=off")
+    catalog = {}
+    for key, sql in native.CATALOG.items():
+        if key == 'extensions':
+            continue  # Dependency bootstrap is verified separately, outside application scope.
+        sql = sql.replace(native.NAMESPACES, 'n.nspname=ANY($1::text[])')
+        if key == 'functions':
+            sql = sql.replace('p.proacl::text AS acl', "ARRAY(SELECT a::text FROM unnest(coalesce(p.proacl,acldefault('f',p.proowner))) a ORDER BY a::text) AS acl")
+        sql = sql.replace('ORDER BY a::text', 'ORDER BY a::text COLLATE "C"')
+        rows = await conn.fetch('SELECT to_jsonb(r)::text AS value FROM (' + sql + ') r ORDER BY to_jsonb(r)::text', list(SCHEMAS))
+        # Database collations differ between hosted Linux and local Windows.
+        # Compare identical records in a portable client order, not locale order.
+        catalog[key] = {'objects': len(rows), 'sha256': digest('\n'.join(sorted(r['value'] for r in rows)).encode())}
+    acl = await conn.fetch('''SELECT n.nspname,pg_get_userbyid(d.defaclrole) AS role,d.defaclobjtype::text AS kind,
+        ARRAY(SELECT a::text FROM unnest(d.defaclacl) a ORDER BY a::text COLLATE "C") AS acl
+        FROM pg_default_acl d JOIN pg_namespace n ON n.oid=d.defaclnamespace WHERE n.nspname=ANY($1::text[])
+        ORDER BY 1,2,3''', list(SCHEMAS))
+    catalog['default_acl'] = {'objects': len(acl), 'sha256': digest('\n'.join(sorted(json.dumps(dict(r), sort_keys=True) for r in acl)).encode())}
+    relations = await conn.fetch('''SELECT n.nspname,c.relname,c.relkind::text AS kind FROM pg_class c
+        JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=ANY($1::text[])
+        AND c.relkind IN ('r','p','m','S') ORDER BY 1,2''', list(SCHEMAS))
+    tables = await relation_fingerprints_batched(conn, relations, row_hashes,
+                                                server_aggregation=server_aggregation)
+    return {'tables': tables, 'catalog': catalog}
 
 async def dependencies(conn):
     """Record referenced managed objects. Unsupported dependencies hold recovery."""
