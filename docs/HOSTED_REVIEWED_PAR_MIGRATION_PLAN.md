@@ -12,8 +12,9 @@ dated additive sensitivity is 362.527 seconds. These are local
 observations and planning arithmetic, not calibrated hosted timing or approval.
 Public cursor/transaction API counts are not protocol round trips.
 
-The next step is the reserved owner prompt before draft publication, followed by
-fresh CI, independent review and separate merge approval. Hosted work/service
+The owner approved publication as
+[draft PR58](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/58).
+Next: fresh exact-head CI and independent review, then separate merge approval. Hosted work/service
 controls and credential, grant, schema and connection changes remain held. No
 maintenance window is active. Earlier dated planning/qualification records below
 confer no current execution authority.

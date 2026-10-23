@@ -17,8 +17,9 @@ passed. The guarded retained-data rehearsal passed with exact preservation and
 owned cleanup: **764 apply/fresh-verification query calls / 45.063 seconds**,
 31.29% fewer calls than PR57's dated 1,112 / 75.218 seconds. The
 old sensitivity gives 362.527 seconds; this is planning arithmetic,
-not hosted timing proof. API operations are not network round trips. No new draft
-has been pushed; prompt the owner before publication. Hosted work/service controls
+not hosted timing proof. API operations are not network round trips. The owner
+approved publication as [draft PR58](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/58)
+for fresh CI and independent review; merge approval remains separate. Hosted work/service controls
 and credential, grant, schema and connection changes remain held.
 
 ### Accepted PR57 measurement evidence
