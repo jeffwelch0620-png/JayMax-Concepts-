@@ -1,10 +1,11 @@
 """Fictional driver calls prove timing attribution, restoration and redaction."""
 import asyncio
 import json
+import inspect
 from types import SimpleNamespace
 import unittest
 from local_query_metrics import (MeasuredConnection, finish, instrument_functions,
-                                query_scope, relation_group, GROUPS)
+                                query_scope, relation_group, GROUPS, par_attribution_bindings)
 
 
 class LocalQueryMetricsTests(unittest.IsolatedAsyncioTestCase):
@@ -48,14 +49,14 @@ class LocalQueryMetricsTests(unittest.IsolatedAsyncioTestCase):
         ready = asyncio.Event()
         async def fetch(*args):
             ready.set(); await asyncio.sleep(0); return 1
-        driver = SimpleNamespace(fetch=fetch, transaction=lambda: 'TEST ONLY transaction')
+        driver = SimpleNamespace(fetch=fetch, is_closed=lambda: False)
         metrics = {}; conn = MeasuredConnection(driver, metrics)
         async def scoped():
             with query_scope('capture_catalog'): await conn.fetch('TEST ONLY')
         async def unscoped():
             await ready.wait(); await conn.fetch('TEST ONLY')
         await asyncio.gather(scoped(), unscoped())
-        self.assertEqual(conn.transaction(), 'TEST ONLY transaction')
+        self.assertFalse(conn.is_closed())
         finish(metrics)
         self.assertEqual(metrics['queryCalls'], 2)
         self.assertEqual(metrics['exclusiveGroups']['capture_catalog']['queryCalls'], 1)
@@ -162,5 +163,187 @@ class LocalQueryMetricsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, [{'value':'TEST ONLY sequence state'}])
         self.assertEqual(metrics['queryCalls'], 0)
         self.assertEqual(metrics['exclusiveGroups']['sequences']['queryCalls'], 0)
+        self.assertEqual(metrics['driverOperations']['cursor_next']['calls'], 2)
+        self.assertEqual(metrics['driverOperations']['cursor_next']['exhausted'], 1)
+        self.assertEqual(metrics['driverOperationGroups']['sequences']['cursor_next']['completed'], 1)
         self.assertEqual(set(metrics['exclusiveGroups']), set(GROUPS))
         self.assertNotIn('TEST ONLY', json.dumps(metrics))
+
+    def test_binding_factory_resolves_actual_coroutines_and_fixed_labels(self):
+        import hosted_reviewed_pars as adapter
+        bindings = par_attribution_bindings(adapter)
+        self.assertGreater(len(bindings), 0)
+        for owner, attribute, label in bindings:
+            with self.subTest(attribute=attribute):
+                self.assertTrue(inspect.iscoroutinefunction(getattr(owner, attribute)))
+                if callable(label):
+                    for kind in ('S', 'r'):
+                        self.assertIn(label((None, 'TEST ONLY identifier', kind), {}), GROUPS)
+                        self.assertIn(label((), {'kind': kind}), GROUPS)
+                        self.assertEqual(label((None, '', kind), {}),
+                                         'sequences' if kind == 'S' else 'backup_fingerprints')
+                else:
+                    self.assertIn(label, GROUPS)
+
+    async def test_cursor_iteration_observes_row_requests_not_inferred_batches(self):
+        for count in (0, 100, 250):
+            with self.subTest(count=count):
+                async def rows():
+                    for number in range(count): yield number
+                seen = []
+                def factory(*args, **kwargs):
+                    seen.append((args, kwargs)); return rows()
+                metrics = {}; conn = MeasuredConnection(SimpleNamespace(cursor=factory), metrics)
+                with query_scope('backup_fingerprints'):
+                    result = [row async for row in conn.cursor('TEST ONLY query', 7, prefetch=100)]
+                self.assertEqual(result, list(range(count)))
+                self.assertEqual(seen, [(('TEST ONLY query', 7), {'prefetch': 100})])
+                finish(metrics)
+                operations = metrics['driverOperations']
+                self.assertEqual(operations['cursor_create']['calls'], 1)
+                self.assertEqual(operations['cursor_iter']['calls'], 1)
+                self.assertEqual(operations['cursor_next']['completed'], count)
+                self.assertEqual(operations['cursor_next']['calls'], count + 1)
+                self.assertEqual(operations['cursor_next']['exhausted'], 1)
+                self.assertEqual(metrics['queryCalls'], 0)
+                self.assertNotIn('TEST ONLY', json.dumps(metrics))
+                self.assertNotIn('protocolRoundTrips', metrics)
+
+    async def test_early_cursor_exit_does_not_invent_close_or_exhaustion(self):
+        async def rows():
+            yield 1; yield 2
+        source = rows()
+        metrics = {}; conn = MeasuredConnection(SimpleNamespace(cursor=lambda *a: source), metrics)
+        try:
+            async for row in conn.cursor('TEST ONLY query'):
+                self.assertEqual(row, 1); break
+            finish(metrics)
+            self.assertEqual(metrics['driverOperations']['cursor_next']['completed'], 1)
+            self.assertEqual(metrics['driverOperations']['cursor_next']['exhausted'], 0)
+            self.assertFalse(any('close' in key for key in metrics['driverOperations']))
+        finally:
+            await source.aclose()
+
+    async def test_awaited_cursor_forwards_manual_operations_and_values(self):
+        from unittest.mock import AsyncMock
+        target = SimpleNamespace(fetch=AsyncMock(return_value=['TEST ONLY result']),
+            fetchrow=AsyncMock(return_value=None), forward=AsyncMock(return_value=7))
+        class Factory:
+            def __await__(self):
+                async def ready(): return target
+                return ready().__await__()
+        metrics = {}; conn = MeasuredConnection(SimpleNamespace(cursor=lambda *a, **k: Factory()), metrics)
+        cursor = await conn.cursor('TEST ONLY query', timeout=2)
+        self.assertEqual(await cursor.fetch(3, timeout=1), ['TEST ONLY result'])
+        self.assertIsNone(await cursor.fetchrow())
+        self.assertEqual(await cursor.forward(9), 7)
+        target.fetch.assert_awaited_once_with(3, timeout=1)
+        target.forward.assert_awaited_once_with(9)
+        finish(metrics)
+        for operation in ('cursor_await', 'cursor_fetch', 'cursor_fetchrow', 'cursor_forward'):
+            self.assertEqual(metrics['driverOperations'][operation]['completed'], 1)
+        self.assertNotIn('TEST ONLY', json.dumps(metrics))
+
+    async def test_cursor_failures_and_cancellation_propagate_without_data(self):
+        for error in (ValueError('TEST ONLY failure'), asyncio.CancelledError('TEST ONLY cancel')):
+            with self.subTest(error=type(error).__name__):
+                class Iterator:
+                    def __aiter__(self): return self
+                    async def __anext__(self): raise error
+                metrics = {}; conn = MeasuredConnection(SimpleNamespace(cursor=lambda *a: Iterator()), metrics)
+                with self.assertRaises(type(error)) as caught:
+                    async for _ in conn.cursor('TEST ONLY query'): pass
+                self.assertIs(caught.exception, error)
+                finish(metrics)
+                outcome = 'cancelled' if isinstance(error, asyncio.CancelledError) else 'errors'
+                self.assertEqual(metrics['driverOperations']['cursor_next'][outcome], 1)
+                self.assertNotIn('TEST ONLY', json.dumps(metrics))
+
+    async def test_factory_and_iterator_errors_are_recorded_without_extra_driver_calls(self):
+        from unittest.mock import Mock
+        error = ValueError('TEST ONLY invalid cursor')
+        driver = SimpleNamespace(cursor=Mock(side_effect=error), transaction=Mock(side_effect=error))
+        metrics = {}; conn = MeasuredConnection(driver, metrics)
+        for method in (conn.cursor, conn.transaction):
+            with self.assertRaises(ValueError) as caught: method('TEST ONLY')
+            self.assertIs(caught.exception, error)
+        class BadFactory:
+            def __aiter__(self): raise error
+            def __await__(self):
+                async def refuse(): raise error
+                return refuse().__await__()
+        driver.cursor.side_effect = None; driver.cursor.return_value = BadFactory()
+        with self.assertRaises(ValueError):
+            async for _ in conn.cursor('TEST ONLY'): pass
+        with self.assertRaises(ValueError): await conn.cursor('TEST ONLY')
+        finish(metrics)
+        for operation in ('cursor_create', 'cursor_iter', 'cursor_await', 'transaction_create'):
+            self.assertEqual(metrics['driverOperations'][operation]['errors'], 1)
+        self.assertEqual(metrics['queryCalls'], 0)
+        self.assertNotIn('TEST ONLY', json.dumps(metrics))
+
+    async def test_transactions_delegate_context_result_exception_tuple_and_suppression(self):
+        from unittest.mock import AsyncMock, Mock
+        marker = object()
+        target = SimpleNamespace(__aenter__=AsyncMock(return_value=marker),
+                                 __aexit__=AsyncMock(return_value=True))
+        driver = SimpleNamespace(transaction=Mock(return_value=target))
+        metrics = {}; conn = MeasuredConnection(driver, metrics)
+        error = RuntimeError('TEST ONLY suppressed')
+        with query_scope('backup_catalog'):
+            async with conn.transaction(readonly=True) as entered:
+                self.assertIs(entered, marker); raise error
+        driver.transaction.assert_called_once_with(readonly=True)
+        args = target.__aexit__.await_args.args
+        self.assertIs(args[0], RuntimeError); self.assertIs(args[1], error)
+        self.assertIsNotNone(args[2])
+        finish(metrics)
+        for op in ('transaction_create', 'transaction_enter', 'transaction_exit'):
+            self.assertEqual(metrics['driverOperations'][op]['completed'], 1)
+            self.assertEqual(metrics['driverOperationGroups']['transaction_control'][op]['calls'], 1)
+        self.assertEqual(metrics['driverOperations']['transaction_commit']['calls'], 0)
+        self.assertEqual(metrics['driverOperations']['transaction_rollback']['calls'], 0)
+        self.assertNotIn('TEST ONLY', json.dumps(metrics))
+
+    async def test_manual_transaction_results_errors_and_cancellation_stay_separate(self):
+        from unittest.mock import AsyncMock
+        error = ValueError('TEST ONLY commit refused')
+        target = SimpleNamespace(start=AsyncMock(return_value='TEST ONLY started'),
+            commit=AsyncMock(side_effect=error), rollback=AsyncMock(side_effect=asyncio.CancelledError()))
+        metrics = {}; conn = MeasuredConnection(SimpleNamespace(transaction=lambda: target), metrics)
+        transaction = conn.transaction()
+        self.assertEqual(await transaction.start(), 'TEST ONLY started')
+        with self.assertRaises(ValueError) as caught: await transaction.commit()
+        self.assertIs(caught.exception, error)
+        with self.assertRaises(asyncio.CancelledError): await transaction.rollback()
+        finish(metrics)
+        self.assertEqual(metrics['driverOperations']['transaction_start']['completed'], 1)
+        self.assertEqual(metrics['driverOperations']['transaction_commit']['errors'], 1)
+        self.assertEqual(metrics['driverOperations']['transaction_rollback']['cancelled'], 1)
+        self.assertEqual(metrics['queryCalls'], 0)
+        self.assertNotIn('TEST ONLY', json.dumps(metrics))
+
+    async def test_cursor_operation_scopes_are_task_local(self):
+        async def rows():
+            await asyncio.sleep(0); yield 1
+        metrics = {}; conn = MeasuredConnection(SimpleNamespace(cursor=lambda *a: rows()), metrics)
+        async def read(group):
+            with query_scope(group):
+                return [value async for value in conn.cursor('TEST ONLY')]
+        self.assertEqual(await asyncio.gather(read('sequences'), read('backup_fingerprints')), [[1], [1]])
+        finish(metrics)
+        for group in ('sequences', 'backup_fingerprints'):
+            self.assertEqual(metrics['driverOperationGroups'][group]['cursor_next']['calls'], 2)
+        self.assertEqual(metrics['driverOperationGroups']['other']['cursor_next']['calls'], 0)
+
+    async def test_operation_durations_are_exclusive_and_finish_detects_tampering(self):
+        async def rows(): yield 7
+        ticks = iter([0, .25, 1, 1.5, 2, 2.75, 3, 4])
+        metrics = {}; conn = MeasuredConnection(SimpleNamespace(cursor=lambda *a: rows()), metrics,
+                                                clock=lambda: next(ticks))
+        with query_scope('sequences'):
+            self.assertEqual([value async for value in conn.cursor('TEST ONLY')], [7])
+        finish(metrics)
+        self.assertEqual(metrics['driverOperations']['cursor_next']['seconds'], 1.75)
+        metrics['driverOperationGroups']['sequences']['cursor_next']['completed'] += 1
+        with self.assertRaises(ValueError): finish(metrics)
