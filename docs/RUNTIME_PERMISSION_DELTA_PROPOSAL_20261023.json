@@ -1,0 +1,169 @@
+{
+  "format": "jmax-coordinated-permission-delta-proposal-v2",
+  "status": "local design; not deployable grant SQL",
+  "executionApproved": false,
+  "roleNamesSelected": false,
+  "runtimeModel": "separate trusted server inventory and auxiliary account roles; application-authorized location access",
+  "parTable": {
+    "name": "purchasing.inventory_par_versions",
+    "allow": [
+      "SELECT",
+      "INSERT"
+    ],
+    "deny": [
+      "UPDATE",
+      "DELETE",
+      "TRUNCATE",
+      "REFERENCES",
+      "TRIGGER",
+      "MAINTAIN"
+    ],
+    "requiredRls": "explicit policies naming only the selected trusted inventory backend role",
+    "browserRolesAllowed": []
+  },
+  "parDependencies": {
+    "purchasing.unit_profiles": [
+      "SELECT"
+    ],
+    "purchasing.item_bases": [
+      "SELECT"
+    ],
+    "public.store_state": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ]
+  },
+  "preserveExistingReviewedCatalogShareLockPrivileges": true,
+  "auxiliaryTables": {
+    "public.app_users": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "public.push_subscriptions": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ]
+  },
+  "ledgerWritesAllowed": false,
+  "objectOwnershipAllowed": false,
+  "roleMembershipsAllowed": false,
+  "rlsBypassAllowed": false,
+  "databaseOrRoleCreationAllowed": false,
+  "secretValuesIncluded": false,
+  "cutoverBindingsToReviewTogether": [
+    "DATABASE_URL",
+    "AUXILIARY_DATABASE_URL"
+  ],
+  "requiresBeforeLiveApproval": [
+    "fresh installed catalog and actual runtime role identities",
+    "complete per-object native and public matrix reconciliation",
+    "exact role-addressed RLS and dependency SQL",
+    "local allowed and denied workflow tests including pool restart",
+    "reviewed PR and fresh CI",
+    "concrete consumer inventory, recovery plan and owner approval"
+  ],
+  "primaryRoleRequired": {
+    "public.activity_log": [
+      "INSERT"
+    ]
+  },
+  "activityLog": {
+    "pool": "db_pg.pool (primary)",
+    "sourceExpectedRls": true,
+    "installedState": "unverified; separately approved catalog read required",
+    "proposedRequiredPolicy": {
+      "command": "INSERT",
+      "role": "selected trusted inventory login; not yet bound",
+      "withCheck": "reviewed server-only expression; no browser policy"
+    },
+    "existingCandidatePrivileges": [
+      "SELECT",
+      "INSERT"
+    ],
+    "selectDisposition": "No product read route found; justify or reduce SELECT in separate R1 manifest/validator/test change, not this slice",
+    "requestFailurePolicy": "Current middleware catches audit write errors; missing grant does not imply HTTP failure",
+    "requiredTests": [
+      "Allowed request creates exactly one attributable row",
+      "Denied INSERT/policy yields no row and sanitized logging failure; HTTP may succeed"
+    ]
+  },
+  "dependencySecurity": {
+    "purchasing.unit_profiles": {
+      "sourceExpectedRls": false,
+      "requiredForParReview": [
+        "SELECT"
+      ],
+      "policyIfSourceStateMatches": null
+    },
+    "purchasing.item_bases": {
+      "sourceExpectedRls": false,
+      "requiredForParReview": [
+        "SELECT"
+      ],
+      "policyIfSourceStateMatches": null
+    },
+    "public.store_state": {
+      "sourceExpectedRls": true,
+      "requiredForParReview": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "requiredPolicyCommands": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "policyRoles": "selected trusted inventory login/cohort only; not bound"
+    }
+  },
+  "installedDependencyStatesVerified": false,
+  "dependencyPolicyTestRule": "Test grant denial always; policy denial only on RLS-enabled caller reads/writes. FK integrity checks bypass RLS.",
+  "catalogShareLockDecision": {
+    "public.items": {
+      "chosenPrivilege": "UPDATE",
+      "existingCandidatePrivilege": true,
+      "newGrantApproved": false,
+      "reason": "Preserve reviewed runtime catalog rights/SHARE locks; existing metadata guards stay enforced. Justify each real write path in R1."
+    },
+    "public.store_items": {
+      "chosenPrivilege": "UPDATE",
+      "existingCandidatePrivilege": true,
+      "newGrantApproved": false,
+      "reason": "Preserve reviewed runtime catalog rights/SHARE locks; existing metadata guards stay enforced. Justify each real write path in R1."
+    },
+    "public.dishes": {
+      "chosenPrivilege": "UPDATE",
+      "existingCandidatePrivilege": true,
+      "newGrantApproved": false,
+      "reason": "Preserve reviewed runtime catalog rights/SHARE locks; existing metadata guards stay enforced. Justify each real write path in R1."
+    },
+    "public.dish_lines": {
+      "chosenPrivilege": "UPDATE",
+      "existingCandidatePrivilege": true,
+      "newGrantApproved": false,
+      "reason": "Preserve reviewed runtime catalog rights/SHARE locks; existing metadata guards stay enforced. Justify each real write path in R1."
+    },
+    "public.prep_items": {
+      "chosenPrivilege": "UPDATE",
+      "existingCandidatePrivilege": true,
+      "newGrantApproved": false,
+      "reason": "Preserve reviewed runtime catalog rights/SHARE locks; existing metadata guards stay enforced. Justify each real write path in R1."
+    },
+    "public.staff_members": {
+      "chosenPrivilege": "UPDATE",
+      "existingCandidatePrivilege": true,
+      "newGrantApproved": false,
+      "reason": "Preserve reviewed runtime catalog rights/SHARE locks; existing metadata guards stay enforced. Justify each real write path in R1."
+    }
+  },
+  "maintainAlternativeSelected": false,
+  "maintainReason": "MAINTAIN also authorizes maintenance/broader locks, not a lock-only capability; keep par MAINTAIN denied",
+  "requiredDualBindingTest": "Detect DATABASE_URL-only cutover with auxiliary unset; verify both actors and all same-target/no-fallback/restart paths",
+  "requiredTestsStatus": "Specifications only; no runtime or database tests run in this documentation slice"
+}
