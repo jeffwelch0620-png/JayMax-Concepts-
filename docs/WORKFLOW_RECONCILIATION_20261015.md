@@ -15,10 +15,13 @@ bounded audit breakdown/sampling with explicit coverage and envelope-expiry
 diagnostics. PR62 accepted the [N3 disposable PostgreSQL test](S1_COLLECTOR_POSTGRES_TEST_20261023.md).
 PR63 accepted the [F1/F2/M1 collector follow-up](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md).
 The owner authorized the local [L1/L2/L3 follow-up](S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md)
-and local validation, with a prompt before draft publication. It adds visibility
+and local validation, then approved draft PR64 publication and its C1 amendment.
+It adds aggregate visibility
 summary, newest session sampling/full groups and ledger consistency; v3 replaces
-the current output contract for future handoffs. No new push, follow-up merge or
-hosted execution is authorized. PIN-storage remediation stays in a future security slice.
+the current output contract for future handoffs. C1 separates complete aggregate
+coverage from intentionally bounded record/session samples. Pushing the amendment
+to existing PR64 is authorized; fresh CI and merge approval remain separate.
+No hosted execution is authorized. PIN-storage remediation stays in a future security slice.
 The earlier checkpoints below retain their dated results and approval boundaries.
 
 **Historical October 21 continuation:** accepted main was PR52

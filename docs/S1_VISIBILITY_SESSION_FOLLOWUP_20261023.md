@@ -25,21 +25,38 @@ The public receipt adds `coverageComplete`, a boolean or null:
 
 | Value | Meaning |
 | --- | --- |
-| null | At least one audit/metadata truncation flag or auditTotal is not durably observed. Unknown takes precedence even if another flag already reports truncation. |
-| true | status is complete, auditTotal is an exact integer (not bool), and every audit/metadata key ending in Truncated is exactly false. This includes sessionGroupsTruncated. |
-| false | All required visibility inputs are known, but execution is not complete, the total is invalid, or at least one relevant flag reports truncation. |
+| null | A required aggregate-coverage flag or auditTotal is not durably observed. Unknown takes precedence even if another coverage flag reports truncation. |
+| true | status is complete, auditTotal is an exact integer (not bool), and breakdownTruncated, sessionGroupsTruncated, ledgerTruncated and policiesTruncated are each exactly false. |
+| false | All required aggregate inputs are known, but execution is not complete, the total is invalid, or at least one coverage flag reports truncation. |
+
+C1 corrects the initial PR63 L1 specification. Coverage flags are explicitly
+`breakdownTruncated`, `sessionGroupsTruncated`, `ledgerTruncated` and
+`policiesTruncated`. Sample flags `recordsTruncated` and `sessionsTruncated`
+remain in the public receipt unchanged and are informational: intentionally
+bounded samples do not make complete aggregates incomplete. Sample flags alone,
+including an unknown sample flag, do not determine aggregate completeness.
+Failed execution still reports false when aggregates are known; missing or
+unpersisted aggregates report null. Session total stays in the private durable
+session checkpoint alongside its group-coverage flag.
+
+Ledger truncation remains consequential because count/max do not represent all
+migration version/name entries. The retained ledger sample therefore cannot
+claim complete ledger visibility when more than 64 entries exist.
 
 Operators must inspect **both status and coverageComplete**, then the individual
-flags and private evidence. Neither field certifies S1/security acceptance,
+coverage and sample flags and private evidence. coverageComplete concerns
+aggregate visibility, not sample completeness or review of every activity row.
+Neither field certifies S1/security acceptance,
 actor attribution, complete middleware logging, permissions, writer drain or
 installation readiness. A complete recorded-activity sample does not establish
 that every security-relevant request was recorded or reviewed.
 
-The review package's full-success fixture has 250 matching audit rows and a
-200-row sample, so it correctly asserts false rather than the package's proposed
-true. A separate 100-row fixture establishes true. The 70-row ledger fixture
-also uses the 100-row baseline, leaving ledger truncation as the sole incomplete
-visibility flag. Test profiles retain these distinctions.
+The 250-row audit fixture now asserts true aggregate coverage alongside
+recordsTruncated true. The 100-row fixture retains a smaller control. The 70-row
+ledger fixture uses that control and still reports false aggregate coverage;
+51 session groups also report false even though the complete session total is
+retained. More than 20 sessions with complete groups may report true while the
+session sample flag remains true.
 
 ## L2: one session observation, bounded private output
 
@@ -88,13 +105,16 @@ existing files are not rewritten. Current composition is described in the
 must adopt v3 explicitly, verify private sinks/readers and bind exact source,
 target/TLS, identity, approval, deadline, resource gate and cleanup before any
 future live request. A closed approval or old v2 packet cannot be reused.
+C1 keeps v3 as a pre-live semantics correction. No executable v3 live packet
+has been issued in this workflow; the published draft/reference is not one.
+Future executable packets must bind the amended source and final semantics.
 
 The 128 KiB checkpoint and 512 KiB stream limits, 10-second connect, 12-second
 client command, 10-second statement, one-second lock, <=120-second overall work
 envelope and seven-second cleanup reserve are unchanged. No retry follows a
 failure. Disk/OS stalls still require the separate supervisor boundary.
 
-## Local validation
+## Initial PR64 validation at 3dc1943 (before C1)
 
 The final focused selection passed **63 tests + 141 subtests = 204 cases**, with
 one existing multipart warning. The first command collected no tests because its
@@ -105,8 +125,9 @@ was needed. These receipts are retained outside Git.
 PostgreSQL 17.11 passed **8 tests + 13 subtests = 21 cases**, including six real
 database methods. The new real case opens three explicitly named fictional
 clients, checks their groups/counts and newest session ordering, excludes the
-observer, and establishes true coverage on 100 audit rows. The existing 250-row
-case asserts false; the 70-ledger case isolates ledger truncation. Snapshot
+observer, and establishes true coverage on 100 audit rows. Under the original
+all-truncation-flags definition, the 250-row case asserted false; C1 supersedes
+that expectation above. The 70-ledger case isolates ledger truncation. Snapshot
 equality and public redaction/byte caps passed. Loaded start memory was
 1,418.66 MiB / 23.53%, above the unchanged 1 GiB / 15% requirement. Temporary
 databases were removed; role/database inventories matched; the owned server was
@@ -119,11 +140,36 @@ Source/link and whitespace checks validate the current documentation, database
 runner selection and unchanged application/migration/hosting files. No frontend
 change was made; the accepted baseline's CI validates its frontend/build.
 
+## C1 amendment validation
+
+The focused selection passed **64 tests + 145 subtests = 209 cases**, with one
+existing multipart warning. It verifies sample limits remain visible without
+holding aggregate coverage, all four explicit coverage flags still hold or
+remain unknown correctly, exact integer/status checks remain, and an oversized
+or failed audit-record checkpoint cannot turn a failed run into success.
+Updated session boundary cases cover >20 rows with complete groups and 51 capped
+groups. The real 250-row case expects true aggregate coverage and a truncated
+record sample; the ledger case remains false.
+
+The disposable PostgreSQL 17.11 amendment rerun passed **8 tests + 13 subtests =
+21 cases**, including all six real collector methods, with no failures/errors/
+skips. Loaded start memory was 1,462.93 MiB / 24.26%. Fixture snapshots matched,
+temporary databases were removed, role/database inventories matched and the
+owned local server was verified stopped. No hosted connection or credential,
+grant or production schema change occurred.
+
+The broad offline amendment run passed **548 tests + 1,072 subtests = 1,620
+cases**, including the actual Windows ACL checks, with zero failures/errors/
+skips and five existing deprecation warnings. Source/link and whitespace checks
+passed; 78 local Markdown links resolve and application, migration, frontend,
+hosting and connection source remain unchanged. These profiles overlap.
+
 ## Remaining gates
 
-Local validation is complete. Update JMax and prompt before publishing a draft.
-Fresh follow-up CI, independent review and owner merge approval follow that
-publication. No fresh S1 live attempt, service pause or credential/grant/schema
+PR64 is draft and unmerged. The owner authorized the C1 amendment, local tests,
+documentation/JMax updates and pushing to its existing branch. Fresh amended-head
+CI and owner merge/automatic-test-deployment approval remain separate.
+No fresh S1 live attempt, service pause or credential/grant/schema
 change is authorized. S1 PIN/personal-role/activity/actor acceptance, N2 PIN
 storage, G04/G13/O1 and par installation remain open. Ordering stays manual;
 par editing frozen; Track 1 independent; Inventory remains the stock writer.

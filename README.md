@@ -23,17 +23,20 @@ server/client timeout budgets, exposes capped metadata coverage, and corrects th
 PIN fixture. PR63's merge and automatic test deployment were approved; runtime
 acceptance was not inspected. The authorized local
 [L1/L2/L3 follow-up](docs/S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md) adds nullable
-coverageComplete, one-observation session totals/groups with newest-first samples,
-and consistent ledger total/maximum validation. All 1,615 offline cases, the
-overlapping 204-case focused profile and 21 disposable PostgreSQL module cases
+coverageComplete for aggregate visibility, one-observation session totals/groups with newest-first samples,
+and consistent ledger total/maximum validation. All 1,620 C1 offline cases, the
+overlapping 209-case focused profile and 21 disposable PostgreSQL module cases
 (six real database methods) passed; owned local cleanup is verified.
+PR64's C1 amendment separates aggregate coverage flags from informational record/
+session sample limits; a truncated sample alone does not hold aggregate coverage.
 Checkpoint/diagnostics v3 and a
 fresh source-bound handoff are required before future live use. No hosted work in this slice.
 
 ## Next
 
-- L1/L2/L3 and local validation are complete. Prompt before a new draft PR push.
-  Fresh CI and merge approval remain separate. A new
+- C1 and local validation are complete for existing draft PR64, with updated documentation.
+  The owner approved pushing its updates; fresh amended-head CI and merge approval
+  remain separate. A new
   S1 handoff/window requires separate approval. The prior attempt is closed.
 - Review the [coordinated approval index](docs/PAR_SECURITY_APPROVAL_INDEX_20261023.md)
   and [security/identity/permissions plan](docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md).

@@ -201,7 +201,7 @@ class S1CollectorDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['status'],'complete')
         self.assertEqual(result['auditTotal'],250)
         self.assertTrue(result['recordsTruncated']);self.assertFalse(result['breakdownTruncated'])
-        self.assertIs(result['coverageComplete'],False)  # 250 audit rows exceed the 200-row sample.
+        self.assertIs(result['coverageComplete'],True)  # Exact aggregate coverage; bounded sample is informational.
         self.assertFalse(result['envelopeExpired'])
         self.assertEqual(len(saved),11)
         self.assertEqual(result['completedObservations'],list(saved))

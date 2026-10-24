@@ -65,10 +65,17 @@ than silently rerunning or modifying that closed attempt.
   [current contract and validation](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md).
 - The local [L1/L2/L3 follow-up](S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md) advances
   checkpoint and diagnostics to **v3**. Public coverageComplete is true only for
-  complete execution, an exact integer auditTotal and every audit/metadata
-  truncation flag false; any unknown visibility input takes precedence as null;
+  complete execution, an exact integer auditTotal and all four explicit coverage
+  flags false: breakdownTruncated, sessionGroupsTruncated, ledgerTruncated and
+  policiesTruncated. Any unknown aggregate coverage input takes precedence as null;
   otherwise false. Operators read both execution status and coverage, then the
-  private evidence. This is collector visibility, not S1/security acceptance.
+  private evidence. C1 separates informational recordsTruncated/sessionsTruncated
+  sample flags from those coverage flags, so a 250-row audit or >20 sessions can
+  retain complete aggregate visibility while samples are truncated. Ledger count/max
+  do not represent every version/name, so ledger truncation remains consequential.
+  This is aggregate visibility, not sample completeness, full individual-activity
+  review, S1/security acceptance or writer drain. C1 keeps v3 before any executable
+  v3 live packet; future handoffs must bind the amended source.
   metadata.sessions now includes full total and bounded groups from one materialized
   observation alongside newest-first 20 rows. A 51st group reports truncation at
   the 50-group cap; public sessionGroupsTruncated stays null until the whole

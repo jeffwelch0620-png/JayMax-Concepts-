@@ -26,6 +26,9 @@ CHECKPOINT_FORMAT = 'jaymax-s1-checkpoint-v3'
 DIAGNOSTICS_FORMAT = 'jaymax-s1-diagnostics-v3'
 METADATA_CAPS = {'ledger': 64, 'sessions': 20, 'policies': 100}
 SESSION_GROUP_LIMIT = 50
+COVERAGE_FLAGS = ('breakdownTruncated', 'sessionGroupsTruncated',
+                  'ledgerTruncated', 'policiesTruncated')
+SAMPLE_FLAGS = ('recordsTruncated', 'sessionsTruncated')  # Informational only.
 READS = ('identity', 'relations', 'policies', 'pin_configuration', 'toast_jobs',
          'sessions', 'ledger', 'summary', 'breakdown', 'records')
 LABELS = {f'{phase}.{op}' for phase in PHASES
@@ -191,11 +194,10 @@ class Diagnostics:
 
     def receipt(self):
         failed = next((event for event in self.events if event['status'] == 'failed'), None)
-        visibility = [value for key, value in
-                      {**self.audit_coverage, **self.metadata_coverage}.items()
-                      if key.endswith('Truncated')]
-        # Unknown visibility takes precedence over known truncation. Execution
-        # status is a separate gate; neither field is an S1 acceptance verdict.
+        coverage = {**self.audit_coverage, **self.metadata_coverage}
+        visibility = [coverage.get(key) for key in COVERAGE_FLAGS]
+        # Aggregate visibility excludes intentional sample limits. Unknown
+        # coverage takes precedence; neither status nor coverage is S1 acceptance.
         coverage_complete = (None if any(value is None for value in visibility)
                              or self.audit_coverage['auditTotal'] is None else
                              self.status == 'complete'

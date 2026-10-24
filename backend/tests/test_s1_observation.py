@@ -300,6 +300,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['auditTotal'],250)
         self.assertTrue(result['recordsTruncated'])
         self.assertFalse(result['breakdownTruncated'])
+        self.assertIs(result['coverageComplete'],True)
         self.assertNotIn('TEST_ONLY_',json.dumps(result))
         self.assertNotIn('/TEST_ONLY_PRIVATE_PATH',json.dumps(result))
         summary_sql = f[1].fetchrow.await_args.args[0]
@@ -365,6 +366,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result['auditTotal'],None if step=='summary' else 250)
                 self.assertIsNone(result['recordsTruncated'])
                 self.assertEqual(result['breakdownTruncated'],False if step=='records' else None)
+                self.assertIs(result['coverageComplete'],False if step=='records' else None)
                 self.assertTrue(result['ownedClientsClosed']['audit'])
                 self.assertNotIn('TEST_ONLY_',json.dumps(result))
 
@@ -391,6 +393,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(receipt['auditTotal'],250)
                 self.assertFalse(receipt['breakdownTruncated'])
                 self.assertIsNone(receipt['recordsTruncated'])
+                self.assertIs(receipt['coverageComplete'],False)  # Failed execution, despite complete aggregates.
                 self.assertNotIn('audit.records',receipt['completedObservations'])
                 self.assertTrue(receipt['ownedClientsClosed']['audit'])
 
@@ -477,7 +480,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(saved['groups']),min(groups,50))
                 self.assertEqual(saved['groupsTruncated'],groups>50)
                 self.assertEqual(result['sessionGroupsTruncated'],groups>50)
-                self.assertEqual(result['coverageComplete'],total<=20 and groups<=50)
+                self.assertEqual(result['coverageComplete'],groups<=50)
                 if total:self.assertEqual(saved['rows'][0]['session_ref'],str(total))
                 sql=next(call.args[0] for call in f[0].fetch.await_args_list if 'FROM pg_stat_activity' in call.args[0])
                 self.assertIn('observed AS MATERIALIZED',sql)
@@ -532,7 +535,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(journal.receipt()['coverageComplete'],status=='complete')
         for coverage in (journal.audit_coverage,journal.metadata_coverage):
             for key in coverage:
-                if not key.endswith('Truncated'):continue
+                if key not in s1.COVERAGE_FLAGS:continue
                 with self.subTest(key=key):
                     coverage[key]=True
                     self.assertIs(journal.receipt()['coverageComplete'],False)
@@ -548,6 +551,27 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(total=total):
                 journal.audit_coverage['auditTotal']=total
                 self.assertIs(journal.receipt()['coverageComplete'],None if total is None else False)
+
+    def test_aggregate_coverage_ignores_sample_flags_but_keeps_them_visible(self):
+        self.assertEqual(set(s1.COVERAGE_FLAGS),{'breakdownTruncated','sessionGroupsTruncated',
+            'ledgerTruncated','policiesTruncated'})
+        self.assertEqual(set(s1.SAMPLE_FLAGS),{'recordsTruncated','sessionsTruncated'})
+        journal=s1.Diagnostics(lambda *_:None)
+        journal.status='complete'
+        journal.audit_coverage={'auditTotal':250,'recordsTruncated':True,'breakdownTruncated':False}
+        journal.metadata_coverage={key:False for key in journal.metadata_coverage}
+        for record_sample,session_sample in ((True,True),(True,False),(False,True),(None,None)):
+            with self.subTest(records=record_sample,sessions=session_sample):
+                journal.audit_coverage['recordsTruncated']=record_sample
+                journal.metadata_coverage['sessionsTruncated']=session_sample
+                receipt=journal.receipt()
+                self.assertIs(receipt['coverageComplete'],True)
+                self.assertIs(receipt['recordsTruncated'],record_sample)
+                self.assertIs(receipt['sessionsTruncated'],session_sample)
+        for status in ('running','held'):
+            with self.subTest(status=status):
+                journal.status=status
+                self.assertIs(journal.receipt()['coverageComplete'],False)
 
     async def test_metadata_empty_exact_and_lookahead_boundaries_are_explicit(self):
         for name,cap in s1.METADATA_CAPS.items():
