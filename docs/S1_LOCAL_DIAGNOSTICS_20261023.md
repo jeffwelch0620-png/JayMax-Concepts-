@@ -164,14 +164,15 @@ was installed or started for this amendment.
 
 ## Next gates
 
-1. [Draft PR61](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/61) was
-   published at 2e8ab80 with all four checks passing in
-   [the original-head CI run](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40045888723).
-   The owner authorized the local A1/N1 review amendments, testing and same-branch
-   push. The original CI does not validate these amendments.
-2. Amendment local validation is complete; same-branch push is owner-authorized.
-   Obtain fresh exact-head CI and return for owner merge/automatic-test-deployment
-   approval. Independent review and any fresh live attempt remain separate gates.
+1. [PR61](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/61) is merged
+   with owner approval as bacf51b, tree-identical to reviewed head 7cbc7a5. All four
+   [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40047632330)
+   and separate [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40048517576)
+   passed. Its automatic Render test deployment was authorized; no live runtime
+   acceptance is claimed by those checks.
+2. The owner authorized the separate [N3 disposable PostgreSQL collector test](S1_COLLECTOR_POSTGRES_TEST_20261023.md)
+   and local validation. Prompt before a new draft PR push; fresh CI and merge
+   approval remain separate. No fresh S1 live attempt is authorized.
 3. Prepare secure controlled-probe inputs, personal-role contexts and a source-
    pinned operator handoff before requesting another bounded S1 attempt. This
    local fix does not complete the PIN/role probes, audit review or API actor and
