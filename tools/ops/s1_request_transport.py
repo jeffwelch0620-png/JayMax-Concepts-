@@ -111,9 +111,8 @@ class LocalTransport:
     failure. Wall and monotonic deadlines also run inside every request. The
     local claim is in memory: durable cross-process live claiming is NOT enabled.
     """
-    def __init__(self, origin, *, approved, guard, ends_at, stop_checks_at,
-                 transport=None, clock=time.monotonic,
-                 seconds=780, request_seconds=90):
+    @staticmethod
+    def _check_destination(origin, transport):
         try:
             parsed = urlsplit(origin)
             port = parsed.port
@@ -129,6 +128,11 @@ class LocalTransport:
                     and transport is None)
         if not fixture and not loopback:
             raise Held('hosted_execution_disabled')
+
+    def __init__(self, origin, *, approved, guard, ends_at, stop_checks_at,
+                 transport=None, clock=time.monotonic,
+                 seconds=780, request_seconds=90):
+        self._check_destination(origin, transport)
         if approved is not True or not callable(guard):
             raise Held('local_approval_required')
         if not 0 < seconds <= 780 or not 0 < request_seconds <= 90:
@@ -151,6 +155,7 @@ class LocalTransport:
         self._ends_at, self._stop_checks_at = ends_at, stop_checks_at
         self._used, self._passed, self._sessions, self._facts = set(), set(), {}, []
         self._recovery_at = None
+        self._steps = STEPS
         self._closed = False
         self._busy = False
         self._check()
@@ -196,7 +201,7 @@ class LocalTransport:
             headers['Authorization'] = 'Bearer ' + session.token
         # A fresh client per exchange prevents Set-Cookie from contaminating any
         # following anonymous/personal request. No arbitrary headers are accepted.
-        async with httpx.AsyncClient(transport=self._transport, verify=True, trust_env=False,
+        async with httpx.AsyncClient(transport=self._transport, verify=self._tls_verify(), trust_env=False,
                 follow_redirects=False, timeout=httpx.Timeout(budget, connect=min(6, budget))) as client:
             self._check()
             async with client.stream(step.method, self._origin + step.path,
@@ -208,7 +213,7 @@ class LocalTransport:
                 if response.headers.get('content-type', '').split(';')[0].strip() != 'application/json':
                     raise Held('response_type')
                 size = response.headers.get('content-length')
-                if size is not None and (not size.isascii() or not size.isdigit() or int(size) > CAP):
+                if size is not None and (len(size) > 8 or not size.isascii() or not size.isdigit() or int(size) > CAP):
                     raise Held('response_size')
                 raw = bytearray()
                 async for chunk in response.aiter_bytes(chunk_size=4096):
@@ -222,6 +227,9 @@ class LocalTransport:
                 except (ValueError, UnicodeError, RecursionError):
                     raise Held('response_shape') from None
                 return value, response.headers.get('retry-after')
+
+    def _tls_verify(self):
+        return True
 
     async def _send(self, label, step, body=None, session=None):
         self._recovery_gate(label)
@@ -277,9 +285,20 @@ class LocalTransport:
             raise Held('login_identity')
         if any(other.subject == user['id'] for other in self._sessions.values()):
             raise Held('login_identity')
+        self._validate_login(user)
         self._check()
         self._sessions[role] = Session(token, user['id'], user['email'], role)
         fact['outcome'] = 'passed'
+
+    def _validate_login(self, user):
+        pass
+
+    def _validate_me(self, value, session):
+        return (isinstance(value, dict) and value.get('sub') == session.subject
+                and value.get('role') == session.role and value.get('email') == session.email)
+
+    def _validate_roster(self, value):
+        return True
 
     async def login_from_terminal(self, role):
         self._check()
@@ -295,7 +314,7 @@ class LocalTransport:
 
     async def pin_from_terminal(self, label, *, staff_id=None):
         self._recovery_gate(label)
-        if label not in STEPS or STEPS[label].path not in (VERIFY, IDENTIFY) or label in self._used:
+        if label not in self._steps or self._steps[label].path not in (VERIFY, IDENTIFY) or label in self._used:
             raise Held('unknown_request')
         pin = None
         try:
@@ -304,17 +323,20 @@ class LocalTransport:
         finally:
             pin = None
 
+    def _valid_pin_input(self,label,pin):
+        return isinstance(pin,str) and re.fullmatch(r'[0-9]{4,8}',pin) is not None
+
     async def probe(self, label, *, pin=None, staff_id=None):
-        if label not in STEPS:
+        if label not in self._steps:
             raise Held('unknown_request')
         self._recovery_gate(label)
-        step = STEPS[label]
+        step = self._steps[label]
         session = self._sessions.get(step.actor)
         if step.actor != 'anonymous' and session is None:
             raise Held('personal_login_required')
         body = None
         if step.path in (VERIFY, IDENTIFY):
-            if not isinstance(pin, str) or re.fullmatch(r'[0-9]{4,8}', pin) is None:
+            if not self._valid_pin_input(label,pin):
                 raise Held('pin_input')
             if step.path == VERIFY and staff_id is not None:
                 raise Held('unexpected_input')
@@ -336,17 +358,19 @@ class LocalTransport:
                          and set(v) == {'id', 'name', 'role', 'active'}
                          and all(isinstance(v[k], str) for k in ('id', 'name', 'role'))
                          and type(v['active']) is bool for v in value['staff']))
+            valid = valid and self._validate_roster(value)
         elif step.shape == 'identified':
             valid = (isinstance(value, dict) and set(value) == {'ok', 'name', 'role'}
                      and value['ok'] is True and isinstance(value['name'], str) and bool(value['name'])
                      and value['role'] == 'owner_admin')
+        elif step.shape == 'disabled':
+            valid = value == {'detail': 'Staff PIN portal is disabled. Ask a manager to set a PIN.'}
         elif step.shape in ('error', 'throttled'):
             valid = isinstance(value, dict) and set(value) == {'detail'} and isinstance(value['detail'], str)
             if step.shape == 'throttled':
-                valid = valid and isinstance(retry, str) and retry.isascii() and retry.isdigit() and 1 <= int(retry) <= 61
+                valid = valid and isinstance(retry, str) and 1 <= len(retry) <= 2 and retry.isascii() and retry.isdigit() and 1 <= int(retry) <= 61
         elif step.shape == 'me':
-            valid = (isinstance(value, dict) and value.get('sub') == session.subject
-                     and value.get('role') == session.role and value.get('email') == session.email)
+            valid = self._validate_me(value, session)
         elif step.shape == 'users':
             valid = isinstance(value, list) and all(isinstance(v, dict) and set(v) <= {
                 'id', 'email', 'role', 'locations', 'createdAt'} and {'id', 'email', 'role'} <= set(v) for v in value)
