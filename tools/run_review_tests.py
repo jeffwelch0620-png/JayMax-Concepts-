@@ -27,6 +27,8 @@ DATABASE_CASES = (
  ('s1_observation_pg','S1CollectorDatabaseTests','test_complete_collector_reads_real_metadata_ledger_and_audit_without_writes'),
  ('s1_observation_pg','S1CollectorDatabaseTests','test_real_disposable_identity_without_adapter_is_refused_and_closed'),
  ('s1_observation_pg','S1CollectorDatabaseTests','test_real_ledger_shape_failure_preserves_prefix_and_skips_audit'),
+ ('s1_observation_pg','S1CollectorDatabaseTests','test_seventy_ledger_rows_report_full_aggregate_and_keep_newest_sixty_four'),
+ ('s1_observation_pg','S1CollectorDatabaseTests','test_server_statement_timeout_has_sqlstate_and_label_before_client_deadline'),
  ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_complete_two_families_preserve_rows_catalog_sequence_and_independent_hash_formats'),
  ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_full_cursor_fallback_and_sequences_are_included_in_envelopes'),
  ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_unknown_inventory_or_unapproved_discovery_refuses_before_hashing'),

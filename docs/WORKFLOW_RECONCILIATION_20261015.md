@@ -1,6 +1,6 @@
 # Inventory workflow checkpoint and remaining work
 
-**Current October 23 routing:** accepted main is PR61 bacf51b. The approved S1
+**Current October 23 routing:** accepted main is PR62 a009e8a. The approved S1
 attempt returned partial metadata/owner-login evidence and stopped on timeout;
 all PIN/role probes and audit review remain incomplete. See the
 [local diagnostics follow-up](S1_LOCAL_DIAGNOSTICS_20261023.md) and
@@ -8,9 +8,9 @@ all PIN/role probes and audit review remain incomplete. See the
 This local slice changes no hosted system, credential, grant or schema. The
 accepted PR61 A1/N1 amendment adds full-interval recorded-activity totals,
 bounded audit breakdown/sampling with explicit coverage and envelope-expiry
-diagnostics. The owner authorized the separate
-[N3 disposable PostgreSQL test](S1_COLLECTOR_POSTGRES_TEST_20261023.md) and local
-validation, with a prompt before draft publication. No new push, merge or hosted
+diagnostics. PR62 accepted the [N3 disposable PostgreSQL test](S1_COLLECTOR_POSTGRES_TEST_20261023.md).
+The owner authorized the separate [F1/F2/M1 collector follow-up](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md)
+and local validation, with a prompt before draft publication. No new push, merge or hosted
 execution is authorized. PIN-storage remediation stays in a future security slice.
 The earlier checkpoints below retain their dated results and approval boundaries.
 

@@ -8,7 +8,7 @@ import re
 import sys
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
@@ -122,8 +122,8 @@ class S1CollectorDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.owned=[]
         self.addAsyncCleanup(self.close_remaining_owned)
         await self.setup.execute(activity_ddl())
-        await self.setup.execute('''CREATE TABLE public.staff_pins(store_id text,pin text);
-            INSERT INTO public.staff_pins VALUES('berts','12345678'),('rudds','87654321'),('papa',NULL);
+        await self.setup.execute('''CREATE TABLE public.staff_pins(store_id text NOT NULL,pin text NOT NULL);
+            INSERT INTO public.staff_pins VALUES('berts','12345678'),('rudds','87654321'),('papa','TEST_ONLY_X');
             CREATE SCHEMA cron;
             CREATE TABLE cron.job(jobid bigint,active boolean,schedule text);
             INSERT INTO cron.job VALUES(3,true,'0 0 * * *'),(4,true,'0 0 * * *');
@@ -163,7 +163,7 @@ class S1CollectorDatabaseTests(unittest.IsolatedAsyncioTestCase):
 
     async def connector(self, phase, *, readonly, timeout, command_timeout, adapt=True):
         self.assertTrue(readonly);self.assertIn(phase,s1.PHASES)
-        self.assertEqual((timeout,command_timeout),(10,10))
+        self.assertEqual((timeout,command_timeout),(10,s1.COMMAND_TIMEOUT_SECONDS))
         conn=await asyncpg.connect(self.dsn,ssl=False,timeout=timeout,command_timeout=command_timeout,
             server_settings={'default_transaction_read_only':'on','application_name':'TEST_ONLY_S1_COLLECTOR'})
         adapter=FixtureIdentityConnection(conn,self.database)
@@ -186,6 +186,10 @@ class S1CollectorDatabaseTests(unittest.IsolatedAsyncioTestCase):
             ('public.activity_log','public.staff_pins','cron.job','supabase_migrations.schema_migrations')]
 
     async def test_complete_collector_reads_real_metadata_ledger_and_audit_without_writes(self):
+        self.assertEqual({row['column_name']:row['is_nullable'] for row in await self.setup.fetch(
+            "SELECT column_name,is_nullable FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name='staff_pins'")},
+            {'store_id':'NO','pin':'NO'})
         before=await self.snapshot()
         with TemporaryDirectory() as directory:
             path=Path(directory)/'TEST_ONLY.ndjson'
@@ -201,14 +205,19 @@ class S1CollectorDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(saved),11)
         self.assertEqual(result['completedObservations'],list(saved))
         self.assertEqual(len(saved['metadata.relations']),14)
-        self.assertEqual(saved['metadata.ledger'],[
-            {'version':'TEST_ONLY_001','name':'fixture_one'},{'version':'TEST_ONLY_002','name':'fixture_two'}])
+        self.assertEqual(saved['metadata.ledger'],{'rows':[
+            {'version':'TEST_ONLY_002','name':'fixture_two'},{'version':'TEST_ONLY_001','name':'fixture_one'}],
+            'truncated':False,'total':2,'max_version':'TEST_ONLY_002'})
+        for key in ('ledgerTruncated','sessionsTruncated','policiesTruncated'):
+            self.assertFalse(result[key])
+        self.assertTrue(all(json.loads(line)['format']=='jaymax-s1-checkpoint-v2' for line in lines))
+        self.assertEqual(result['format'],'jaymax-s1-diagnostics-v2')
         self.assertEqual(saved['metadata.pin_configuration'],[
             {'store_id':'berts','configured':True},{'store_id':'papa','configured':False},
             {'store_id':'rudds','configured':True}])
         self.assertEqual([row['jobid'] for row in saved['metadata.toast_jobs']],[3,4])
-        self.assertEqual(len(saved['metadata.policies']),1)
-        self.assertTrue(any(row['application_name'] for row in saved['metadata.sessions']))
+        self.assertEqual(len(saved['metadata.policies']['rows']),1)
+        self.assertTrue(any(row['application_name'] for row in saved['metadata.sessions']['rows']))
         self.assertEqual(saved['audit.summary'],{'total':250,
             'first_at':self.start.isoformat(),'last_at':self.rows[-1][7].isoformat()})
         self.assertEqual(sum(row['n'] for row in saved['audit.breakdown']['groups']),250)
@@ -255,4 +264,45 @@ class S1CollectorDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved[-1],'metadata.sessions')
         self.assertIsNone(receipt['auditTotal']);self.assertNotIn('audit',receipt['ownedClientsClosed'])
         self.assertNotIn('TEST_ONLY',json.dumps(receipt))
+        await self.assert_owned_closed(1)
+
+    async def test_seventy_ledger_rows_report_full_aggregate_and_keep_newest_sixty_four(self):
+        await self.setup.execute('TRUNCATE supabase_migrations.schema_migrations')
+        await self.setup.executemany('INSERT INTO supabase_migrations.schema_migrations VALUES($1,$2)',
+            [('TEST_ONLY_'+str(i).zfill(3),'fixture_'+str(i)) for i in range(1,71)])
+        before=await self.snapshot()
+        with TemporaryDirectory() as directory:
+            path=Path(directory)/'TEST_ONLY.ndjson'
+            with path.open('xb') as stream:
+                diagnostics=s1.Diagnostics(s1.JsonlCheckpoints(stream))
+                result=await s1.collect(self.connector,diagnostics,audit_from=self.start,as_of=self.end,remaining_seconds=120)
+            raw=path.read_bytes();lines=raw.splitlines(keepends=True)
+            saved={row['operation']:row['data'] for row in map(json.loads,lines)}
+        self.assertTrue(result['ledgerTruncated'])
+        ledger=saved['metadata.ledger']
+        self.assertEqual((ledger['total'],ledger['max_version']),(70,'TEST_ONLY_070'))
+        self.assertEqual([row['version'] for row in ledger['rows']],
+            ['TEST_ONLY_'+str(i).zfill(3) for i in range(70,6,-1)])
+        self.assertEqual(len(ledger['rows']),64)
+        self.assertEqual(result['status'],'complete')  # Execution, not complete metadata visibility.
+        self.assertLessEqual(max(map(len,lines)),128*1024);self.assertLessEqual(len(raw),512*1024)
+        self.assertNotIn('TEST_ONLY',json.dumps(result))
+        self.assertEqual(await self.snapshot(),before)
+        await self.assert_owned_closed(2)
+
+    async def test_server_statement_timeout_has_sqlstate_and_label_before_client_deadline(self):
+        async def slow(conn): return await conn.fetchval('SELECT pg_sleep(1)')
+        diagnostics=s1.Diagnostics(lambda *_:None)
+        plans={'metadata':[('metadata.ledger',slow)],
+               'audit':[('audit.records',AsyncMock())]}
+        with patch.object(s1,'STATEMENT_TIMEOUT_MS',150),patch.object(s1,'COMMAND_TIMEOUT_SECONDS',3):
+            with self.assertRaises(asyncpg.QueryCanceledError):
+                await s1.observe(self.connector,plans,diagnostics,remaining_seconds=60)
+        receipt=diagnostics.receipt()
+        self.assertEqual(receipt['failedOperation'],'metadata.ledger')
+        self.assertEqual(receipt['error'],{'errorType':'QueryCanceledError','sqlState':'57014'})
+        self.assertFalse(receipt['envelopeExpired'])
+        self.assertEqual(receipt['ownedClientsClosed'],{'metadata':True})
+        self.assertIsNone(receipt['ledgerTruncated'])
+        plans['audit'][0][1].assert_not_awaited()
         await self.assert_owned_closed(1)

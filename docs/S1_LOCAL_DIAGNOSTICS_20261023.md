@@ -29,7 +29,7 @@ than silently rerunning or modifying that closed attempt.
   A failed stream cannot be reused after a short write/flush/fsync failure, and
   an asynchronous or uncompleted sink cannot claim a durable checkpoint.
 - Public diagnostics contain only fixed labels, statuses, safe error categories,
-  validated SQLSTATE, durations, cleanup outcomes and audit counts/coverage flags.
+  validated SQLSTATE, durations, cleanup outcomes and audit/metadata coverage flags.
   `envelopeExpired` distinguishes total-envelope expiry from a command timeout
   or independent operator cancellation. SQL, exception messages,
   connection strings, actor/employee/session rows and private observations never
@@ -56,6 +56,13 @@ than silently rerunning or modifying that closed attempt.
   breakdown uses a 501-row lookahead, keeps at most 500 groups and trims its
   checkpoint to 96 KiB, setting truncation for either limit. Individual record
   checkpoints that exceed the existing cap still hold the attempt.
+- The F1/F2/M1 follow-up uses checkpoint and diagnostics **v2**. Capped metadata
+  checkpoints are objects with rows/truncated; ledger also includes total and
+  max_version. Public ledgerTruncated/sessionsTruncated/policiesTruncated remain
+  null until the corresponding checkpoint is durable. The ledger retains the
+  newest 64 version/name rows with full count/max; sessions/policies keep caps
+  20/100. Each uses a one-row lookahead. See the
+  [current contract and validation](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md).
 
 ## Query scope and unchanged safeguards
 
@@ -73,13 +80,17 @@ User IDs and paths remain private evidence only. Each checkpoint stays within
 128 KiB and the cumulative stream within 512 KiB; output-budget failure holds
 the attempt without publishing false complete coverage.
 
-There are at most two sequential injected connections. Connect and command
-timeouts remain 10 seconds, server statement timeout 10 seconds, lock timeout
+There are at most two sequential injected connections. Connect timeout remains
+10 seconds; the client command timeout is now 12 seconds, server statement timeout
+10 seconds, lock timeout
 one second, rollback timeout three seconds and owned-close timeout four seconds.
 The work timer reserves seven seconds for the existing three-second rollback
 and four-second owned close inside the 120-second/caller-remaining envelope.
 An available envelope of seven seconds or less refuses before connecting.
 No second connection or replay occurs after failure.
+The 120-second ceiling is an overall envelope, not a promise that all commands
+can finish at their worst-case limits. A new source-bound handoff must adopt the
+v2 contracts and reviewed 12-second command budget; old approvals cannot be reused.
 
 The helper is **not an approval or credential boundary**. A fresh operator
 handoff must independently bind the exact packet and source bytes, target,
@@ -170,9 +181,11 @@ was installed or started for this amendment.
    and separate [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40048517576)
    passed. Its automatic Render test deployment was authorized; no live runtime
    acceptance is claimed by those checks.
-2. The owner authorized the separate [N3 disposable PostgreSQL collector test](S1_COLLECTOR_POSTGRES_TEST_20261023.md)
-   and local validation. Prompt before a new draft PR push; fresh CI and merge
-   approval remain separate. No fresh S1 live attempt is authorized.
+2. PR62 a009e8a accepted the [N3 disposable PostgreSQL collector test](S1_COLLECTOR_POSTGRES_TEST_20261023.md),
+   with reviewed-head and merged-main CI green. The owner authorized the separate
+   [F1/F2/M1 fixes](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md) and local tests.
+   Prompt before a new draft PR push; fresh CI and merge approval remain separate.
+   No fresh S1 live attempt is authorized.
 3. Prepare secure controlled-probe inputs, personal-role contexts and a source-
    pinned operator handoff before requesting another bounded S1 attempt. This
    local fix does not complete the PIN/role probes, audit review or API actor and
