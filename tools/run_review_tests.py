@@ -20,9 +20,13 @@ OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrit
  'apply_additive_migration::AdditivePlanGuards hosted_additive_index::HostedAdapterGuards '
  'hosted_additive_index::HostedReceiptGuards hosted_additive_index::HostedWriterGuards').split()
 OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests',
+                    's1_observation_pg::CollectorFixtureSafetyTests',
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
                     'batched_fingerprints::BatchedFingerprintGuards']
 DATABASE_CASES = (
+ ('s1_observation_pg','S1CollectorDatabaseTests','test_complete_collector_reads_real_metadata_ledger_and_audit_without_writes'),
+ ('s1_observation_pg','S1CollectorDatabaseTests','test_real_disposable_identity_without_adapter_is_refused_and_closed'),
+ ('s1_observation_pg','S1CollectorDatabaseTests','test_real_ledger_shape_failure_preserves_prefix_and_skips_audit'),
  ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_complete_two_families_preserve_rows_catalog_sequence_and_independent_hash_formats'),
  ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_full_cursor_fallback_and_sequences_are_included_in_envelopes'),
  ('read_only_probe_pg','ReadOnlyProbeDatabaseTests','test_unknown_inventory_or_unapproved_discovery_refuses_before_hashing'),

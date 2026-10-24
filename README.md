@@ -8,23 +8,23 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-Accepted baseline: PR60 **b056e88**, tree-identical to tested 24990f9. All four
-[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40017141873)
-and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40021305472)
+Accepted baseline: PR61 **bacf51b**, tree-identical to tested 7cbc7a5. All four
+[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40047632330)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40048517576)
 passed separately. The October 23 approved S1 check observed API PR59 and frontend
 PR53 Live with source-equivalent service code. Owner sign-in and partial read-only
 metadata succeeded; a metadata timeout stopped the attempt. PIN/role probes and
 audit review remain incomplete. The [local diagnostic follow-up](docs/S1_LOCAL_DIAGNOSTICS_20261023.md)
 now identifies operations and preserves completed private observations. PR61's
 review amendment adds explicit audit coverage/truncation and envelope-expiry
-diagnostics; validation and publication status are recorded there. No hosted work
-in this slice.
+diagnostics. The [N3 disposable PostgreSQL collector test](docs/S1_COLLECTOR_POSTGRES_TEST_20261023.md)
+is a separate local-only follow-up. No hosted work in this slice.
 
 ## Next
 
-- Complete the authorized PR61 amendments, tests and same-branch push; return for
-  merge approval after fresh CI. A new S1 handoff/window requires separate
-  approval. The prior attempt is closed.
+- Complete the authorized N3 collector tests and local validation, then prompt
+  before a new draft PR push. Fresh CI and merge approval remain separate. A new
+  S1 handoff/window requires separate approval. The prior attempt is closed.
 - Review the [coordinated approval index](docs/PAR_SECURITY_APPROVAL_INDEX_20261023.md)
   and [security/identity/permissions plan](docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md).
   S1 verification comes first; a targeted S2a rotation packet no longer waits for

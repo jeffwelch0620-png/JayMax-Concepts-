@@ -13,6 +13,15 @@ runner = importlib.util.module_from_spec(spec); spec.loader.exec_module(runner)
 
 
 class ReviewRunnerTests(unittest.TestCase):
+    def test_n3_real_collector_cases_stay_in_database_selection(self):
+        expected={('s1_observation_pg','S1CollectorDatabaseTests',name) for name in (
+            'test_complete_collector_reads_real_metadata_ledger_and_audit_without_writes',
+            'test_real_disposable_identity_without_adapter_is_refused_and_closed',
+            'test_real_ledger_shape_failure_preserves_prefix_and_skips_audit')}
+        self.assertEqual({case for case in runner.DATABASE_CASES if case[0]=='s1_observation_pg'},expected)
+        self.assertNotIn('s1_observation_pg',runner.OFFLINE_MODULES)
+        self.assertIn('s1_observation_pg::CollectorFixtureSafetyTests',runner.OFFLINE_CLASSES)
+
     def test_remote_and_non_disposable_connections_stop_before_any_process(self):
         for dsn in ('postgresql://purchase_implementation_test@remote.invalid:5432/native_purchase_test_control',
                     'postgresql://purchase_implementation_test@127.0.0.1:5432/postgres',
