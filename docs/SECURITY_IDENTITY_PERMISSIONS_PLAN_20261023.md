@@ -143,6 +143,14 @@ cases unevaluated. **No PIN is set or rotated in S1.** Revocation-after-role-cha
 and new shared-session lifecycle require later local/I1 work; S1 does not mutate
 accounts or claim those tests passed.
 
+PR65's local request-client receipt records that server-side session revocation
+is unavailable. Clearing its in-memory L01–L03 sessions does not invalidate the
+stateless HMAC tokens already issued. Their source default is eight hours
+(`SESSION_TTL_SECONDS=28800`), with runtime configuration able to override it;
+S1 does not assert the live TTL. Current actor authority and revocation after a
+role/lifecycle change remain I1 deliverables, including the trusted actor resolver
+and revocation tests below. This note authorizes no credential or identity change.
+
 The request budget tests the supported PostgreSQL path. Local tests cover the
 retained legacy identify/verify implementations and old synthetic-token refusal.
 If deployed routing exposes additional legacy entry points, document their

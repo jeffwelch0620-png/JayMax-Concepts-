@@ -8,36 +8,42 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-Accepted baseline: PR63 **0cba049**, tree-identical to tested 423bded. All four
-[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40053598106)
-and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40054929392)
-passed separately. The October 23 approved S1 check observed API PR59 and frontend
-PR53 Live with source-equivalent service code. Owner sign-in and partial read-only
-metadata succeeded; a metadata timeout stopped the attempt. PIN/role probes and
-audit review remain incomplete. The [local diagnostic follow-up](docs/S1_LOCAL_DIAGNOSTICS_20261023.md)
-now identifies operations and preserves completed private observations. PR61's
-review amendment adds explicit audit coverage/truncation and envelope-expiry
-diagnostics. PR62 accepted the [N3 disposable PostgreSQL collector test](docs/S1_COLLECTOR_POSTGRES_TEST_20261023.md).
-The [F1/F2/M1 follow-up](docs/S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md) separates
-server/client timeout budgets, exposes capped metadata coverage, and corrects the
-PIN fixture. PR63's merge and automatic test deployment were approved; runtime
-acceptance was not inspected. The authorized local
-[L1/L2/L3 follow-up](docs/S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md) adds nullable
-coverageComplete for aggregate visibility, one-observation session totals/groups with newest-first samples,
-and consistent ledger total/maximum validation. All 1,620 C1 offline cases, the
-overlapping 209-case focused profile and 21 disposable PostgreSQL module cases
-(six real database methods) passed; owned local cleanup is verified.
-PR64's C1 amendment separates aggregate coverage flags from informational record/
-session sample limits; a truncated sample alone does not hold aggregate coverage.
-Checkpoint/diagnostics v3 and a
-fresh source-bound handoff are required before future live use. No hosted work in this slice.
+Accepted baseline: PR64 **f4235f7**, tree-identical to tested 502519e. All four
+[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40057721329)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40058597235)
+passed separately. The October 24 approved S1 v3 attempt observed API PR64 and
+frontend PR53 Live with finite service source proofs. Its two-connection read-only
+collector completed in 11.391 seconds: 13 scoped relations, ledger 55 and 17,468
+recorded owner/manager audit entries with a retained 200-row sample. Aggregate
+coverage was complete; the sample was truncated and is not exhaustive security
+review. Both owned database clients closed. PIN/role probes remained NOT EVALUATED:
+the attempt stopped before any controlled API/PIN request because the required
+protected-input request transport was unavailable. That window is closed and
+its approval consumed. Existing app/service/credential settings remained unchanged.
+
+The authorized [local transport design and rehearsal](docs/S1_PROTECTED_REQUEST_TRANSPORT_20261024.md)
+now uses isolated anonymous/personal contexts, legitimate fictional logins,
+strict route/response/time limits, one-use request slots and minimized receipts.
+The [PR65](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/65) review
+amendment enforces P09 recovery waits before P10/P11, requires successful P10
+before P11, and binds separate absolute stop-checks/cleanup deadlines. Receipt
+metadata documents unavailable server revocation and the configurable eight-hour
+session default; local session cleanup does not revoke issued tokens.
+Amended local validation passed 1,687 offline cases and the overlapping 67-test
+transport profile. Fresh amended-head CI and merge approval remain separate.
+It deliberately has **no hosted mode**. Local validation, independent review,
+hosted activation and a fresh live approval remain separate gates. The
+[collector history](docs/S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md) remains dated
+evidence; this slice does not change collector or application behavior.
 
 ## Next
 
-- C1 and local validation are complete for existing draft PR64, with updated documentation.
-  The owner approved pushing its updates; fresh amended-head CI and merge approval
-  remain separate. A new
-  S1 handoff/window requires separate approval. The prior attempt is closed.
+- Obtain fresh CI and merge approval for PR65's locally validated amendment;
+  JMax records the current publication and check status. After acceptance,
+  prepare a separately reviewed activation
+  adapter and fresh exact S1 packet: up to 18 probes plus three explicit personal
+  logins, durable source/approval/claim guards and private operator handoff. No live
+  execution is enabled or authorized by this local slice.
 - Review the [coordinated approval index](docs/PAR_SECURITY_APPROVAL_INDEX_20261023.md)
   and [security/identity/permissions plan](docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md).
   S1 verification comes first; a targeted S2a rotation packet no longer waits for

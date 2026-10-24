@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-OFFLINE_MODULES = ('s1_observation probe_reproducibility read_only_probe local_query_metrics par_qualification_packet maintenance_connection planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
+OFFLINE_MODULES = ('s1_request_transport s1_observation probe_reproducibility read_only_probe local_query_metrics par_qualification_packet maintenance_connection planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
  'managed_development rotate_build_connections provision_build_connections staff_response staff_pin_security pg_routes pg_migrations '
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
