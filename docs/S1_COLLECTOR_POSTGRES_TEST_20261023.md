@@ -1,5 +1,10 @@
 # S1 collector disposable PostgreSQL test
 
+This preserves the PR62 validation checkpoint, now merged as a009e8a with separate
+reviewed-head and merged-main CI green. The current
+[F1/F2/M1 follow-up](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md) advances collector
+limits, metadata checkpoint shapes and fixture fidelity; its validation is separate.
+
 ## Purpose and boundaries
 
 PR61 is accepted as bacf51b, tree-identical to reviewed head 7cbc7a5, with separate

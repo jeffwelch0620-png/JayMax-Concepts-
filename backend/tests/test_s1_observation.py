@@ -28,7 +28,8 @@ def plans(**changes):
     readers = {
         'metadata': [('metadata.identity', AsyncMock(return_value={'readOnly':True})),
                      ('metadata.relations', AsyncMock(return_value=[{'name':'TEST_ONLY_ITEM'}])),
-                     ('metadata.ledger', AsyncMock(return_value=[{'version':'TEST_ONLY'}]))],
+                     ('metadata.ledger', AsyncMock(return_value={'rows':[{'version':'TEST_ONLY'}],
+                         'truncated':False,'total':1,'max_version':'TEST_ONLY'}))],
         'audit': [('audit.records', AsyncMock(return_value={'recordsTruncated': False}))]
     }
     for label, reader in changes.items():
@@ -55,7 +56,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['status'], 'complete')
         self.assertEqual(f[4].await_count, 2)
         for phase, conn, tx in zip(s1.PHASES, f[:2], f[2:4]):
-            f[4].assert_any_await(phase, readonly=True, timeout=10, command_timeout=10)
+            f[4].assert_any_await(phase, readonly=True, timeout=10, command_timeout=12)
             conn.transaction.assert_called_once_with(isolation='repeatable_read', readonly=True)
             tx.commit.assert_awaited_once(); tx.rollback.assert_not_awaited()
             conn.close.assert_awaited_once_with(timeout=4)
@@ -222,8 +223,10 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first_calls[0].args[1],list(s1.OBJECTS))
         self.assertEqual(len(s1.OBJECTS),14)
         self.assertEqual(first_calls[3].args[1],[3,4])
-        self.assertIn('LIMIT 20',first_calls[4].args[0])
-        self.assertIn('LIMIT 64',first_calls[5].args[0])
+        self.assertIn('LIMIT 21',first_calls[4].args[0])
+        self.assertIn('LIMIT 65',first_calls[5].args[0])
+        self.assertIn('ORDER BY version::text DESC',first_calls[5].args[0])
+        self.assertIn('count(*) OVER ()',first_calls[5].args[0])
         pin_sql=first_calls[2].args[0]
         self.assertIn('AS configured',pin_sql);self.assertNotIn('SELECT pin',pin_sql)
         audit_call=f[1].fetch.await_args
@@ -398,6 +401,111 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
                         as_of=datetime(2026,1,2,tzinfo=timezone.utc),remaining_seconds=60)
                 f[0].fetch.assert_not_awaited()
                 self.assertEqual(f[6].receipt()['failedOperation'],'metadata.identity')
+
+    async def test_client_no_reply_timeout_has_no_sqlstate_or_envelope_expiry(self):
+        async def never_answers(conn):
+            return await asyncio.wait_for(asyncio.Event().wait(),conn.command_timeout)
+        f=self.fixture(plans(**{'metadata.ledger':never_answers}))
+        async def connect(phase,**options):
+            conn=f[0] if phase=='metadata' else f[1]
+            conn.command_timeout=options['command_timeout']
+            return conn
+        f[4].side_effect=connect
+        self.assertEqual((s1.CONNECT_TIMEOUT_SECONDS,s1.COMMAND_TIMEOUT_SECONDS,
+                          s1.STATEMENT_TIMEOUT_MS,s1.LOCK_TIMEOUT_MS),(10,12,10000,1000))
+        with patch.object(s1,'COMMAND_TIMEOUT_SECONDS',.04):
+            with self.assertRaises(TimeoutError): await self.run_plan(f)
+        receipt=f[6].receipt()
+        self.assertEqual(receipt['failedOperation'],'metadata.ledger')
+        self.assertEqual(receipt['error'],{'errorType':'TimeoutError','sqlState':None})
+        self.assertFalse(receipt['envelopeExpired'])
+        self.assertIsNone(receipt['ledgerTruncated'])
+        self.assertEqual(f[4].await_count,1)
+        f[2].rollback.assert_awaited_once();f[0].close.assert_awaited_once()
+
+    def metadata_fixture(self,name,count,*,wide=False):
+        f=self.fixture()
+        identity={'actor':'postgres','login':'postgres','db':'postgres','readonly':'on'}
+        f[0].fetchrow=AsyncMock(return_value=identity)
+        f[1].fetchrow=AsyncMock(side_effect=[identity,{'total':0,'first_at':None,'last_at':None}])
+        async def read(sql,*args):
+            target=('ledger' if 'schema_migrations' in sql else
+                    'policies' if 'FROM pg_policies' in sql else
+                    'sessions' if 'FROM pg_stat_activity' in sql else None)
+            if target!=name:return []
+            if name=='ledger':
+                return [{'version':'TEST_ONLY_'+str(count-i).zfill(3),
+                    'name':'X'*(128*1024) if wide else 'TEST_ONLY_PRIVATE',
+                    'total':count,'max_version':'TEST_ONLY_'+str(count).zfill(3)} for i in range(count)]
+            return [{'TEST_ONLY_PRIVATE':'X'*(128*1024) if wide else i} for i in range(count)]
+        f[0].fetch=AsyncMock(side_effect=read)
+        f[1].fetch=AsyncMock(return_value=[])
+        return f
+
+    async def collect_metadata(self,f):
+        return await s1.collect(f[4],f[6],audit_from=datetime(2026,1,1,tzinfo=timezone.utc),
+            as_of=datetime(2026,1,2,tzinfo=timezone.utc),remaining_seconds=60)
+
+    async def test_metadata_empty_exact_and_lookahead_boundaries_are_explicit(self):
+        for name,cap in s1.METADATA_CAPS.items():
+            for count in (0,cap,cap+1):
+                with self.subTest(name=name,count=count):
+                    f=self.metadata_fixture(name,count)
+                    result=await self.collect_metadata(f)
+                    saved=dict(f[5])['metadata.'+name]
+                    self.assertEqual(len(saved['rows']),min(count,cap))
+                    self.assertEqual(saved['truncated'],count>cap)
+                    self.assertEqual(result[name+'Truncated'],count>cap)
+                    if name=='ledger':
+                        self.assertEqual(saved['total'],count)
+                        self.assertEqual(saved['max_version'],'TEST_ONLY_'+str(count).zfill(3) if count else None)
+                    self.assertNotIn('TEST_ONLY',json.dumps(result))
+                    self.assertEqual(result['format'],'jaymax-s1-diagnostics-v2')
+
+    async def test_failed_metadata_checkpoint_cannot_publish_its_coverage(self):
+        for name in s1.METADATA_CAPS:
+            with self.subTest(name=name):
+                f=self.metadata_fixture(name,s1.METADATA_CAPS[name]+1)
+                original=f[6].checkpoint
+                def fail(label,value):
+                    if label=='metadata.'+name:raise OSError('TEST_ONLY_PRIVATE')
+                    original(label,value)
+                f[6].checkpoint=fail
+                with self.assertRaises(OSError):await self.collect_metadata(f)
+                receipt=f[6].receipt()
+                self.assertIsNone(receipt[name+'Truncated'])
+                self.assertNotIn('metadata.'+name,receipt['completedObservations'])
+                event=next(e for e in receipt['operations'] if e['status']=='failed')
+                self.assertEqual((event['operation'],event['checkpointFor']),('evidence.checkpoint','metadata.'+name))
+                self.assertEqual(f[4].await_count,1)
+                self.assertTrue(receipt['ownedClientsClosed']['metadata'])
+
+    async def test_metadata_byte_cap_holds_without_a_false_complete_flag(self):
+        for name in s1.METADATA_CAPS:
+            with self.subTest(name=name),TemporaryDirectory() as directory:
+                f=self.metadata_fixture(name,1,wide=True)
+                path=Path(directory)/'TEST_ONLY.ndjson'
+                with path.open('xb') as stream:
+                    f[6].checkpoint=s1.JsonlCheckpoints(stream)
+                    with self.assertRaises(s1.ObservationHeld):await self.collect_metadata(f)
+                self.assertIsNone(f[6].receipt()[name+'Truncated'])
+                lines=path.read_bytes().splitlines(keepends=True)
+                self.assertTrue(all(len(line)<=128*1024 for line in lines))
+                self.assertLessEqual(sum(map(len,lines)),512*1024)
+                self.assertTrue(all(json.loads(line)['format']=='jaymax-s1-checkpoint-v2' for line in lines))
+                self.assertTrue(f[6].receipt()['ownedClientsClosed']['metadata'])
+
+    async def test_metadata_unknown_or_malformed_coverage_stays_unevaluated(self):
+        journal=s1.Diagnostics(lambda *_:None)
+        for name in s1.METADATA_CAPS:
+            self.assertIsNone(journal.receipt()[name+'Truncated'])
+        for name in s1.METADATA_CAPS:
+            with self.subTest(name=name):
+                journal=s1.Diagnostics(lambda *_:None)
+                with self.assertRaises(s1.ObservationHeld):
+                    await journal.capture('metadata.'+name,{'rows':[],'truncated':'false'})
+                self.assertIsNone(journal.receipt()[name+'Truncated'])
+                self.assertEqual(journal.receipt()['failedOperation'],'evidence.checkpoint')
 
     async def test_fixed_collector_refuses_invalid_audit_interval_without_connect(self):
         valid=datetime(2026,1,1,tzinfo=timezone.utc)

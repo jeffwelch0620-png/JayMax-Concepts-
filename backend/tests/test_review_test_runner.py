@@ -17,7 +17,9 @@ class ReviewRunnerTests(unittest.TestCase):
         expected={('s1_observation_pg','S1CollectorDatabaseTests',name) for name in (
             'test_complete_collector_reads_real_metadata_ledger_and_audit_without_writes',
             'test_real_disposable_identity_without_adapter_is_refused_and_closed',
-            'test_real_ledger_shape_failure_preserves_prefix_and_skips_audit')}
+            'test_real_ledger_shape_failure_preserves_prefix_and_skips_audit',
+            'test_seventy_ledger_rows_report_full_aggregate_and_keep_newest_sixty_four',
+            'test_server_statement_timeout_has_sqlstate_and_label_before_client_deadline')}
         self.assertEqual({case for case in runner.DATABASE_CASES if case[0]=='s1_observation_pg'},expected)
         self.assertNotIn('s1_observation_pg',runner.OFFLINE_MODULES)
         self.assertIn('s1_observation_pg::CollectorFixtureSafetyTests',runner.OFFLINE_CLASSES)

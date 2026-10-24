@@ -8,21 +8,23 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-Accepted baseline: PR61 **bacf51b**, tree-identical to tested 7cbc7a5. All four
-[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40047632330)
-and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40048517576)
+Accepted baseline: PR62 **a009e8a**, tree-identical to tested d306b8e. All four
+[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40050416906)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40051971964)
 passed separately. The October 23 approved S1 check observed API PR59 and frontend
 PR53 Live with source-equivalent service code. Owner sign-in and partial read-only
 metadata succeeded; a metadata timeout stopped the attempt. PIN/role probes and
 audit review remain incomplete. The [local diagnostic follow-up](docs/S1_LOCAL_DIAGNOSTICS_20261023.md)
 now identifies operations and preserves completed private observations. PR61's
 review amendment adds explicit audit coverage/truncation and envelope-expiry
-diagnostics. The [N3 disposable PostgreSQL collector test](docs/S1_COLLECTOR_POSTGRES_TEST_20261023.md)
-is a separate local-only follow-up. No hosted work in this slice.
+diagnostics. PR62 accepted the [N3 disposable PostgreSQL collector test](docs/S1_COLLECTOR_POSTGRES_TEST_20261023.md).
+The [F1/F2/M1 follow-up](docs/S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md) separates
+server/client timeout budgets, exposes capped metadata coverage, and corrects the
+PIN fixture. It remains local pending draft-push approval. No hosted work in this slice.
 
 ## Next
 
-- Complete the authorized N3 collector tests and local validation, then prompt
+- Complete the authorized F1/F2/M1 fixes and local validation, then prompt
   before a new draft PR push. Fresh CI and merge approval remain separate. A new
   S1 handoff/window requires separate approval. The prior attempt is closed.
 - Review the [coordinated approval index](docs/PAR_SECURITY_APPROVAL_INDEX_20261023.md)

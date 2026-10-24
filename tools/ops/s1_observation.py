@@ -2,7 +2,8 @@
 
 The operator must separately bind approval, source, resources, target, claim and
 an exclusively created private evidence stream before supplying a connector.
-Tests supply only fictional in-process connections. This module authorizes no run.
+Tests use fictional data with injected in-process or disposable local connections.
+This module authorizes no run.
 """
 import asyncio
 from contextlib import asynccontextmanager
@@ -17,6 +18,13 @@ import time
 from readonly_snapshot import readonly_snapshot
 
 PHASES = ('metadata', 'audit')
+CONNECT_TIMEOUT_SECONDS = 10
+COMMAND_TIMEOUT_SECONDS = 12
+STATEMENT_TIMEOUT_MS = 10000
+LOCK_TIMEOUT_MS = 1000
+CHECKPOINT_FORMAT = 'jaymax-s1-checkpoint-v2'
+DIAGNOSTICS_FORMAT = 'jaymax-s1-diagnostics-v2'
+METADATA_CAPS = {'ledger': 64, 'sessions': 20, 'policies': 100}
 READS = ('identity', 'relations', 'policies', 'pin_configuration', 'toast_jobs',
          'sessions', 'ledger', 'summary', 'breakdown', 'records')
 LABELS = {f'{phase}.{op}' for phase in PHASES
@@ -38,7 +46,7 @@ def checkpoint_bytes(label, value):
         if isinstance(value, datetime):
             return value.isoformat()
         raise TypeError('Unsupported private checkpoint type')
-    return (json.dumps({'format': 'jaymax-s1-checkpoint-v1', 'operation': label,
+    return (json.dumps({'format': CHECKPOINT_FORMAT, 'operation': label,
                        'data': value}, default=encode, allow_nan=False) + '\n').encode()
 
 
@@ -101,6 +109,7 @@ class Diagnostics:
         # None means not durably observed, never zero/complete by default.
         self.audit_coverage = {'auditTotal': None, 'recordsTruncated': None,
                                'breakdownTruncated': None}
+        self.metadata_coverage = {name+'Truncated': None for name in METADATA_CAPS}
 
     @asynccontextmanager
     async def step(self, label, *, target=None, cleanup=False):
@@ -135,18 +144,29 @@ class Diagnostics:
     async def capture(self, label, value):
         # Completed observations are persisted immediately, not at whole-run end.
         coverage = {}
-        if label == 'audit.summary':
-            total = value.get('total') if isinstance(value, dict) else None
-            if type(total) is not int or total < 0:
-                raise ObservationHeld('Valid audit total required')
-            coverage['auditTotal'] = total
-        elif label in ('audit.breakdown', 'audit.records'):
-            key = 'breakdownTruncated' if label == 'audit.breakdown' else 'recordsTruncated'
-            flag = value.get(key) if isinstance(value, dict) else None
-            if type(flag) is not bool:
-                raise ObservationHeld('Explicit audit coverage required')
-            coverage[key] = flag
+        metadata = {}
         async with self.step('evidence.checkpoint', target=label):
+            if label == 'audit.summary':
+                total = value.get('total') if isinstance(value, dict) else None
+                if type(total) is not int or total < 0:
+                    raise ObservationHeld('Valid audit total required')
+                coverage['auditTotal'] = total
+            elif label in ('audit.breakdown', 'audit.records'):
+                key = 'breakdownTruncated' if label == 'audit.breakdown' else 'recordsTruncated'
+                flag = value.get(key) if isinstance(value, dict) else None
+                if type(flag) is not bool:
+                    raise ObservationHeld('Explicit audit coverage required')
+                coverage[key] = flag
+            elif label.startswith('metadata.') and label.split('.')[1] in METADATA_CAPS:
+                name = label.split('.')[1]
+                if (not isinstance(value, dict) or type(value.get('truncated')) is not bool
+                        or not isinstance(value.get('rows'), list)
+                        or len(value['rows']) > METADATA_CAPS[name]):
+                    raise ObservationHeld('Bounded explicit metadata coverage required')
+                if name == 'ledger' and (type(value.get('total')) is not int or value['total'] < 0
+                        or (value.get('max_version') is not None and not isinstance(value['max_version'], str))):
+                    raise ObservationHeld('Valid ledger aggregate required')
+                metadata[name+'Truncated'] = value['truncated']
             result = self.checkpoint(label, value)
             if inspect.iscoroutine(result):
                 result.close()
@@ -155,14 +175,16 @@ class Diagnostics:
                 raise ObservationHeld('Synchronous completed checkpoint required')
         self.completed.append(label)
         self.audit_coverage.update(coverage)
+        self.metadata_coverage.update(metadata)
 
     def receipt(self):
         failed = next((event for event in self.events if event['status'] == 'failed'), None)
-        result = {'format': 'jaymax-s1-diagnostics-v1', 'status': self.status,
+        result = {'format': DIAGNOSTICS_FORMAT, 'status': self.status,
                   'operations': deepcopy(self.events), 'completedObservations': list(self.completed),
                   'failedOperation': failed['operation'] if failed else None,
                   'ownedClientsClosed': dict(self.closed), 'diagnosticsTruncated': self.truncated,
-                  'envelopeExpired': self.envelope_expired, **self.audit_coverage}
+                  'envelopeExpired': self.envelope_expired, **self.audit_coverage,
+                  **self.metadata_coverage}
         if self.primary is not None:
             result['error'] = safe_error(self.primary)
         return result
@@ -251,11 +273,13 @@ async def observe(connect, plans, diagnostics, *, remaining_seconds, work_second
                 primary = None
                 try:
                     conn = await diagnostics.run(phase + '.connect',
-                        lambda: connect(phase, readonly=True, timeout=10, command_timeout=10))
+                        lambda: connect(phase, readonly=True, timeout=CONNECT_TIMEOUT_SECONDS,
+                                        command_timeout=COMMAND_TIMEOUT_SECONDS))
                     tracked = _SnapshotConnection(conn, diagnostics, phase)
                     async with readonly_snapshot(tracked, rollback_timeout=3):
                         await diagnostics.run(phase + '.settings', lambda: conn.execute(
-                            "SET LOCAL statement_timeout='10s'; SET LOCAL lock_timeout='1s'"))
+                            f"SET LOCAL statement_timeout='{STATEMENT_TIMEOUT_MS}ms'; "
+                            f"SET LOCAL lock_timeout='{LOCK_TIMEOUT_MS}ms'"))
                         for label, reader in readers:
                             value = await diagnostics.run(label, lambda: reader(conn))
                             await diagnostics.capture(label, value)
@@ -286,7 +310,7 @@ AUDIT_BREAKDOWN_BYTES = 96 * 1024  # Leaves room under the 128 KiB checkpoint ca
 
 
 async def collect(connect, diagnostics, *, audit_from, as_of, remaining_seconds):
-    """The existing S1 query scope, now using checkpointed diagnostic operations.
+    """Fixed S1 object scope with bounded, checkpointed diagnostic observations.
 
     This supplies no connection implementation or live approval. The separately
     reviewed operator handoff must check its exact packet/target, prepare the
@@ -308,6 +332,26 @@ async def collect(connect, diagnostics, *, audit_from, as_of, remaining_seconds)
         async def read(conn):
             return [dict(row) for row in await conn.fetch(sql, *args)]
         return read
+
+    def capped_rows(name, sql, *args):
+        async def read(conn):
+            found = await conn.fetch(sql, *args)
+            return {'rows': [dict(row) for row in found[:METADATA_CAPS[name]]],
+                    'truncated': len(found) > METADATA_CAPS[name]}
+        return read
+
+    async def ledger(conn):
+        # Window aggregates precede LIMIT, retaining the complete same-snapshot
+        # count/max even when only the newest bounded row sample is returned.
+        found = await conn.fetch('''SELECT version::text AS version,name::text AS name,
+            count(*) OVER () AS total,max(version::text) OVER () AS max_version
+            FROM supabase_migrations.schema_migrations
+            ORDER BY version::text DESC,name::text DESC NULLS LAST LIMIT 65''')
+        return {'rows': [{'version':row['version'], 'name':row['name']}
+                         for row in found[:METADATA_CAPS['ledger']]],
+                'truncated': len(found) > METADATA_CAPS['ledger'],
+                'total': found[0]['total'] if found else 0,
+                'max_version': found[0]['max_version'] if found else None}
 
     audit_args = (audit_from, as_of, ['owner', 'manager'])
     audit_filter = 'created_at >= $1 AND created_at < $2 AND role=ANY($3::text[])'
@@ -361,16 +405,16 @@ async def collect(connect, diagnostics, *, audit_from, as_of, remaining_seconds)
                 c.relrowsecurity AS rls,c.relforcerowsecurity AS force_rls
                 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                 WHERE n.nspname||'.'||c.relname=ANY($1::text[]) ORDER BY 1,2''', list(OBJECTS))),
-            ('metadata.policies', rows('''SELECT schemaname,tablename,policyname,permissive,roles,cmd
+            ('metadata.policies', capped_rows('policies','''SELECT schemaname,tablename,policyname,permissive,roles,cmd
                 FROM pg_policies WHERE schemaname||'.'||tablename=ANY($1::text[])
-                ORDER BY schemaname,tablename,policyname LIMIT 100''', list(OBJECTS))),
+                ORDER BY schemaname,tablename,policyname LIMIT 101''', list(OBJECTS))),
             ('metadata.pin_configuration', rows("SELECT store_id,coalesce(pin ~ '^[0-9]{4,8}$',false) AS configured "
                 "FROM public.staff_pins WHERE store_id=ANY($1::text[]) ORDER BY store_id", ['berts','rudds','papa'])),
             ('metadata.toast_jobs', rows('SELECT jobid,active,schedule FROM cron.job WHERE jobid=ANY($1::bigint[]) ORDER BY jobid', [3,4])),
-            ('metadata.sessions', rows('''SELECT usename,application_name,state,backend_start,pid::text AS session_ref
+            ('metadata.sessions', capped_rows('sessions','''SELECT usename,application_name,state,backend_start,pid::text AS session_ref
                 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()
-                ORDER BY backend_start,pid LIMIT 20''')),
-            ('metadata.ledger', rows('SELECT version::text,name::text FROM supabase_migrations.schema_migrations ORDER BY version::text,name::text LIMIT 64'))],
+                ORDER BY backend_start,pid LIMIT 21''')),
+            ('metadata.ledger', ledger)],
         'audit': [('audit.identity', identity), ('audit.summary', summary),
                   ('audit.breakdown', breakdown), ('audit.records', records)]
     }
