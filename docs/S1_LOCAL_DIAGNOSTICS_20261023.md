@@ -56,13 +56,32 @@ than silently rerunning or modifying that closed attempt.
   breakdown uses a 501-row lookahead, keeps at most 500 groups and trims its
   checkpoint to 96 KiB, setting truncation for either limit. Individual record
   checkpoints that exceed the existing cap still hold the attempt.
-- The F1/F2/M1 follow-up uses checkpoint and diagnostics **v2**. Capped metadata
+- PR63's dated F1/F2/M1 checkpoint uses diagnostics **v2**. Capped metadata
   checkpoints are objects with rows/truncated; ledger also includes total and
   max_version. Public ledgerTruncated/sessionsTruncated/policiesTruncated remain
   null until the corresponding checkpoint is durable. The ledger retains the
   newest 64 version/name rows with full count/max; sessions/policies keep caps
   20/100. Each uses a one-row lookahead. See the
   [current contract and validation](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md).
+- The local [L1/L2/L3 follow-up](S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md) advances
+  checkpoint and diagnostics to **v3**. Public coverageComplete is true only for
+  complete execution, an exact integer auditTotal and all four explicit coverage
+  flags false: breakdownTruncated, sessionGroupsTruncated, ledgerTruncated and
+  policiesTruncated. Any unknown aggregate coverage input takes precedence as null;
+  otherwise false. Operators read both execution status and coverage, then the
+  private evidence. C1 separates informational recordsTruncated/sessionsTruncated
+  sample flags from those coverage flags, so a 250-row audit or >20 sessions can
+  retain complete aggregate visibility while samples are truncated. Ledger count/max
+  do not represent every version/name, so ledger truncation remains consequential.
+  This is aggregate visibility, not sample completeness, full individual-activity
+  review, S1/security acceptance or writer drain. C1 keeps v3 before any executable
+  v3 live packet; future handoffs must bind the amended source.
+  metadata.sessions now includes full total and bounded groups from one materialized
+  observation alongside newest-first 20 rows. A 51st group reports truncation at
+  the 50-group cap; public sessionGroupsTruncated stays null until the whole
+  checkpoint is durable and participates in coverageComplete. No private session
+  names/rows enter the public receipt. Ledger maximum must be a string for a
+  positive total and null for zero, with the key explicitly present.
 
 ## Query scope and unchanged safeguards
 
@@ -90,7 +109,7 @@ An available envelope of seven seconds or less refuses before connecting.
 No second connection or replay occurs after failure.
 The 120-second ceiling is an overall envelope, not a promise that all commands
 can finish at their worst-case limits. A new source-bound handoff must adopt the
-v2 contracts and reviewed 12-second command budget; old approvals cannot be reused.
+v3 contracts and reviewed 12-second command budget; old approvals cannot be reused.
 
 The helper is **not an approval or credential boundary**. A fresh operator
 handoff must independently bind the exact packet and source bytes, target,
@@ -182,8 +201,11 @@ was installed or started for this amendment.
    passed. Its automatic Render test deployment was authorized; no live runtime
    acceptance is claimed by those checks.
 2. PR62 a009e8a accepted the [N3 disposable PostgreSQL collector test](S1_COLLECTOR_POSTGRES_TEST_20261023.md),
-   with reviewed-head and merged-main CI green. The owner authorized the separate
-   [F1/F2/M1 fixes](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md) and local tests.
+   with reviewed-head and merged-main CI green. PR63 0cba049 accepted the
+   [F1/F2/M1 fixes](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md), tree-identical to
+   reviewed 423bded, with all four separate reviewed-head and merged-main checks
+   passing. The owner authorized [L1/L2/L3](S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md)
+   and local tests.
    Prompt before a new draft PR push; fresh CI and merge approval remain separate.
    No fresh S1 live attempt is authorized.
 3. Prepare secure controlled-probe inputs, personal-role contexts and a source-

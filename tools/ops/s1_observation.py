@@ -22,9 +22,13 @@ CONNECT_TIMEOUT_SECONDS = 10
 COMMAND_TIMEOUT_SECONDS = 12
 STATEMENT_TIMEOUT_MS = 10000
 LOCK_TIMEOUT_MS = 1000
-CHECKPOINT_FORMAT = 'jaymax-s1-checkpoint-v2'
-DIAGNOSTICS_FORMAT = 'jaymax-s1-diagnostics-v2'
+CHECKPOINT_FORMAT = 'jaymax-s1-checkpoint-v3'
+DIAGNOSTICS_FORMAT = 'jaymax-s1-diagnostics-v3'
 METADATA_CAPS = {'ledger': 64, 'sessions': 20, 'policies': 100}
+SESSION_GROUP_LIMIT = 50
+COVERAGE_FLAGS = ('breakdownTruncated', 'sessionGroupsTruncated',
+                  'ledgerTruncated', 'policiesTruncated')
+SAMPLE_FLAGS = ('recordsTruncated', 'sessionsTruncated')  # Informational only.
 READS = ('identity', 'relations', 'policies', 'pin_configuration', 'toast_jobs',
          'sessions', 'ledger', 'summary', 'breakdown', 'records')
 LABELS = {f'{phase}.{op}' for phase in PHASES
@@ -110,6 +114,7 @@ class Diagnostics:
         self.audit_coverage = {'auditTotal': None, 'recordsTruncated': None,
                                'breakdownTruncated': None}
         self.metadata_coverage = {name+'Truncated': None for name in METADATA_CAPS}
+        self.metadata_coverage['sessionGroupsTruncated'] = None
 
     @asynccontextmanager
     async def step(self, label, *, target=None, cleanup=False):
@@ -163,9 +168,19 @@ class Diagnostics:
                         or not isinstance(value.get('rows'), list)
                         or len(value['rows']) > METADATA_CAPS[name]):
                     raise ObservationHeld('Bounded explicit metadata coverage required')
-                if name == 'ledger' and (type(value.get('total')) is not int or value['total'] < 0
-                        or (value.get('max_version') is not None and not isinstance(value['max_version'], str))):
-                    raise ObservationHeld('Valid ledger aggregate required')
+                if name == 'ledger':
+                    total = value.get('total')
+                    if (type(total) is not int or total < 0 or 'max_version' not in value
+                            or (total > 0 and not isinstance(value['max_version'], str))
+                            or (total == 0 and value['max_version'] is not None)):
+                        raise ObservationHeld('Valid ledger aggregate required')
+                if name == 'sessions':
+                    if (type(value.get('total')) is not int or value['total'] < 0
+                            or not isinstance(value.get('groups'), list)
+                            or len(value['groups']) > SESSION_GROUP_LIMIT
+                            or type(value.get('groupsTruncated')) is not bool):
+                        raise ObservationHeld('Valid session aggregate required')
+                    metadata['sessionGroupsTruncated'] = value['groupsTruncated']
                 metadata[name+'Truncated'] = value['truncated']
             result = self.checkpoint(label, value)
             if inspect.iscoroutine(result):
@@ -179,12 +194,21 @@ class Diagnostics:
 
     def receipt(self):
         failed = next((event for event in self.events if event['status'] == 'failed'), None)
+        coverage = {**self.audit_coverage, **self.metadata_coverage}
+        visibility = [coverage.get(key) for key in COVERAGE_FLAGS]
+        # Aggregate visibility excludes intentional sample limits. Unknown
+        # coverage takes precedence; neither status nor coverage is S1 acceptance.
+        coverage_complete = (None if any(value is None for value in visibility)
+                             or self.audit_coverage['auditTotal'] is None else
+                             self.status == 'complete'
+                             and type(self.audit_coverage['auditTotal']) is int
+                             and all(value is False for value in visibility))
         result = {'format': DIAGNOSTICS_FORMAT, 'status': self.status,
                   'operations': deepcopy(self.events), 'completedObservations': list(self.completed),
                   'failedOperation': failed['operation'] if failed else None,
                   'ownedClientsClosed': dict(self.closed), 'diagnosticsTruncated': self.truncated,
                   'envelopeExpired': self.envelope_expired, **self.audit_coverage,
-                  **self.metadata_coverage}
+                  **self.metadata_coverage, 'coverageComplete': coverage_complete}
         if self.primary is not None:
             result['error'] = safe_error(self.primary)
         return result
@@ -353,6 +377,37 @@ async def collect(connect, diagnostics, *, audit_from, as_of, remaining_seconds)
                 'total': found[0]['total'] if found else 0,
                 'max_version': found[0]['max_version'] if found else None}
 
+    async def sessions(conn):
+        # One materialized observation supplies total, sample and groups. This
+        # is visibility at this read, never proof that writers are drained.
+        found = await conn.fetch('''WITH observed AS MATERIALIZED (
+            SELECT usename,application_name,state,backend_start,pid
+            FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()
+        ), sample AS (
+            SELECT * FROM observed ORDER BY backend_start DESC NULLS LAST,pid DESC LIMIT 21
+        ), grouped AS (
+            SELECT usename,application_name,state,count(*) AS n FROM observed
+            GROUP BY 1,2,3 ORDER BY 1 NULLS LAST,2 NULLS LAST,3 NULLS LAST LIMIT 51
+        )
+        SELECT 'total'::text AS kind,count(*) AS n,NULL::text AS usename,
+            NULL::text AS application_name,NULL::text AS state,
+            NULL::timestamptz AS backend_start,NULL::int AS pid FROM observed
+        UNION ALL SELECT 'row',NULL::bigint,usename,application_name,state,backend_start,pid FROM sample
+        UNION ALL SELECT 'group',n,usename,application_name,state,NULL::timestamptz,NULL::int FROM grouped
+        ORDER BY kind,backend_start DESC NULLS LAST,pid DESC,
+                 usename NULLS LAST,application_name NULLS LAST,state NULLS LAST''')
+        totals = [row['n'] for row in found if row['kind'] == 'total']
+        if len(totals) != 1 or any(row['kind'] not in ('total','row','group') for row in found):
+            raise ObservationHeld('One session observation required')
+        sample = [{key: row[key] for key in ('usename','application_name','state','backend_start')}
+                  | {'session_ref': str(row['pid'])} for row in found if row['kind'] == 'row']
+        groups = [{key: row[key] for key in ('usename','application_name','state','n')}
+                  for row in found if row['kind'] == 'group']
+        return {'rows': sample[:METADATA_CAPS['sessions']],
+                'truncated': len(sample) > METADATA_CAPS['sessions'],
+                'groups': groups[:SESSION_GROUP_LIMIT], 'total': totals[0],
+                'groupsTruncated': len(groups) > SESSION_GROUP_LIMIT}
+
     audit_args = (audit_from, as_of, ['owner', 'manager'])
     audit_filter = 'created_at >= $1 AND created_at < $2 AND role=ANY($3::text[])'
 
@@ -411,9 +466,7 @@ async def collect(connect, diagnostics, *, audit_from, as_of, remaining_seconds)
             ('metadata.pin_configuration', rows("SELECT store_id,coalesce(pin ~ '^[0-9]{4,8}$',false) AS configured "
                 "FROM public.staff_pins WHERE store_id=ANY($1::text[]) ORDER BY store_id", ['berts','rudds','papa'])),
             ('metadata.toast_jobs', rows('SELECT jobid,active,schedule FROM cron.job WHERE jobid=ANY($1::bigint[]) ORDER BY jobid', [3,4])),
-            ('metadata.sessions', capped_rows('sessions','''SELECT usename,application_name,state,backend_start,pid::text AS session_ref
-                FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()
-                ORDER BY backend_start,pid LIMIT 21''')),
+            ('metadata.sessions', sessions),
             ('metadata.ledger', ledger)],
         'audit': [('audit.identity', identity), ('audit.summary', summary),
                   ('audit.breakdown', breakdown), ('audit.records', records)]

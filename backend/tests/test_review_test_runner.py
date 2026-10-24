@@ -19,7 +19,8 @@ class ReviewRunnerTests(unittest.TestCase):
             'test_real_disposable_identity_without_adapter_is_refused_and_closed',
             'test_real_ledger_shape_failure_preserves_prefix_and_skips_audit',
             'test_seventy_ledger_rows_report_full_aggregate_and_keep_newest_sixty_four',
-            'test_server_statement_timeout_has_sqlstate_and_label_before_client_deadline')}
+            'test_server_statement_timeout_has_sqlstate_and_label_before_client_deadline',
+            'test_untruncated_coverage_and_newest_session_groups_use_one_observation')}
         self.assertEqual({case for case in runner.DATABASE_CASES if case[0]=='s1_observation_pg'},expected)
         self.assertNotIn('s1_observation_pg',runner.OFFLINE_MODULES)
         self.assertIn('s1_observation_pg::CollectorFixtureSafetyTests',runner.OFFLINE_CLASSES)
