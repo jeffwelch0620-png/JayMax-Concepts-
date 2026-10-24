@@ -11,8 +11,9 @@ Render or Supabase request was issued; no real PIN/password/token was read.
 Accepted main remains PR65 `1db9797`, with separately passing
 [reviewed-head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40103720101)
 and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40104331749).
-This follow-up is local and awaits owner approval before a new draft PR push.
-Fresh CI, review, merge and any live attempt retain separate approvals.
+This follow-up is published as [draft PR66](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/66).
+The owner authorized the A1/N1/N2/N3 amendments and their push to the same PR;
+review, merge and any live attempt retain separate approvals.
 
 ## Components and guarantees
 
@@ -43,13 +44,35 @@ the reviewed pinned dependencies; no new runtime was provisioned in this slice.
 ## Durable dispatch and failure behavior
 
 The exact approval binds the profile, actor-reference digest, attempt identifier,
-private evidence directory, independently observed API proof, quiet-period
+private evidence directory, owner-reported API proof, quiet-period
 confirmation and UTC timestamps. The approval must explicitly attest the owner
 reference; a public profile alone never enables execution. The existing
 health/calibration approval validator is unchanged and is not reused as S1 consent.
 
-An exclusively created claim is flushed/fsynced before any worker starts. The
-controller flushes an intent before granting each individual dispatch, and accepts
+The owned worker is armed under independent supervision before network-free input
+collection. Each field permits three total entries (the initial entry plus two
+corrections). Bound email must match exactly; configured PINs require 4-8 ASCII
+digits; passwords must contain 1-1,024 characters. Rehearsal still accepts only
+fixed fictional values. No network client is created during input. A typo does
+not consume the attempt; password correctness is established only by the later
+ordinary login request, without a login retry.
+
+The worker sends exactly `{"event":"inputs_ready"}`, with no values. The parent
+revalidates approval, bindings, sources, resources and the evidence environment.
+It requires at least **397 seconds** to the existing stop-checks cutoff: 65 seconds
+quiet + 90 for P01 + 20 x 6 for remaining requests + 62 maximum recovery wait +
+60 margin for integrity, IPC, storage and scheduling. The check is repeated after
+the evidence environment checks immediately before claim creation, even for
+reduced variants. This conservative start gate does not extend deadlines or
+guarantee completion on a stalled machine; the watchdog still enforces cutoff.
+
+Only then is an exclusive claim created and flushed/fsynced, before the parent
+sends `{"start_dispatch":true}`. Slow/invalid input or failed revalidation holds
+without a claim; the returned receipt distinguishes `inputs_collected_no_claim`
+from inputs that never became ready. An unused approval remains subject to its
+original timestamps/source bindings: it is never automatically extended. Any
+partial or uncertain claim creation remains consumed or held for reconciliation.
+The controller flushes an intent before granting each individual dispatch, and accepts
 only the expected result shape for the pending case. A partial claim, pending
 intent, failed result, evidence failure, interrupted worker or unexpected message
 cannot be replayed as a fresh attempt. The approved directory cannot be replaced
@@ -64,7 +87,8 @@ an explicitly held/unconfirmed result; it does not race a final write against th
 stalled writer. Its incomplete evidence and claim remain consumed. This is not a
 whole-machine power-loss durability or frozen-Windows guarantee.
 
-The worker starts only after job assignment and the parent's start grant. The
+The worker starts only after job assignment and the parent's initial start grant;
+dispatch requires the separate post-input claim grant described above. The
 parent checks the active window/resources independently of blocking terminal
 input and cooperative HTTP cancellation. Cleanup targets only the owned process
 and job, including descendants. Tests cover stalled workers, blocked parent
@@ -82,15 +106,37 @@ the controller has no extra warmup, health, discovery or retry request.
 
 Only finite variants can omit missing roles/roster cases or use the predeclared
 P04/P06 verify fallback. Unconfigured-PIN verification has its own exact disabled
-response, not a silent change to the normal success expectation. Omitted request
+response and sends an empty, non-candidate PIN, not `0000`. The exception is scoped
+only to that profile's P01; configured profiles and the base LocalTransport retain
+the normal PIN input rule. The server deliberately reserves its store attempt
+slot before checking configuration, so the disabled request still consumes one
+slot. No bypass/refund or server change is introduced. If a supposedly disabled
+portal is configured, the empty input cannot authenticate it and the unexpected
+response holds the attempt. Omitted request
 labels are reported; they do not become spare request capacity. The client checks
 the selected owner-admin roster ID before identifying it. Login and identity
 responses must match independently bound ID, email, role and exact intended store
 scope. Roster owner-admin is never substituted for personal owner authority.
 
+The parent validates owner-reported preflight facts against its bindings; it does
+not independently observe the running deployment, runtime or quiet interval.
+Receipts state `preflightSource: owner_reported`. `apiCommit`, `runtimeSha256`,
+`quietConfirmed` and `observedAt` require separately approved supporting evidence.
+They are attestations, not observations made by this adapter.
+
+The activation handoff must require each account holder to enter their own email
+and password at the protected console, or use explicitly approved dedicated test
+accounts. Nobody relays passwords to the operator. The private receipt records
+only `credentialEntryRoles` for the roles whose input phase completed; this does
+not identify or independently prove who physically typed. The owner checks the
+participants' role-level participation during the supervised handoff. These role
+labels do not grant authority or replace bound actor records. P01/P02 precede the
+personal logins; L01-L03 precede the deliberate failed-PIN sequence starting P03.
+
 The wrong PIN is derived in worker memory only after P01 succeeds and is guaranteed
 to differ from the supplied PIN. Real operator inputs would be requested only
-after a fresh approval/claim and only in the protected operator console. No browser
+after fresh approval validation and only in the supervised protected operator
+console; the claim follows validated input and precedes every HTTP dispatch. No browser
 token, clipboard, password-manager, database PIN or environment-secret lookup is
 implemented. Rehearsal input is restricted to fixed fictional values and
 `@example.invalid` accounts. Default preparation and help do not collect secrets.
@@ -109,6 +155,14 @@ sessions; the configurable source default remains eight hours. I1 current-actor
 resolution and revocation work is unchanged.
 
 ## Fictional acceptance and evidence
+
+PR66's original head passed all four [CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40108443508).
+The A1/N1/N2/N3 amendment keeps full source/runtime/trust hashing in both worker
+and controller before each dispatch. Private receipt `integrityChecks` records
+each label's measured `workerMilliseconds` and `controllerMilliseconds`; no
+path/size/mtime shortcut is used. Measurements cover those hash validations only,
+not total IPC, fsync, quiet/recovery waits or hosted latency. Start/close and
+per-request behavior remain subject to the source/approval/deadline guards.
 
 The real operator console milestone completed with the exact prescribed fictional
 phrase. Its receipt reports `fictionalInputMatched: true`,
@@ -129,7 +183,7 @@ strengthened run passed 102 tests, including:
 - actual Windows owned-worker/descendant/parent-exit containment and blocked
   worker/controller cleanup.
 
-Final validation passed **1,736 offline cases** (664 tests plus 1,072 subtests),
+Original-head validation passed **1,736 offline cases** (664 tests plus 1,072 subtests),
 with zero failures, errors or skips. That run includes the added storage,
 malformed-protocol, private-binding and validation-order fault cases. The prior
 full run passed 1,735 before the final private-file validation-order test was
@@ -148,10 +202,18 @@ held event on failure; the durable pending case identifies the uncertain stage.
 It does not forward exception text or raw responses for diagnosis. More detailed
 reason reporting must retain that fixed-category/privacy boundary if added later.
 
+The review amendment disposition, corrected throttle expectations, inactive
+account-holder checklist and fresh validation are recorded in
+[PR66 review amendments](PR66_REVIEW_AMENDMENTS_20261024.md). The amended full
+offline profile passed 1,770 cases (698 tests plus 1,072 subtests) with no
+failures/errors/skips. The final 21-request loopback recorded 17.377 seconds of
+combined full-integrity checks; hosted timing remains unproven. The earlier
+focused fixture failure and corrected rerun are retained and explained there.
+
 ## Remaining gates
 
-1. Finish local checks and JMax readback, commit cleanly, and prompt before pushing
-   the new draft PR. There is no automatic publication from this slice.
+1. Finish the authorized PR66 amendment checks and JMax readback, commit cleanly
+   and push to the existing draft; return for merge approval after fresh CI.
 2. Obtain independent review, fresh CI and separate merge/automatic-deployment
    approval. The operator code is not imported by the deployed application.
 3. Prepare separately approved, bounded API deployment/configuration/actor

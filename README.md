@@ -36,17 +36,32 @@ Its LocalTransport entry point deliberately has **no hosted mode**. The authoriz
 separate approval-bound HTTPS factory, durable request journal and supervised
 private console worker, tested only with fictional/local targets. The real
 fictional console milestone passed. No actual hosted execution or secret input
-was performed. Final follow-up validation passed all 1,736 offline cases, including
+was performed. Original follow-up validation passed all 1,736 offline cases, including
 the new process, TLS, identity, protocol and storage-failure coverage. Local
 validation, independent review, hosted activation and a fresh
 live approval remain separate gates. The
 [collector history](docs/S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md) remains dated
 evidence; this slice does not change collector or application behavior.
+The owner-authorized [PR66](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/66)
+review amendments validate protected input before claiming an attempt, permit
+two local corrections per field and require at least 397 seconds to the existing
+stop-checks cutoff before claiming. The disabled-PIN variant sends an empty
+non-candidate while preserving server throttling. Full per-request integrity
+hashes remain, with measured timing; preflight facts are labeled owner-reported.
+Account holders enter their own credentials or use approved dedicated test
+accounts; credentials are never relayed to the operator. No hosted attempt or
+real credential input is included in these amendments.
+Amended local validation passed **1,770 offline cases** (698 tests plus 1,072
+subtests), with no failures/errors/skips. The initial fixture failure and corrected
+rerun are preserved in the [review amendment notes](docs/PR66_REVIEW_AMENDMENTS_20261024.md),
+alongside the final 21-request loopback timing: 17.377 seconds combined integrity
+checks. Full hashing remains; hosted timing is unproven. Fresh amended-head CI
+and separate merge/automatic-deployment approval remain required.
 
 ## Next
 
-- Complete local activation-adapter acceptance and JMax readback, then prompt
-  before a new draft PR push. After independent review/CI and separate acceptance,
+- Complete the authorized PR66 amendment validation, update JMax and push to the
+  existing draft, then return for merge approval. After review/CI and separate acceptance,
   prepare a fresh exact S1 packet: up to 18 probes plus three explicit personal
   logins, durable source/approval/claim guards and private operator handoff. No live
   execution is enabled or authorized by this local slice.

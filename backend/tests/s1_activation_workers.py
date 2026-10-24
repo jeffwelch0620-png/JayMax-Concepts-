@@ -46,5 +46,29 @@ def claim(profile,approval,actors,directory,connection):
     finally: connection.close()
 
 
+def typed_operator(channel,profile,approval,actors,input_mode):
+    """One local email typo, then valid fictional fields in the real worker."""
+    import s1_operator as operator
+    values=['4826','typo@example.invalid']
+    for role in profile['roles']: values.extend([actors[role]['email'],operator.FICTIONAL_PASSWORD])
+    entries=iter(values)
+    operator.console_input=lambda _:next(entries)
+    operator._operator_worker(channel,profile,approval,actors,'terminal')
+
+
+def invalid_email_operator(channel,profile,approval,actors,input_mode):
+    import s1_operator as operator
+    entries=iter(['4826']+['typo@example.invalid']*3)
+    operator.console_input=lambda _:next(entries)
+    operator._operator_worker(channel,profile,approval,actors,'terminal')
+
+
+def invalid_pin_operator(channel,profile,approval,actors,input_mode):
+    import s1_operator as operator
+    entries=iter(['bad','12','123456789'])
+    operator.console_input=lambda _:next(entries)
+    operator._operator_worker(channel,profile,approval,actors,'terminal')
+
+
 if __name__=='__main__' and len(sys.argv)==3 and sys.argv[1]=='parent-death':
     parent_death(sys.argv[2])

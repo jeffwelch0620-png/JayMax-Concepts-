@@ -323,6 +323,9 @@ class LocalTransport:
         finally:
             pin = None
 
+    def _valid_pin_input(self,label,pin):
+        return isinstance(pin,str) and re.fullmatch(r'[0-9]{4,8}',pin) is not None
+
     async def probe(self, label, *, pin=None, staff_id=None):
         if label not in self._steps:
             raise Held('unknown_request')
@@ -333,7 +336,7 @@ class LocalTransport:
             raise Held('personal_login_required')
         body = None
         if step.path in (VERIFY, IDENTIFY):
-            if not isinstance(pin, str) or re.fullmatch(r'[0-9]{4,8}', pin) is None:
+            if not self._valid_pin_input(label,pin):
                 raise Held('pin_input')
             if step.path == VERIFY and staff_id is not None:
                 raise Held('unexpected_input')

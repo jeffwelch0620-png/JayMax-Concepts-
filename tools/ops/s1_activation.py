@@ -10,11 +10,13 @@ from functools import lru_cache
 import hashlib
 import importlib
 import json
+import math
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 from types import MappingProxyType
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -24,6 +26,10 @@ import s1_request_transport as engine
 ROOT = Path(__file__).resolve().parents[2]
 ORIGIN = 'https://jaymax-api.onrender.com'
 FORMAT = 's1-http-activation-v1'
+PREFLIGHT_SOURCE = 'owner_reported'
+# Full 21-request bound even for reduced variants: quiet + cold P01 + other
+# requests + maximum recovery wait + integrity/IPC/storage scheduling margin.
+MIN_DISPATCH_SECONDS = 65 + 90 + 20 * 6 + 62 + 60
 _KEY = object()
 Held = engine.Held
 ALL_ORDER = ('P01','P02','L01','L02','L03', *[f'P{i:02}' for i in range(3,10)],
@@ -178,31 +184,57 @@ def check_approval(profile, approval, actors, directory):
     return stop,end
 
 
+def evidence_environment(profile, directory):
+    """Read-only launch checks; collecting input never creates a claim or file."""
+    directory = Path(directory)
+    if not directory.is_dir() or any(p.is_symlink() or p.is_junction() for p in (directory,*directory.parents)):
+        raise Held('evidence_directory_invalid')
+    if profile['mode']=='hosted':
+        from read_only_probe import private_path, resources
+        if git('status','--porcelain'): raise Held('clean_reviewed_checkout_required')
+        if not sys.flags.isolated: raise Held('isolated_runtime_required')
+        resources(start=True); private_path(directory,directory=True)
+
+
+def dispatch_window(profile, approval, actors, directory):
+    stop,end = check_approval(profile,approval,actors,directory)
+    if (stop-engine.utc_now()).total_seconds() < MIN_DISPATCH_SECONDS:
+        raise Held('window_insufficient_before_claim')
+    return stop,end
+
+
+def timing_ms(value):
+    if type(value) not in (float,int) or not math.isfinite(value) or not 0 <= value <= 900000:
+        raise Held('integrity_timing_invalid')
+    return round(value,3)
+
+
 class Journal:
     """Exclusive, flushed append-only metadata; an incomplete intent is consumed."""
-    def __init__(self, profile, approval, actors, directory):
+    def __init__(self, profile, approval, actors, directory, *, require_dispatch_window=False):
         self.stop,self.end = check_approval(profile,approval,actors,directory)
         self.profile,self.approval,self.actors = deepcopy(profile),deepcopy(approval),deepcopy(actors)
         self._approval_sha,self._actors_sha = digest(approval),digest(actors)
+        evidence_environment(profile,directory)
         directory = Path(directory)
-        if not directory.is_dir() or any(p.is_symlink() or p.is_junction() for p in (directory,*directory.parents)):
-            raise Held('evidence_directory_invalid')
         if profile['mode']=='hosted':
-            from read_only_probe import private_path, _fresh_private_file, resources
-            if git('status','--porcelain'): raise Held('clean_reviewed_checkout_required')
-            if not sys.flags.isolated: raise Held('isolated_runtime_required')
-            resources(start=True); private_path(directory,directory=True)
+            from read_only_probe import _fresh_private_file
             opener = _fresh_private_file
         else:
             opener = lambda p: p.open('xb')
+        if require_dispatch_window:
+            self.stop,self.end=dispatch_window(profile,approval,actors,directory)
         # Fixed ID + bound directory: never replace an existing or partial claim.
         claim = directory/('s1-'+profile['attemptId']+'.claim')
         with opener(claim) as stream:
             stream.write((digest(approval)+'\n').encode());stream.flush();os.fsync(stream.fileno())
         self.stream = opener(directory/('s1-'+profile['attemptId']+'.jsonl'))
         self.order,self.index,self.pending = sequence(profile),0,None
+        self.integrity_checks = []
         self.closed = False
-        try: self._append({'event':'claimed','profileSha256':digest(profile)})
+        claimed={'event':'claimed','profileSha256':digest(profile)}
+        if require_dispatch_window: claimed['credentialEntryRoles']=list(profile['roles'])
+        try: self._append(claimed)
         except BaseException:
             self.stream.close()
             raise Held('initial_evidence_failed') from None
@@ -224,10 +256,15 @@ class Journal:
             from read_only_probe import resources
             resources()
 
-    def intent(self,label):
-        self.guard();check_profile(self.profile)
+    def intent(self,label,*,worker_integrity_ms=None):
+        self.guard()
+        if worker_integrity_ms is not None: worker_integrity_ms=timing_ms(worker_integrity_ms)
+        started=time.perf_counter();check_profile(self.profile)
+        elapsed=timing_ms((time.perf_counter()-started)*1000)
         if self.pending or self.index>=len(self.order) or label!=self.order[self.index]: raise Held('dispatch_order_invalid')
-        self._append({'event':'intent','request':label})
+        measurement={'request':label,'controllerMilliseconds':elapsed,'workerMilliseconds':worker_integrity_ms}
+        self._append({'event':'intent','request':label,'integrityCheck':measurement})
+        self.integrity_checks.append(measurement)
         self.pending=label
 
     def result(self,value):
@@ -250,6 +287,8 @@ class Journal:
         return {'status':'passed' if passed else 'held','cleanupConfirmed':cleanup_confirmed is True,
                 'requestsCompleted':self.index,'requestPending':self.pending is not None,
                 'clockMode':self.profile['clock'],'securityAcceptance':False,
+                'claimStatus':'created','preflightSource':PREFLIGHT_SOURCE,
+                'integrityChecks':deepcopy(self.integrity_checks),
                 'omittedRequests':[label for label in ALL_ORDER if label not in self.order],
                 'serverSideRevocation':'not_available','sessionTtlSecondsDefault':28800}
 
@@ -273,6 +312,12 @@ class _ApprovedTransport(engine.LocalTransport):
             ends_at=stamp(capability.approval['endsAt']),stop_checks_at=stamp(capability.approval['stopChecksAt']),
             transport=transport,**({'clock':clock} if clock else {}))
         self._steps=steps(profile)
+        self.last_integrity_ms=None
+
+    def _valid_pin_input(self,label,pin):
+        if not self.cap.profile['pinConfigured']:
+            return label=='P01' and pin=='' and self._steps[label].shape=='disabled'
+        return super()._valid_pin_input(label,pin)
 
     def _check_destination(self,origin,transport):
         if origin!=self.cap.profile['origin']: raise Held('target_binding_invalid')
@@ -303,16 +348,18 @@ class _ApprovedTransport(engine.LocalTransport):
     async def _send(self,label,step,body=None,session=None):
         self._recovery_gate(label)
         if label in self._used: raise Held('request_already_claimed')
-        check_profile(self.cap.profile)
+        started=time.perf_counter();check_profile(self.cap.profile)
+        self.last_integrity_ms=timing_ms((time.perf_counter()-started)*1000)
         await self.cap.permit(label)
         return await super()._send(label,step,body,session)
 
 
 def rehearsal_client(journal, *, transport=None, tls_context=None, clock=None):
     if journal.profile['mode']!='rehearsal': raise Held('supervised_operator_required')
-    async def permit(label): journal.intent(label)
-    return _ApprovedTransport(_Capability(_KEY,journal.profile,journal.approval,journal.actors,
+    async def permit(label): journal.intent(label,worker_integrity_ms=client.last_integrity_ms)
+    client = _ApprovedTransport(_Capability(_KEY,journal.profile,journal.approval,journal.actors,
         permit,journal.guard),transport=transport,tls_context=tls_context,clock=clock)
+    return client
 
 
 async def run_sequence(client, *, pin, credentials, staff_id=None, emit, wait=asyncio.sleep,
@@ -321,7 +368,7 @@ async def run_sequence(client, *, pin, credentials, staff_id=None, emit, wait=as
     profile=client.cap.profile
     if quiet_seconds!=65: raise Held('quiet_interval_invalid')
     try:
-        if not isinstance(pin,str) or not re.fullmatch('[0-9]{4,8}',pin): raise Held('pin_input')
+        if not client._valid_pin_input('P01',pin): raise Held('pin_input')
         await wait(65)
         client._check()
         wrong_pin = None

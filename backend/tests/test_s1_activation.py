@@ -9,6 +9,7 @@ import multiprocessing
 import os
 from pathlib import Path
 import ssl
+import sqlite3
 import sys
 import threading
 
@@ -183,6 +184,11 @@ def test_complete_supervised_loopback_profile_and_replay_refusal(tmp_path):
         assert result['status']=='passed', result
         assert result['cleanupConfirmed'] and result['evidenceClosureConfirmed'] and result['requestsCompleted']==21
         assert seen==list(activation.sequence(profile)) and not errors
+        assert result['preflightSource']=='owner_reported' and result['claimStatus']=='created'
+        assert result['credentialEntryRoles']==profile['roles']
+        assert len(result['integrityChecks'])==21
+        assert all(row['controllerMilliseconds']>=0 and row['workerMilliseconds']>=0 for row in result['integrityChecks'])
+        (tmp_path/'fictional-rehearsal-receipt.json').write_text(json.dumps(result),encoding='utf-8')
         with pytest.raises(FileExistsError):
             operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,
                 owner_reference=bound['ownerReference'],input_mode='fixture')
@@ -261,11 +267,14 @@ def test_real_app_routes_with_approved_identity_bindings_and_variants(tmp_path,m
     client=activation.rehearsal_client(ledger,transport=httpx.ASGITransport(app=server.app),clock=lambda:now[0])
     async def wait(seconds): now[0]+=seconds;await asyncio.sleep(0)
     async def emit(value): ledger.result(value)
-    asyncio.run(activation.run_sequence(client,pin='4826',credentials={role:(actor['email'],operator.FICTIONAL_PASSWORD)
+    asyncio.run(activation.run_sequence(client,pin='4826' if configured else '',credentials={role:(actor['email'],operator.FICTIONAL_PASSWORD)
         for role,actor in people.items()},staff_id=MEMBER if roster and configured else None,emit=emit,wait=wait))
     result=ledger.finish(cleanup_confirmed=True,completed=True)
     assert result['status']=='passed' and result['clockMode']=='virtual' and result['securityAcceptance'] is False
     assert result['requestsCompleted']==len(activation.sequence(profile))<=21
+    if not configured:
+        with sqlite3.connect(tmp_path/'limiter.sqlite3') as db:
+            assert db.execute('SELECT count FROM attempts WHERE key=?',(security.store_key('berts'),)).fetchone()==(1,)
 
 
 def test_missing_roster_and_wrong_store_refuse(tmp_path):
@@ -357,3 +366,187 @@ def test_invalid_public_profile_never_opens_private_binding_files(tmp_path,monke
         '--actors','actors.json','--evidence',str(tmp_path),'--owner-reference','TEST_ONLY_OWNER_APPROVAL'])
     assert operator.main()==1 and reads==['profile.json']
     assert 'S1 held.' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('bad_field',('pin','email','password'))
+def test_local_field_reentry_accepts_correction_without_network(bad_field,monkeypatch):
+    profile=activation.prepare(roles=('owner',));people=actors(profile)
+    values=['4826',people['owner']['email'],operator.FICTIONAL_PASSWORD]
+    offset={'pin':0,'email':1,'password':2}[bad_field]
+    values.insert(offset,{'pin':'abc','email':'typo@example.invalid','password':''}[bad_field])
+    entries=iter(values);seen=[]
+    monkeypatch.setattr(httpx,'AsyncClient',lambda **_:pytest.fail('network during input'))
+    pin,credentials=operator.collect_inputs(profile,people,read=lambda prompt:(seen.append(prompt),next(entries))[1],guard=lambda:None)
+    assert pin=='4826' and credentials=={'owner':(people['owner']['email'],operator.FICTIONAL_PASSWORD)}
+    assert len(seen)==4 and '2/3' in seen[offset+1]
+
+
+@pytest.mark.parametrize('field',('pin','email','password'))
+def test_local_field_three_bad_entries_holds(field):
+    profile=activation.prepare(roles=('owner',));people=actors(profile)
+    good=['4826',people['owner']['email'],operator.FICTIONAL_PASSWORD]
+    offset={'pin':0,'email':1,'password':2}[field]
+    entries=iter(good[:offset]+[{'pin':'12','email':'wrong@example.invalid','password':''}[field]]*3)
+    with pytest.raises(activation.Held,match='local_input_entries_exhausted'):
+        operator.collect_inputs(profile,people,read=lambda _:next(entries),guard=lambda:None)
+    assert next(entries,None) is None
+
+
+@pytest.mark.parametrize('password',('', 'x'*1025))
+def test_hosted_input_password_bounds_are_local_only(password,monkeypatch):
+    # The collector has no transport or activation authority.
+    profile=activation.prepare(roles=('owner',));profile['mode']='hosted'
+    people=actors(profile);entries=iter(['4826',people['owner']['email']]+[password]*3)
+    monkeypatch.setattr(httpx,'AsyncClient',lambda **_:pytest.fail('network during input'))
+    with pytest.raises(activation.Held,match='local_input_entries_exhausted'):
+        operator.collect_inputs(profile,people,read=lambda _:next(entries),guard=lambda:None)
+
+
+def test_disabled_input_does_not_prompt_for_or_invent_pin():
+    profile=activation.prepare(roles=('owner',),pin_configured=False);people=actors(profile)
+    entries=iter([people['owner']['email'],operator.FICTIONAL_PASSWORD]);prompts=[]
+    pin,credentials=operator.collect_inputs(profile,people,read=lambda p:(prompts.append(p),next(entries))[1],guard=lambda:None)
+    assert pin=='' and len(credentials)==1 and all('PIN' not in p for p in prompts)
+
+
+@pytest.mark.parametrize('worker,passes',[(workers.typed_operator,True),
+    (workers.invalid_email_operator,False),(workers.invalid_pin_operator,False)])
+def test_actual_supervised_input_phase_claims_only_after_valid_fields(tmp_path,monkeypatch,worker,passes):
+    if os.name!='nt': return
+    monkeypatch.setattr(operator,'_operator_worker',worker)
+    base=activation.prepare()
+    with fixture_server(base) as (origin,seen,errors):
+        profile=activation.prepare(origin=origin);bound=approval(profile,tmp_path)
+        result=operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,
+            owner_reference=bound['ownerReference'],input_mode='terminal')
+    assert result['cleanupConfirmed'] and not errors
+    if passes:
+        assert result['status']=='passed' and len(list(tmp_path.glob('*.claim')))==1 and len(seen)==21
+    else:
+        assert result['status']=='held' and result['claimStatus']=='not_created'
+        assert result['inputStage']=='inputs_not_ready_no_claim' and not list(tmp_path.iterdir()) and not seen
+
+
+@pytest.mark.parametrize('fault',('short_window','source_changed','expired','binding_changed'))
+def test_ready_revalidation_holds_without_claim(tmp_path,monkeypatch,fault):
+    profile=activation.prepare();people=actors(profile);bound=approval(profile,tmp_path)
+    now=[activation.engine.utc_now()]
+    monkeypatch.setattr(activation.engine,'utc_now',lambda:now[0])
+    def supervise(_target,args,*,on_event,guard,seconds):
+        assert not list(tmp_path.iterdir());guard()
+        if fault=='short_window': now[0]=activation.stamp(bound['stopChecksAt'])-timedelta(seconds=activation.MIN_DISPATCH_SECONDS-.001)
+        elif fault=='expired': now[0]=activation.stamp(bound['stopChecksAt'])
+        elif fault=='source_changed': monkeypatch.setattr(activation,'execution_pins',lambda:{'changed':'source'})
+        else: args[2]['owner']['id']='changed inside copied binding'
+        try: on_event({'event':'inputs_ready'})
+        except BaseException:
+            error=operator.ProcessHeld('worker_held');error.ownedCleanupConfirmed=True;raise error
+        pytest.fail('claim granted')
+    monkeypatch.setattr(operator,'supervise',supervise)
+    result=operator.execute_approved(profile,bound,people,evidence_directory=tmp_path,owner_reference=bound['ownerReference'])
+    assert result['status']=='held' and result['claimStatus']=='not_created' and result['cleanupConfirmed']
+    assert result['inputStage']=='inputs_collected_no_claim' and not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize('event',({'event':'permit','request':'P01','integrityMilliseconds':0},
+    {'event':'done'},{'event':'inputs_ready','password':'TEST ONLY PRIVATE'},
+    {'event':'inputs_ready','roles':['owner']}))
+def test_before_claim_protocol_rejects_values_or_dispatch(tmp_path,monkeypatch,event):
+    profile=activation.prepare();bound=approval(profile,tmp_path)
+    def supervise(_target,args,*,on_event,guard,seconds):
+        try: on_event(event)
+        except BaseException:
+            error=operator.ProcessHeld('worker_held');error.ownedCleanupConfirmed=True;raise error
+        pytest.fail('invalid event accepted')
+    monkeypatch.setattr(operator,'supervise',supervise)
+    result=operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,owner_reference=bound['ownerReference'])
+    assert result['claimStatus']=='not_created' and not list(tmp_path.iterdir())
+    assert 'TEST ONLY PRIVATE' not in json.dumps(result)
+
+
+def test_ready_exact_message_grants_one_claim_then_duplicate_is_held(tmp_path,monkeypatch):
+    profile=activation.prepare();bound=approval(profile,tmp_path)
+    def supervise(_target,args,*,on_event,guard,seconds):
+        assert not list(tmp_path.iterdir())
+        assert on_event({'event':'inputs_ready'})=={'start_dispatch':True}
+        assert len(list(tmp_path.glob('*.claim')))==1
+        with pytest.raises(operator.ProcessHeld): on_event({'event':'inputs_ready'})
+        return {'ownedCleanupConfirmed':True}
+    monkeypatch.setattr(operator,'supervise',supervise)
+    result=operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,owner_reference=bound['ownerReference'])
+    assert result['status']=='held' and result['claimStatus']=='created'
+    assert result['preflightSource']=='owner_reported' and len(list(tmp_path.glob('*.claim')))==1
+
+
+def test_named_window_bound_is_checked_after_evidence_environment(tmp_path,monkeypatch):
+    assert activation.MIN_DISPATCH_SECONDS==397
+    profile=activation.prepare();bound=approval(profile,tmp_path);now=[activation.engine.utc_now()]
+    monkeypatch.setattr(activation.engine,'utc_now',lambda:now[0])
+    def delayed_environment(*_):
+        now[0]=activation.stamp(bound['stopChecksAt'])-timedelta(seconds=396)
+    monkeypatch.setattr(activation,'evidence_environment',delayed_environment)
+    with pytest.raises(activation.Held,match='window_insufficient_before_claim'):
+        activation.Journal(profile,bound,actors(profile),tmp_path,require_dispatch_window=True)
+    assert not list(tmp_path.iterdir())
+
+
+def test_disabled_variant_empty_pin_fails_closed_if_portal_was_configured(tmp_path,monkeypatch):
+    import server
+    import staff_pin_security as security
+    from test_staff_pin_security import Connection,Pool
+    limiter=security.PinAttemptLimiter(tmp_path/'limiter.sqlite3')
+    monkeypatch.setattr(security,'limiter',limiter)
+    monkeypatch.setattr(server,'AUTH_REQUIRED',True);monkeypatch.setattr(server,'USE_PG',True)
+    pool=Pool(Connection('4826'))
+    monkeypatch.setattr(server.db_pg,'pool',lambda:pool)
+    profile=activation.prepare(pin_configured=False);bound=approval(profile,tmp_path)
+    journal=activation.Journal(profile,bound,actors(profile),tmp_path)
+    client=activation.rehearsal_client(journal,transport=httpx.ASGITransport(app=server.app))
+    with pytest.raises(activation.Held,match='unexpected_status'): asyncio.run(client.probe('P01',pin=''))
+    assert journal.pending=='P01' and not client._sessions
+    with sqlite3.connect(tmp_path/'limiter.sqlite3') as db:
+        assert db.execute('SELECT count FROM attempts WHERE key=?',(security.store_key('berts'),)).fetchone()==(1,)
+    client.close();journal.finish(cleanup_confirmed=True)
+
+
+@pytest.mark.parametrize('pin',('0000','4826',None))
+def test_disabled_variant_refuses_plausible_pin_before_dispatch(tmp_path,pin,monkeypatch):
+    profile=activation.prepare(pin_configured=False);journal=activation.Journal(profile,approval(profile,tmp_path),actors(profile),tmp_path)
+    client=activation.rehearsal_client(journal,transport=httpx.MockTransport(lambda _:pytest.fail('request')))
+    with pytest.raises(activation.Held,match='pin_input'): asyncio.run(client.probe('P01',pin=pin))
+    assert journal.pending is None
+    client.close();journal.finish(cleanup_confirmed=True)
+
+
+@pytest.mark.parametrize('timing',(-1,True,float('inf'),float('nan'),'private',900001))
+def test_integrity_timing_rejects_non_numeric_or_unbounded_metadata(tmp_path,timing):
+    profile=activation.prepare();journal=activation.Journal(profile,approval(profile,tmp_path),actors(profile),tmp_path)
+    with pytest.raises(activation.Held,match='integrity_timing_invalid'): journal.intent('P01',worker_integrity_ms=timing)
+    assert journal.pending is None
+    journal.finish(cleanup_confirmed=True)
+
+
+def test_partial_claim_after_ready_is_never_reported_unused(tmp_path,monkeypatch):
+    profile=activation.prepare();bound=approval(profile,tmp_path)
+    monkeypatch.setattr(activation.os,'fsync',lambda _:(_ for _ in ()).throw(OSError('TEST ONLY storage')))
+    def supervise(_target,args,*,on_event,guard,seconds):
+        try: on_event({'event':'inputs_ready'})
+        except BaseException:
+            error=operator.ProcessHeld('worker_held');error.ownedCleanupConfirmed=True;raise error
+        pytest.fail('storage failure granted')
+    monkeypatch.setattr(operator,'supervise',supervise)
+    result=operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,owner_reference=bound['ownerReference'])
+    assert result['status']=='held' and result['claimStatus']=='creation_unconfirmed'
+    assert result['inputStage']=='inputs_collected_claim_unconfirmed' and not result['evidenceClosureConfirmed']
+    assert len(list(tmp_path.glob('*.claim')))==1
+    with pytest.raises(FileExistsError):
+        operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,owner_reference=bound['ownerReference'])
+
+
+def test_claim_records_only_completed_input_role_labels(tmp_path):
+    profile=activation.prepare();bound=approval(profile,tmp_path)
+    journal=activation.Journal(profile,bound,actors(profile),tmp_path,require_dispatch_window=True)
+    journal.finish(cleanup_confirmed=True)
+    claimed=json.loads(next(tmp_path.glob('*.jsonl')).read_text().splitlines()[0])
+    assert claimed['credentialEntryRoles']==['owner','manager','staff']
+    assert set(claimed)=={'event','profileSha256','credentialEntryRoles'}
