@@ -24,6 +24,13 @@ its approval consumed. Existing app/service/credential settings remained unchang
 The authorized [local transport design and rehearsal](docs/S1_PROTECTED_REQUEST_TRANSPORT_20261024.md)
 now uses isolated anonymous/personal contexts, legitimate fictional logins,
 strict route/response/time limits, one-use request slots and minimized receipts.
+The [PR65](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/65) review
+amendment enforces P09 recovery waits before P10/P11, requires successful P10
+before P11, and binds separate absolute stop-checks/cleanup deadlines. Receipt
+metadata documents unavailable server revocation and the configurable eight-hour
+session default; local session cleanup does not revoke issued tokens.
+Amended local validation passed 1,687 offline cases and the overlapping 67-test
+transport profile. Fresh amended-head CI and merge approval remain separate.
 It deliberately has **no hosted mode**. Local validation, independent review,
 hosted activation and a fresh live approval remain separate gates. The
 [collector history](docs/S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md) remains dated
@@ -31,8 +38,9 @@ evidence; this slice does not change collector or application behavior.
 
 ## Next
 
-- Complete local transport validation and JMax readback, then prompt before a new
-  draft PR push. After independent review, prepare a separately reviewed activation
+- Obtain fresh CI and merge approval for PR65's locally validated amendment;
+  JMax records the current publication and check status. After acceptance,
+  prepare a separately reviewed activation
   adapter and fresh exact S1 packet: up to 18 probes plus three explicit personal
   logins, durable source/approval/claim guards and private operator handoff. No live
   execution is enabled or authorized by this local slice.

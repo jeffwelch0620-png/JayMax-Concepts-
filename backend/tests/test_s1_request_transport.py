@@ -1,6 +1,7 @@
 """Fictional S1 requests only; includes actual TCP and real app login routes."""
 import asyncio
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 import getpass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
@@ -28,9 +29,17 @@ def run(awaitable):
     return asyncio.run(awaitable)
 
 
+def window(**overrides):
+    now = boundary.utc_now()
+    result = {'ends_at': now + timedelta(seconds=900),
+              'stop_checks_at': now + timedelta(seconds=780)}
+    result.update(overrides)
+    return result
+
+
 def client(handler, **kwargs):
     return boundary.LocalTransport('https://s1-fixture.invalid', approved=True,
-        guard=lambda: None, transport=httpx.MockTransport(handler), **kwargs)
+        guard=lambda: None, transport=httpx.MockTransport(handler), **window(**kwargs))
 
 
 def response(value=None, status=200, headers=None):
@@ -45,13 +54,13 @@ def test_hosted_and_ambiguous_destinations_are_disabled_before_client_creation(m
                    'http://127.0.0.1:9123?x=1', 'http://user:secret@127.0.0.1:9123',
                    'http://127.0.0.1.evil.invalid:9123', 'http://127.0.0.1:80'):
         with pytest.raises(boundary.Held, match='hosted_execution_disabled'):
-            boundary.LocalTransport(origin, approved=True, guard=lambda: None)
+            boundary.LocalTransport(origin, approved=True, guard=lambda: None, **window())
 
 
 @pytest.mark.parametrize('approved,guard', [(False, lambda: None), (None, lambda: None), (True, None)])
 def test_local_approval_and_guard_are_required(approved, guard):
     with pytest.raises(boundary.Held, match='local_approval_required'):
-        boundary.LocalTransport('http://127.0.0.1:9123', approved=approved, guard=guard)
+        boundary.LocalTransport('http://127.0.0.1:9123', approved=approved, guard=guard, **window())
 
 
 def test_missing_inputs_and_unknown_routes_refuse_before_transport():
@@ -252,7 +261,7 @@ def test_resource_or_source_guard_failure_cancels_inflight_and_later_send():
         try: await asyncio.sleep(5)
         finally: closed.append(True)
     c = boundary.LocalTransport('https://s1-fixture.invalid', approved=True,
-        guard=guard, transport=httpx.MockTransport(stalled))
+        guard=guard, transport=httpx.MockTransport(stalled), **window())
     with pytest.raises(boundary.Held, match='local_guard_failed'):
         run(c.probe('P01', pin='4826'))
     assert closed
@@ -281,6 +290,162 @@ def test_deadline_cancel_and_concurrent_requests_have_no_implicit_retry():
     assert len(calls) == 1 and c.receipt()['requests'][0]['outcome'] == 'cancelled'
 
 
+@pytest.mark.parametrize('field,value', [
+    ('ends_at', None), ('ends_at', '2026-10-24T12:00:00Z'),
+    ('ends_at', datetime(2026, 1, 1)), ('stop_checks_at', datetime(2026, 1, 1)),
+    ('ends_at', datetime(2000, 1, 1, tzinfo=timezone.utc)),
+    ('stop_checks_at', datetime(2000, 1, 1, tzinfo=timezone.utc)),
+])
+def test_absolute_deadlines_refuse_naive_missing_invalid_and_past_values(field, value, monkeypatch):
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **_: pytest.fail('client created'))
+    with pytest.raises(boundary.Held, match='invalid_deadline'):
+        client(lambda _: pytest.fail('sent'), **{field: value})
+
+
+def test_both_absolute_deadlines_are_required_and_cleanup_reserve_is_preserved():
+    limits = window()
+    with pytest.raises(TypeError):
+        boundary.LocalTransport('http://127.0.0.1:9123', approved=True, guard=lambda: None,
+                                ends_at=limits['ends_at'])
+    with pytest.raises(TypeError):
+        boundary.LocalTransport('http://127.0.0.1:9123', approved=True, guard=lambda: None,
+                                stop_checks_at=limits['stop_checks_at'])
+    with pytest.raises(boundary.Held, match='invalid_deadline'):
+        client(lambda _: pytest.fail('sent'), ends_at=limits['stop_checks_at'] + timedelta(seconds=119))
+    with pytest.raises(boundary.Held, match='invalid_deadline'):
+        client(lambda _: pytest.fail('sent'), ends_at=limits['stop_checks_at'] - timedelta(seconds=1))
+    eastern = timezone(timedelta(hours=-4))
+    c = client(lambda _: response(), **{k: v.astimezone(eastern) for k, v in limits.items()})
+    assert c._ends_at == limits['ends_at'] and c._stop_checks_at == limits['stop_checks_at']
+    c.close()
+
+
+@pytest.mark.parametrize('cutoff', ['stop_checks', 'hard_end'])
+def test_wall_clock_crossing_cutoff_midstream_cancels_and_closes(cutoff, monkeypatch):
+    wall = [datetime.now(timezone.utc)]
+    monkeypatch.setattr(boundary, 'utc_now', lambda: wall[0])
+    closed = []
+    limits = window()
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'{"ok":true,'
+            wall[0] = limits['stop_checks_at' if cutoff == 'stop_checks' else 'ends_at']
+            await asyncio.sleep(.1)
+            yield b'"staff":[]}'
+        async def aclose(self): closed.append(True)
+    c = client(lambda _: httpx.Response(200, headers={'content-type': 'application/json'}, stream=Stream()))
+    with pytest.raises(boundary.Held, match='window_closed'):
+        run(c.probe('P01', pin='4826'))
+    assert closed and c._used == {'P01'} and c.receipt()['requests'][0]['outcome'] == 'held'
+    with pytest.raises(boundary.Held, match='window_closed'):
+        run(c.probe('P03', pin='0000'))
+    assert c._used == {'P01'}
+
+
+@pytest.mark.parametrize('utc_remaining,relative,request_limit,expected', [
+    (2, 780, 90, 2), (60, 780, .5, .5), (60, .75, 90, .75)])
+def test_client_and_total_timeout_use_smallest_remaining_budget(
+        utc_remaining, relative, request_limit, expected, monkeypatch):
+    wall = datetime.now(timezone.utc)
+    monkeypatch.setattr(boundary, 'utc_now', lambda: wall)
+    original_client, original_timeout = httpx.AsyncClient, asyncio.timeout
+    client_budgets, total_budgets = [], []
+    def observed_client(**kwargs):
+        client_budgets.append(kwargs['timeout'])
+        return original_client(**kwargs)
+    def observed_timeout(seconds):
+        total_budgets.append(seconds)
+        return original_timeout(seconds)
+    monkeypatch.setattr(httpx, 'AsyncClient', observed_client)
+    monkeypatch.setattr(asyncio, 'timeout', observed_timeout)
+    stop = wall + timedelta(seconds=utc_remaining)
+    c = client(lambda _: response(), seconds=relative, request_seconds=request_limit,
+               stop_checks_at=stop, ends_at=stop + timedelta(seconds=120))
+    run(c.probe('P01', pin='4826'))
+    assert client_budgets and total_budgets
+    assert all(0 < timeout.read <= expected and 0 < timeout.connect <= expected for timeout in client_budgets)
+    assert all(0 < seconds <= expected for seconds in total_budgets)
+
+
+def recovery_client(**kwargs):
+    now, seen = [0.0], []
+    def handler(request):
+        seen.append(request.url.path)
+        if now[0] < 61:
+            return response({'detail': 'TEST ONLY wait'}, 429, {'Retry-After': '60'})
+        if request.url.path == boundary.IDENTIFY:
+            return response({'ok': True, 'name': 'TEST ONLY', 'role': 'owner_admin'})
+        return response()
+    return client(handler, clock=lambda: now[0], **kwargs), now, seen
+
+
+@pytest.mark.parametrize('label', ['P10', 'P11'])
+def test_recovery_without_validated_p09_never_consumes_or_sends(label, monkeypatch):
+    c, _, seen = recovery_client()
+    with pytest.raises(boundary.Held, match='throttle_sequence_required'):
+        run(c.probe(label, pin='4826', **({'staff_id': MEMBER} if label == 'P11' else {})))
+    monkeypatch.setattr(getpass, 'getpass', lambda _: pytest.fail('prompt called'))
+    with pytest.raises(boundary.Held, match='throttle_sequence_required'):
+        run(c.pin_from_terminal(label, staff_id=MEMBER if label == 'P11' else None))
+    assert not seen and not c._used
+
+
+def test_early_recovery_keeps_slots_then_exact_wait_and_successful_p10_allow_p11(monkeypatch):
+    c, now, seen = recovery_client()
+    run(c.probe('P09', pin='4826'))
+    assert c._recovery_at == 61
+    monkeypatch.setattr(getpass, 'getpass', lambda _: pytest.fail('prompt called'))
+    for label in ('P10', 'P11'):
+        with pytest.raises(boundary.Held, match='throttle_wait_required'):
+            run(c.probe(label, pin='4826', **({'staff_id': MEMBER} if label == 'P11' else {})))
+        with pytest.raises(boundary.Held, match='throttle_wait_required'):
+            run(c.pin_from_terminal(label, staff_id=MEMBER if label == 'P11' else None))
+    assert c._used == {'P09'} and len(seen) == 1
+    now[0] = 61
+    with pytest.raises(boundary.Held, match='recovery_verification_required'):
+        run(c.probe('P11', pin='4826', staff_id=MEMBER))
+    assert c._used == {'P09'}
+    assert run(c.probe('P10', pin='4826'))['outcome'] == 'passed'
+    assert run(c.probe('P11', pin='4826', staff_id=MEMBER))['outcome'] == 'passed'
+    assert len(seen) == 3
+
+
+@pytest.mark.parametrize('label', ['P10', 'P11'])
+@pytest.mark.parametrize('limit', ['relative', 'absolute'])
+def test_insufficient_recovery_window_refuses_before_wait_input_or_consumption(label, limit):
+    kwargs = {'seconds': 30} if limit == 'relative' else window(
+        stop_checks_at=boundary.utc_now() + timedelta(seconds=30))
+    c, _, seen = recovery_client(**kwargs)
+    run(c.probe('P09', pin='4826'))
+    with pytest.raises(boundary.Held, match='window_insufficient_for_recovery'):
+        run(c.probe(label, pin='4826', **({'staff_id': MEMBER} if label == 'P11' else {})))
+    assert c._used == {'P09'} and len(seen) == 1
+
+
+def test_malformed_p09_does_not_authorize_recovery():
+    c = client(lambda _: response({'detail': 'wait'}, 429))
+    with pytest.raises(boundary.Held, match='probe_shape'):
+        run(c.probe('P09', pin='4826'))
+    with pytest.raises(boundary.Held, match='throttle_sequence_required'):
+        run(c.probe('P10', pin='4826'))
+    assert c._used == {'P09'}
+
+
+def test_failed_p10_never_authorizes_p11():
+    now = [0.0]
+    def handler(_):
+        return (response({'detail': 'wait'}, 429, {'Retry-After': '60'}) if now[0] == 0
+                else response({'ok': True, 'staff': [], 'token': TOKEN}))
+    c = client(handler, clock=lambda: now[0])
+    run(c.probe('P09', pin='4826'))
+    now[0] = 61
+    with pytest.raises(boundary.Held, match='probe_shape'):
+        run(c.probe('P10', pin='4826'))
+    with pytest.raises(boundary.Held, match='recovery_verification_required'):
+        run(c.probe('P11', pin='4826', staff_id=MEMBER))
+    assert c._used == {'P09', 'P10'}
+
+
 @contextmanager
 def local_http():
     seen = []
@@ -293,8 +458,12 @@ def local_http():
                 assert body == {'email': EMAIL, 'password': PASSWORD}
                 value = {'token': TOKEN, 'user': {'id': 'fictional-owner', 'email': EMAIL, 'role': 'owner'}}
             else:
-                assert body == {'pin': '4826'}
-                value = {'ok': True, 'staff': []}
+                if self.path == boundary.IDENTIFY:
+                    assert body == {'pin': '4826', 'staffId': MEMBER}
+                    value = {'ok': True, 'name': 'TEST ONLY', 'role': 'owner_admin'}
+                else:
+                    assert body == {'pin': '4826'}
+                    value = {'ok': True, 'staff': []}
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Set-Cookie', 'do-not-replay=fictional; Path=/')
@@ -321,12 +490,12 @@ def test_actual_httpx_socket_boundary_has_no_proxy_cookie_or_ambient_authorizati
     monkeypatch.setenv('ALL_PROXY', 'http://unreachable.invalid:9123')
     monkeypatch.setenv('NO_PROXY', '')
     with local_http() as (origin, seen):
-        c = boundary.LocalTransport(origin, approved=True, guard=lambda: None)
+        c = boundary.LocalTransport(origin, approved=True, guard=lambda: None, **window())
         async def scenario():
             await c.login('owner', EMAIL, PASSWORD)
             await c.probe('R01')
             await c.probe('P01', pin='4826')
-            await c.probe('P10', pin='4826')
+            await c.probe('P02', pin='4826', staff_id=MEMBER)
         with caplog.at_level(logging.DEBUG): run(scenario())
         assert len(seen) == 4
         assert all(not ({k.lower() for k in headers} & {'cookie', 'proxy-authorization'}) for _, headers in seen)
@@ -344,12 +513,12 @@ def test_real_app_login_pin_lockout_and_personal_role_matrix(monkeypatch, tmp_pa
     import server
     import staff_pin_security as security
     from test_staff_pin_security import Connection, Pool
-    from datetime import datetime, timezone
     now = [1000.0]
     monkeypatch.setattr(security, 'limiter', security.PinAttemptLimiter(tmp_path / 'limits.sqlite3', clock=lambda: now[0]))
     monkeypatch.setattr(server, 'USE_PG', True)
     monkeypatch.setattr(server, 'AUTH_REQUIRED', True)
     monkeypatch.setattr(server, 'AUTH_SECRET', 'TEST-ONLY-S1-transport-signing-key')
+    monkeypatch.setattr(server, 'SESSION_TTL', 37)  # Receipt reports the default, not observed runtime config.
     users = {role + '@example.invalid': {'id': 'fictional-' + role, 'role': role,
              'email': role + '@example.invalid', 'locations': ['berts'],
              'password_hash': server._password_hash(PASSWORD), 'created_at': datetime.now(timezone.utc)}
@@ -363,7 +532,8 @@ def test_real_app_login_pin_lockout_and_personal_role_matrix(monkeypatch, tmp_pa
     async def no_activity(*args): pass
     monkeypatch.setattr(server, '_record_activity', no_activity)
     c = boundary.LocalTransport('https://s1-fixture.invalid', approved=True,
-        guard=lambda: None, transport=httpx.ASGITransport(app=server.app))
+        guard=lambda: None, transport=httpx.ASGITransport(app=server.app),
+        clock=lambda: now[0], **window())
     async def scenario():
         await c.probe('P01', pin='4826')
         await c.probe('P02', pin='4826', staff_id=MEMBER)
@@ -379,8 +549,11 @@ def test_real_app_login_pin_lockout_and_personal_role_matrix(monkeypatch, tmp_pa
         await c.probe('P10', pin='4826')
         await c.probe('P11', pin='4826', staff_id=MEMBER)
     run(scenario())
+    fictional_tokens = [session.token for session in c._sessions.values()]
     c.close()
     receipt = c.receipt()
+    assert not c._sessions and all(server._decode_token(token) for token in fictional_tokens)
+    assert receipt['serverSideRevocation'] == 'not_available' and receipt['sessionTtlSecondsDefault'] == 28800
     assert len(receipt['requests']) == 21
     assert all(fact['outcome'] == 'passed' for fact in receipt['requests'])
     public = json.dumps(receipt)

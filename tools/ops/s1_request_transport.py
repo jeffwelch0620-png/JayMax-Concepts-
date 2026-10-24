@@ -5,6 +5,7 @@ This module deliberately refuses every non-fictional/non-loopback destination.
 """
 import asyncio
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import getpass
 import json
 import re
@@ -19,6 +20,12 @@ import httpx
 CAP = 65536
 ROLES = ('owner', 'manager', 'staff')
 FORMAT = 's1-local-request-transport-v1'
+CLEANUP_RESERVE_SECONDS = 120
+SESSION_TTL_SECONDS_DEFAULT = 28800
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 class Held(ValueError):
@@ -104,7 +111,8 @@ class LocalTransport:
     failure. Wall and monotonic deadlines also run inside every request. The
     local claim is in memory: durable cross-process live claiming is NOT enabled.
     """
-    def __init__(self, origin, *, approved, guard, transport=None, clock=time.monotonic,
+    def __init__(self, origin, *, approved, guard, ends_at, stop_checks_at,
+                 transport=None, clock=time.monotonic,
                  seconds=780, request_seconds=90):
         try:
             parsed = urlsplit(origin)
@@ -125,22 +133,55 @@ class LocalTransport:
             raise Held('local_approval_required')
         if not 0 < seconds <= 780 or not 0 < request_seconds <= 90:
             raise Held('invalid_deadline')
+        try:
+            if any(not isinstance(value, datetime) or value.utcoffset() is None
+                   for value in (ends_at, stop_checks_at)):
+                raise ValueError
+            ends_at, stop_checks_at = (value.astimezone(timezone.utc)
+                                      for value in (ends_at, stop_checks_at))
+            if (stop_checks_at <= utc_now() or ends_at <= utc_now()
+                    or (ends_at - stop_checks_at).total_seconds() < CLEANUP_RESERVE_SECONDS):
+                raise ValueError
+        except (ValueError, TypeError, OverflowError):
+            raise Held('invalid_deadline') from None
         self._origin, self._transport, self._guard = origin, transport, guard
         self._clock, self._until = clock, clock() + seconds
         self._request_seconds = request_seconds
-        self._wall_until = time.monotonic() + seconds
-        self._used, self._sessions, self._facts = set(), {}, []
+        self._budget_until = time.monotonic() + seconds
+        self._ends_at, self._stop_checks_at = ends_at, stop_checks_at
+        self._used, self._passed, self._sessions, self._facts = set(), set(), {}, []
+        self._recovery_at = None
         self._closed = False
         self._busy = False
         self._check()
 
     def _check(self):
-        if self._closed or self._clock() >= self._until or time.monotonic() >= self._wall_until:
+        if (self._closed or self._clock() >= self._until or time.monotonic() >= self._budget_until
+                or utc_now() >= self._stop_checks_at or utc_now() >= self._ends_at):
             raise Held('window_closed')
         try:
             self._guard()
         except Exception:
             raise Held('local_guard_failed') from None
+
+    def _remaining(self):
+        now = utc_now()
+        return min(self._until - self._clock(), self._budget_until - time.monotonic(),
+                   (self._stop_checks_at - now).total_seconds(), (self._ends_at - now).total_seconds())
+
+    def _recovery_gate(self, label):
+        self._check()
+        if label not in ('P10', 'P11'):
+            return
+        if self._recovery_at is None:
+            raise Held('throttle_sequence_required')
+        delay = max(0, self._recovery_at - self._clock())
+        if self._recovery_at >= self._until or delay >= self._remaining():
+            raise Held('window_insufficient_for_recovery')
+        if self._clock() < self._recovery_at:
+            raise Held('throttle_wait_required')
+        if label == 'P11' and 'P10' not in self._passed:
+            raise Held('recovery_verification_required')
 
     async def _watch(self):
         while True:
@@ -157,6 +198,7 @@ class LocalTransport:
         # following anonymous/personal request. No arbitrary headers are accepted.
         async with httpx.AsyncClient(transport=self._transport, verify=True, trust_env=False,
                 follow_redirects=False, timeout=httpx.Timeout(budget, connect=min(6, budget))) as client:
+            self._check()
             async with client.stream(step.method, self._origin + step.path,
                                      headers=headers, json=body) as response:
                 if response.status_code != step.status:
@@ -182,18 +224,19 @@ class LocalTransport:
                 return value, response.headers.get('retry-after')
 
     async def _send(self, label, step, body=None, session=None):
-        self._check()
+        self._recovery_gate(label)
         if label in self._used or self._busy:
             raise Held('request_already_claimed')
+        budget = min(self._request_seconds, 90 if label == 'P01' else 6, self._remaining())
+        if budget <= 0:
+            raise Held('window_closed')
         self._used.add(label)  # Ambiguous send/timeout consumes its slot too.
         self._busy = True
-        budget = min(self._request_seconds, 90 if label == 'P01' else 6)
         exchange = asyncio.create_task(self._exchange(step, body, session, budget))
         watch = asyncio.create_task(self._watch())
         fact = {'request': label, 'outcome': 'held'}
         try:
-            async with asyncio.timeout(min(budget, self._until - self._clock(),
-                                           self._wall_until - time.monotonic())):
+            async with asyncio.timeout(min(budget, self._remaining())):
                 done, _ = await asyncio.wait((exchange, watch), return_when=asyncio.FIRST_COMPLETED)
                 if watch in done:
                     watch.result()
@@ -234,6 +277,7 @@ class LocalTransport:
             raise Held('login_identity')
         if any(other.subject == user['id'] for other in self._sessions.values()):
             raise Held('login_identity')
+        self._check()
         self._sessions[role] = Session(token, user['id'], user['email'], role)
         fact['outcome'] = 'passed'
 
@@ -250,7 +294,7 @@ class LocalTransport:
             email = password = None
 
     async def pin_from_terminal(self, label, *, staff_id=None):
-        self._check()
+        self._recovery_gate(label)
         if label not in STEPS or STEPS[label].path not in (VERIFY, IDENTIFY) or label in self._used:
             raise Held('unknown_request')
         pin = None
@@ -263,6 +307,7 @@ class LocalTransport:
     async def probe(self, label, *, pin=None, staff_id=None):
         if label not in STEPS:
             raise Held('unknown_request')
+        self._recovery_gate(label)
         step = STEPS[label]
         session = self._sessions.get(step.actor)
         if step.actor != 'anonymous' and session is None:
@@ -307,13 +352,19 @@ class LocalTransport:
                 'id', 'email', 'role', 'locations', 'createdAt'} and {'id', 'email', 'role'} <= set(v) for v in value)
         if not valid:
             raise Held('probe_shape')
+        self._check()
         fact.update(outcome='passed', httpStatus=step.status)
+        self._passed.add(label)
         if step.shape == 'throttled':
             fact['retryAfterSeconds'] = int(retry)
+            if label == 'P09':
+                self._recovery_at = self._clock() + int(retry) + 1
         return dict(fact)  # Never return response bodies, tokens, PINs or actors.
 
     def receipt(self):
         return {'format': FORMAT, 'localOnly': True, 'closed': self._closed,
+                'serverSideRevocation': 'not_available',
+                'sessionTtlSecondsDefault': SESSION_TTL_SECONDS_DEFAULT,
                 'requests': [dict(fact) for fact in self._facts]}
 
     def close(self):
