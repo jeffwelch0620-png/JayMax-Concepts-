@@ -15,13 +15,16 @@ passed separately. The October 23 approved S1 check observed API PR59 and fronte
 PR53 Live with source-equivalent service code. Owner sign-in and partial read-only
 metadata succeeded; a metadata timeout stopped the attempt. PIN/role probes and
 audit review remain incomplete. The [local diagnostic follow-up](docs/S1_LOCAL_DIAGNOSTICS_20261023.md)
-now identifies operations and preserves completed private observations; local
-validation and publication status are recorded there. No hosted work in this slice.
+now identifies operations and preserves completed private observations. PR61's
+review amendment adds explicit audit coverage/truncation and envelope-expiry
+diagnostics; validation and publication status are recorded there. No hosted work
+in this slice.
 
 ## Next
 
-- Complete local diagnostic review and prompt before a draft PR push; a new S1
-  handoff/window requires separate approval. The prior attempt is closed.
+- Complete the authorized PR61 amendments, tests and same-branch push; return for
+  merge approval after fresh CI. A new S1 handoff/window requires separate
+  approval. The prior attempt is closed.
 - Review the [coordinated approval index](docs/PAR_SECURITY_APPROVAL_INDEX_20261023.md)
   and [security/identity/permissions plan](docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md).
   S1 verification comes first; a targeted S2a rotation packet no longer waits for

@@ -1,7 +1,7 @@
 """Offline fictional observations only: no credentials, sockets or real database."""
 import asyncio
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import io
 import json
 from pathlib import Path
@@ -29,7 +29,7 @@ def plans(**changes):
         'metadata': [('metadata.identity', AsyncMock(return_value={'readOnly':True})),
                      ('metadata.relations', AsyncMock(return_value=[{'name':'TEST_ONLY_ITEM'}])),
                      ('metadata.ledger', AsyncMock(return_value=[{'version':'TEST_ONLY'}]))],
-        'audit': [('audit.records', AsyncMock(return_value=[]))]
+        'audit': [('audit.records', AsyncMock(return_value={'recordsTruncated': False}))]
     }
     for label, reader in changes.items():
         for phase, entries in readers.items():
@@ -73,6 +73,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(caught.exception, original)
         result = f[6].receipt()
         self.assertEqual(result['failedOperation'], 'metadata.ledger')
+        self.assertFalse(result['envelopeExpired'])
         self.assertEqual(result['status'], 'held')
         self.assertEqual(result['completedObservations'], ['metadata.identity','metadata.relations'])
         self.assertEqual([label for label, _ in f[5]], result['completedObservations'])
@@ -177,6 +178,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(TimeoutError): await self.run_plan(f, work_seconds=7.1)
         result = f[6].receipt()
         self.assertEqual(result['error']['errorType'], 'TimeoutError')
+        self.assertTrue(result['envelopeExpired'])
         failed = next(e for e in result['operations'] if e['status']=='failed')
         self.assertEqual((failed['operation'],failed['errorType']),
                          ('metadata.ledger','CancelledError'))
@@ -190,6 +192,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
             await self.run_plan(f)
         self.assertIs(caught.exception, original)
         self.assertEqual(f[6].receipt()['error']['errorType'], 'CancelledError')
+        self.assertFalse(f[6].receipt()['envelopeExpired'])
         self.assertEqual(f[6].completed, ['metadata.identity','metadata.relations'])
         f[2].rollback.assert_awaited_once(); f[0].close.assert_awaited_once()
 
@@ -206,11 +209,14 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         for conn in f[:2]:
             conn.fetchrow = AsyncMock(return_value={'actor':'postgres','login':'postgres','db':'postgres','readonly':'on'})
             conn.fetch = AsyncMock(return_value=[])
+        f[1].fetchrow.side_effect = [
+            {'actor':'postgres','login':'postgres','db':'postgres','readonly':'on'},
+            {'total':0, 'first_at':None, 'last_at':None}]
         start=datetime(2026,10,15,4,tzinfo=timezone.utc)
         end=datetime(2026,10,23,22,tzinfo=timezone.utc)
         result=await s1.collect(f[4],f[6],audit_from=start,as_of=end,remaining_seconds=60)
         self.assertEqual(result['status'],'complete')
-        self.assertEqual(len(f[5]),9)
+        self.assertEqual(len(f[5]),11)
         first_calls=f[0].fetch.await_args_list
         self.assertEqual(len(first_calls),6)
         self.assertEqual(first_calls[0].args[1],list(s1.OBJECTS))
@@ -221,12 +227,13 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         pin_sql=first_calls[2].args[0]
         self.assertIn('AS configured',pin_sql);self.assertNotIn('SELECT pin',pin_sql)
         audit_call=f[1].fetch.await_args
-        self.assertIn('LIMIT 200',audit_call.args[0])
+        self.assertEqual(audit_call.args[0].count('LIMIT 100'),2)
         self.assertIn('ORDER BY created_at ASC,id ASC',audit_call.args[0])
+        self.assertIn('ORDER BY created_at DESC,id DESC',audit_call.args[0])
         self.assertEqual(audit_call.args[1:],(start,end,['owner','manager']))
         self.assertNotIn('user_email',audit_call.args[0])
         for call in (*first_calls,audit_call):
-            self.assertTrue(call.args[0].startswith('SELECT'))
+            self.assertTrue(call.args[0].startswith(('SELECT','WITH')))
             self.assertNotIn('password_hash',call.args[0])
             self.assertNotIn('command,',call.args[0])
 
@@ -250,6 +257,134 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
                      'metadata.toast_jobs','metadata.sessions'])
                 self.assertNotIn('PRIVATE',json.dumps(journal.receipt()))
         self.assertEqual(f[4].await_count,1)
+
+    def audit_fixture(self, total=250, groups=None):
+        f = self.fixture()
+        identity = {'actor':'postgres','login':'postgres','db':'postgres','readonly':'on'}
+        f[0].fetchrow = AsyncMock(return_value=identity)
+        f[0].fetch = AsyncMock(return_value=[])
+        start = datetime(2026,10,15,tzinfo=timezone.utc)
+        data = [{'created_at':start+timedelta(seconds=i), 'user_id':'TEST_ONLY_USER',
+                 'role':'manager', 'method':'GET', 'path':'/TEST_ONLY_PRIVATE_PATH',
+                 'status':200, 'store_id':'TEST_ONLY_STORE'} for i in range(total)]
+        f[1].fetchrow = AsyncMock(side_effect=[identity, {'total':total,
+            'first_at':data[0]['created_at'] if data else None,
+            'last_at':data[-1]['created_at'] if data else None}])
+        group_rows = groups if groups is not None else [{'day':start.replace(tzinfo=None),
+            'role':'manager','user_id':'TEST_ONLY_USER','method':'GET','status_class':2,'n':total}]
+        sample = [dict(sample='earliest',**row) for row in data[:100]]
+        sample += [dict(sample='latest',**row) for row in data[-100:]]
+        f[1].fetch = AsyncMock(side_effect=[group_rows, sample])
+        return f, start, data
+
+    async def collect_audit(self, f, start):
+        return await s1.collect(f[4],f[6],audit_from=start,
+            as_of=start+timedelta(days=1),remaining_seconds=60)
+
+    async def test_full_interval_total_and_split_sample_keep_newest_of_250_rows(self):
+        f,start,data = self.audit_fixture()
+        result = await self.collect_audit(f,start)
+        evidence = dict(f[5])
+        self.assertEqual(evidence['audit.summary'],
+            {'total':250,'first_at':data[0]['created_at'],'last_at':data[-1]['created_at']})
+        self.assertEqual(evidence['audit.records']['earliest'],data[:100])
+        self.assertEqual(evidence['audit.records']['latest'],data[-100:])
+        self.assertEqual(result['auditTotal'],250)
+        self.assertTrue(result['recordsTruncated'])
+        self.assertFalse(result['breakdownTruncated'])
+        self.assertNotIn('TEST_ONLY_',json.dumps(result))
+        self.assertNotIn('/TEST_ONLY_PRIVATE_PATH',json.dumps(result))
+        summary_sql = f[1].fetchrow.await_args.args[0]
+        self.assertIn('count(*) AS total',summary_sql)
+        self.assertIn('min(created_at)',summary_sql)
+        self.assertIn('max(created_at)',summary_sql)
+        self.assertNotIn('LIMIT',summary_sql)
+        for call in (*f[1].fetchrow.await_args_list[1:],*f[1].fetch.await_args_list):
+            self.assertEqual(call.args[1:],(start,start+timedelta(days=1),['owner','manager']))
+            self.assertNotIn('user_email',call.args[0])
+        f[1].transaction.assert_called_once_with(readonly=True,isolation='repeatable_read')
+
+    async def test_empty_and_exact_sample_boundaries_are_explicit(self):
+        for total in (0,1,199,200,201):
+            with self.subTest(total=total):
+                f,start,_ = self.audit_fixture(total,groups=[])
+                result = await self.collect_audit(f,start)
+                self.assertEqual(result['auditTotal'],total)
+                self.assertEqual(result['recordsTruncated'],total>200)
+                self.assertFalse(result['breakdownTruncated'])
+                sample = dict(f[5])['audit.records']
+                self.assertEqual(len(sample['earliest']),min(total,100))
+                self.assertEqual(len(sample['latest']),min(total,100))
+
+    async def test_breakdown_lookahead_and_byte_budget_both_report_truncation(self):
+        for count,field_size,truncated in ((500,10,False),(501,10,True),(500,2048,True),(1,150000,True)):
+            with self.subTest(count=count,field_size=field_size):
+                groups = [{'day':datetime(2026,10,15), 'role':'manager',
+                    'user_id':'X'*field_size+str(i),'method':'GET','status_class':2,'n':1}
+                    for i in range(count)]
+                f,start,_ = self.audit_fixture(groups=groups)
+                result = await self.collect_audit(f,start)
+                breakdown = dict(f[5])['audit.breakdown']
+                self.assertEqual(result['breakdownTruncated'],truncated)
+                self.assertLessEqual(len(breakdown['groups']),500)
+                self.assertLessEqual(len(s1.checkpoint_bytes('audit.breakdown',breakdown)),96*1024)
+                self.assertIn('LIMIT 501',f[1].fetch.await_args_list[0].args[0])
+                lines = [s1.checkpoint_bytes(label,value) for label,value in f[5]]
+                self.assertLessEqual(max(map(len,lines)),128*1024)
+                self.assertLessEqual(sum(map(len,lines)),512*1024)
+                with TemporaryDirectory() as directory:
+                    with (Path(directory)/'TEST_ONLY.ndjson').open('xb') as stream:
+                        sink=s1.JsonlCheckpoints(stream)
+                        for label,value in f[5]: sink(label,value)
+                        self.assertEqual(sink.bytes_written,sum(map(len,lines)))
+
+    async def test_audit_not_evaluated_and_partial_failure_never_look_empty_complete(self):
+        fresh=s1.Diagnostics(lambda *_:None).receipt()
+        for key in ('auditTotal','recordsTruncated','breakdownTruncated'):
+            self.assertIsNone(fresh[key])
+        for step in ('summary','breakdown','records'):
+            with self.subTest(step=step):
+                f,start,_=self.audit_fixture()
+                if step=='summary':
+                    f[1].fetchrow.side_effect=[
+                        {'actor':'postgres','login':'postgres','db':'postgres','readonly':'on'},TimeoutError()]
+                elif step=='breakdown': f[1].fetch.side_effect=TimeoutError()
+                else: f[1].fetch.side_effect=[[],TimeoutError()]
+                with self.assertRaises(TimeoutError): await self.collect_audit(f,start)
+                result=f[6].receipt()
+                self.assertEqual(result['failedOperation'],'audit.'+step)
+                self.assertFalse(result['envelopeExpired'])
+                self.assertEqual(result['auditTotal'],None if step=='summary' else 250)
+                self.assertIsNone(result['recordsTruncated'])
+                self.assertEqual(result['breakdownTruncated'],False if step=='records' else None)
+                self.assertTrue(result['ownedClientsClosed']['audit'])
+                self.assertNotIn('TEST_ONLY_',json.dumps(result))
+
+    async def test_failed_summary_checkpoint_cannot_publish_coverage(self):
+        f,start,_=self.audit_fixture()
+        sink=f[6].checkpoint
+        def fail(label,value):
+            if label=='audit.summary': raise OSError('PRIVATE')
+            sink(label,value)
+        f[6].checkpoint=fail
+        with self.assertRaises(OSError): await self.collect_audit(f,start)
+        self.assertIsNone(f[6].receipt()['auditTotal'])
+        f[1].fetch.assert_not_awaited()
+
+    async def test_oversized_record_checkpoint_holds_without_claiming_sample_coverage(self):
+        f,start,_=self.audit_fixture()
+        sample=[{'sample':'earliest','path':'X'*(128*1024)}]
+        f[1].fetch.side_effect=[[],sample]
+        with TemporaryDirectory() as directory:
+            with (Path(directory)/'TEST_ONLY.ndjson').open('xb') as stream:
+                f[6].checkpoint=s1.JsonlCheckpoints(stream)
+                with self.assertRaises(s1.ObservationHeld): await self.collect_audit(f,start)
+                receipt=f[6].receipt()
+                self.assertEqual(receipt['auditTotal'],250)
+                self.assertFalse(receipt['breakdownTruncated'])
+                self.assertIsNone(receipt['recordsTruncated'])
+                self.assertNotIn('audit.records',receipt['completedObservations'])
+                self.assertTrue(receipt['ownedClientsClosed']['audit'])
 
     async def test_fixed_collector_rejects_wrong_identity_before_other_reads(self):
         for field,value in (('actor','TEST_ONLY_OTHER'),('login','TEST_ONLY_OTHER'),('db','TEST_ONLY_OTHER'),('readonly','off')):

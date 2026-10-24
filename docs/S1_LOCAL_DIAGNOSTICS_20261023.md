@@ -29,7 +29,9 @@ than silently rerunning or modifying that closed attempt.
   A failed stream cannot be reused after a short write/flush/fsync failure, and
   an asynchronous or uncompleted sink cannot claim a durable checkpoint.
 - Public diagnostics contain only fixed labels, statuses, safe error categories,
-  validated SQLSTATE, durations and cleanup outcomes. SQL, exception messages,
+  validated SQLSTATE, durations, cleanup outcomes and audit counts/coverage flags.
+  `envelopeExpired` distinguishes total-envelope expiry from a command timeout
+  or independent operator cancellation. SQL, exception messages,
   connection strings, actor/employee/session rows and private observations never
   enter that receipt. Unknown exception type names become OtherError.
 - The primary observation exception survives rollback/close/terminate failures;
@@ -40,14 +42,36 @@ than silently rerunning or modifying that closed attempt.
   read-only transaction; exceptional exit attempts rollback. Receipts name the
   actual action instead of falsely marking a successful read-only commit as a
   confirmed rollback. No write transaction or business commit is introduced.
+- Audit coverage is checkpointed separately as `audit.summary`, `audit.breakdown`
+  and `audit.records` within the same audit snapshot. The full-interval aggregate
+  supplies total, first and last timestamps for recorded owner/manager activity.
+  The row sample contains the earliest 100 and latest 100, ordered using timestamp
+  and ID; the two samples can overlap when the total is below 200. They are not
+  counts to add together or evidence that every event has been reviewed.
+- Public receipts expose only `auditTotal`, `recordsTruncated` and
+  `breakdownTruncated` for audit coverage. Each remains null (not evaluated) until
+  its corresponding private checkpoint is durably completed. A saved aggregate
+  can survive a later sample failure; that does not make the held attempt complete.
+  The row sample reports truncation when the aggregate exceeds 200. The grouped
+  breakdown uses a 501-row lookahead, keeps at most 500 groups and trims its
+  checkpoint to 96 KiB, setting truncation for either limit. Individual record
+  checkpoints that exceed the existing cap still hold the attempt.
 
-## Unchanged boundaries
+## Query scope and unchanged safeguards
 
 The fixed collector retains the existing 14-relation scope, 100 policy-metadata
 row cap, PIN configured-booleans only for the same three stores, Toast IDs 3/4,
-20 session-metadata rows, 64 ledger version/name identifiers and 200 minimized
-manager/owner activity records ordered by created_at and id. It does not select
+20 session-metadata rows and 64 ledger version/name identifiers. The PR61 review
+amendment adds the full-interval audit aggregate and bounded UTC-day/role/user/
+method/status-class breakdown, plus the two 100-row minimized samples, against
+the same activity table, role filter and approved half-open interval. Full-interval
+coverage comes from the aggregate, not the row sample. This covers recorded
+owner/manager activity; it does not prove the audit middleware captures every
+security-relevant request or resolve actor/consumer attribution. It does not select
 PIN values, account password hashes, audit emails, cron commands or SQL text.
+User IDs and paths remain private evidence only. Each checkpoint stays within
+128 KiB and the cumulative stream within 512 KiB; output-budget failure holds
+the attempt without publishing false complete coverage.
 
 There are at most two sequential injected connections. Connect and command
 timeouts remain 10 seconds, server statement timeout 10 seconds, lock timeout
@@ -115,12 +139,39 @@ No frontend
 or database-server test is needed for this operator-only diagnostic change;
 application code, dependencies, migrations and hosting configuration are unchanged.
 
+### PR61 A1 and N1 review amendment
+
+The final focused selection passed **51 tests + 78 subtests = 129 reported cases**
+with one existing warning. The broad offline profile passed **535 tests + 1,005
+subtests = 1,540 cases**, zero failures/errors/skips and five existing warnings,
+including the actual Windows ACL checks. These selections overlap. Source-contract,
+local Markdown-link and whitespace checks passed separately.
+
+New cases cover 250 recorded events retaining the newest sample, empty and
+199/200/201 boundaries, 500/501 grouped rows, byte-budget truncation, real temporary
+JSONL stream limits, partial audit failures, failed summary persistence, oversized
+sample refusal and public-receipt redaction. Existing timeout/cancellation tests
+now distinguish envelope expiry, command timeout and operator cancellation.
+
+Two initial expanded selections used incomplete dependency paths (seven missing
+asyncpg imports, then five missing cryptography imports in unchanged companion
+tests); all new diagnostic tests passed in both. One subsequent command selected
+a nonexistent runner filename and collected no tests. After selecting the
+established local library paths and correct runner module, the focused and broad
+profiles above passed. These earlier receipts are retained outside Git and are
+not added to the final counts. No dependency, hosted request or database server
+was installed or started for this amendment.
+
 ## Next gates
 
-1. Local code review and final broad offline checks are complete. Repository
-   and JMax documentation record this local-only checkpoint; no PR is published.
-2. Prompt the owner before publishing a draft PR. Fresh CI, independent review,
-   merge and any automatic test deployment remain separate approval steps.
+1. [Draft PR61](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/61) was
+   published at 2e8ab80 with all four checks passing in
+   [the original-head CI run](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40045888723).
+   The owner authorized the local A1/N1 review amendments, testing and same-branch
+   push. The original CI does not validate these amendments.
+2. Amendment local validation is complete; same-branch push is owner-authorized.
+   Obtain fresh exact-head CI and return for owner merge/automatic-test-deployment
+   approval. Independent review and any fresh live attempt remain separate gates.
 3. Prepare secure controlled-probe inputs, personal-role contexts and a source-
    pinned operator handoff before requesting another bounded S1 attempt. This
    local fix does not complete the PIN/role probes, audit review or API actor and
@@ -129,3 +180,7 @@ application code, dependencies, migrations and hosting configuration are unchang
    schema, connection/provider changes held. Ordering stays manual; par editing
    frozen; Track 1 independent. No credential retirement or par installation is
    approved by this diagnostic work.
+5. N2 remains a separate PIN-storage security decision: review protected storage,
+   key management, verification, manager controls and migration on a future owner
+   PIN set, including whether resetting store PINs belongs in S2a. Existing PIN
+   storage and all credentials are unchanged by PR61.

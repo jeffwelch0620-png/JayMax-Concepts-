@@ -18,7 +18,7 @@ from readonly_snapshot import readonly_snapshot
 
 PHASES = ('metadata', 'audit')
 READS = ('identity', 'relations', 'policies', 'pin_configuration', 'toast_jobs',
-         'sessions', 'ledger', 'records')
+         'sessions', 'ledger', 'summary', 'breakdown', 'records')
 LABELS = {f'{phase}.{op}' for phase in PHASES
           for op in (*READS, 'connect', 'begin', 'settings', 'commit', 'rollback',
                      'close', 'terminate', 'confirm_closed')}
@@ -31,6 +31,15 @@ ERROR_TYPES = frozenset(('TimeoutError', 'CancelledError', 'ConnectionError',
 
 class ObservationHeld(ValueError):
     pass
+
+
+def checkpoint_bytes(label, value):
+    def encode(value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        raise TypeError('Unsupported private checkpoint type')
+    return (json.dumps({'format': 'jaymax-s1-checkpoint-v1', 'operation': label,
+                       'data': value}, default=encode, allow_nan=False) + '\n').encode()
 
 
 def safe_error(error):
@@ -60,12 +69,7 @@ class JsonlCheckpoints:
             raise ObservationHeld('Failed private stream cannot be reused')
         if label not in LABELS or label.rsplit('.', 1)[-1] not in READS:
             raise ObservationHeld('Unsupported private checkpoint')
-        def encode(value):
-            if isinstance(value, datetime):
-                return value.isoformat()
-            raise TypeError('Unsupported private checkpoint type')
-        raw = (json.dumps({'format': 'jaymax-s1-checkpoint-v1', 'operation': label,
-                           'data': value}, default=encode, allow_nan=False) + '\n').encode()
+        raw = checkpoint_bytes(label, value)
         if len(raw) > 128 * 1024 or self.bytes_written + len(raw) > 512 * 1024:
             raise ObservationHeld('Private checkpoint size held')
         try:
@@ -93,6 +97,10 @@ class Diagnostics:
         self.primary = None
         self.closed = {}
         self.truncated = False
+        self.envelope_expired = False
+        # None means not durably observed, never zero/complete by default.
+        self.audit_coverage = {'auditTotal': None, 'recordsTruncated': None,
+                               'breakdownTruncated': None}
 
     @asynccontextmanager
     async def step(self, label, *, target=None, cleanup=False):
@@ -126,6 +134,18 @@ class Diagnostics:
 
     async def capture(self, label, value):
         # Completed observations are persisted immediately, not at whole-run end.
+        coverage = {}
+        if label == 'audit.summary':
+            total = value.get('total') if isinstance(value, dict) else None
+            if type(total) is not int or total < 0:
+                raise ObservationHeld('Valid audit total required')
+            coverage['auditTotal'] = total
+        elif label in ('audit.breakdown', 'audit.records'):
+            key = 'breakdownTruncated' if label == 'audit.breakdown' else 'recordsTruncated'
+            flag = value.get(key) if isinstance(value, dict) else None
+            if type(flag) is not bool:
+                raise ObservationHeld('Explicit audit coverage required')
+            coverage[key] = flag
         async with self.step('evidence.checkpoint', target=label):
             result = self.checkpoint(label, value)
             if inspect.iscoroutine(result):
@@ -134,13 +154,15 @@ class Diagnostics:
             if result is not None:
                 raise ObservationHeld('Synchronous completed checkpoint required')
         self.completed.append(label)
+        self.audit_coverage.update(coverage)
 
     def receipt(self):
         failed = next((event for event in self.events if event['status'] == 'failed'), None)
         result = {'format': 'jaymax-s1-diagnostics-v1', 'status': self.status,
                   'operations': deepcopy(self.events), 'completedObservations': list(self.completed),
                   'failedOperation': failed['operation'] if failed else None,
-                  'ownedClientsClosed': dict(self.closed), 'diagnosticsTruncated': self.truncated}
+                  'ownedClientsClosed': dict(self.closed), 'diagnosticsTruncated': self.truncated,
+                  'envelopeExpired': self.envelope_expired, **self.audit_coverage}
         if self.primary is not None:
             result['error'] = safe_error(self.primary)
         return result
@@ -219,10 +241,11 @@ async def observe(connect, plans, diagnostics, *, remaining_seconds, work_second
     # Keep the validated sequence stable while individual readers are awaited.
     plans = {phase: tuple(readers) for phase, readers in plans.items()}
     diagnostics.status = 'running'
+    envelope = asyncio.timeout(min(work_seconds, remaining_seconds) - 7)
     try:
         # Reserve the existing 3-second rollback + 4-second owned close inside
         # the total envelope, rather than tacking cleanup onto its deadline.
-        async with asyncio.timeout(min(work_seconds, remaining_seconds) - 7):
+        async with envelope:
             for phase, readers in plans.items():
                 conn = None
                 primary = None
@@ -243,6 +266,7 @@ async def observe(connect, plans, diagnostics, *, remaining_seconds, work_second
                     if conn is not None:
                         await close_owned(conn, diagnostics, phase, primary)
     except BaseException as error:
+        diagnostics.envelope_expired = envelope.expired()
         diagnostics.status = 'held'
         diagnostics.primary = error
         raise
@@ -256,6 +280,9 @@ OBJECTS = ('public.activity_log', 'public.app_users', 'public.push_subscriptions
     'purchasing.unit_profiles', 'purchasing.item_bases', 'public.items',
     'public.store_items', 'public.dishes', 'public.dish_lines',
     'public.prep_items', 'public.staff_members')
+
+AUDIT_GROUP_LIMIT = 500
+AUDIT_BREAKDOWN_BYTES = 96 * 1024  # Leaves room under the 128 KiB checkpoint cap.
 
 
 async def collect(connect, diagnostics, *, audit_from, as_of, remaining_seconds):
@@ -282,6 +309,51 @@ async def collect(connect, diagnostics, *, audit_from, as_of, remaining_seconds)
             return [dict(row) for row in await conn.fetch(sql, *args)]
         return read
 
+    audit_args = (audit_from, as_of, ['owner', 'manager'])
+    audit_filter = 'created_at >= $1 AND created_at < $2 AND role=ANY($3::text[])'
+
+    async def summary(conn):
+        return dict(await conn.fetchrow('SELECT count(*) AS total, '
+            'min(created_at) AS first_at, max(created_at) AS last_at '
+            'FROM public.activity_log WHERE ' + audit_filter, *audit_args))
+
+    async def breakdown(conn):
+        groups = await conn.fetch('''SELECT date_trunc('day', created_at AT TIME ZONE 'UTC') AS day,
+            role,user_id,method,(status/100)::int AS status_class,count(*) AS n
+            FROM public.activity_log WHERE ''' + audit_filter + '''
+            GROUP BY 1,2,3,4,5 ORDER BY 1,2,3,4,5 LIMIT 501''', *audit_args)
+        result = {'groups': [], 'breakdownTruncated': len(groups) > AUDIT_GROUP_LIMIT}
+        for row in groups[:AUDIT_GROUP_LIMIT]:
+            result['groups'].append(dict(row))
+            if len(checkpoint_bytes('audit.breakdown', result)) > AUDIT_BREAKDOWN_BYTES:
+                result['groups'].pop()
+                result['breakdownTruncated'] = True
+                break
+        return result
+
+    async def records(conn):
+        total = diagnostics.audit_coverage['auditTotal']
+        if total is None:
+            raise ObservationHeld('Durable audit summary required before sampling')
+        fields = 'id,created_at,user_id,role,method,path,status,store_id'
+        sample = await conn.fetch('WITH first_rows AS (SELECT ' + fields +
+            ' FROM public.activity_log WHERE ' + audit_filter +
+            ' ORDER BY created_at ASC,id ASC LIMIT 100), last_rows AS (SELECT ' + fields +
+            ' FROM public.activity_log WHERE ' + audit_filter +
+            ''' ORDER BY created_at DESC,id DESC LIMIT 100)
+            SELECT sample,created_at,user_id,role,method,path,status,store_id FROM (
+                SELECT 'earliest' AS sample,* FROM first_rows UNION ALL
+                SELECT 'latest' AS sample,* FROM last_rows) samples
+            ORDER BY sample,created_at,id''', *audit_args)
+        result = {'earliest': [], 'latest': [], 'recordsTruncated': total > 200}
+        for row in sample:
+            row = dict(row)
+            side = row.pop('sample')
+            if side not in ('earliest', 'latest') or len(result[side]) >= 100:
+                raise ObservationHeld('Bounded audit sample required')
+            result[side].append(row)
+        return result
+
     plans = {
         'metadata': [
             ('metadata.identity', identity),
@@ -299,8 +371,7 @@ async def collect(connect, diagnostics, *, audit_from, as_of, remaining_seconds)
                 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()
                 ORDER BY backend_start,pid LIMIT 20''')),
             ('metadata.ledger', rows('SELECT version::text,name::text FROM supabase_migrations.schema_migrations ORDER BY version::text,name::text LIMIT 64'))],
-        'audit': [('audit.identity', identity), ('audit.records', rows('''SELECT created_at,user_id,role,method,path,status,store_id
-            FROM public.activity_log WHERE created_at >= $1 AND created_at < $2 AND role=ANY($3::text[])
-            ORDER BY created_at ASC,id ASC LIMIT 200''', audit_from, as_of, ['owner','manager']))]
+        'audit': [('audit.identity', identity), ('audit.summary', summary),
+                  ('audit.breakdown', breakdown), ('audit.records', records)]
     }
     return await observe(connect, plans, diagnostics, remaining_seconds=remaining_seconds)
