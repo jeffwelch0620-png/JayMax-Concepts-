@@ -1,6 +1,10 @@
 # Inventory workflow checkpoint and remaining work
 
-**Current October 23 routing:** accepted main is PR62 a009e8a. The approved S1
+**Current October 23 routing:** accepted main is PR63 0cba049, tree-identical to
+reviewed 423bded. All four [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40053598106)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40054929392)
+passed separately. Merge and existing automatic Render test deployment were
+approved; runtime acceptance is not claimed. The approved S1
 attempt returned partial metadata/owner-login evidence and stopped on timeout;
 all PIN/role probes and audit review remain incomplete. See the
 [local diagnostics follow-up](S1_LOCAL_DIAGNOSTICS_20261023.md) and
@@ -9,9 +13,12 @@ This local slice changes no hosted system, credential, grant or schema. The
 accepted PR61 A1/N1 amendment adds full-interval recorded-activity totals,
 bounded audit breakdown/sampling with explicit coverage and envelope-expiry
 diagnostics. PR62 accepted the [N3 disposable PostgreSQL test](S1_COLLECTOR_POSTGRES_TEST_20261023.md).
-The owner authorized the separate [F1/F2/M1 collector follow-up](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md)
-and local validation, with a prompt before draft publication. No new push, merge or hosted
-execution is authorized. PIN-storage remediation stays in a future security slice.
+PR63 accepted the [F1/F2/M1 collector follow-up](S1_TIMEOUT_METADATA_FOLLOWUP_20261023.md).
+The owner authorized the local [L1/L2/L3 follow-up](S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md)
+and local validation, with a prompt before draft publication. It adds visibility
+summary, newest session sampling/full groups and ledger consistency; v3 replaces
+the current output contract for future handoffs. No new push, follow-up merge or
+hosted execution is authorized. PIN-storage remediation stays in a future security slice.
 The earlier checkpoints below retain their dated results and approval boundaries.
 
 **Historical October 21 continuation:** accepted main was PR52

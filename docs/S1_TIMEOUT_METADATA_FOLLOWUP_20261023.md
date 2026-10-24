@@ -1,5 +1,14 @@
 # S1 timeout and metadata coverage follow-up
 
+**Accepted checkpoint:** PR63 merged as 0cba049, tree-identical to reviewed
+423bded, with owner approval for automatic Render test deployment. Its
+[reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40053598106)
+and separate [merged-main run](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40054929392)
+are tracked independently. The v2 shapes and local results below are dated PR63
+evidence. The authorized local [L1/L2/L3 follow-up](S1_VISIBILITY_SESSION_FOLLOWUP_20261023.md)
+introduces v3, a nullable visibility summary, session groups/newest sampling and
+stricter ledger aggregates. No live S1 acceptance follows from this merge.
+
 ## Scope and accepted baseline
 
 PR62 is accepted as a009e8a, tree-identical to reviewed d306b8e. Its separate

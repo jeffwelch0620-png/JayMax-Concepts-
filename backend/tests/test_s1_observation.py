@@ -38,6 +38,10 @@ def plans(**changes):
     return readers
 
 
+def empty_metadata(sql, *args):
+    return [{'kind':'total','n':0}] if 'FROM pg_stat_activity' in sql else []
+
+
 class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
     def fixture(self, readers=None):
         first, tx1 = connection()
@@ -209,7 +213,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         f = self.fixture()
         for conn in f[:2]:
             conn.fetchrow = AsyncMock(return_value={'actor':'postgres','login':'postgres','db':'postgres','readonly':'on'})
-            conn.fetch = AsyncMock(return_value=[])
+            conn.fetch = AsyncMock(side_effect=empty_metadata)
         f[1].fetchrow.side_effect = [
             {'actor':'postgres','login':'postgres','db':'postgres','readonly':'on'},
             {'total':0, 'first_at':None, 'last_at':None}]
@@ -245,6 +249,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         f[0].fetchrow=AsyncMock(return_value={'actor':'postgres','login':'postgres','db':'postgres','readonly':'on'})
         async def read(sql,*args):
             if 'schema_migrations' in sql:raise TimeoutError('PRIVATE SQL credential')
+            if 'FROM pg_stat_activity' in sql:return empty_metadata(sql)
             return [{'TEST_ONLY_RESULT':True}]
         f[0].fetch=AsyncMock(side_effect=read)
         with TemporaryDirectory() as directory:
@@ -265,7 +270,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
         f = self.fixture()
         identity = {'actor':'postgres','login':'postgres','db':'postgres','readonly':'on'}
         f[0].fetchrow = AsyncMock(return_value=identity)
-        f[0].fetch = AsyncMock(return_value=[])
+        f[0].fetch = AsyncMock(side_effect=empty_metadata)
         start = datetime(2026,10,15,tzinfo=timezone.utc)
         data = [{'created_at':start+timedelta(seconds=i), 'user_id':'TEST_ONLY_USER',
                  'role':'manager', 'method':'GET', 'path':'/TEST_ONLY_PRIVATE_PATH',
@@ -432,7 +437,9 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
             target=('ledger' if 'schema_migrations' in sql else
                     'policies' if 'FROM pg_policies' in sql else
                     'sessions' if 'FROM pg_stat_activity' in sql else None)
-            if target!=name:return []
+            if target!=name:return empty_metadata(sql)
+            if name=='sessions':
+                return self.session_rows(count,1 if count else 0,wide=wide)
             if name=='ledger':
                 return [{'version':'TEST_ONLY_'+str(count-i).zfill(3),
                     'name':'X'*(128*1024) if wide else 'TEST_ONLY_PRIVATE',
@@ -445,6 +452,102 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
     async def collect_metadata(self,f):
         return await s1.collect(f[4],f[6],audit_from=datetime(2026,1,1,tzinfo=timezone.utc),
             as_of=datetime(2026,1,2,tzinfo=timezone.utc),remaining_seconds=60)
+
+    def session_rows(self,count,groups,*,wide=False):
+        start=datetime(2026,10,1,tzinfo=timezone.utc)
+        name='X'*(128*1024) if wide else 'TEST_ONLY_SESSION'
+        return ([{'kind':'total','n':count}]
+            +[{'kind':'row','usename':'TEST_ONLY_ROLE','application_name':name,
+               'state':'idle','backend_start':start+timedelta(seconds=i),'pid':i}
+              for i in range(count, max(count-21,0),-1)]
+            +[{'kind':'group','usename':'TEST_ONLY_ROLE','application_name':name+str(i),
+               'state':'idle','n':1} for i in range(min(groups,51))])
+
+    async def test_session_sample_and_group_limits_keep_full_total_and_private_names(self):
+        for total,groups in ((0,0),(20,1),(21,1),(50,50),(73,51),(125,75)):
+            with self.subTest(total=total,groups=groups):
+                f=self.metadata_fixture('sessions',0)
+                f[0].fetch.side_effect=lambda sql,*args: (self.session_rows(total,groups)
+                    if 'FROM pg_stat_activity' in sql else [])
+                result=await self.collect_metadata(f)
+                saved=dict(f[5])['metadata.sessions']
+                self.assertEqual(saved['total'],total)
+                self.assertEqual(len(saved['rows']),min(total,20))
+                self.assertEqual(saved['truncated'],total>20)
+                self.assertEqual(len(saved['groups']),min(groups,50))
+                self.assertEqual(saved['groupsTruncated'],groups>50)
+                self.assertEqual(result['sessionGroupsTruncated'],groups>50)
+                self.assertEqual(result['coverageComplete'],total<=20 and groups<=50)
+                if total:self.assertEqual(saved['rows'][0]['session_ref'],str(total))
+                sql=next(call.args[0] for call in f[0].fetch.await_args_list if 'FROM pg_stat_activity' in call.args[0])
+                self.assertIn('observed AS MATERIALIZED',sql)
+                self.assertEqual(sql.count('FROM pg_stat_activity'),1)
+                self.assertIn('backend_start DESC NULLS LAST,pid DESC LIMIT 21',sql)
+                self.assertIn('LIMIT 51',sql)
+                for forbidden in ('client_addr','query,','query_text'):
+                    self.assertNotIn(forbidden,sql)
+                self.assertNotIn('TEST_ONLY',json.dumps(result))
+                lines=[s1.checkpoint_bytes(label,value) for label,value in f[5]]
+                self.assertLessEqual(max(map(len,lines)),128*1024)
+                self.assertLessEqual(sum(map(len,lines)),512*1024)
+
+    async def test_session_aggregate_validation_and_failed_sink_leave_both_flags_unknown(self):
+        valid={'rows':[],'truncated':False,'groups':[],'groupsTruncated':False,'total':0}
+        for change in ({'total':True},{'total':-1},{'groups':None},
+                       {'groups':[{}]*51},{'groupsTruncated':None}):
+            with self.subTest(change=change):
+                journal=s1.Diagnostics(lambda *_:None)
+                with self.assertRaises(s1.ObservationHeld):
+                    await journal.capture('metadata.sessions',{**valid,**change})
+                self.assertIsNone(journal.receipt()['sessionsTruncated'])
+                self.assertIsNone(journal.receipt()['sessionGroupsTruncated'])
+        journal=s1.Diagnostics(lambda *_:(_ for _ in ()).throw(OSError('PRIVATE')))
+        with self.assertRaises(OSError):await journal.capture('metadata.sessions',valid)
+        self.assertIsNone(journal.receipt()['sessionGroupsTruncated'])
+
+    async def test_ledger_aggregate_requires_explicit_consistent_maximum(self):
+        for value in ({'total':3,'max_version':None},{'total':0,'max_version':'TEST_ONLY'},
+                      {'total':True,'max_version':'TEST_ONLY'},{'total':-1,'max_version':None},
+                      {'total':0},{'total':3,'max_version':7}):
+            with self.subTest(value=value):
+                journal=s1.Diagnostics(lambda *_:None)
+                with self.assertRaises(s1.ObservationHeld):
+                    await journal.capture('metadata.ledger',{'rows':[],'truncated':False,**value})
+                self.assertIsNone(journal.receipt()['ledgerTruncated'])
+        for total,maximum in ((0,None),(3,'TEST_ONLY')):
+            with self.subTest(total=total):
+                journal=s1.Diagnostics(lambda *_:None)
+                await journal.capture('metadata.ledger',{'rows':[],'truncated':False,
+                    'total':total,'max_version':maximum})
+                self.assertFalse(journal.receipt()['ledgerTruncated'])
+
+    def test_coverage_summary_is_nullable_and_execution_status_remains_separate(self):
+        journal=s1.Diagnostics(lambda *_:None)
+        self.assertIsNone(journal.receipt()['coverageComplete'])
+        journal.audit_coverage={'auditTotal':0,'recordsTruncated':False,'breakdownTruncated':False}
+        journal.metadata_coverage={key:False for key in journal.metadata_coverage}
+        for status in ('not_started','running','held','complete'):
+            with self.subTest(status=status):
+                journal.status=status
+                self.assertIs(journal.receipt()['coverageComplete'],status=='complete')
+        for coverage in (journal.audit_coverage,journal.metadata_coverage):
+            for key in coverage:
+                if not key.endswith('Truncated'):continue
+                with self.subTest(key=key):
+                    coverage[key]=True
+                    self.assertIs(journal.receipt()['coverageComplete'],False)
+                    coverage[key]=None
+                    self.assertIsNone(journal.receipt()['coverageComplete'])
+                    coverage[key]=False
+        journal.audit_coverage['recordsTruncated']=True
+        journal.metadata_coverage['sessionGroupsTruncated']=None
+        self.assertIsNone(journal.receipt()['coverageComplete'])  # Unknown takes precedence.
+        journal.metadata_coverage['sessionGroupsTruncated']=False
+        journal.audit_coverage['recordsTruncated']=False
+        for total in (None,True,'0'):
+            with self.subTest(total=total):
+                journal.audit_coverage['auditTotal']=total
+                self.assertIs(journal.receipt()['coverageComplete'],None if total is None else False)
 
     async def test_metadata_empty_exact_and_lookahead_boundaries_are_explicit(self):
         for name,cap in s1.METADATA_CAPS.items():
@@ -460,7 +563,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(saved['total'],count)
                         self.assertEqual(saved['max_version'],'TEST_ONLY_'+str(count).zfill(3) if count else None)
                     self.assertNotIn('TEST_ONLY',json.dumps(result))
-                    self.assertEqual(result['format'],'jaymax-s1-diagnostics-v2')
+                    self.assertEqual(result['format'],'jaymax-s1-diagnostics-v3')
 
     async def test_failed_metadata_checkpoint_cannot_publish_its_coverage(self):
         for name in s1.METADATA_CAPS:
@@ -492,7 +595,7 @@ class S1ObservationTests(unittest.IsolatedAsyncioTestCase):
                 lines=path.read_bytes().splitlines(keepends=True)
                 self.assertTrue(all(len(line)<=128*1024 for line in lines))
                 self.assertLessEqual(sum(map(len,lines)),512*1024)
-                self.assertTrue(all(json.loads(line)['format']=='jaymax-s1-checkpoint-v2' for line in lines))
+                self.assertTrue(all(json.loads(line)['format']=='jaymax-s1-checkpoint-v3' for line in lines))
                 self.assertTrue(f[6].receipt()['ownedClientsClosed']['metadata'])
 
     async def test_metadata_unknown_or_malformed_coverage_stays_unevaluated(self):
