@@ -88,11 +88,14 @@ def _local_origin(origin):
 
 
 def prepare(*, mode='rehearsal', origin='https://s1-fixture.invalid', roles=engine.ROLES,
-            roster=True, pin_configured=True, attempt_id=None, real_time_resources=False):
+            roster=True, pin_configured=True, attempt_id=None, real_time_resources=False,
+            operator_start_floor_mib=None):
     roles = list(roles)
     attempt_id = attempt_id or uuid4().hex
     if (mode not in ('rehearsal','hosted') or type(real_time_resources) is not bool
             or real_time_resources and mode!='rehearsal'
+            or operator_start_floor_mib is not None and (type(operator_start_floor_mib) is not int
+                                                        or not 1024 <= operator_start_floor_mib <= 8192)
             or type(roster) is not bool or type(pin_configured) is not bool
             or not roles or roles[0]!='owner' or roles != [role for role in engine.ROLES if role in roles]
             or not re.fullmatch('[a-f0-9]{32}',attempt_id)
@@ -100,6 +103,7 @@ def prepare(*, mode='rehearsal', origin='https://s1-fixture.invalid', roles=engi
         raise Held('profile_invalid')
     return {'format':FORMAT,'mode':mode,'origin':origin,'attemptId':attempt_id,
             **({'rehearsalResources':'real'} if real_time_resources else {}),
+            **({'operatorStartFloorMiB':operator_start_floor_mib} if operator_start_floor_mib is not None else {}),
             'clock':'real' if mode=='hosted' or real_time_resources else 'virtual',
             'roles':roles,'roster':roster,'pinConfigured':pin_configured,
             'limits':{'attempts':21,'workSeconds':780,'totalSeconds':900,'cleanupSeconds':120,
@@ -112,7 +116,8 @@ def check_profile(value):
     try:
         expected = prepare(mode=value['mode'], origin=value['origin'], roles=value['roles'],
             roster=value['roster'],pin_configured=value['pinConfigured'],attempt_id=value['attemptId'],
-            real_time_resources=value.get('rehearsalResources')=='real')
+            real_time_resources=value.get('rehearsalResources')=='real',
+            operator_start_floor_mib=value.get('operatorStartFloorMiB'))
         if value != expected: raise ValueError
     except (KeyError, TypeError, ValueError):
         raise Held('profile_or_sources_changed') from None
@@ -204,8 +209,17 @@ def evidence_environment(profile, directory, *, resource_monitor=None):
         private_path(directory,directory=True)
 
 
-def dispatch_window(profile, approval, actors, directory):
+def dispatch_window(profile, approval, actors, directory, *, resource_monitor=None):
     stop,end = check_approval(profile,approval,actors,directory)
+    if 'operatorStartFloorMiB' in profile:
+        from read_only_probe import resources, Held as ResourceHeld
+        monitor=resource_observations.select(profile,resource_monitor)
+        try:
+            observed=monitor.check(start=True) if monitor.active else resources(start=True)
+        except ResourceHeld:
+            raise Held('resource_headroom_insufficient') from None
+        if observed['freeBytes'] < profile['operatorStartFloorMiB'] * 2**20:
+            raise Held('resource_headroom_insufficient')
     if (stop-engine.utc_now()).total_seconds() < MIN_DISPATCH_SECONDS:
         raise Held('window_insufficient_before_claim')
     return stop,end
@@ -219,7 +233,8 @@ def timing_ms(value):
 
 class Journal:
     """Exclusive, flushed append-only metadata; an incomplete intent is consumed."""
-    def __init__(self, profile, approval, actors, directory, *, require_dispatch_window=False, resource_monitor=None):
+    def __init__(self, profile, approval, actors, directory, *, require_dispatch_window=False,
+                 resource_monitor=None, on_claim_start=None):
         self.stop,self.end = check_approval(profile,approval,actors,directory)
         self.profile,self.approval,self.actors = deepcopy(profile),deepcopy(approval),deepcopy(actors)
         self._approval_sha,self._actors_sha = digest(approval),digest(actors)
@@ -232,11 +247,14 @@ class Journal:
         else:
             opener = lambda p: p.open('xb')
         if require_dispatch_window:
-            self.stop,self.end=dispatch_window(profile,approval,actors,directory)
+            self.stop,self.end=dispatch_window(profile,approval,actors,directory,resource_monitor=self.resource_monitor)
         # Fixed ID + bound directory: never replace an existing or partial claim.
         claim = directory/('s1-'+profile['attemptId']+'.claim')
+        if on_claim_start is not None: on_claim_start()
         with opener(claim) as stream:
             stream.write((digest(approval)+'\n').encode());stream.flush();os.fsync(stream.fileno())
+        self.resource_monitor.set_phase('post_claim_setup')
+        self.resource_monitor.check()
         self.stream = opener(directory/('s1-'+profile['attemptId']+'.jsonl'))
         self.order,self.index,self.pending = sequence(profile),0,None
         self.integrity_checks = []
@@ -295,8 +313,9 @@ class Journal:
                 from s1_failure import validate_summary
                 diagnostic['failureDiagnostics']=validate_summary(failure_diagnostics,requests=self.order)
             if resource_observations is not None:
-                from s1_resources import validate_pair
+                from s1_resources import validate_pair, quiet_gate
                 diagnostic['resourceObservations']=validate_pair(resource_observations)
+                diagnostic['quietWaitGate']=quiet_gate(diagnostic['resourceObservations'])
             self._append({'event':'closed','status':'passed' if passed else 'held','cleanupConfirmed':cleanup_confirmed is True,**diagnostic})
         finally: self.closed=True;self.stream.close()
         return {'status':'passed' if passed else 'held','cleanupConfirmed':cleanup_confirmed is True,

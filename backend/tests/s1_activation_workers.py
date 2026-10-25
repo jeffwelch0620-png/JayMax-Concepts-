@@ -124,6 +124,49 @@ def diagnostic_operator(channel,profile,approval,actors,input_mode):
         if not loop.is_closed():loop.close()
 
 
+def post_claim_transport_dip_operator(channel,profile,approval,actors,input_mode):
+    """Memory drops in the actual transport constructor after the durable claim."""
+    import asyncio
+    from unittest.mock import patch
+    import s1_operator as operator
+    import s1_activation as activation
+    import read_only_probe as probe
+    loop=asyncio.new_event_loop()
+    low=[False]
+    original=activation._ApprovedTransport.__init__
+    def init(client,*args,**kwargs):
+        low[0]=True
+        return original(client,*args,**kwargs)
+    def deny(event,args):
+        if event in ('socket.connect','socket.connect_ex','socket.getaddrinfo','socket.bind'):
+            raise AssertionError('TEST ONLY application socket forbidden')
+    sys.addaudithook(deny)
+    try:
+        with patch.object(probe,'memory',lambda:{'freeBytes':(400 if low[0] else 2048)*2**20,'totalBytes':6144*2**20}),\
+             patch.object(activation._ApprovedTransport,'__init__',init),\
+             patch.object(asyncio.events,'new_event_loop',lambda:loop):
+            operator._operator_worker(channel,profile,approval,actors,'fixture')
+    finally:
+        if not loop.is_closed():loop.close()
+
+
+def fast_real_phase_operator(channel,profile,approval,actors,input_mode):
+    """Fictional-only phase/IPC regression with injected time and memory."""
+    from unittest.mock import patch
+    import s1_operator as operator
+    import s1_activation as activation
+    import read_only_probe as probe
+    clock=[time.monotonic()]
+    original=activation._ApprovedTransport.__init__
+    def init(client,*args,**kwargs):
+        kwargs['clock']=lambda:clock[0]
+        return original(client,*args,**kwargs)
+    async def wait(seconds,guard):guard();clock[0]+=seconds;guard()
+    with patch.object(probe,'memory',lambda:{'freeBytes':2048*2**20,'totalBytes':6144*2**20}),\
+         patch.object(activation._ApprovedTransport,'__init__',init),patch.object(operator,'guarded_wait',wait):
+        diagnostic_operator(channel,profile,approval,actors,'success')
+
+
 def resource_complete_operator(channel,profile,approval,actors,input_mode):
     """Fast fictional disabled-portal variant, real worker and final-summary IPC."""
     from unittest.mock import patch

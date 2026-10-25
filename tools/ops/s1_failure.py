@@ -20,7 +20,7 @@ REASONS = frozenset(('unknown_error', 'held', 'value_error', 'type_error', 'io_e
     'controller_callback_unconfirmed', 'owned_job_assignment_failed',
     'owned_job_termination_failed', 'owned_job_query_failed', 'owned_cleanup_unconfirmed',
     'window_closed', 'profile_or_sources_changed', 'exact_approval_required',
-    'actor_bindings_invalid', 'window_insufficient_before_claim', 'private_binding_changed',
+    'actor_bindings_invalid', 'window_insufficient_before_claim', 'resource_headroom_insufficient', 'private_binding_changed',
     'local_input_entries_exhausted', 'fictional_inputs_required', 'dispatch_not_granted',
     'result_not_acknowledged', 'supervised_production_transport_required',
     'target_binding_invalid', 'invalid_deadline', 'local_guard_failed',

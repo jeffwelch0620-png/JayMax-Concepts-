@@ -118,6 +118,7 @@ def _operator_worker(channel,profile,approval,actors,input_mode):
         stage('worker_dispatch_wait');guard()
         send(channel,{'event':'inputs_ready'})
         if receive(channel)!={'start_dispatch':True}: raise activation.Held('dispatch_not_granted')
+        monitor.set_phase('post_claim_setup')
         stage('worker_dispatch_check')
         guard()
         stage('worker_transport')
@@ -173,13 +174,15 @@ def execute_approved(profile,approval,actors,*,evidence_directory,owner_referenc
         monitor.observe_cleanup()
         detail=( {**failure.position('controller_evidence'),'reason':'resource_guard_failed','errorType':'Held'}
                  if monitor.failed else failure.describe(error,'controller_evidence',trusted_types=(ResourceHeld,)))
+        resource_pair={'version':observations.VERSION,'supervisor':monitor.snapshot(),'worker':None}
         return {'status':'held','cleanupConfirmed':True,'evidenceClosureConfirmed':True,
             'claimStatus':'not_created','requestsCompleted':0,'securityAcceptance':False,
             'preflightSource':activation.PREFLIGHT_SOURCE,
             'failureDiagnostics':failure.validate_summary({'version':1,'workerPosition':None,
                 'controllerStage':'controller_evidence','primaryFailure':detail,
                 'workerCleanupFailure':None,'supervisorFailure':None,'supervisorCleanupFailure':None,'closureFailure':None}),
-            **({'resourceObservations':{'supervisor':monitor.snapshot(),'worker':None}} if monitor.active else {})}
+            **({'resourceObservations':resource_pair,'quietWaitGate':observations.quiet_gate(resource_pair)}
+               if monitor.active else {})}
     claim=Path(evidence_directory)/('s1-'+profile['attemptId']+'.claim')
     if claim.exists(): raise FileExistsError('attempt_already_claimed')
     binding=activation.digest([profile,approval,actors])
@@ -189,8 +192,9 @@ def execute_approved(profile,approval,actors,*,evidence_directory,owner_referenc
            'supervisorFailure':None,'supervisorCleanupFailure':None,'closureFailure':None,'workerReported':False,
            'workerResources':None,'resourceFinal':False}
     cleanup=False;failed=False;uncertain_writer=False
+    def claim_started():state['claimStarted']=True
     def describe(error, stage):
-        if type(error) is ResourceHeld and stage=='controller_guard':
+        if type(error) is ResourceHeld and (stage=='controller_guard' or monitor.failed):
             return {**failure.position(stage),'reason':'resource_guard_failed','errorType':'Held'}
         return failure.describe(error, stage, trusted_types=(activation.Held, ProcessHeld, ResourceHeld))
     def guard():
@@ -265,14 +269,9 @@ def execute_approved(profile,approval,actors,*,evidence_directory,owner_referenc
             monitor.set_phase('pre_claim')
             state['inputsReady']=True
             guard()
-            activation.dispatch_window(profile,approval,actors,evidence_directory)
-            state['claimStarted']=True
-            try:
-                journal=activation.Journal(profile,approval,actors,evidence_directory,require_dispatch_window=True,
-                                           resource_monitor=monitor)
-            except activation.Held as error:
-                if BaseException.args.__get__(error)==('window_insufficient_before_claim',): state['claimStarted']=False
-                raise
+            activation.dispatch_window(profile,approval,actors,evidence_directory,resource_monitor=monitor)
+            journal=activation.Journal(profile,approval,actors,evidence_directory,require_dispatch_window=True,
+                                      resource_monitor=monitor,on_claim_start=claim_started)
             return {'start_dispatch':True}
         if journal is None: raise ProcessHeld('worker_message_invalid')
         if value=={'event':'done'} and journal.pending is None and journal.index==len(journal.order): return
@@ -297,8 +296,9 @@ def execute_approved(profile,approval,actors,*,evidence_directory,owner_referenc
             requests=activation.sequence(profile))
     def resource_metadata():
         if not monitor.active: return {}
-        return {'resourceObservations':observations.validate_pair(
-            {'supervisor':monitor.snapshot(),'worker':state['workerResources']})}
+        pair=observations.validate_pair(
+            {'version':observations.VERSION,'supervisor':monitor.snapshot(),'worker':state['workerResources']})
+        return {'resourceObservations':pair,'quietWaitGate':observations.quiet_gate(pair)}
     try:
         outcome=supervise(_operator_worker,(profile,approval,actors,input_mode),on_event=event,
             guard=guard,seconds=max(.001,(stop-activation.engine.utc_now()).total_seconds()))
@@ -349,6 +349,7 @@ def main():
     prep=subs.add_parser('prepare');prep.add_argument('--mode',choices=('rehearsal','hosted'),default='rehearsal')
     prep.add_argument('--origin',default='https://s1-fixture.invalid');prep.add_argument('--output',type=Path,required=True)
     prep.add_argument('--real-time-resources',action='store_true',help='Fictional rehearsal only: real clock and unchanged memory guards')
+    prep.add_argument('--operator-start-floor-mib',type=int,help='Optional raise-only pre-claim floor: integer 1024..8192 MiB')
     check=subs.add_parser('check');check.add_argument('--profile',type=Path,required=True)
     for command in ('rehearse','run-approved'):
         run=subs.add_parser(command)
@@ -358,7 +359,8 @@ def main():
     stage='controller_profile'
     try:
         if args.command=='prepare':
-            profile=activation.prepare(mode=args.mode,origin=args.origin,real_time_resources=args.real_time_resources)
+            profile=activation.prepare(mode=args.mode,origin=args.origin,real_time_resources=args.real_time_resources,
+                                       operator_start_floor_mib=args.operator_start_floor_mib)
             with args.output.open('x',encoding='utf-8') as stream: json.dump(profile,stream,indent=2);stream.write('\n')
             print('Inert S1 profile saved; executionApproved remains false.');return 0
         if args.command=='check':
