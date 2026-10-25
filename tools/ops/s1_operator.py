@@ -18,6 +18,8 @@ if sys.flags.isolated:
 import s1_activation as activation
 from s1_console import console_input
 from s1_process import ProcessHeld, receive, send, supervise
+import s1_failure as failure
+from read_only_probe import Held as ResourceHeld
 
 FICTIONAL_PASSWORD = 'TEST-ONLY-S1-password-4826'
 MAX_FIELD_ENTRIES = 3
@@ -65,7 +67,15 @@ def collect_inputs(profile,actors,*,read,guard):
 
 
 def _operator_worker(channel,profile,approval,actors,input_mode):
+    current = failure.position('worker_profile')
+    def stage(name, request=None):
+        nonlocal current
+        current = failure.position(name, request)
+        send(channel, {'event':'stage', **current})
+        if receive(channel) != {'stage_recorded':True}:
+            raise activation.Held('dispatch_not_granted')
     async def permit(label):
+        await asyncio.to_thread(stage, 'request', label)
         send(channel,{'event':'permit','request':label,'integrityMilliseconds':client.last_integrity_ms})
         answer=await asyncio.to_thread(receive,channel)
         if answer!={'grant':label}: raise activation.Held('dispatch_not_granted')
@@ -73,16 +83,20 @@ def _operator_worker(channel,profile,approval,actors,input_mode):
         if activation.engine.utc_now()>=activation.stamp(approval['stopChecksAt']):
             raise activation.Held('window_closed')
         if profile['mode']=='hosted':
-            from read_only_probe import resources
-            resources()
+            from read_only_probe import resources, Held as ResourceHeld
+            try: resources()
+            except ResourceHeld: raise activation.Held('resource_guard_failed') from None
     async def emit(value):
         send(channel,{'event':'result','value':value})
         if await asyncio.to_thread(receive,channel)!={'continue':True}:
             raise activation.Held('result_not_acknowledged')
-    credentials={};pin=None;client=None
+    credentials={};pin=None;client=None;primary=None;cleanup_failure=None
     try:
+        stage('worker_profile')
         activation.check_profile(profile)
+        stage('worker_approval')
         activation.check_approval(profile,approval,actors,approval['evidenceDirectory'])
+        stage('worker_input')
         if input_mode=='fixture':
             if profile['mode']!='rehearsal' or any(not a['email'].endswith('@example.invalid') for a in actors.values()):
                 raise activation.Held('fictional_inputs_required')
@@ -90,23 +104,42 @@ def _operator_worker(channel,profile,approval,actors,input_mode):
             credentials={role:(actor['email'],FICTIONAL_PASSWORD) for role,actor in actors.items()}
         else:
             pin,credentials=collect_inputs(profile,actors,read=console_input,guard=guard)
-        guard()
+        stage('worker_dispatch_wait');guard()
         send(channel,{'event':'inputs_ready'})
         if receive(channel)!={'start_dispatch':True}: raise activation.Held('dispatch_not_granted')
+        stage('worker_dispatch_check')
         guard()
+        stage('worker_transport')
         cap=activation._Capability(activation._KEY,profile,approval,actors,permit,guard,supervised=True)
         virtual=[time.monotonic()]
         client=activation._ApprovedTransport(cap,clock=(lambda:virtual[0]) if profile['clock']=='virtual' else None)
         async def wait(seconds):
+            await asyncio.to_thread(stage, 'quiet_wait' if seconds==65 else 'recovery_wait',
+                                    None if seconds==65 else 'P10')
             if profile['clock']=='virtual':
                 virtual[0]+=seconds;await asyncio.sleep(0)
             else: await asyncio.sleep(seconds)
+        stage('worker_sequence')
         asyncio.run(activation.run_sequence(client,pin=pin,credentials=credentials,
-                    staff_id=approval['rosterId'],emit=emit,wait=wait))
-        send(channel,{'event':'done'})
+                    staff_id=approval['rosterId'],emit=emit,wait=wait,close_on_exit=False))
+    except BaseException as error:
+        primary = failure.describe(error, **current, trusted_types=(activation.Held, ProcessHeld))
     finally:
-        if client: client.close()
-        credentials.clear();pin=None
+        try:
+            if primary is None: stage('worker_cleanup')
+        except BaseException as error:
+            cleanup_failure = failure.describe(error, 'worker_cleanup', trusted_types=(activation.Held, ProcessHeld))
+        try:
+            if client: client.close()
+        except BaseException as error:
+            if cleanup_failure is None:
+                cleanup_failure = failure.describe(error, 'worker_cleanup', trusted_types=(activation.Held, ProcessHeld))
+        finally:
+            credentials.clear();pin=None
+    if primary is not None or cleanup_failure is not None:
+        send(channel, {'event':'failure', 'primaryFailure':primary, 'cleanupFailure':cleanup_failure})
+        raise ProcessHeld('worker_held')
+    send(channel,{'event':'done'})
 
 
 def execute_approved(profile,approval,actors,*,evidence_directory,owner_reference,input_mode='terminal'):
@@ -121,18 +154,67 @@ def execute_approved(profile,approval,actors,*,evidence_directory,owner_referenc
     if claim.exists(): raise FileExistsError('attempt_already_claimed')
     binding=activation.digest([profile,approval,actors])
     journal=None
-    state={'inputsReady':False,'claimStarted':False}
+    state={'inputsReady':False,'claimStarted':False,'workerPosition':None,'stageCount':0,
+           'controllerStage':'controller_guard','primaryFailure':None,'workerCleanupFailure':None,
+           'supervisorFailure':None,'supervisorCleanupFailure':None,'closureFailure':None,'workerReported':False}
     cleanup=False;failed=False;uncertain_writer=False
+    def describe(error, stage):
+        if type(error) is ResourceHeld and stage=='controller_guard':
+            return {**failure.position(stage),'reason':'resource_guard_failed','errorType':'Held'}
+        return failure.describe(error, stage, trusted_types=(activation.Held, ProcessHeld, ResourceHeld))
     def guard():
-        if activation.digest([profile,approval,actors])!=binding: raise activation.Held('private_binding_changed')
-        if activation.engine.utc_now()>=stop: raise activation.Held('window_closed')
-        if journal is not None: journal.guard()
-        elif profile['mode']=='hosted':
-            from read_only_probe import resources
-            resources()
-    def event(value):
+        try:
+            if activation.digest([profile,approval,actors])!=binding: raise activation.Held('private_binding_changed')
+            if activation.engine.utc_now()>=stop: raise activation.Held('window_closed')
+            if journal is not None: journal.guard()
+            elif profile['mode']=='hosted':
+                from read_only_probe import resources, Held as ResourceHeld
+                try: resources()
+                except ResourceHeld: raise activation.Held('resource_guard_failed') from None
+        except BaseException as error:
+            if state['primaryFailure'] is None: state['primaryFailure']=describe(error,'controller_guard')
+            raise
+    def handle_event(value):
         nonlocal journal
+        if type(value) is not dict: raise ProcessHeld('worker_message_invalid')
+        state['controllerStage']='controller_message'
+        if set(value)=={'event','stage','request'} and value['event']=='stage':
+            try: pos=failure.position(value['stage'],value['request'])
+            except ValueError: raise ProcessHeld('worker_message_invalid') from None
+            before=('worker_profile','worker_approval','worker_input','worker_dispatch_wait')
+            after=('worker_dispatch_check','worker_transport','worker_sequence','quiet_wait','recovery_wait','request','worker_cleanup')
+            if (state['stageCount']>=64 or pos['stage'] not in (before if journal is None else after)
+                    or pos['request'] is not None and pos['request'] not in activation.sequence(profile)):
+                raise ProcessHeld('worker_message_invalid')
+            if pos['stage'] in ('request','recovery_wait'):
+                if (journal.pending is not None or journal.index>=len(journal.order)
+                        or journal.order[journal.index]!=pos['request']):
+                    raise ProcessHeld('worker_message_invalid')
+            elif journal is not None and pos['stage']!='worker_cleanup' and (journal.index or journal.pending):
+                raise ProcessHeld('worker_message_invalid')
+            if pos['stage']=='worker_cleanup' and (journal.pending or journal.index!=len(journal.order)):
+                raise ProcessHeld('worker_message_invalid')
+            state['workerPosition']=pos;state['stageCount']+=1
+            return {'stage_recorded':True}
+        if set(value)=={'event','primaryFailure','cleanupFailure'} and value['event']=='failure':
+            try:
+                primary=(failure.validate(value['primaryFailure'],requests=activation.sequence(profile))
+                         if value['primaryFailure'] is not None else None)
+                worker_cleanup=(failure.validate(value['cleanupFailure'],requests=activation.sequence(profile))
+                                if value['cleanupFailure'] is not None else None)
+            except ValueError: raise ProcessHeld('worker_message_invalid') from None
+            if (state['workerReported'] or primary is None and worker_cleanup is None
+                    or primary is not None and {k:primary[k] for k in ('stage','request')}!=state['workerPosition']
+                    or primary is None and worker_cleanup is not None and state['workerPosition']!=failure.position('worker_cleanup')
+                    or worker_cleanup is not None and (worker_cleanup['stage']!='worker_cleanup' or worker_cleanup['request'] is not None)):
+                raise ProcessHeld('worker_message_invalid')
+            state['workerReported']=True
+            if state['primaryFailure'] is None: state['primaryFailure']=primary
+            state['workerCleanupFailure']=worker_cleanup
+            raise ProcessHeld('worker_held')
+        if value=={'event':'held'}: return
         if value=={'event':'inputs_ready'} and not state['inputsReady'] and journal is None:
+            state['controllerStage']='controller_claim'
             state['inputsReady']=True
             guard()
             activation.dispatch_window(profile,approval,actors,evidence_directory)
@@ -140,17 +222,30 @@ def execute_approved(profile,approval,actors,*,evidence_directory,owner_referenc
             try:
                 journal=activation.Journal(profile,approval,actors,evidence_directory,require_dispatch_window=True)
             except activation.Held as error:
-                if str(error)=='window_insufficient_before_claim': state['claimStarted']=False
+                if BaseException.args.__get__(error)==('window_insufficient_before_claim',): state['claimStarted']=False
                 raise
             return {'start_dispatch':True}
         if journal is None: raise ProcessHeld('worker_message_invalid')
         if value=={'event':'done'} and journal.pending is None and journal.index==len(journal.order): return
         if set(value)=={'event','request','integrityMilliseconds'} and value['event']=='permit':
+            state['controllerStage']='controller_intent'
             journal.intent(value['request'],worker_integrity_ms=activation.timing_ms(value['integrityMilliseconds']))
             return {'grant':value['request']}
         if set(value)=={'event','value'} and value['event']=='result':
+            state['controllerStage']='controller_result'
             journal.result(value['value']);return {'continue':True}
         raise ProcessHeld('worker_message_invalid')
+    def event(value):
+        try: return handle_event(value)
+        except BaseException as error:
+            if not state['workerReported'] and state['primaryFailure'] is None:
+                state['primaryFailure']=describe(error,state['controllerStage'])
+            raise
+    def diagnostics():
+        return failure.validate_summary({'version':1,'workerPosition':state['workerPosition'],
+            'controllerStage':state['controllerStage'],**{key:state[key] for key in
+            ('primaryFailure','workerCleanupFailure','supervisorFailure','supervisorCleanupFailure','closureFailure')}},
+            requests=activation.sequence(profile))
     try:
         outcome=supervise(_operator_worker,(profile,approval,actors,input_mode),on_event=event,
             guard=guard,seconds=max(.001,(stop-activation.engine.utc_now()).total_seconds()))
@@ -158,25 +253,38 @@ def execute_approved(profile,approval,actors,*,evidence_directory,owner_referenc
     except BaseException as error:
         failed=True
         cleanup=getattr(error,'ownedCleanupConfirmed',False) is True
+        for attr,key in (('supervisorFailure','supervisorFailure'),('cleanupFailure','supervisorCleanupFailure')):
+            value=getattr(error,attr,None)
+            if value is not None:
+                try: state[key]=failure.validate(value,requests=activation.sequence(profile))
+                except ValueError: state[key]=describe(RuntimeError(),'unknown')
+        if state['primaryFailure'] is None and not state['workerReported']:
+            state['primaryFailure']=state['supervisorFailure'] or describe(error,state['controllerStage'])
         # Writer may still be stalled: never race another write or call it closed.
-        uncertain_writer=type(error) is ProcessHeld and str(error)=='controller_callback_unconfirmed'
+        uncertain_writer=type(error) is ProcessHeld and BaseException.args.__get__(error)==('controller_callback_unconfirmed',)
     if uncertain_writer:
         return {'status':'held','cleanupConfirmed':False,'evidenceClosureConfirmed':False,
-                'claimStatus':'unconfirmed','preflightSource':activation.PREFLIGHT_SOURCE,'securityAcceptance':False}
+                'claimStatus':'unconfirmed','preflightSource':activation.PREFLIGHT_SOURCE,'securityAcceptance':False,
+                'failureDiagnostics':diagnostics()}
     if journal is None:
         return {'status':'held','cleanupConfirmed':cleanup,'evidenceClosureConfirmed':not state['claimStarted'],
                 'claimStatus':'creation_unconfirmed' if state['claimStarted'] else 'not_created',
                 'inputStage':('inputs_collected_claim_unconfirmed' if state['claimStarted'] else
                               'inputs_collected_no_claim' if state['inputsReady'] else 'inputs_not_ready_no_claim'),
-                'requestsCompleted':0,'preflightSource':activation.PREFLIGHT_SOURCE,'securityAcceptance':False}
+                'requestsCompleted':0,'preflightSource':activation.PREFLIGHT_SOURCE,'securityAcceptance':False,
+                'failureDiagnostics':diagnostics()}
     try:
-        result=journal.finish(cleanup_confirmed=cleanup,completed=not failed)
+        state['controllerStage']='controller_finish'
+        result=journal.finish(cleanup_confirmed=cleanup,completed=not failed,failure_diagnostics=diagnostics())
         result['credentialEntryRoles']=list(profile['roles'])
         result['evidenceClosureConfirmed']=True
+        result['failureDiagnostics']=diagnostics()
         return result
-    except BaseException:
+    except BaseException as error:
+        state['closureFailure']=describe(error,'controller_finish')
         return {'status':'held','cleanupConfirmed':cleanup,'evidenceClosureConfirmed':False,
-                'claimStatus':'created','preflightSource':activation.PREFLIGHT_SOURCE,'securityAcceptance':False}
+                'claimStatus':'created','preflightSource':activation.PREFLIGHT_SOURCE,'securityAcceptance':False,
+                'failureDiagnostics':diagnostics()}
 
 
 def main():
@@ -190,6 +298,7 @@ def main():
         for name in ('profile','approval','actors','evidence'): run.add_argument('--'+name,type=Path,required=True)
         run.add_argument('--owner-reference',required=True)
     args=parser.parse_args()
+    stage='controller_profile'
     try:
         if args.command=='prepare':
             profile=activation.prepare(mode=args.mode,origin=args.origin)
@@ -202,19 +311,27 @@ def main():
         if profile['mode']!=('hosted' if args.command=='run-approved' else 'rehearsal'):
             raise activation.Held('stage_mismatch')
         if args.command=='run-approved':
+            stage='controller_evidence'
             if not sys.flags.isolated: raise activation.Held('isolated_runtime_required')
             from read_only_probe import private_path
             # Explicit input files only. No discovery, .env, password or PIN read.
             for path in (args.approval,args.actors): private_path(path)
+        stage='controller_approval'
         bound=read_json(args.approval)
         if (bound.get('approved') is not True or bound.get('profileSha256')!=activation.digest(profile)
                 or bound.get('ownerReference')!=args.owner_reference):
             raise activation.Held('explicit_operator_attestation_required')
-        result=execute_approved(profile,bound,read_json(args.actors),
+        people=read_json(args.actors)
+        stage='controller_execute'
+        result=execute_approved(profile,bound,people,
             evidence_directory=args.evidence,owner_reference=args.owner_reference,
             input_mode='fixture' if args.command=='rehearse' else 'terminal')
         print(json.dumps(result));return 0 if result['status']=='passed' else 1
-    except BaseException:
+    except BaseException as error:
+        detail=failure.describe(error,stage,trusted_types=(activation.Held,ProcessHeld,ResourceHeld))
+        print(json.dumps({'status':'held','failureDiagnostics':failure.validate_summary({
+            'version':1,'workerPosition':None,'controllerStage':stage,'primaryFailure':detail,
+            'workerCleanupFailure':None,'supervisorFailure':None,'supervisorCleanupFailure':None,'closureFailure':None})}))
         print('S1 held. No retry is authorized; retain the private attempt evidence.');return 1
 
 

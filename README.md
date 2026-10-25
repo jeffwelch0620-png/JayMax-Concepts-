@@ -1,14 +1,32 @@
-# JayMax Restaurant Group — Inventory / Prep / Food Costing
+# JayMax Restaurant Group â€” Inventory / Prep / Food Costing
 
 ## Now
 
 Inventory serves Bert's, Rudd's and Papa Leoni's. PostgreSQL is authoritative
 for catalog/units, purchases, counts, prep/production and stock effects.
-**Actual purchased-item counts + received purchases − closing count** determine
+**Actual purchased-item counts + received purchases âˆ’ closing count** determine
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-Accepted baseline: PR65 **1db9797**, tree-identical to tested 2898c77. All four
+Accepted Inventory baseline is merged PR66 **42a78b8**. The separately approved
+October 24 owner-only S1 attempt confirmed that deployment, accepted protected
+inputs locally, then held before its first request intent. It sent **zero API
+requests**; no owner login/session or PIN lockout occurred. Both claims are
+consumed and owned cleanup passed. The subsequent seven-case fictional review
+did not reproduce the hold; its cause remains unknown.
+
+The current local [safe failure-attribution follow-up](docs/S1_SAFE_FAILURE_ATTRIBUTION_20261024.md)
+adds fixed worker/controller stages and allowlisted reasons, with primary and
+cleanup failures reported separately. It never records raw exception text or
+secret inputs. It preserves approval, source/resource/time, claim and request
+guards. This is a diagnostic improvement, not a proven fix for the original hold.
+Final local validation passed **1,809 offline cases**, including 39 new
+diagnostic cases; the 41-case focused profile overlaps. Initial local dependency
+selection failures and corrected reruns are documented in the follow-up notes.
+Draft publication, CI, merge and any fresh live attempt remain separate gates;
+hosted work and credential/grant/schema changes are held.
+
+Earlier transport baseline: PR65 **1db9797**, tree-identical to tested 2898c77. All four
 [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40103720101)
 and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40104331749)
 passed separately. The October 24 approved S1 v3 attempt observed API PR64 and
@@ -60,11 +78,11 @@ and separate merge/automatic-deployment approval remain required.
 
 ## Next
 
-- Complete the authorized PR66 amendment validation, update JMax and push to the
-  existing draft, then return for merge approval. After review/CI and separate acceptance,
-  prepare a fresh exact S1 packet: up to 18 probes plus three explicit personal
-  logins, durable source/approval/claim guards and private operator handoff. No live
-  execution is enabled or authorized by this local slice.
+- Finish local failure-attribution regression checks and JMax documentation,
+  then prompt before publishing a new draft PR for independent review. No live
+  attempt is authorized. After accepted review/CI/merge, prepare fresh fictional
+  console evidence and a separately approved S1 packet; preserve the consumed
+  attempt and its unresolved cause.
 - Review the [coordinated approval index](docs/PAR_SECURITY_APPROVAL_INDEX_20261023.md)
   and [security/identity/permissions plan](docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md).
   S1 verification comes first; a targeted S2a rotation packet no longer waits for

@@ -280,9 +280,14 @@ class Journal:
                     or not 1 <= value['retryAfterSeconds'] <= 61))): raise Held('worker_result_invalid')
         self._append({'event':'result',**value});self.pending=None;self.index+=1
 
-    def finish(self, *, cleanup_confirmed, completed=False):
+    def finish(self, *, cleanup_confirmed, completed=False, failure_diagnostics=None):
         passed = completed is True and cleanup_confirmed is True and self.pending is None and self.index==len(self.order)
-        try: self._append({'event':'closed','status':'passed' if passed else 'held','cleanupConfirmed':cleanup_confirmed is True})
+        diagnostic = {}
+        try:
+            if failure_diagnostics is not None:
+                from s1_failure import validate_summary
+                diagnostic['failureDiagnostics']=validate_summary(failure_diagnostics,requests=self.order)
+            self._append({'event':'closed','status':'passed' if passed else 'held','cleanupConfirmed':cleanup_confirmed is True,**diagnostic})
         finally: self.closed=True;self.stream.close()
         return {'status':'passed' if passed else 'held','cleanupConfirmed':cleanup_confirmed is True,
                 'requestsCompleted':self.index,'requestPending':self.pending is not None,
@@ -363,10 +368,12 @@ def rehearsal_client(journal, *, transport=None, tls_context=None, clock=None):
 
 
 async def run_sequence(client, *, pin, credentials, staff_id=None, emit, wait=asyncio.sleep,
-                       quiet_seconds=65):
+                       quiet_seconds=65, close_on_exit=True):
     """No hidden HTTP calls. Caller supplies transient input; worker owns cleanup."""
     profile=client.cap.profile
     if quiet_seconds!=65: raise Held('quiet_interval_invalid')
+    if type(close_on_exit) is not bool or not close_on_exit and not client.cap.supervised:
+        raise Held('supervised_operator_required')
     try:
         if not client._valid_pin_input('P01',pin): raise Held('pin_input')
         await wait(65)
@@ -392,4 +399,4 @@ async def run_sequence(client, *, pin, credentials, staff_id=None, emit, wait=as
                 value=await client.probe(label,**args)
             await emit(value)
     finally:
-        client.close()
+        if close_on_exit: client.close()

@@ -6,6 +6,7 @@ import multiprocessing
 import os
 import threading
 import time
+from s1_failure import describe
 
 
 class ProcessHeld(RuntimeError):
@@ -120,21 +121,25 @@ def supervise(target, args=(), *, on_event, guard, seconds, cleanup_seconds=3):
     job = OwnedJob()
     started = time.monotonic()
     result, held, cleanup = None, None, False
+    stage, held_stage, cleanup_error = 'worker_start', 'unknown', None
     try:
         process.start(); child.close()
         job.assign(process)
         send(parent, {'start': True})
         while True:
+            stage = 'supervisor_guard'
             guard()
             if time.monotonic() - started >= seconds:
                 raise ProcessHeld('worker_deadline')
             if parent.poll(.05):
+                stage = 'worker_protocol'
                 event = receive(parent)
                 outcome = {}
                 def callback():
                     try: outcome['reply'] = on_event(event)
                     except BaseException as error: outcome['error'] = error
                 task = threading.Thread(target=callback, daemon=True)
+                stage = 'controller_callback'
                 task.start()
                 while task.is_alive():
                     try:
@@ -152,9 +157,10 @@ def supervise(target, args=(), *, on_event, guard, seconds, cleanup_seconds=3):
                 if event == {'event': 'held'}:
                     raise ProcessHeld('worker_held')
             elif not process.is_alive():
+                stage = 'worker_wait'
                 raise ProcessHeld('worker_exited_without_receipt')
     except BaseException as error:
-        held = error
+        held, held_stage = error, stage
     finally:
         parent.close(); child.close()
         try:
@@ -167,22 +173,38 @@ def supervise(target, args=(), *, on_event, guard, seconds, cleanup_seconds=3):
                     time.sleep(.02)
                 process.join(timeout=max(0, until-time.monotonic()))
                 cleanup = not process.is_alive() and job.empty()
-        except BaseException:
+        except BaseException as error:
+            cleanup_error = error
             cleanup = False
         finally:
-            job.close()
-            if process.pid and not process.is_alive(): process.close()
+            try:
+                job.close()
+                if process.pid and not process.is_alive(): process.close()
+            except BaseException as error:
+                if cleanup_error is None: cleanup_error = error
+                cleanup = False
+    primary = describe(held, held_stage, trusted_types=(ProcessHeld,)) if held is not None else None
+    cleanup_failure = (describe(cleanup_error, 'owned_cleanup', trusted_types=(ProcessHeld,))
+                       if cleanup_error is not None else
+                       {'stage':'owned_cleanup','request':None,'reason':'cleanup_unconfirmed','errorType':'ProcessHeld'}
+                       if not cleanup else None)
     if not cleanup:
-        raise ProcessHeld('owned_cleanup_unconfirmed') from None
+        error = ProcessHeld('owned_cleanup_unconfirmed')
+        error.ownedCleanupConfirmed = False
+        error.supervisorFailure, error.cleanupFailure = primary, cleanup_failure
+        raise error from None
     if held:
         # Never surface a worker/guard exception string containing private inputs.
         if isinstance(held, (KeyboardInterrupt, SystemExit)):
             held.ownedCleanupConfirmed = cleanup
+            held.supervisorFailure, held.cleanupFailure = primary, cleanup_failure
             raise held
-        category = str(held) if type(held) is ProcessHeld and str(held) in (
+        args = BaseException.args.__get__(held)
+        category = args[0] if type(held) is ProcessHeld and len(args)==1 and type(args[0]) is str and args[0] in (
             'worker_deadline', 'worker_held', 'worker_exited_without_receipt', 'worker_message_invalid',
             'worker_message_bound', 'owned_job_assignment_failed', 'controller_callback_unconfirmed') else 'supervisor_held'
         error = ProcessHeld(category)
         error.ownedCleanupConfirmed = cleanup
+        error.supervisorFailure, error.cleanupFailure = primary, cleanup_failure
         raise error from None
     return {'status': result, 'ownedCleanupConfirmed': cleanup}
