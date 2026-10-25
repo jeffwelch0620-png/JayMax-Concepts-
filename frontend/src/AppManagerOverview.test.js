@@ -25,7 +25,11 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
 async function render(role) { api.currentSession.mockReturnValue({ user: { ...owner, role } }); await act(async () => root.render(<App/>)); }
 test.each(["owner", "manager"])("%s has the manager overview and retains prep scope", async role => {
-  await render(role); if (role === "owner") await act(async () => container.querySelector('[data-testid="location-tab-berts"]').click());
+  await render(role); if (role === "owner") {
+    expect(container.textContent).toContain("Owner group");
+    expect(container.querySelector('[data-testid="nav-tab-managerOverview"]')).toBeNull();
+    await act(async () => container.querySelector('[data-testid="location-tab-berts"]').click());
+  }
   await click("Manager overview"); await click("TEST ONLY open prep");
   expect(container.textContent).toContain('"rid":"berts","day":"2026-10-25","track":"bulk"');
   await click("Manager overview"); await click("TEST ONLY open counts"); expect(container.textContent).toContain("Actual Inventory berts counts");

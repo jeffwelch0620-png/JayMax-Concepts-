@@ -254,7 +254,7 @@ export default function App() {
                 return (
                   <button
                     key={t.id}
-                    onClick={() => setActiveTab(t.id)}
+                    onClick={() => { setPrepFocus(null); setActiveTab(t.id); }}
                     data-testid={`nav-tab-${t.id}`}
                     className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-xs font-semibold border-b-2 transition ${active ? "text-white" : "text-slate-500 border-transparent hover:text-slate-300"}`}
                     style={active ? { borderBottomColor: current.accent } : {}}

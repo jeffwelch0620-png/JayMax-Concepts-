@@ -27,8 +27,14 @@ Owner-selected fictional starting scope: **Bert's / October 25, 2026 / Bulk Prep
 The owner confirmed Supabase is still a development database with no operational
 data. Tests and the separate local preview use clearly labelled fictional data;
 no fixtures are inserted into Supabase or substituted into production screens.
-Final validation: **1,150 frontend tests in 87 suites** and the strict production
-build passed. The fictional desktop preview was inspected and its exact prep
+PR71's original head passed **1,150 frontend tests in 87 suites**, the strict
+production build and all four CI checks. The M1 review amendment clears the
+overview's one-time prep context on manual tab selection, preserving retained
+drafts. Its four real-component App navigation cases reproduce the old failure
+and verify ordinary Today/Daily entry, original dated-draft recovery and
+restaurant/session isolation. The amended full frontend run passed **1,154 tests
+in 88 suites** and the strict production build passed. Fresh CI must pass on the
+amended head before the merge handoff. The fictional desktop preview was inspected and its exact prep
 navigation context verified. Initial test-setup failures and the corrected strict
 build warning are recorded in the
 [receiving contract, acceptance and coverage matrix](docs/INTEGRATION_MANAGER_OVERVIEW_20261025.md).
@@ -37,7 +43,9 @@ Inventory Build Main remains the sole coordinating chat; Companion PR72
 **b73a80d** is the source baseline. This read-only milestone does not adopt its
 D1 workspace service, candidate migrations, persistent operations or scheduling.
 The next slice is the receiving contract for one persistent manager handoff.
-Prompt before draft publication and merge. Hosted work, service controls and
+[PR71](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/71) remains draft;
+merge requires separate approval. Prompt before each new draft publication.
+Hosted work, service controls and
 credential, grant and schema changes remain held. S1 remains partial; optional
 harness work is parked while local integration proceeds. Ordering stays manual
 and Track 1 remains independent.
