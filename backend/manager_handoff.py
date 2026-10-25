@@ -84,14 +84,17 @@ async def installed(conn):
     rows = await conn.fetch('''SELECT c.relname,c.relrowsecurity FROM pg_class c
         JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='operations' AND c.relname=ANY($1::text[])''', list(TABLES))
     return (len(rows) == len(TABLES) and all(r['relrowsecurity'] for r in rows)
-            and await conn.fetchval("""SELECT count(*)=3 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+            and await conn.fetchval("""SELECT count(*)=6 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
                 JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_proc p ON p.oid=t.tgfoid
                 JOIN pg_namespace fn ON fn.oid=p.pronamespace
                 WHERE n.nspname='operations' AND fn.nspname='operations' AND NOT p.prosecdef
-                AND (tgname,c.relname,p.proname) IN (
-                    ('handoff_header_guard','handoff_notes','guard_handoff_header'),
-                    ('handoff_revision_guard','handoff_note_revisions','guard_handoff_history'),
-                    ('handoff_receipt_guard','handoff_command_receipts','guard_handoff_history'))
+                AND (tgname,c.relname,p.proname,tgtype) IN (
+                    ('handoff_header_guard','handoff_notes','guard_handoff_header',31),
+                    ('handoff_revision_guard','handoff_note_revisions','guard_handoff_history',31),
+                    ('handoff_receipt_guard','handoff_command_receipts','guard_handoff_history',27),
+                    ('handoff_notes_no_truncate','handoff_notes','refuse_handoff_truncate',34),
+                    ('handoff_revisions_no_truncate','handoff_note_revisions','refuse_handoff_truncate',34),
+                    ('handoff_receipts_no_truncate','handoff_command_receipts','refuse_handoff_truncate',34))
                 AND tgenabled IN ('O','A') AND NOT tgisinternal"""))
 
 

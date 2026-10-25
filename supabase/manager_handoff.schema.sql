@@ -80,6 +80,19 @@ BEGIN
 END $$;
 
 
+--
+-- Name: refuse_handoff_truncate(); Type: FUNCTION; Schema: operations; Owner: -
+--
+
+CREATE FUNCTION operations.refuse_handoff_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog'
+    AS $$
+BEGIN
+ RAISE EXCEPTION 'Handoff history cannot be truncated';
+END $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -224,6 +237,13 @@ CREATE TRIGGER handoff_header_guard BEFORE INSERT OR DELETE OR UPDATE ON operati
 
 
 --
+-- Name: handoff_notes handoff_notes_no_truncate; Type: TRIGGER; Schema: operations; Owner: -
+--
+
+CREATE TRIGGER handoff_notes_no_truncate BEFORE TRUNCATE ON operations.handoff_notes FOR EACH STATEMENT EXECUTE FUNCTION operations.refuse_handoff_truncate();
+
+
+--
 -- Name: handoff_command_receipts handoff_receipt_guard; Type: TRIGGER; Schema: operations; Owner: -
 --
 
@@ -231,10 +251,24 @@ CREATE TRIGGER handoff_receipt_guard BEFORE DELETE OR UPDATE ON operations.hando
 
 
 --
+-- Name: handoff_command_receipts handoff_receipts_no_truncate; Type: TRIGGER; Schema: operations; Owner: -
+--
+
+CREATE TRIGGER handoff_receipts_no_truncate BEFORE TRUNCATE ON operations.handoff_command_receipts FOR EACH STATEMENT EXECUTE FUNCTION operations.refuse_handoff_truncate();
+
+
+--
 -- Name: handoff_note_revisions handoff_revision_guard; Type: TRIGGER; Schema: operations; Owner: -
 --
 
 CREATE TRIGGER handoff_revision_guard BEFORE INSERT OR DELETE OR UPDATE ON operations.handoff_note_revisions FOR EACH ROW EXECUTE FUNCTION operations.guard_handoff_history();
+
+
+--
+-- Name: handoff_note_revisions handoff_revisions_no_truncate; Type: TRIGGER; Schema: operations; Owner: -
+--
+
+CREATE TRIGGER handoff_revisions_no_truncate BEFORE TRUNCATE ON operations.handoff_note_revisions FOR EACH STATEMENT EXECUTE FUNCTION operations.refuse_handoff_truncate();
 
 
 --

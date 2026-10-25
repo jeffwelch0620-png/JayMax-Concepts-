@@ -259,6 +259,40 @@ class HandoffDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r.status_code,503); self.assertNotIn('fictional late',r.text)
         self.assertEqual(await self.count(),[1,1,1]); self.assertEqual((await self.read()).json()['current']['revision'],1)
 
+    async def test_owner_truncate_refuses_each_journal_table_and_disabled_guard_holds(self):
+        value=body(); key=str(uuid4()); self.assertEqual((await self.command(value,key=key)).status_code,200)
+        before=await self.count()
+        async with self.pool.acquire() as c:
+            # CASCADE includes FK dependents: the custom error must come from a
+            # truncate guard, not from an unrelated FK restriction.
+            for table in handoff.TABLES[1:]:
+                with self.subTest(table=table),self.assertRaisesRegex(asyncpg.RaiseError,'Handoff history cannot be truncated'):
+                    await c.execute(f'TRUNCATE operations.{table} CASCADE')
+            self.assertEqual(await self.count(),before)
+            await c.execute('ALTER TABLE operations.handoff_notes DISABLE TRIGGER handoff_notes_no_truncate')
+            self.assertFalse(await handoff.installed(c))
+        self.assertEqual((await self.read()).status_code,503)
+        self.assertEqual((await self.command(value,key=key,status=True)).status_code,503)
+        async with self.pool.acquire() as c:
+            await c.execute('ALTER TABLE operations.handoff_notes ENABLE TRIGGER handoff_notes_no_truncate')
+            self.assertTrue(await handoff.installed(c))
+            await c.execute('DROP TRIGGER handoff_notes_no_truncate ON operations.handoff_notes')
+            await c.execute('CREATE TRIGGER handoff_notes_no_truncate BEFORE DELETE ON operations.handoff_notes FOR EACH ROW EXECUTE FUNCTION operations.refuse_handoff_truncate()')
+            self.assertFalse(await handoff.installed(c))  # Correct name/function alone is insufficient.
+            await c.execute('DROP TRIGGER handoff_notes_no_truncate ON operations.handoff_notes')
+            await c.execute('CREATE TRIGGER handoff_notes_no_truncate BEFORE TRUNCATE ON operations.handoff_notes FOR EACH STATEMENT EXECUTE FUNCTION operations.refuse_handoff_truncate()')
+        self.assertEqual((await self.command(value,key=key,status=True)).json()['outcome'],'saved')
+        self.assertEqual(await self.count(),before)
+
+    async def test_historical_backfill_keeps_business_date_distinct_from_recording_time(self):
+        value=body(business_date='2000-01-01',summary='TEST ONLY historical backfill')
+        r=await self.command(value);self.assertEqual(r.status_code,200,r.text)
+        current=r.json()['current'];accepted=r.json()['accepted']
+        self.assertEqual(current['business_date'],'2000-01-01')
+        self.assertGreater(current['created_at'][:10],current['business_date'])
+        self.assertGreater(accepted['recorded_at'][:10],current['business_date'])
+        self.assertEqual((await self.read(day='2000-01-01')).json()['current']['id'],current['id'])
+
     async def test_history_pages_and_foreign_note_ids_never_return_other_store(self):
         value=body(); self.assertEqual((await self.command(value)).status_code,200)
         # Pagination fixture uses the real immutable guards, without 51 redundant HTTP edits.
@@ -318,6 +352,18 @@ class HandoffDatabaseTests(unittest.IsolatedAsyncioTestCase):
                 for table,verbs in {'store_settings':'SELECT','handoff_notes':'SELECT,INSERT,UPDATE','handoff_note_revisions':'SELECT,INSERT','handoff_command_receipts':'SELECT,INSERT'}.items():
                     await c.execute(f'GRANT {verbs} ON operations.{table} TO {runtime}')
                     await c.execute(f'CREATE POLICY fictional_backend ON operations.{table} TO {runtime} USING(true) WITH CHECK(true)')
+                manifest=json.loads((ROOT/'supabase/manager_handoff.manifest.json').read_text(encoding='utf-8'))
+                policies=await c.fetch('''SELECT c.relname,p.polcmd::text AS polcmd,p.polpermissive,p.polroles,
+                    pg_get_expr(p.polqual,p.polrelid) AS using_expr,pg_get_expr(p.polwithcheck,p.polrelid) AS check_expr
+                    FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+                    WHERE n.nspname='operations' ORDER BY c.relname''')
+                role_oid=await c.fetchval('SELECT oid FROM pg_roles WHERE rolname=$1',runtime)
+                declared={}
+                for policy in policies:
+                    self.assertEqual(list(policy['polroles']),[role_oid]);self.assertEqual(policy['polcmd'],'*')
+                    declared['operations.'+policy['relname']]=dict(roleClass='operational_backend',command='ALL',
+                        permissive=policy['polpermissive'],using=policy['using_expr'],withCheck=policy['check_expr'])
+                self.assertEqual(manifest['proposedPolicies'],declared)
                 async def initialize(connection): await connection.execute(f'SET ROLE {runtime}')
                 runtime_pool=await asyncpg.create_pool(os.environ['NATIVE_PURCHASE_TEST_DSN'].rsplit('/',1)[0]+'/'+self.db,min_size=1,max_size=1,init=initialize)
                 try:
@@ -344,6 +390,7 @@ class HandoffDatabaseTests(unittest.IsolatedAsyncioTestCase):
                                     async with c.transaction(): await c.fetch('SELECT password_hash FROM public.app_users')
                     for table in handoff.TABLES:
                         self.assertFalse(await c.fetchval('SELECT has_table_privilege($1,$2,$3)',role,'operations.'+table,'DELETE'))
+                        self.assertFalse(await c.fetchval('SELECT has_table_privilege($1,$2,$3)',role,'operations.'+table,'TRUNCATE'))
                 self.assertTrue(await handoff.installed(c))
                 self.assertFalse(await c.fetchval('SELECT has_table_privilege($1,$2,$3)',runtime,'operations.store_settings','UPDATE'))
                 self.assertFalse(await c.fetchval("SELECT bool_or(prosecdef) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='operations'"))

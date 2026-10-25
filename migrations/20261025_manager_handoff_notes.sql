@@ -103,6 +103,18 @@ CREATE TRIGGER handoff_revision_guard BEFORE INSERT OR UPDATE OR DELETE ON opera
 CREATE TRIGGER handoff_receipt_guard BEFORE UPDATE OR DELETE ON operations.handoff_command_receipts
  FOR EACH ROW EXECUTE FUNCTION operations.guard_handoff_history();
 
+CREATE FUNCTION operations.refuse_handoff_truncate() RETURNS trigger LANGUAGE plpgsql
+SET search_path=pg_catalog AS $$
+BEGIN
+ RAISE EXCEPTION 'Handoff history cannot be truncated';
+END $$;
+CREATE TRIGGER handoff_notes_no_truncate BEFORE TRUNCATE ON operations.handoff_notes
+ FOR EACH STATEMENT EXECUTE FUNCTION operations.refuse_handoff_truncate();
+CREATE TRIGGER handoff_revisions_no_truncate BEFORE TRUNCATE ON operations.handoff_note_revisions
+ FOR EACH STATEMENT EXECUTE FUNCTION operations.refuse_handoff_truncate();
+CREATE TRIGGER handoff_receipts_no_truncate BEFORE TRUNCATE ON operations.handoff_command_receipts
+ FOR EACH STATEMENT EXECUTE FUNCTION operations.refuse_handoff_truncate();
+
 ALTER TABLE operations.store_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE operations.handoff_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE operations.handoff_note_revisions ENABLE ROW LEVEL SECURITY;

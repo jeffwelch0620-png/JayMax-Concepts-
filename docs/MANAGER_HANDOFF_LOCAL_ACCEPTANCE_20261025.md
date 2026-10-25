@@ -15,6 +15,12 @@ notes are found across missing days; later drafts do not imply readiness and are
 not the previous submitted note. Corrections remain visible as currently recorded,
 not an as-known-at-the-time reconstruction.
 
+Historical backfill to any valid past business date is intentional. There is no
+earliest-date or store-settings activation-date bound in this slice. Business date
+describes the reported shift; server creation/revision timestamps show when the
+note was actually recorded or corrected. Backfill never rewrites timestamps,
+stock, receipt dates, purchased-item counts or Food Cost.
+
 The summary and next-shift text are reports. No action transfers responsibility,
 accepts a named receiver, resolves a task, completes prep, sends notifications or
 writes stock. Track 1 accounting, purchases, counts, prep and sales commands remain
@@ -70,6 +76,34 @@ The auxiliary fixture reads only account ID/role/locations for this adapter and 
 no operational schema access. Browser roles receive none. The real auxiliary login
 retains its existing login/notification duties; no real privilege is reduced here.
 Trigger functions are invoker functions, not security-definer wrappers.
+The three journal tables also have statement-level BEFORE TRUNCATE guards.
+These prevent accidental truncation by a privileged operator while enabled;
+they do not secure an owner against deliberately disabling triggers. The API's
+installation gate checks all six guards, including their event/row-level wiring.
+
+### Mandatory future activation conditions
+
+Keep both capability flags off until a separately approved hosted plan verifies:
+
+1. Reviewed store timezone/settings rows exist for each enabled restaurant.
+2. The actual operational runtime has the reviewed per-object grants **and**
+   role-addressed RLS policies from the receiving manifest. Its `proposedPolicies`
+   entries are declarative review inputs, not executed SQL or applied-policy proof.
+   `USING(true) WITH CHECK(true)` applies only to the server runtime role; grants
+   still limit each table's verbs and FastAPI rechecks personal actor/store scope.
+   Browser and auxiliary roles receive no operational access.
+3. R1 is qualified: the operational database connection is restricted, non-owner,
+   non-superuser and without BYPASSRLS or authority to disable guards. A broad
+   owner connection is not an acceptable activation substitute. This concerns
+   database connection privileges; a personal Inventory owner remains an allowed
+   application user. Any optional runtime owner-refusal code is deferred to that
+   separate activation package; this PR does not claim to enforce that role check.
+4. Backend/browser flags match, and the exact installed catalog, guards and
+   permissions pass their reviewed checks before the feature is enabled.
+
+Real grants, policies, timezone configuration, schema application, credentials and
+hosted execution remain held. No sealed native/par source pins are rebased for
+this receiving manifest amendment. S2a and P1 keep their independent work queues.
 
 The new extension does not join `deployment_readiness.MIGRATIONS` or rewrite the
 sealed 31-file reviewed-par packet. Apply-order documentation lists it separately.
@@ -108,6 +142,16 @@ The approved personal-manager browser convention is not employee/shared-tablet
 rollout policy; retention, shared-device erasure and wider identity work remain open.
 
 ## Validation receipts
+
+PR72 review amendments (U1/A1/A2/L1): the new manager UI and the seven affected
+legacy staff-production lines now use the intended UTF-8 punctuation. The frontend
+guard scans every source `.js` for invalid UTF-8 and known broken sequences while
+allowing legitimate Unicode. The recovery heading is asserted with its explicit
+date/track. Proposed policy definitions are compared with the independently
+created disposable policies; owner truncation, absent/wrong guards and historical
+backfill are covered locally. The amended local database selection passed 12 methods plus three truncation subtests; the focused frontend selection passed 61 tests in seven suites. All 1,190 frontend tests in 93 suites and the strict CI-mode build passed. The focused backend/configuration/source-pin selection passed 155 reported cases (49 tests and 106 subtests), including the frozen native/par packet and runtime-profile checks. Selections overlap. The optional owner-connection refusal code is not part of this amendment; its activation requirement is explicit above.
+
+### Initial PR72 checkpoint at 2b2b609 (historical)
 
 Serial local receipts are retained outside the checkout in the owned
 `manager-handoff-local-20261025` evidence directory. Local tests do not establish CI, deployment,

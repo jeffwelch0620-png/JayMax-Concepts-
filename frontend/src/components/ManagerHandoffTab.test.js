@@ -60,7 +60,7 @@ test("lost response freezes editing and exact retry keeps key, version and conte
 test("reload and same personal account recover via receipt without another command or rollback", async () => {
   const r = await retained(), newer = note({ revision: 3, action: "save_draft", summary: "Newer manager report", actor_id: "usr_other" });
   api.handoffDay.mockResolvedValue(state({ current: newer })); api.handoffStatus.mockResolvedValue({ ...receipt(r, newer), outcome: "saved" });
-  await render(); expect(container.textContent).toContain("Retained request"); await click("Check retained handoff status");
+  await render(); expect(container.querySelector('[aria-label="Retained handoff request"] h2').textContent).toBe("Retained request · 2026-10-25 · bulk"); await click("Check retained handoff status");
   expect(api.saveHandoff).not.toHaveBeenCalled(); expect(input("Handoff summary").value).toBe(newer.summary);
   expect(handoffJournal(user.id, "berts").read()).toBeNull();
 });

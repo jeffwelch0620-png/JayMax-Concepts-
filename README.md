@@ -66,6 +66,14 @@ Local validation passed **1,188 frontend tests in 92 suites**, the strict build 
 The broad offline run passed 1,947/1,953 reported cases; all six local dependency
 failures cleared in the corrected, overlapping 155-case focused rerun. Full details
 and initial corrections are in the acceptance record; fresh CI is still pending.
+PR72 review amendments address U1/A1/A2/L1: readable UTF-8 labels plus a source
+encoding guard, explicit proposed runtime policies and activation conditions,
+three TRUNCATE guards checked for exact wiring, and intentional historical
+business-date backfill with server recording timestamps. Amended local validation
+passed **1,190 frontend tests in 93 suites**, the strict build and **12 disposable
+PostgreSQL methods plus three truncation subtests**. Older receipt counts above
+refer to the initial PR72 checkpoint. Real activation still requires the reviewed
+non-owner runtime role, timezone rows, grants plus policies and matching flags.
 Prompt before each new draft publication and merge.
 Hosted work, service controls and
 credential, grant and schema changes remain held. S1 remains partial; optional

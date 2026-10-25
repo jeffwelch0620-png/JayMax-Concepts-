@@ -201,6 +201,8 @@ DATABASE_CASES += tuple(('manager_handoff','HandoffDatabaseTests',name) for name
  'test_feature_missing_timezone_inactive_store_future_date_and_foreign_scope_hold',
  'test_missing_storage_disabled_guards_and_malformed_requests_hold_without_writes',
  'test_immutable_history_context_and_late_failure_rollback_all_three_relations',
+ 'test_owner_truncate_refuses_each_journal_table_and_disabled_guard_holds',
+ 'test_historical_backfill_keeps_business_date_distinct_from_recording_time',
  'test_history_pages_and_foreign_note_ids_never_return_other_store',
  'test_disposable_dump_restore_preserves_context_history_and_exact_replay',
  'test_disposable_role_matrix_and_catalog_snapshot'))

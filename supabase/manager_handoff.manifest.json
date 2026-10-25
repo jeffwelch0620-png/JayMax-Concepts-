@@ -20,20 +20,26 @@
         "name": "operations.guard_handoff_history",
         "securityDefiner": false,
         "trigger": true
+      },
+      "operations.refuse_handoff_truncate()": {
+        "definitionSha256": "3e45a38a1fa815baa031705be6fa75c5c8208d4cb38a3cce126584a20e9b86a4",
+        "name": "operations.refuse_handoff_truncate",
+        "securityDefiner": false,
+        "trigger": true
       }
     },
     "relations": {
       "operations.handoff_command_receipts": {
         "kind": "r",
-        "shapeSha256": "4d41ccd185e9d98842ff9c195f085e5b1e374cc366f8e545de3901adf4eb6e2a"
+        "shapeSha256": "09fac1c9b5b2bf6ba1169eb35f5599b59f2425722a67530c7a192dec22e19768"
       },
       "operations.handoff_note_revisions": {
         "kind": "r",
-        "shapeSha256": "27687ba28e91369dc59cdeb6a1669fb2c45d3deea8dcf6354240074358556240"
+        "shapeSha256": "3fc9635b0a990e2e1d1f06dc4665a55f47194ea88f99da6abe70a9845b348a2f"
       },
       "operations.handoff_notes": {
         "kind": "r",
-        "shapeSha256": "8f30bbdf6bcd0ead7a56d3b3e2d7ad31cab3196a0334e71b110df07bea7e6482"
+        "shapeSha256": "4878677230969d0854fa046b4ff17a1ca4182e3de819551305d7cc3324b24428"
       },
       "operations.store_settings": {
         "kind": "r",
@@ -47,10 +53,40 @@
   "historicalRuntimeProfile": "Unchanged; future receiving grants/policies need a separately reviewed matrix, no blanket schema grants",
   "liveActivationApproved": false,
   "migration": "20261025_manager_handoff_notes.sql",
-  "migrationSha256": "10a02315a4d0ee4fb923a44281ff6404ef855bd4bb28fb4b3d69aa6e0db3cb03",
+  "migrationSha256": "c36928e5520c18f96093c3e1eff21ca3287bc9e347d9a9dc8d9c0c21cb5f08f5",
   "namespace": "operations",
   "policyScope": "Server-only runtime role; store/user authorization is rechecked by FastAPI. No anonymous or authenticated-browser access.",
   "postgresMajor": 17,
+  "proposedPolicies": {
+    "operations.handoff_command_receipts": {
+      "command": "ALL",
+      "permissive": true,
+      "roleClass": "operational_backend",
+      "using": "true",
+      "withCheck": "true"
+    },
+    "operations.handoff_note_revisions": {
+      "command": "ALL",
+      "permissive": true,
+      "roleClass": "operational_backend",
+      "using": "true",
+      "withCheck": "true"
+    },
+    "operations.handoff_notes": {
+      "command": "ALL",
+      "permissive": true,
+      "roleClass": "operational_backend",
+      "using": "true",
+      "withCheck": "true"
+    },
+    "operations.store_settings": {
+      "command": "ALL",
+      "permissive": true,
+      "roleClass": "operational_backend",
+      "using": "true",
+      "withCheck": "true"
+    }
+  },
   "proposedRuntimePrivileges": {
     "operations.handoff_command_receipts": [
       "SELECT",
@@ -75,5 +111,5 @@
       "active"
     ]
   },
-  "snapshotSha256": "94ffd35aa8d7f591a3f4f3aa3073a71c6db3b41c49b6b10942d052110d9376cc"
+  "snapshotSha256": "48d9d2a75f49aff531eef9d266375f4dd14a505bbc5cf5d74ff49240a7775826"
 }
