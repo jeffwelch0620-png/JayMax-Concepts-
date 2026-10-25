@@ -8,7 +8,44 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-Accepted baseline is [merged PR69](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/69)
+The accepted baseline is [merged PR70](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/70)
+**6e95313**, tree-identical to reviewed **ca84815**. The four
+[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40206917665)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40208642033)
+passed separately. This is accepted-source evidence, not fresh CI for the local
+integration work below; current Render deployment completion was not inspected.
+
+The first LOCAL integration slice is a distinct personal-owner/manager
+**Manager overview** tab, with purchased-item count context and dated prep
+progress/review flags. It uses two existing authorized GET readers, isolates
+unconfirmed sections and stale scope responses, and opens the native Prep
+workflow with the same restaurant/date/track. Existing dashboards, Operations
+archive access and retained drafts remain. No backend, schema or business-write
+command changes are included.
+
+Owner-selected fictional starting scope: **Bert's / October 25, 2026 / Bulk Prep**.
+The owner confirmed Supabase is still a development database with no operational
+data. Tests and the separate local preview use clearly labelled fictional data;
+no fixtures are inserted into Supabase or substituted into production screens.
+Final validation: **1,150 frontend tests in 87 suites** and the strict production
+build passed. The fictional desktop preview was inspected and its exact prep
+navigation context verified. Initial test-setup failures and the corrected strict
+build warning are recorded in the
+[receiving contract, acceptance and coverage matrix](docs/INTEGRATION_MANAGER_OVERVIEW_20261025.md).
+
+Inventory Build Main remains the sole coordinating chat; Companion PR72
+**b73a80d** is the source baseline. This read-only milestone does not adopt its
+D1 workspace service, candidate migrations, persistent operations or scheduling.
+The next slice is the receiving contract for one persistent manager handoff.
+Prompt before draft publication and merge. Hosted work, service controls and
+credential, grant and schema changes remain held. S1 remains partial; optional
+harness work is parked while local integration proceeds. Ordering stays manual
+and Track 1 remains independent.
+
+## Historical PR69 diagnostic checkpoint
+
+The following preserves the earlier pre-PR70 local receipt and S1 context.
+Accepted baseline at that checkpoint was [merged PR69](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/69)
 **6740590**, tree-identical to reviewed **13c4e53**. All four
 [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40160234719)
 and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40160847615)

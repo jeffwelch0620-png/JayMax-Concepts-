@@ -25,6 +25,8 @@ import { AdjustmentsTab } from "./components/AdjustmentsTab";
 import { HistoryTab } from "./components/HistoryTab";
 import { NativePurchaseHistory } from "./components/NativePurchaseHistory";
 import { PrepTab } from "./components/PrepTab";
+import { ManagerOverviewTab } from "./components/ManagerOverviewTab";
+import { overviewContext } from "./lib/managerOverview";
 import { SchedulingTab } from "./components/SchedulingTab";
 import { StaffTab } from "./components/StaffTab";
 import { OwnerDashboard } from "./components/OwnerDashboard";
@@ -34,6 +36,7 @@ import { Login } from "./components/Login";
 
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "managerOverview", label: "Manager overview", icon: ClipboardCheck },
   { id: "prep", label: "Prep", icon: ChefHat },
   { id: "counts", label: "Enter Counts", icon: ClipboardList },
   { id: "setup", label: "Item Setup", icon: Settings },
@@ -63,6 +66,7 @@ export default function App() {
   }, []);
   const [loc, setLoc] = useState(() => api.currentSession()?.user?.role === "owner" ? "owner" : (api.currentSession()?.user?.locations || [])[0] || "berts");
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [prepFocus, setPrepFocus] = useState(null);
   const [historyFocusCN, setHistoryFocusCN] = useState(null);
   const [dashboardFlaggedOnly, setDashboardFlaggedOnly] = useState(false);
   const [costingFocus, setCostingFocus] = useState(null);
@@ -87,10 +91,11 @@ export default function App() {
     ? TABS.filter((t) => ["dashboard", "history"].includes(t.id))
     : session?.user?.role === "staff"
       ? TABS.filter((t) => ["dashboard", "prep", "counts"].includes(t.id))
-      : TABS;
+      : TABS.filter(t => t.id !== "managerOverview" || ["owner", "manager"].includes(session?.user?.role));
 
   useEffect(() => {
     setCostingFocus(null);
+    setPrepFocus(null);
     setActiveTab(pendingTabRef.current || "dashboard");
     pendingTabRef.current = null;
   }, [loc, session]);
@@ -266,6 +271,13 @@ export default function App() {
       <main className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 pb-20">
         {isOwner ? (
           <OwnerDashboard onOpenLocation={(id) => setLoc(id)} onOpenOrder={openOrder} />
+        ) : activeTab === "managerOverview" && ["owner", "manager"].includes(session?.user?.role) ? (
+          <ManagerOverviewTab key={`${session.user.id}:${loc}`} rid={loc} user={session.user}
+            onOpenCounts={() => { if (api.actualInventoryEnabled) setActiveTab("counts"); }}
+            onOpenPrep={selection => {
+              if (!api.prepExecutionEnabled || selection.rid !== loc || !overviewContext(loc, selection.day, selection.track, session.user)) return;
+              setPrepFocus(selection); setActiveTab("prep");
+            }}/>
         ) : !S ? (
           <div className="text-slate-500 text-sm p-10 text-center" data-testid="loading-state">
             {store.loadError ? <>
@@ -277,7 +289,7 @@ export default function App() {
         ) : (
           <>
             {activeTab === "dashboard" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:report`} restaurantId={loc} view="report" /> : nativeSharedState ? <p>Accounting reports are awaiting Actual Inventory setup and explicit physical count values. Purchases are reviewed in Invoice Master.</p> : <DashboardTab rid={loc} items={S.items} purchases={S.purchases} dishes={S.dishes} adjustments={S.adjustments} salesPeriod={S.salesPeriod} reportingPeriods={S.reportingPeriods} onOpenHistory={(cn) => { setHistoryFocusCN(cn); setActiveTab("history"); }} flaggedOnly={dashboardFlaggedOnly} setFlaggedOnly={setDashboardFlaggedOnly} />)}
-            {activeTab === "prep" && <PrepTab showError={showError} drafts={drafts.current} key={loc} rid={loc} items={S.items} dishes={S.dishes} persistDishes={persistDishes} prepStock={S.prepStock} prepLogs={S.prepLogs} prepReadStatus={S.prepReadStatus} prepCapabilities={S.prepCapabilities} applyPrepResult={applyPrepResult} salesPeriod={S.salesPeriod} showToast={showToast} />}
+            {activeTab === "prep" && <PrepTab initialContext={prepFocus} showError={showError} drafts={drafts.current} key={`${loc}:${prepFocus?.day || "default"}:${prepFocus?.track || "daily"}`} rid={loc} items={S.items} dishes={S.dishes} persistDishes={persistDishes} prepStock={S.prepStock} prepLogs={S.prepLogs} prepReadStatus={S.prepReadStatus} prepCapabilities={S.prepCapabilities} applyPrepResult={applyPrepResult} salesPeriod={S.salesPeriod} showToast={showToast} />}
             {activeTab === "counts" && (api.actualInventoryEnabled ? <ActualInventoryTab key={`${loc}:counts`} restaurantId={loc} /> : nativeSharedState ? <p>Physical counts are awaiting Actual Inventory setup. Legacy count entry is unavailable.</p> : <CountsTab key={loc} rid={loc} items={S.items} onCountsApplied={(next) => store.apply(p => ({ ...p, items: next }))} showToast={showToast} />)}
             {activeTab === "setup" && <SetupTab actorId={session.user.id} revision={S.revision} onCatalogLinked={store.refresh} onVerifySupplier={selection => { setUnitReviewFocus({ ...selection, restaurantId: loc }); setActiveTab("invoices"); }} showError={showError} drafts={drafts.current} key={loc} items={S.items} persistItems={persistItems} areas={S.areas} persistAreas={persistAreas} showToast={showToast} rid={loc} />}
             {activeTab === "invoices" && <InvoicesTab actorId={session.user.id} unitReviewFocus={unitReviewFocus?.restaurantId === loc ? unitReviewFocus : null} onUnitReviewSaved={store.refresh} showError={showError} drafts={drafts.current} key={`${session.user.id}:${loc}`} rid={loc} items={S.items} persistItems={persistItems} purchases={S.purchases} persistPurchases={persistPurchases} showToast={showToast} restaurantName={current.name} />}

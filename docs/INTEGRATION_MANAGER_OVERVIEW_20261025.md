@@ -1,0 +1,58 @@
+# First manager overview integration slice
+
+October 25, 2026. Local implementation; publication, review, merge and hosted acceptance remain separate. Inventory Build Main is the sole coordinating chat. Companion App Integration remains a source and history reference.
+
+The first functional slice adds **Manager overview** to Inventory's restaurant navigation for personal owner and manager accounts. Start at **Bert's → October 25, 2026 → Bulk Prep** in the fictional local acceptance fixture. The owner confirmed that Supabase is a development database with no operational data; this slice does not query that claim or insert sample records there. Production screens never substitute fixtures when a read fails.
+
+## Accepted sources and ownership
+
+- Inventory accepted PR70: `6e95313a8fd688d4a887c2b3d4ba78f9eb20740d`, reviewed tree `4f05943c77b307bdb828632f0112c003b8e9afff`.
+- Companion accepted PR72: `b73a80d63adde989babee3c75c198e3148bf6ce9`. Its `app/team/operations-home.tsx`, `app/shared/operations-home.ts` and `app/shared/shift-brief.ts` supply the daily-brief/navigation direction. No Companion component, D1 workspace service, candidate SQL, permission model or stock writer is copied in this slice.
+- Inventory remains authoritative for purchased-item counts, explicit count values, received purchases, recipes/units and production/stock commands. Prep and sales explain Track 1. Assignment, production submission, manager acceptance and stock posting are separate events.
+- The existing accounting Dashboard and the legacy Operations/archive screen remain available. The latter is not the integrated Companion scheduling system.
+
+## Receiving contract
+
+| Section | Existing authorized GET reader | Required context and displayed meaning |
+| --- | --- | --- |
+| Recorded physical count | `actualCounts(rid)` → `/api/pg/actual-inventory/{store}/counts` | Validate store, count date, receipt timing, status, scope/revision, recorded timestamp and correction references. Exclude superseded snapshots and future count dates; show the latest current count on/before the selected date, including an incomplete count. Do not sum values or imply a full Food Cost period. |
+| Dated prep work | `prepExecution(rid, day, track)` → `/api/pg/purchases/{store}/prep-execution/{day}?track=…` | Validate exact store/date/track, revision, draft identity and released-version linkage. Preserve included task names and server progress/review flags. Quantity alone does not complete a task. Earlier draft production requiring review stays visible as a history warning. |
+| Navigation | Existing `ActualInventoryTab`, `PrepTab`, `PrepDayDrafts` | The count button opens the existing count workflow and its selector. The prep button carries the exact restaurant/date/track into the native dated draft/execution workflow. Ordinary Prep entry still defaults to today's Daily Prep. Existing retained drafts are preserved. |
+
+The read model uses the existing `papa_leonis` → `papa` mapping. Date is explicit; the initial default uses the existing browser-local `todayISO`, not an invented restaurant timezone. Each section is independently loading, ready or unavailable. An empty count list means no recorded count, not zero inventory value. No dated draft or included tasks does not mean prep is complete. Unsupported progress, disabled features, malformed/foreign-context responses and failed reads stay unconfirmed.
+
+Existing endpoint authentication and server authorization remain authoritative. Frontend role/scope checks hide this view from staff, readonly and unknown roles; they grant no new backend rights. No shared PIN or identify request is used. Scope keys include person, role, assigned locations, restaurant, date and track. Old effect results are ignored after scope changes, refresh or unmount; results are also checked against the current scope before rendering. Each read has the existing 60-second UI deadline. Constant error messages do not expose response contents.
+
+Only `{day, track}` navigation preferences are saved in session storage, keyed per person and restaurant. No counts, prep records, credentials, permissions or session tokens are cached by this feature. Blocked storage falls back to the default view. This preference is not a business record or an offline sync queue.
+
+## Local acceptance
+
+Fictional fixtures live in `frontend/src/testFixtures/managerOverview.js` and are imported by tests or a separate local preview only. They are absent from the production App import graph. The preview uses injected fictional GET readers, an empty API module and a restrictive connection policy; its navigation output is a preview receipt, not hosted acceptance.
+
+Coverage includes all three restaurant mappings; manager/owner visibility; staff/readonly denial; invalid dates and scope; correction chains and cycles; future/incomplete/empty counts; missing or malformed progress; omitted tasks; earlier-draft review flags; independent section failures; read timeout; actor/store/date/refresh races; per-person preferences and blocked storage; exact native prep navigation; and access when unrelated shared-state loading fails. Existing tests cover native draft/save/retry behavior unchanged by the new entry props.
+
+Final local validation passed **1,150 frontend tests across 87 suites**, including 71 added cases, and the strict production build. The initial five-suite selection passed 72/77: one test used a timer helper unavailable in the existing Jest version and four used a mock whose implementation was reset by Jest. After correcting those test setups and adding two history/quantity cases, that overlapping selection passed 79/79. The first strict build held on a new effect-cleanup lint warning; the cleanup was simplified, its 11 component cases passed, and the strict build then passed without relaxing warnings. The complete final regression run passed after adding the shared-state-failure entry test. Counts overlap and must not be added together.
+
+The separate localhost preview was visually inspected at 1280 × 720. It showed the two distinct cards, fictional labels, October 25 Bulk Prep, open/in-progress/review-required tasks and the exact `berts / 2026-10-25 / bulk` navigation receipt. The temporary tab was closed and its localhost server stopped. This is desktop fixture acceptance; mobile and real receiving-runtime acceptance remain pending. There was no hosted application request or database connection.
+
+No backend, migration, credential, grant, API configuration or service-control changes are included. No disposable PostgreSQL or broad backend run is necessary for this frontend-only change. Fresh repository CI still follows draft publication.
+
+## Coverage and next delivery slices
+
+This is the initial core-workflow coverage matrix, not a claim of complete Companion parity. Exact command/storage mapping for each later family must be reviewed before adoption.
+
+| Family | Receiving status | Next concrete work |
+| --- | --- | --- |
+| Catalog, units, recipes, receiving, actual counts, Track 1 | Retained Inventory authority; count context is now exposed in the local overview | Reuse existing identity/revision/unit contracts. Never import Companion's parallel food stock writers. |
+| Dated prep plans, release, execution, correction review | Existing Inventory workflow; read-only local overview and dated navigation implemented | Add assignment/submission/verification context using existing scoped readers when needed; retain one accepted production/stock effect. |
+| Manager operations, shifts, closing, handoffs and follow-through | Next integration slice; source `operations-home`, `shift-log`, `close-*`, `followthrough-forms` and workspace services | Select one manager handoff workflow; map its existing Inventory overlap, persistence, actor authority, history and exact retry before adding receiving commands. |
+| Scheduling, coverage, leave, attendance and corrections | Companion candidate/source only; not integrated by this PR | Reconcile selected scheduling contracts and candidate dependencies with Inventory's receiving schema; then prove draft/save/reload/publish and cross-store denial. Do not replay migrations 001–063 wholesale. |
+| Reporting, dayparts, tour and manager summaries | Existing Inventory reporting retained; newer JMax contributions pending reconciliation | Pin each contribution and map its fields to actual versus theoretical sources, explicit units and completeness. No combined totals fabricated by this overview. |
+| People, identity and permissions | Existing personal Inventory login retained; shared adoption and broader administration remain release work | Map trusted server actors and approved memberships for new commands. No identity or permissions inferred from a roster label. |
+| Toast/source ingestion and notifications | Separate integration and acceptance work | Use authorized representative samples and fictional public fixtures; local tests are not live source certification. |
+| Hiring, training/standards, equipment/maintenance, compliance/incidents, catering, guest reviews/promotions, messaging and AI | Source retained; explicitly deferred beyond the first core slices | Inventory commands/screens that overlap, then classify each module as adopted, retained, deferred or retired with owner review. No silent retirement or parity claim. |
+| Offline/device behavior, local recovery copy and release security | Separate release checklist | Preserve validated backups and existing controls. Resume bounded hosted work only under its specific approval. S1 remains partial; this read-only integration slice does not change that result. |
+
+The next milestone after review is a persistent manager operations/handoff slice with a reviewed receiving contract and fictional save/reload/retry tests. The final integration objective still includes real receiving PostgreSQL persistence for selected operations and scheduling, scoped reports and one combined acceptance proposal. A read-only overview alone does not satisfy it.
+
+Hosted execution, service pauses and credential, grant and schema changes remain held. Prompt before a new draft push and again for merge; automatic Render test deployment is a separate stated consequence of merge approval. Historical PR cards do not need bulk reattachment: accepted cumulative Git trees and targeted links supply provenance.

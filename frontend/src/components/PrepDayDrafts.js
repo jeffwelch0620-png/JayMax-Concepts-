@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from "react";
 import * as api from "../lib/api";
 import {useRetainedDraft} from "../lib/saveIntegrity";
 import {todayISO} from "../lib/calc";
+import {validOverviewDay} from "../lib/managerOverview";
 import {cardCls,inpCls,btnGhost,SectionLabel} from "./common";
 import {PrepExecution} from "./PrepExecution";
 import {StaffPrepAssignments} from "./StaffPrepTasks";
@@ -10,8 +11,8 @@ const storeId=rid=>rid==="papa_leonis"?"papa":rid;
 const decimal=value=>String(value).trim().replace(/^\+/,"").replace(/^\./,"0.").replace(/^0+(?=\d)/,"").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/,"");
 const stable=value=>JSON.stringify(value&&typeof value==="object"?Array.isArray(value)?value.map(v=>JSON.parse(stable(v))):Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(stable(value[k]))])):value);
 const blank=track=>({loaded:false,version:0,inputs:{track,day_group:"weekday",count_event_id:null,overrides:[],note:""},preview:null,reviewed:false,pending:null});
-export function PrepDayDrafts({rid,track="daily",drafts,showToast=()=>{}}){
-  const [day,setDay]=useState(todayISO());
+export function PrepDayDrafts({initialDay,rid,track="daily",drafts,showToast=()=>{}}){
+  const [day,setDay]=useState(()=>validOverviewDay(initialDay)?initialDay:todayISO());
   return <div className={`${cardCls} p-4`}><SectionLabel>Dated Prep Drafts</SectionLabel>
     <p>Reviewed Track 2 tasks. Saving a draft records no production and leaves Food Cost unchanged. Manager execution is available when enabled.</p>
     <label>Service date<input aria-label="Prep draft date" className={inpCls} type="date" value={day} onChange={e=>setDay(e.target.value)}/></label>
