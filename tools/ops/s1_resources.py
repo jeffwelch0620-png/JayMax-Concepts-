@@ -5,8 +5,10 @@ import threading
 
 import read_only_probe as probe
 
-PHASES = ('input', 'pre_claim', 'quiet_wait', 'requests', 'recovery_wait', 'cleanup')
+VERSION = 2
+PHASES = ('input', 'pre_claim', 'post_claim_setup', 'quiet_wait', 'requests', 'recovery_wait', 'cleanup')
 MAX_SAMPLES = 1000000
+QUIET_HEADROOM_MIB = 1536
 
 
 def enabled(profile):
@@ -18,7 +20,9 @@ def phase(stage):
     if stage == 'recovery_wait': return 'recovery_wait'
     if stage == 'request': return 'requests'
     if stage in ('worker_cleanup', 'owned_cleanup', 'controller_finish'): return 'cleanup'
-    if stage in ('worker_dispatch_wait', 'worker_dispatch_check', 'worker_transport', 'worker_sequence', 'controller_claim'):
+    if stage in ('worker_dispatch_check', 'worker_transport', 'worker_sequence'):
+        return 'post_claim_setup'
+    if stage in ('worker_dispatch_wait', 'controller_claim'):
         return 'pre_claim'
     return 'input'
 
@@ -47,9 +51,22 @@ def validate(value, previous=None):
 
 
 def validate_pair(value):
-    if type(value) is not dict or set(value) != {'supervisor', 'worker'}:
+    if (type(value) is not dict or set(value) != {'version', 'supervisor', 'worker'}
+            or type(value['version']) is not int or value['version'] != VERSION):
         raise ValueError('resource_summary_invalid')
-    return {k: validate(v) if v is not None else None for k, v in value.items()}
+    return {'version': VERSION, **{k: validate(value[k]) if value[k] is not None else None
+                                 for k in ('supervisor', 'worker')}}
+
+
+def quiet_gate(value):
+    """A numeric pre-live evidence check, never execution authority."""
+    pair=validate_pair(value)
+    rows={k:pair[k]['quiet_wait'] if pair[k] is not None else
+          {'samples':0,'minFreeMiB':None} for k in ('supervisor','worker')}
+    return {'passed':all(r['samples']>0 and r['minFreeMiB']>=QUIET_HEADROOM_MIB for r in rows.values()),
+            'requiredFreeMiB':QUIET_HEADROOM_MIB,
+            **{k+'Samples':r['samples'] for k,r in rows.items()},
+            **{k+'MinFreeMiB':r['minFreeMiB'] for k,r in rows.items()}}
 
 
 class Monitor:

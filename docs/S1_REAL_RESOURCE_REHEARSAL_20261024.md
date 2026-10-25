@@ -63,6 +63,12 @@ The request/time/source/claim/response limits and full integrity hashing remain.
 
 ## Numeric observations and failure evidence
 
+The following six-phase contract and measurements are the dated PR68 checkpoint.
+The [F1/G1/G2/G3 follow-up](S1_POST_CLAIM_ACTIVATION_GATES_20261024.md) introduces
+resource evidence version 2 with a distinct post_claim_setup phase. Old receipts
+remain historical evidence and cannot qualify a new live packet. G2 is now an
+explicit >=1536 MiB quiet-wait gate, rather than just the earlier suggestion.
+
 `resourceObservations` in the returned receipt and safely writable journal closure
 has separate supervisor and worker summaries. Each has exactly six phases:
 input, pre_claim, quiet_wait, requests, recovery_wait, cleanup. Every phase holds

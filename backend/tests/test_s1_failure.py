@@ -88,10 +88,15 @@ def test_stage_budget_is_bounded_without_authorizing_dispatch(tmp_path,monkeypat
 
 def test_parent_resource_failure_after_inputs_retains_safe_reason(tmp_path,monkeypatch):
     from read_only_probe import Held as ResourceHeld
-    def fail_guard(self):raise ResourceHeld(PRIVATE)
+    original=activation.Journal.guard;calls=[]
+    def fail_guard(self):
+        calls.append(True)
+        if len(calls)==1:return original(self)  # Mandatory pre-dispatch post-claim check.
+        raise ResourceHeld(PRIVATE)
     monkeypatch.setattr(activation.Journal,'guard',fail_guard)
     result=mock_failure(tmp_path,monkeypatch,[{'event':'inputs_ready'}],after=lambda guard:guard())
     assert result['requestsCompleted']==0 and result['claimStatus']=='created'
+    assert len(calls)==2
     assert result['failureDiagnostics']['primaryFailure']=={
         'stage':'controller_guard','request':None,'reason':'resource_guard_failed','errorType':'Held'}
     assert PRIVATE not in json.dumps(result)+next(tmp_path.glob('*.jsonl')).read_text()
