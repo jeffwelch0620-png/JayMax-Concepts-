@@ -202,12 +202,17 @@ or hosted recovery rehearsal.
 
 ## Next gates
 
-1. Finish local validation, source review and JMax readback; prompt before draft push.
-2. Independent review and fresh CI; come back for merge/automatic test deployment
-   approval. No merge approval is inferred from this implementation request.
-3. Prepare a separate exact hosted installation/permission/configuration and
-   fictional acceptance plan. Prompt before any hosted work or real credential,
-   grant or schema change. Existing holds remain in place.
+1. Local implementation, review amendments and publication are complete.
+2. Owner approved PR72 merge/automatic Render test deployment; merge `486767a`
+   is tree-identical to reviewed `5730b21`. [Reviewed-head CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40231545927)
+   and [merged-main CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40232202416)
+   separately passed all four checks. Deployment completion and hosted acceptance
+   have not been inspected.
+3. The [installation and acceptance proposal](MANAGER_HANDOFF_INSTALLATION_PROPOSAL_20261025.md)
+   is prepared locally. It identifies the missing encrypted seven-schema recovery
+   profile and feature-local installer/actual-role verifier, without changing them.
+   Review it before authorizing local implementation; prompt before any hosted
+   work or real credential, grant, policy, schema or flag change. Holds remain.
 4. Continue the selective operations/scheduling receiving map and resolve actual
    responsibility/leadership identities before named handoff acceptance. Optional
    S1 harness investigation remains separate from this integration milestone.

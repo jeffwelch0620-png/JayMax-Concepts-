@@ -8,12 +8,15 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-The accepted baseline is [merged PR71](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/71)
-**a67aa375**, tree-identical to approved **c5f063c**. The four
-[approved-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40214920647)
-and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40215493932)
+The accepted baseline is [merged PR72](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/72)
+**486767a**, tree-identical to approved **5730b21**. The four
+[approved-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40231545927)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40232202416)
 passed separately. Merge and automatic Render test deployment were approved;
-deployment completion and live acceptance were not inspected. PR70's earlier
+deployment completion and live acceptance were not inspected. PR71's
+[head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40214920647)
+and [main](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40215493932)
+receipts remain historical. PR70's earlier
 [head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40206917665)
 and [main](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40208642033)
 receipts remain historical source evidence.
@@ -65,7 +68,8 @@ Local validation passed **1,188 frontend tests in 92 suites**, the strict build 
 **10 disposable PostgreSQL methods**, including real fictional dump/restore.
 The broad offline run passed 1,947/1,953 reported cases; all six local dependency
 failures cleared in the corrected, overlapping 155-case focused rerun. Full details
-and initial corrections are in the acceptance record; fresh CI is still pending.
+and initial corrections are in the acceptance record; that was the initial
+publication checkpoint. Amended-head and merged-main CI later passed separately.
 PR72 review amendments address U1/A1/A2/L1: readable UTF-8 labels plus a source
 encoding guard, explicit proposed runtime policies and activation conditions,
 three TRUNCATE guards checked for exact wiring, and intentional historical
@@ -75,6 +79,12 @@ PostgreSQL methods plus three truncation subtests**. Older receipt counts above
 refer to the initial PR72 checkpoint. Real activation still requires the reviewed
 non-owner runtime role, timezone rows, grants plus policies and matching flags.
 Prompt before each new draft publication and merge.
+The [local installation and acceptance proposal](docs/MANAGER_HANDOFF_INSTALLATION_PROPOSAL_20261025.md)
+pins the receiving delta, minimum runtime permissions, flag/rollback sequence and
+22-request owner-only fictional acceptance profile. It identifies missing
+feature-local installer/role verification and encrypted `operations` recovery
+coverage as prerequisites. This is documentation only; no executable hosted
+packet, application/tool changes or live activation are included.
 Hosted work, service controls and
 credential, grant and schema changes remain held. S1 remains partial; optional
 harness work is parked while local integration proceeds. Ordering stays manual
