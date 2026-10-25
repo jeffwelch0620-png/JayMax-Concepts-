@@ -25,6 +25,17 @@ def guides():
               'This guide does not apply SQL or change the current Supabase connection.\n\n'
               '| Step | File |\n| --- | --- |\n')
     order += ''.join(f'| {i} | [{name}]({name}) |\n' for i,name in enumerate(values['MIGRATIONS'],1))
+    feature_tree = ast.parse((ROOT / 'backend/manager_handoff_schema.py').read_text(encoding='utf-8'))
+    receiving = {node.targets[0].id: ast.literal_eval(node.value) for node in feature_tree.body
+                 if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
+    order += ('\n## Separate manager receiving extension\n\n'
+              'After the reviewed native source order, [' + receiving['MIGRATION'] + '](' + receiving['MIGRATION'] + ') '
+              'is a separate default-off receiving migration. It is not added to the sealed 31-file '
+              'reviewed-par installer or the historical runtime candidate. Its independent structure '
+              'reference and manifest are in `supabase/manager_handoff.schema.sql` and '
+              '`supabase/manager_handoff.manifest.json`. No live timezone rows or role policies/grants '
+              'are seeded. A separate exact installation, per-object permission and activation review '
+              'is required; existing native installers must not apply it automatically.\n')
     profile = '# Native build/test feature settings\n\n'
     profile += ('Generated from the reviewed feature map. This is a proposed testing profile, '
                 'not evidence of live Render settings and not an instruction to enable features '
@@ -53,6 +64,14 @@ def guides():
                 'does not prove schema installation or runtime permissions; complete its '
                 'read-only catalog checks separately. Authentication/PIN redesign remains '
                 'deferred in build and required before operational use.\n')
+    profile += ('\n## Separate manager journal capability\n\n'
+                '`MANAGER_HANDOFF_NOTES_ENABLED=false` and `REACT_APP_MANAGER_HANDOFF_NOTES=false` '
+                'are the defaults. `backend/manager_handoff_schema.py::configuration` reviews this '
+                'pair separately so the sealed native/par profiles remain unchanged. The fictional '
+                'CI frontend profile enables it for tests only. Before any live activation, require '
+                'the separate receiving schema/permission review, PostgreSQL on both sides, configured '
+                'personal signing, current `app_users` manager/owner authority, and reviewed store '
+                'timezone rows. Matching flags alone do not establish readiness.\n')
     return {'migrations/APPLY_ORDER.md':order, 'docs/BUILD_TEST_FEATURE_PROFILE.md':profile}
 
 

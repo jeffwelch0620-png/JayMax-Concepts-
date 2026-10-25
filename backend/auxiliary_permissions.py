@@ -6,7 +6,7 @@ Application authorization still controls users, locations and staff PINs.
 import transition_permissions as transition_checks
 
 TABLES = ('app_users', 'push_subscriptions')
-PRIVATE = ('purchasing', 'actual_inventory', 'prep_inventory', 'integrations')
+PRIVATE = ('purchasing', 'actual_inventory', 'prep_inventory', 'integrations', 'operations')
 VERBS = ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
 
 

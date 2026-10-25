@@ -7,7 +7,7 @@ import { PageTitle, cardCls, inpCls, btnGhost } from "./common";
 const labels = { open: "Open", in_progress: "In progress", complete: "Complete",
   needs_review: "Manager review required", unavailable: "Progress not confirmed" };
 const loading = () => ({ state: "loading" });
-export function ManagerOverviewTab({ rid, user, onOpenCounts, onOpenPrep, readApi = api }) {
+export function ManagerOverviewTab({ rid, user, onOpenCounts, onOpenPrep, onOpenHandoff, readApi = api }) {
   const scope = JSON.stringify([user?.id, rid]);
   const initial = useMemo(() => ({ ...rememberedOverview(overviewStorage(), user?.id, rid, todayISO()), scope }), [scope, rid, user?.id]);
   const [selected, setSelected] = useState(initial);
@@ -67,6 +67,7 @@ export function ManagerOverviewTab({ rid, user, onOpenCounts, onOpenPrep, readAp
           <button className={`${btnGhost} mt-4`} disabled={!prepEnabled} onClick={() => onOpenPrep?.({ rid, day: selection.day, track: selection.track })}>Open dated prep workflow</button>
         </section>
       </div>
+      {readApi.managerHandoffEnabled && <button className={`${btnGhost} mt-4`} onClick={() => onOpenHandoff?.({ rid, day: selection.day, track: selection.track })}>Open dated manager handoff</button>}
       <p className="mt-4 text-sm text-slate-400">Counts and task history are shown as currently recorded, including corrections. They do not reconstruct what was known on a past date.</p>
     </>}
   </div>;

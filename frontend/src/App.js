@@ -26,6 +26,7 @@ import { HistoryTab } from "./components/HistoryTab";
 import { NativePurchaseHistory } from "./components/NativePurchaseHistory";
 import { PrepTab } from "./components/PrepTab";
 import { ManagerOverviewTab } from "./components/ManagerOverviewTab";
+import { ManagerHandoffTab } from "./components/ManagerHandoffTab";
 import { overviewContext } from "./lib/managerOverview";
 import { SchedulingTab } from "./components/SchedulingTab";
 import { StaffTab } from "./components/StaffTab";
@@ -37,6 +38,7 @@ import { Login } from "./components/Login";
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "managerOverview", label: "Manager overview", icon: ClipboardCheck },
+  { id: "managerHandoff", label: "Manager handoff", icon: FileText },
   { id: "prep", label: "Prep", icon: ChefHat },
   { id: "counts", label: "Enter Counts", icon: ClipboardList },
   { id: "setup", label: "Item Setup", icon: Settings },
@@ -67,6 +69,7 @@ export default function App() {
   const [loc, setLoc] = useState(() => api.currentSession()?.user?.role === "owner" ? "owner" : (api.currentSession()?.user?.locations || [])[0] || "berts");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [prepFocus, setPrepFocus] = useState(null);
+  const [handoffFocus, setHandoffFocus] = useState(null);
   const [historyFocusCN, setHistoryFocusCN] = useState(null);
   const [dashboardFlaggedOnly, setDashboardFlaggedOnly] = useState(false);
   const [costingFocus, setCostingFocus] = useState(null);
@@ -91,11 +94,13 @@ export default function App() {
     ? TABS.filter((t) => ["dashboard", "history"].includes(t.id))
     : session?.user?.role === "staff"
       ? TABS.filter((t) => ["dashboard", "prep", "counts"].includes(t.id))
-      : TABS.filter(t => t.id !== "managerOverview" || ["owner", "manager"].includes(session?.user?.role));
+      : TABS.filter(t => (t.id !== "managerOverview" || ["owner", "manager"].includes(session?.user?.role))
+        && (t.id !== "managerHandoff" || (api.managerHandoffEnabled && ["owner", "manager"].includes(session?.user?.role))));
 
   useEffect(() => {
     setCostingFocus(null);
     setPrepFocus(null);
+    setHandoffFocus(null);
     setActiveTab(pendingTabRef.current || "dashboard");
     pendingTabRef.current = null;
   }, [loc, session]);
@@ -254,7 +259,7 @@ export default function App() {
                 return (
                   <button
                     key={t.id}
-                    onClick={() => { setPrepFocus(null); setActiveTab(t.id); }}
+                    onClick={() => { setPrepFocus(null); setHandoffFocus(null); setActiveTab(t.id); }}
                     data-testid={`nav-tab-${t.id}`}
                     className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-xs font-semibold border-b-2 transition ${active ? "text-white" : "text-slate-500 border-transparent hover:text-slate-300"}`}
                     style={active ? { borderBottomColor: current.accent } : {}}
@@ -273,11 +278,17 @@ export default function App() {
           <OwnerDashboard onOpenLocation={(id) => setLoc(id)} onOpenOrder={openOrder} />
         ) : activeTab === "managerOverview" && ["owner", "manager"].includes(session?.user?.role) ? (
           <ManagerOverviewTab key={`${session.user.id}:${loc}`} rid={loc} user={session.user}
+            onOpenHandoff={selection => {
+              if (!api.managerHandoffEnabled || selection.rid !== loc || !overviewContext(loc, selection.day, selection.track, session.user)) return;
+              setHandoffFocus(selection); setActiveTab("managerHandoff");
+            }}
             onOpenCounts={() => { if (api.actualInventoryEnabled) setActiveTab("counts"); }}
             onOpenPrep={selection => {
               if (!api.prepExecutionEnabled || selection.rid !== loc || !overviewContext(loc, selection.day, selection.track, session.user)) return;
               setPrepFocus(selection); setActiveTab("prep");
             }}/>
+        ) : activeTab === "managerHandoff" && api.managerHandoffEnabled && ["owner", "manager"].includes(session?.user?.role) ? (
+          <ManagerHandoffTab key={`${session.user.id}:${loc}:${handoffFocus?.day || "default"}:${handoffFocus?.track || "bulk"}`} rid={loc} user={session.user} initialContext={handoffFocus} drafts={drafts.current} showToast={showToast}/>
         ) : !S ? (
           <div className="text-slate-500 text-sm p-10 text-center" data-testid="loading-state">
             {store.loadError ? <>
