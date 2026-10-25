@@ -8,19 +8,36 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-Accepted Inventory baseline is merged PR66 **42a78b8**. The separately approved
+Accepted Inventory baseline is [merged PR67](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/67)
+**e0adc3b**, tree-identical to reviewed **dedeb82**. All four
+[reviewed-head CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40149826393)
+and [merged-main CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40153362211)
+passed separately. Its fixed failure stages and independent cleanup diagnostics
+are accepted tooling, not proof of the original S1 cause or live acceptance.
+The owner-approved local [N1/R1 follow-up](docs/S1_REAL_RESOURCE_REHEARSAL_20261024.md)
+adds subclass categories and a digest-bound real-clock/resource rehearsal with
+numeric per-phase minima. It changes no app endpoint, PIN policy, credential,
+grant or schema. Final local validation passed **1,849 offline cases** and
+the overlapping **80-case focused selection**. The real-clock loopback rehearsal
+passed all thirteen fictional requests in **148.828 seconds**, with source hashes
+and cleanup verified. Minimum free memory was about **1,149 MiB**, above guards
+but below the suggested 1.5 GiB headroom target; live acceptance remains open.
+Failed/corrected exploratory runs are retained in the follow-up notes. Prompt
+before publishing the next draft; hosted and credential/grant/schema work stays held.
+
+Earlier PR66 baseline **42a78b8**: the separately approved
 October 24 owner-only S1 attempt confirmed that deployment, accepted protected
 inputs locally, then held before its first request intent. It sent **zero API
 requests**; no owner login/session or PIN lockout occurred. Both claims are
 consumed and owned cleanup passed. The subsequent seven-case fictional review
 did not reproduce the hold; its cause remains unknown.
 
-The current local [safe failure-attribution follow-up](docs/S1_SAFE_FAILURE_ATTRIBUTION_20261024.md)
+The accepted [safe failure-attribution change](docs/S1_SAFE_FAILURE_ATTRIBUTION_20261024.md)
 adds fixed worker/controller stages and allowlisted reasons, with primary and
 cleanup failures reported separately. It never records raw exception text or
 secret inputs. It preserves approval, source/resource/time, claim and request
 guards. This is a diagnostic improvement, not a proven fix for the original hold.
-Final local validation passed **1,809 offline cases**, including 39 new
+PR67 local validation passed **1,809 offline cases**, including 39 new
 diagnostic cases; the 41-case focused profile overlaps. Initial local dependency
 selection failures and corrected reruns are documented in the follow-up notes.
 Draft publication, CI, merge and any fresh live attempt remain separate gates;
@@ -78,11 +95,11 @@ and separate merge/automatic-deployment approval remain required.
 
 ## Next
 
-- Finish local failure-attribution regression checks and JMax documentation,
-  then prompt before publishing a new draft PR for independent review. No live
-  attempt is authorized. After accepted review/CI/merge, prepare fresh fictional
-  console evidence and a separately approved S1 packet; preserve the consumed
-  attempt and its unresolved cause.
+- Finish local real-clock/resource rehearsal and N1 regression checks, update
+  JMax, then prompt before the next draft PR push. Before another live proposal,
+  require real-time fictional operator-machine evidence, inspect memory minima
+  and preserve all consumed attempts and the unresolved original cause. No hosted
+  execution or credential/grant/schema change is authorized by this local slice.
 - Review the [coordinated approval index](docs/PAR_SECURITY_APPROVAL_INDEX_20261023.md)
   and [security/identity/permissions plan](docs/SECURITY_IDENTITY_PERMISSIONS_PLAN_20261023.md).
   S1 verification comes first; a targeted S2a rotation packet no longer waits for

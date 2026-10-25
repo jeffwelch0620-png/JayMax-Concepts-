@@ -167,8 +167,10 @@ def memory():
     return {'freeBytes': result.free, 'totalBytes': result.total}
 
 
-def resources(*, start=False):
+def resources(*, start=False, observe=None):
     value = memory()
+    if observe is not None:
+        observe(value)
     floor, ratio = (1024**3, .15) if start else (512*1024**2, .10)
     if value['totalBytes'] <= 0 or value['freeBytes'] < floor or value['freeBytes']/value['totalBytes'] < ratio:
         raise Held('Local memory floor not met')

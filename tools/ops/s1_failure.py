@@ -14,7 +14,8 @@ WORKER_STAGES = frozenset(s for s in STAGES if s.startswith('worker_')) | frozen
     ('quiet_wait', 'recovery_wait', 'request'))
 REASONS = frozenset(('unknown_error', 'held', 'value_error', 'type_error', 'io_error',
     'runtime_error', 'assertion_error', 'timeout', 'cancelled', 'interrupted',
-    'end_of_input', 'cleanup_unconfirmed', 'resource_guard_failed', 'worker_held', 'worker_deadline',
+    'end_of_input', 'permission_error', 'not_found', 'connection_error', 'import_error',
+    'cleanup_unconfirmed', 'resource_guard_failed', 'worker_held', 'worker_deadline',
     'worker_exited_without_receipt', 'worker_message_invalid', 'worker_message_bound',
     'controller_callback_unconfirmed', 'owned_job_assignment_failed',
     'owned_job_termination_failed', 'owned_job_query_failed', 'owned_cleanup_unconfirmed',
@@ -29,12 +30,18 @@ REASONS = frozenset(('unknown_error', 'held', 'value_error', 'type_error', 'io_e
     'approved_actor_mismatch', 'login_shape', 'login_identity', 'probe_shape'))
 ERROR_TYPES = frozenset(('OtherError', 'Held', 'ProcessHeld', 'ValueError', 'TypeError',
     'OSError', 'RuntimeError', 'AssertionError', 'TimeoutError', 'CancelledError',
-    'KeyboardInterrupt', 'SystemExit', 'EOFError'))
-_BUILTINS = {ValueError: ('ValueError', 'value_error'), TypeError: ('TypeError', 'type_error'),
-    OSError: ('OSError', 'io_error'), RuntimeError: ('RuntimeError', 'runtime_error'),
-    AssertionError: ('AssertionError', 'assertion_error'), TimeoutError: ('TimeoutError', 'timeout'),
-    asyncio.CancelledError: ('CancelledError', 'cancelled'), KeyboardInterrupt: ('KeyboardInterrupt', 'interrupted'),
-    SystemExit: ('SystemExit', 'interrupted'), EOFError: ('EOFError', 'end_of_input')}
+    'KeyboardInterrupt', 'SystemExit', 'EOFError', 'PermissionError', 'FileNotFoundError',
+    'BrokenPipeError', 'ConnectionError', 'ImportError'))
+_ORDERED = ((PermissionError, 'PermissionError', 'permission_error'),
+    (FileNotFoundError, 'FileNotFoundError', 'not_found'),
+    (BrokenPipeError, 'BrokenPipeError', 'connection_error'),
+    (ConnectionError, 'ConnectionError', 'connection_error'),
+    (ImportError, 'ImportError', 'import_error'),
+    (TimeoutError, 'TimeoutError', 'timeout'), (EOFError, 'EOFError', 'end_of_input'),
+    (OSError, 'OSError', 'io_error'), (asyncio.CancelledError, 'CancelledError', 'cancelled'),
+    (KeyboardInterrupt, 'KeyboardInterrupt', 'interrupted'), (SystemExit, 'SystemExit', 'interrupted'),
+    (AssertionError, 'AssertionError', 'assertion_error'), (TypeError, 'TypeError', 'type_error'),
+    (ValueError, 'ValueError', 'value_error'), (RuntimeError, 'RuntimeError', 'runtime_error'))
 
 
 def position(stage, request=None):
@@ -48,14 +55,21 @@ def position(stage, request=None):
 
 def describe(error, stage, request=None, *, trusted_types=()):
     result = position(stage, request)
-    kind, reason = _BUILTINS.get(type(error), ('OtherError', 'unknown_error'))
+    kind, reason = 'OtherError', 'unknown_error'
     # Exact caller-owned exception classes only. No str/repr, subclass properties,
     # arbitrary class names, traceback, paths or exception chains are inspected.
-    if type(error) in trusted_types:
+    if any(type(error) is trusted for trusted in trusted_types):
         kind, reason = ('ProcessHeld' if type(error).__name__ == 'ProcessHeld' else 'Held'), 'held'
         args = BaseException.args.__get__(error)
         if len(args) == 1 and type(args[0]) is str and args[0] in REASONS:
             reason = args[0]
+    else:
+        # Inspect the actual class ancestry, not an instance's spoofable __class__.
+        ancestry = type.__getattribute__(type(error), '__mro__')
+        for base, name, category in _ORDERED:
+            if any(base is member for member in ancestry):
+                kind, reason = name, category
+                break
     return {**result, 'reason': reason, 'errorType': kind}
 
 

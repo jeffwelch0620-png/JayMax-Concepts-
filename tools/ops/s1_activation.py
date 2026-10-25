@@ -22,6 +22,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 import s1_request_transport as engine
+import s1_resources as resource_observations
 
 ROOT = Path(__file__).resolve().parents[2]
 ORIGIN = 'https://jaymax-api.onrender.com'
@@ -87,16 +88,19 @@ def _local_origin(origin):
 
 
 def prepare(*, mode='rehearsal', origin='https://s1-fixture.invalid', roles=engine.ROLES,
-            roster=True, pin_configured=True, attempt_id=None):
+            roster=True, pin_configured=True, attempt_id=None, real_time_resources=False):
     roles = list(roles)
     attempt_id = attempt_id or uuid4().hex
-    if (mode not in ('rehearsal','hosted') or type(roster) is not bool or type(pin_configured) is not bool
+    if (mode not in ('rehearsal','hosted') or type(real_time_resources) is not bool
+            or real_time_resources and mode!='rehearsal'
+            or type(roster) is not bool or type(pin_configured) is not bool
             or not roles or roles[0]!='owner' or roles != [role for role in engine.ROLES if role in roles]
             or not re.fullmatch('[a-f0-9]{32}',attempt_id)
             or (origin!=ORIGIN if mode=='hosted' else not _local_origin(origin))):
         raise Held('profile_invalid')
     return {'format':FORMAT,'mode':mode,'origin':origin,'attemptId':attempt_id,
-            'clock':'real' if mode=='hosted' else 'virtual',
+            **({'rehearsalResources':'real'} if real_time_resources else {}),
+            'clock':'real' if mode=='hosted' or real_time_resources else 'virtual',
             'roles':roles,'roster':roster,'pinConfigured':pin_configured,
             'limits':{'attempts':21,'workSeconds':780,'totalSeconds':900,'cleanupSeconds':120,
                       'quietSeconds':65,'responseBytes':65536,'automaticRetries':0},
@@ -107,7 +111,8 @@ def prepare(*, mode='rehearsal', origin='https://s1-fixture.invalid', roles=engi
 def check_profile(value):
     try:
         expected = prepare(mode=value['mode'], origin=value['origin'], roles=value['roles'],
-            roster=value['roster'],pin_configured=value['pinConfigured'],attempt_id=value['attemptId'])
+            roster=value['roster'],pin_configured=value['pinConfigured'],attempt_id=value['attemptId'],
+            real_time_resources=value.get('rehearsalResources')=='real')
         if value != expected: raise ValueError
     except (KeyError, TypeError, ValueError):
         raise Held('profile_or_sources_changed') from None
@@ -184,16 +189,19 @@ def check_approval(profile, approval, actors, directory):
     return stop,end
 
 
-def evidence_environment(profile, directory):
+def evidence_environment(profile, directory, *, resource_monitor=None):
     """Read-only launch checks; collecting input never creates a claim or file."""
     directory = Path(directory)
+    resource_monitor=resource_observations.select(profile,resource_monitor)
     if not directory.is_dir() or any(p.is_symlink() or p.is_junction() for p in (directory,*directory.parents)):
         raise Held('evidence_directory_invalid')
+    if resource_observations.enabled(profile):
+        resource_monitor.check(start=True)
     if profile['mode']=='hosted':
         from read_only_probe import private_path, resources
         if git('status','--porcelain'): raise Held('clean_reviewed_checkout_required')
         if not sys.flags.isolated: raise Held('isolated_runtime_required')
-        resources(start=True); private_path(directory,directory=True)
+        private_path(directory,directory=True)
 
 
 def dispatch_window(profile, approval, actors, directory):
@@ -211,11 +219,12 @@ def timing_ms(value):
 
 class Journal:
     """Exclusive, flushed append-only metadata; an incomplete intent is consumed."""
-    def __init__(self, profile, approval, actors, directory, *, require_dispatch_window=False):
+    def __init__(self, profile, approval, actors, directory, *, require_dispatch_window=False, resource_monitor=None):
         self.stop,self.end = check_approval(profile,approval,actors,directory)
         self.profile,self.approval,self.actors = deepcopy(profile),deepcopy(approval),deepcopy(actors)
         self._approval_sha,self._actors_sha = digest(approval),digest(actors)
-        evidence_environment(profile,directory)
+        self.resource_monitor=resource_observations.select(profile,resource_monitor)
+        evidence_environment(profile,directory,resource_monitor=self.resource_monitor)
         directory = Path(directory)
         if profile['mode']=='hosted':
             from read_only_probe import _fresh_private_file
@@ -252,9 +261,7 @@ class Journal:
         if self.closed or engine.utc_now()>=self.stop: raise Held('window_closed')
         if digest(self.approval)!=self._approval_sha or digest(self.actors)!=self._actors_sha:
             raise Held('private_binding_changed')
-        if self.profile['mode']=='hosted':
-            from read_only_probe import resources
-            resources()
+        self.resource_monitor.check()
 
     def intent(self,label,*,worker_integrity_ms=None):
         self.guard()
@@ -280,13 +287,16 @@ class Journal:
                     or not 1 <= value['retryAfterSeconds'] <= 61))): raise Held('worker_result_invalid')
         self._append({'event':'result',**value});self.pending=None;self.index+=1
 
-    def finish(self, *, cleanup_confirmed, completed=False, failure_diagnostics=None):
+    def finish(self, *, cleanup_confirmed, completed=False, failure_diagnostics=None, resource_observations=None):
         passed = completed is True and cleanup_confirmed is True and self.pending is None and self.index==len(self.order)
         diagnostic = {}
         try:
             if failure_diagnostics is not None:
                 from s1_failure import validate_summary
                 diagnostic['failureDiagnostics']=validate_summary(failure_diagnostics,requests=self.order)
+            if resource_observations is not None:
+                from s1_resources import validate_pair
+                diagnostic['resourceObservations']=validate_pair(resource_observations)
             self._append({'event':'closed','status':'passed' if passed else 'held','cleanupConfirmed':cleanup_confirmed is True,**diagnostic})
         finally: self.closed=True;self.stream.close()
         return {'status':'passed' if passed else 'held','cleanupConfirmed':cleanup_confirmed is True,

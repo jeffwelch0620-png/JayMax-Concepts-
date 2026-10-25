@@ -29,7 +29,7 @@ def test_describe_builtins_never_uses_error_text(error,kind,reason):
 def test_unknown_exception_and_string_subclass_are_constant_fallbacks():
     class PrivateError(RuntimeError):
         def __str__(self): raise AssertionError('must not stringify private exception')
-    assert failure.describe(PrivateError(PRIVATE),'worker_input')['errorType']=='OtherError'
+    assert failure.describe(PrivateError(PRIVATE),'worker_input')['errorType']=='RuntimeError'
     class PrivateString(str):
         def __hash__(self):raise AssertionError('must not inspect private string subclass')
     error=activation.Held(PrivateString(PRIVATE))
@@ -40,7 +40,7 @@ def test_unknown_exception_and_string_subclass_are_constant_fallbacks():
 def test_only_exact_trusted_reason_constants_are_retained(category,expected):
     value=failure.describe(activation.Held(category),'quiet_wait',trusted_types=(activation.Held,))
     assert value['reason']==expected and PRIVATE not in json.dumps(value)
-    assert failure.describe(activation.Held(category),'quiet_wait')['reason']=='unknown_error'
+    assert failure.describe(activation.Held(category),'quiet_wait')['reason']=='value_error'
 
 
 @pytest.mark.parametrize('change',[{'stage':PRIVATE},{'request':PRIVATE},{'reason':PRIVATE},
