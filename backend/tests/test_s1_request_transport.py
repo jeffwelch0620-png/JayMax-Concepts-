@@ -134,6 +134,56 @@ def test_pin_boolean_shape_is_exact(value):
         run(c.probe('P01', pin='4826'))
 
 
+@pytest.mark.parametrize('value,reason', [
+    ({'ok': False}, 'pin_verification_rejected'),
+    ({'ok': 0}, 'probe_shape'),
+    ({'ok': 'false'}, 'probe_shape'),
+    ({'ok': None}, 'probe_shape'),
+    ({'ok': False, 'token': TOKEN}, 'probe_shape'),
+    ({'ok': False, 'detail': PASSWORD}, 'probe_shape'),
+    ({'ok': True}, 'probe_shape'),
+    ({'ok': True, 'staff': None}, 'probe_shape'),
+    ({'ok': True, 'staff': [], 'token': TOKEN}, 'probe_shape'),
+    ({'ok': True, 'staff': [{'id': MEMBER, 'name': EMAIL,
+                           'role': 'cook', 'active': 1}]}, 'probe_shape'),
+])
+def test_first_pin_verification_classifies_only_exact_negative_without_leaks_or_retry(value, reason, caplog):
+    import s1_failure as failure
+    seen = []
+    c = client(lambda r: seen.append(r.url.path) or response(value))
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(boundary.Held) as caught:
+            run(c.probe('P01', pin='4826'))
+        assert caught.value.args == (reason,)
+        descriptor = failure.describe(caught.value, 'request', 'P01', trusted_types=(boundary.Held,))
+        assert failure.validate(descriptor)['reason'] == reason
+        with pytest.raises(boundary.Held, match='request_already_claimed'):
+            run(c.probe('P01', pin='4826'))
+    c.close()
+    assert seen == [boundary.VERIFY]
+    assert c.receipt()['requests'] == [{'request': 'P01', 'outcome': 'held'}]
+    public = json.dumps([c.receipt(), descriptor]) + caplog.text + str(caught.value)
+    assert all(secret not in public for secret in (EMAIL, PASSWORD, TOKEN, MEMBER, '4826'))
+
+
+def test_first_positive_pin_verification_still_validates_roster_and_passes():
+    c = client(lambda _: response({'ok': True, 'staff': [
+        {'id': MEMBER, 'name': 'TEST ONLY', 'role': 'cook', 'active': True}]}))
+    try:
+        assert run(c.probe('P01', pin='4826')) == {
+            'request': 'P01', 'outcome': 'passed', 'httpStatus': 200}
+    finally:
+        c.close()
+
+
+def test_negative_expected_wrong_pin_stays_successful_without_new_diagnostic():
+    c = client(lambda _: response({'ok': False}))
+    try:
+        assert run(c.probe('P03', pin='0000'))['outcome'] == 'passed'
+    finally:
+        c.close()
+
+
 @pytest.mark.parametrize('retry', [None, '0', '62', '1.5', '６０', '-1'])
 def test_retry_after_is_bounded_ascii_integer(retry):
     def handler(request):

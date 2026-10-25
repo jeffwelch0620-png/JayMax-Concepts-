@@ -349,6 +349,11 @@ class LocalTransport:
         elif pin is not None or staff_id is not None:
             raise Held('unexpected_input')
         (value, retry), fact = await self._send(label, step, body, session)
+        # A negative first verification is evidence of rejection, not proof of
+        # an incorrect PIN. Keep malformed/extra-field responses fail-closed
+        # under the existing shape reason; never serialize response contents.
+        if label == 'P01' and type(value) is dict and set(value) == {'ok'} and value['ok'] is False:
+            raise Held('pin_verification_rejected')
         valid = False
         if step.shape == 'no':
             valid = isinstance(value, dict) and set(value) == {'ok'} and value['ok'] is False

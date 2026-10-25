@@ -8,7 +8,36 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-Accepted Inventory baseline is [merged PR68](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/68)
+Accepted baseline is [merged PR69](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/69)
+**6740590**, tree-identical to reviewed **13c4e53**. All four
+[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40160234719)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40160847615)
+passed separately: 1,079 frontend tests/strict build, 1,904 offline cases and
+344 backend/disposable PostgreSQL cases. Those are accepted-baseline receipts,
+not fresh CI for the local follow-up below.
+
+The separately approved October 25 S1 attempt confirmed that commit Live, then
+closed held after one P01 intent and zero validated completed results, with
+`probe_shape` at response validation. Owner login and the deliberate lockout
+sequence did not run. Its consumed claims and cleanup evidence remain intact.
+Memory stayed above the selected 1-GiB/15% start and 512-MiB/10% running guards;
+the separate 1,536-MiB quiet evidence target missed. No security acceptance.
+
+The owner-authorized LOCAL
+[first-verification diagnostic distinction](docs/S1_PIN_VERIFICATION_DIAGNOSTICS_20261025.md)
+reports only an exact P01 `{"ok": false}` as `pin_verification_rejected`.
+Malformed responses retain `probe_shape`; both hold without retry or login.
+No response contents or secret inputs are saved. All **298 selected local cases**
+passed across the initial **296/298** run and corrected **2/2** TLS rerun; the
+initial two failures were missing local `cryptography`, resolved by using an
+existing test dependency path without source changes or installation. All
+**14 new cases** passed initially. The selection covers six S1 safety modules;
+no broad offline, frontend or PostgreSQL run is claimed. Prompt before draft
+publication; CI, merge and any fresh live
+attempt remain separate approvals. Hosted execution and credential, grant and
+schema changes stay held. No app endpoint or protection threshold changed.
+
+Historical PR68 baseline was [merged PR68](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/68)
 **15d7f1f**, tree-identical to reviewed **b1053a0**. All four
 [reviewed-head CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40155278817)
 and [merged-main CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40156278013)
@@ -28,13 +57,13 @@ as historical evidence after the owner-approved PR69 P1/P2 amendment: the
 controller now retains a durably claimed journal before enforcing the
 post-claim guard, and prepare supports explicit roles/roster/PIN shape flags
 with a safe summary. Genuine storage/callback failures still report uncertainty.
-The amendment remains subject to fresh tests/CI and separate merge approval.
-No live packet or new hosted execution is authorized.
+This pre-merge checkpoint is historical; PR69 was subsequently accepted as
+recorded above. No new live packet or hosted execution is authorized.
 
 PR69 amendment validation: the corrected focused selection passed **56 cases**.
 The broad local offline run passed **1,903/1,904 cases**; one unchanged Windows
 callback-start timing test failed, then the complete **10-case process suite**
-passed on rerun without code changes. Fresh full CI is required; profiles
+passed on rerun without code changes. PR69's later full CI passed; profiles
 overlap. The amended CLI's actual-clock/resource loopback run passed thirteen
 fictional requests in **139.453 seconds**, with source hashes, journal closure
 and cleanup verified. Numeric **G2 failed** at **1386.793 MiB** on both sides
