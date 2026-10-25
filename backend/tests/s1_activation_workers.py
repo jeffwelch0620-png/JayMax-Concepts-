@@ -93,6 +93,10 @@ def diagnostic_operator(channel,profile,approval,actors,input_mode):
     async def exchange(client,step,body,session,budget):
         label=order[len(seen)];seen.append(label)
         owner=actors['owner']
+        if label=='P01' and fault in ('pin_rejected','pin_malformed'):
+            # Exercise the real validator and IPC without opening sockets.
+            return ({'ok':False} if fault=='pin_rejected' else
+                    {'ok':False,'token':'TEST-ONLY-PRIVATE-PASSWORD-DSN'}),None
         if label=='L01':
             if fault=='password':raise activation.Held('unexpected_status')
             return {'token':'TEST-ONLY-OWNER-TOKEN.0123456789','user':dict(owner)},None

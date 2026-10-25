@@ -27,7 +27,8 @@ REASONS = frozenset(('unknown_error', 'held', 'value_error', 'type_error', 'io_e
     'initial_evidence_failed', 'evidence_write_failed', 'dispatch_order_invalid',
     'worker_result_invalid', 'pin_input', 'unexpected_status', 'request_failed',
     'response_type', 'response_size', 'response_shape', 'encoded_response',
-    'approved_actor_mismatch', 'login_shape', 'login_identity', 'probe_shape'))
+    'approved_actor_mismatch', 'login_shape', 'login_identity', 'probe_shape',
+    'pin_verification_rejected'))
 ERROR_TYPES = frozenset(('OtherError', 'Held', 'ProcessHeld', 'ValueError', 'TypeError',
     'OSError', 'RuntimeError', 'AssertionError', 'TimeoutError', 'CancelledError',
     'KeyboardInterrupt', 'SystemExit', 'EOFError', 'PermissionError', 'FileNotFoundError',

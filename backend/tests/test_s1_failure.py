@@ -124,6 +124,8 @@ def test_invalid_summary_closes_journal_without_serializing_private_fields(tmp_p
     ('quiet',0,'quiet_wait','runtime_error',None),
     ('window',0,'worker_dispatch_check','window_closed',None),
     ('password',1,'request','unexpected_status',None),
+    ('pin_rejected',0,'request','pin_verification_rejected',None),
+    ('pin_malformed',0,'request','probe_shape',None),
     ('primary_cleanup',0,'quiet_wait','runtime_error','io_error'),
     ('cleanup',13,None,None,'io_error'),
     ('success',13,None,None,None),
@@ -142,13 +144,21 @@ def test_real_owned_worker_reports_stages_and_independent_cleanup(tmp_path,monke
     d=result['failureDiagnostics'];primary=d['primaryFailure'];cleanup=d['workerCleanupFailure']
     if primary_stage:
         assert (primary['stage'],primary['reason'])==(primary_stage,primary_reason)
-        assert primary['request']==('L01' if fault=='password' else None)
+        assert primary['request']==('L01' if fault=='password' else
+                                   'P01' if fault in ('pin_rejected','pin_malformed') else None)
     else:assert primary is None
     assert (cleanup['reason'] if cleanup else None)==cleanup_reason
     raw=next(tmp_path.glob('*.jsonl')).read_text();closed=json.loads(raw.splitlines()[-1])
     assert closed['failureDiagnostics']==d
     assert PRIVATE not in raw+json.dumps(result) and actors(profile)['owner']['email'] not in raw
     assert result['claimStatus']=='created' and result['securityAcceptance'] is False
+    if fault in ('pin_rejected','pin_malformed'):
+        rows=[json.loads(line) for line in raw.splitlines()]
+        assert [v['request'] for v in rows if v['event']=='intent']==['P01']
+        assert not any(v['event']=='result' for v in rows)
+        assert result['requestPending'] is True and closed['status']=='held'
+        assert all(secret not in raw+json.dumps(result) for secret in (
+            '4826', operator.FICTIONAL_PASSWORD, 'TEST-ONLY-OWNER-TOKEN.0123456789'))
 
 
 def test_supervisor_primary_survives_owned_cleanup_failure(monkeypatch):
