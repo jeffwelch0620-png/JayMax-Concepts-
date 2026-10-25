@@ -5,6 +5,7 @@ import { normalizeRecipeSchema, recipeCostSummary, fmtDate, fmtMoney, num, today
 import { ManualForecast } from "./ManualForecast";
 import * as api from "../lib/api";
 import { PrepDayDrafts } from "./PrepDayDrafts";
+import { validOverviewDay } from "../lib/managerOverview";
 import { HistoricalPrepLists } from "./HistoricalPrepLists";
 import { StaffPrepCountReview } from "./StaffPrepCounts";
 import { PrepContainers } from "./PrepContainers";
@@ -61,8 +62,9 @@ function RecurringScheduleFields({ recurDays, toggleDay, fixedQty, setFixedQty, 
   );
 }
 
-export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, persistDishes, prepStock, prepLogs, prepReadStatus, prepCapabilities, applyPrepResult, salesPeriod, showToast }) {
-  const [track, setTrack] = useState("daily");
+export function PrepTab({ initialContext, drafts, showError = () => {}, rid, items, dishes, persistDishes, prepStock, prepLogs, prepReadStatus, prepCapabilities, applyPrepResult, salesPeriod, showToast }) {
+  const entry = initialContext?.rid === rid && validOverviewDay(initialContext.day) && TRACKS.some(t => t.id === initialContext.track) ? initialContext : null;
+  const [track, setTrack] = useState(entry?.track || "daily");
   const [sub, setSub] = useState("list");
   const [prepItems, setPrepItems] = useState([]);
   const reloadPrepItems = () => api.listPrepItems(rid, track).then(setPrepItems).catch(() => {});
@@ -96,7 +98,7 @@ export function PrepTab({ drafts, showError = () => {}, rid, items, dishes, pers
           );
         })}
       </div>
-      {sub === "list" && (api.prepDayTasksEnabled ? <PrepDayDrafts rid={rid} track={track} drafts={drafts} showToast={showToast}/> : prepCapabilities?.listsAvailable === false ? <p data-testid="prep-list-unavailable">Historical prep lists are retained for review. Use reviewed dated prep tasks for current work.</p> : <PrepListView rid={rid} track={track} items={items} dishes={dishes} prepItems={prepItems} reloadPrepItems={reloadPrepItems} applyPrepResult={applyPrepResult} showToast={showToast} />)}
+      {sub === "list" && (api.prepDayTasksEnabled ? <PrepDayDrafts initialDay={entry?.day} rid={rid} track={track} drafts={drafts} showToast={showToast}/> : prepCapabilities?.listsAvailable === false ? <p data-testid="prep-list-unavailable">Historical prep lists are retained for review. Use reviewed dated prep tasks for current work.</p> : <PrepListView rid={rid} track={track} items={items} dishes={dishes} prepItems={prepItems} reloadPrepItems={reloadPrepItems} applyPrepResult={applyPrepResult} showToast={showToast} />)}
       {sub === "count" && (api.staffPrepCountsEnabled ? <StaffPrepCountReview key={rid} rid={rid} drafts={drafts}/> : prepCapabilities?.countsAvailable === false ? <p data-testid="prep-count-unavailable">Historical count sessions are retained for review. Ask your manager to issue a reviewed prep count sheet.</p> : <EveningCount rid={rid} track={track} showToast={showToast} />)}
       {sub === "inventory" && (api.prepContainersEnabled ? <PrepContainers key={rid} rid={rid} drafts={drafts} /> : prepReadStatus?.available === false ? <p data-testid="prep-inventory-unavailable">{prepReadStatus.message || "Prep balances are unavailable here. Use reviewed prep counts, production and period reports."}</p> : <InventoryLog drafts={drafts} showError={showError} rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />)}
       {sub === "planning" && <Planning drafts={drafts} showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} prepCapabilities={prepCapabilities} persistDishes={persistDishes} showToast={showToast} />}
