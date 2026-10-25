@@ -13,3 +13,5 @@ for browser, _dependencies in features.values():
     if not re.fullmatch(r'[A-Z_]+', browser):
         raise ValueError('Unexpected frontend feature name')
     print(f'REACT_APP_{browser}=true')
+# Separate default-off receiving extension; does not alter sealed native profiles.
+print('REACT_APP_MANAGER_HANDOFF_NOTES=true')

@@ -1,0 +1,79 @@
+{
+  "accountColumnReads": {
+    "public.app_users": [
+      "id",
+      "role",
+      "locations"
+    ]
+  },
+  "applyAutomatically": false,
+  "catalog": {
+    "functions": {
+      "operations.guard_handoff_header()": {
+        "definitionSha256": "98d257bc6e4125fad5b2ca849d56e2fa48128ea8ca4c7d82a79c8fd87afe040d",
+        "name": "operations.guard_handoff_header",
+        "securityDefiner": false,
+        "trigger": true
+      },
+      "operations.guard_handoff_history()": {
+        "definitionSha256": "4d9e41a7293678e66366f4e564105501c713d1c334e8a9c7e6c73f2010aa07f4",
+        "name": "operations.guard_handoff_history",
+        "securityDefiner": false,
+        "trigger": true
+      }
+    },
+    "relations": {
+      "operations.handoff_command_receipts": {
+        "kind": "r",
+        "shapeSha256": "4d41ccd185e9d98842ff9c195f085e5b1e374cc366f8e545de3901adf4eb6e2a"
+      },
+      "operations.handoff_note_revisions": {
+        "kind": "r",
+        "shapeSha256": "27687ba28e91369dc59cdeb6a1669fb2c45d3deea8dcf6354240074358556240"
+      },
+      "operations.handoff_notes": {
+        "kind": "r",
+        "shapeSha256": "8f30bbdf6bcd0ead7a56d3b3e2d7ad31cab3196a0334e71b110df07bea7e6482"
+      },
+      "operations.store_settings": {
+        "kind": "r",
+        "shapeSha256": "11c7654722b3abce1a84dfaecd580c9816c4c2824b94ecdd4cc9054bf7ed3565"
+      }
+    }
+  },
+  "featureDefaults": "off",
+  "fixture": "Independent fictional empty loopback schema; no live settings, accounts or data",
+  "format": "jaymax-manager-handoff-reference-v1",
+  "historicalRuntimeProfile": "Unchanged; future receiving grants/policies need a separately reviewed matrix, no blanket schema grants",
+  "liveActivationApproved": false,
+  "migration": "20261025_manager_handoff_notes.sql",
+  "migrationSha256": "10a02315a4d0ee4fb923a44281ff6404ef855bd4bb28fb4b3d69aa6e0db3cb03",
+  "namespace": "operations",
+  "policyScope": "Server-only runtime role; store/user authorization is rechecked by FastAPI. No anonymous or authenticated-browser access.",
+  "postgresMajor": 17,
+  "proposedRuntimePrivileges": {
+    "operations.handoff_command_receipts": [
+      "SELECT",
+      "INSERT"
+    ],
+    "operations.handoff_note_revisions": [
+      "SELECT",
+      "INSERT"
+    ],
+    "operations.handoff_notes": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "operations.store_settings": [
+      "SELECT"
+    ]
+  },
+  "runtimePublicColumnReads": {
+    "public.stores": [
+      "id",
+      "active"
+    ]
+  },
+  "snapshotSha256": "94ffd35aa8d7f591a3f4f3aa3073a71c6db3b41c49b6b10942d052110d9376cc"
+}

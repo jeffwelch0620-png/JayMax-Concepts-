@@ -191,6 +191,20 @@ DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name
  'test_write_committing_during_lock_wait_invalidates_plan',
  'test_real_encrypted_export_and_restore_retain_installed_par_history_and_food_cost'))
 
+# Manager receiving journal: explicit local/CI selection, no hosted configuration.
+OFFLINE_CLASSES += ['manager_handoff::HandoffValidationTests','manager_handoff::HandoffActorTests']
+DATABASE_CASES += tuple(('manager_handoff','HandoffDatabaseTests',name) for name in (
+ 'test_shared_draft_submit_correct_history_and_previous_are_stock_independent',
+ 'test_before_after_commit_status_exact_retry_and_changed_key_conflicts',
+ 'test_parallel_creates_same_keys_and_stale_edits_never_overwrite',
+ 'test_current_account_revocation_applies_to_reads_commands_and_saved_receipts',
+ 'test_feature_missing_timezone_inactive_store_future_date_and_foreign_scope_hold',
+ 'test_missing_storage_disabled_guards_and_malformed_requests_hold_without_writes',
+ 'test_immutable_history_context_and_late_failure_rollback_all_three_relations',
+ 'test_history_pages_and_foreign_note_ids_never_return_other_store',
+ 'test_disposable_dump_restore_preserves_context_history_and_exact_replay',
+ 'test_disposable_role_matrix_and_catalog_snapshot'))
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

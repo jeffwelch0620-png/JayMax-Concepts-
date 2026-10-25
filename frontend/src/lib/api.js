@@ -16,6 +16,12 @@ const PG_API = `${API}/pg`;
 // database); only an explicit REACT_APP_USE_PG=false build uses the legacy routes.
 const USE_PG = process.env.REACT_APP_USE_PG !== "false";
 export const isPostgres = USE_PG;
+export const managerHandoffEnabled = USE_PG && process.env.REACT_APP_MANAGER_HANDOFF_NOTES === "true";
+const handoffUrl = rid => `${PG_API}/operations/${pgStoreId(rid)}/handoff-notes`;
+export const handoffDay = (rid, day, track, options = {}) => axios.get(`${handoffUrl(rid)}/days/${day}`, { ...options, params: { track } }).then(r => r.data);
+export const saveHandoff = (rid, body, version, key) => axios.post(`${handoffUrl(rid)}/commands`, body, { timeout: 60000, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const handoffStatus = (rid, body, version, key) => axios.post(`${handoffUrl(rid)}/status`, body, { timeout: 60000, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const handoffHistory = (rid, noteId, after = 0, options = {}) => axios.get(`${handoffUrl(rid)}/notes/${noteId}/history`, { ...options, params: { after } }).then(r => r.data);
 export const nativePurchasesEnabled = USE_PG && process.env.REACT_APP_NATIVE_PURCHASES === "true";
 export const actualInventoryEnabled = nativePurchasesEnabled && process.env.REACT_APP_ACTUAL_INVENTORY === "true";
 export const catalogMappingEnabled = actualInventoryEnabled && process.env.REACT_APP_CATALOG_MAPPING === "true";

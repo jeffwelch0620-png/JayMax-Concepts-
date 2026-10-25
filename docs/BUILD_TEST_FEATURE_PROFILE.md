@@ -29,3 +29,7 @@ The full native testing profile below sets both columns to `true` only after eac
 | `STAFF_PREP_PRODUCTION_ENABLED=true` | `REACT_APP_STAFF_PREP_PRODUCTION=true` | STAFF_PREP_TASKS |
 
 Run the existing `backend/deployment_readiness.py` configuration review with private backend and frontend settings. A matching configuration does not prove schema installation or runtime permissions; complete its read-only catalog checks separately. Authentication/PIN redesign remains deferred in build and required before operational use.
+
+## Separate manager journal capability
+
+`MANAGER_HANDOFF_NOTES_ENABLED=false` and `REACT_APP_MANAGER_HANDOFF_NOTES=false` are the defaults. `backend/manager_handoff_schema.py::configuration` reviews this pair separately so the sealed native/par profiles remain unchanged. The fictional CI frontend profile enables it for tests only. Before any live activation, require the separate receiving schema/permission review, PostgreSQL on both sides, configured personal signing, current `app_users` manager/owner authority, and reviewed store timezone rows. Matching flags alone do not establish readiness.

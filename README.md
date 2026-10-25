@@ -23,8 +23,9 @@ The first merged integration slice is a distinct personal-owner/manager
 progress/review flags. It uses two existing authorized GET readers, isolates
 unconfirmed sections and stale scope responses, and opens the native Prep
 workflow with the same restaurant/date/track. Existing dashboards, Operations
-archive access and retained drafts remain. No backend, schema or business-write
-command changes are included.
+archive access and retained drafts remain. That merged read-only slice included
+no backend, schema or business-write commands; the local extension below adds
+note-only persistence.
 
 Owner-selected fictional starting scope: **Bert's / October 25, 2026 / Bulk Prep**.
 The owner confirmed Supabase is still a development database with no operational
@@ -38,7 +39,7 @@ and verify ordinary Today/Daily entry, original dated-draft recovery and
 restaurant/session isolation. The amended full frontend run passed **1,154 tests
 in 88 suites** and the strict production build passed. Approved-head and
 merged-main CI separately passed all four checks. These are PR71 receipts,
-not new application tests for the documentation-only proposal below. The fictional desktop preview was inspected and its exact prep
+not the follow-on handoff-note validation receipts below. The fictional desktop preview was inspected and its exact prep
 navigation context verified. Initial test-setup failures and the corrected strict
 build warning are recorded in the
 [receiving contract, acceptance and coverage matrix](docs/INTEGRATION_MANAGER_OVERVIEW_20261025.md).
@@ -46,15 +47,25 @@ build warning are recorded in the
 Inventory Build Main remains the sole coordinating chat; Companion PR72
 **b73a80d** is the source baseline. This read-only milestone does not adopt its
 D1 workspace service, candidate migrations, persistent operations or scheduling.
-The next local contract is proposed for one **manager production-shift summary
+The approved local receiving extension implements one **manager production-shift summary
 and next-shift note**: draft, submit, reload and correct with history. It uses
 existing personal Inventory accounts with a fresh server-side role/store lookup,
 one shared note per store/date/track and exact-request recovery. Full named
 responsibility-transfer handoffs depend on real leadership/people mappings and
 remain separate. The [canonical coverage and proposed receiving contract](docs/INTEGRATION_MANAGER_OVERVIEW_20261025.md#proposed-persistent-manager-handoff-note)
 lists the logical tables, permission rows, default-off capability and fictional
-acceptance plan. This is documentation-only preparation for owner review; no
-implementation, migration file, SQL, grant or configuration change is included.
+acceptance plan. The implementation includes a default-off Manager handoff tab, revisioned API,
+separate receiving migration and fictional schema/role/recovery tests. Its
+[local acceptance record](docs/MANAGER_HANDOFF_LOCAL_ACCEPTANCE_20261025.md)
+distinguishes tests from future CI/live acceptance. Existing sealed native/par
+installers and their source pins are unchanged; the new migration, reviewed
+timezone rows, permissions and capability activation need a separate plan.
+No hosted SQL, grant, credential or configuration change has been performed.
+Local validation passed **1,188 frontend tests in 92 suites**, the strict build and
+**10 disposable PostgreSQL methods**, including real fictional dump/restore.
+The broad offline run passed 1,947/1,953 reported cases; all six local dependency
+failures cleared in the corrected, overlapping 155-case focused rerun. Full details
+and initial corrections are in the acceptance record; fresh CI is still pending.
 Prompt before each new draft publication and merge.
 Hosted work, service controls and
 credential, grant and schema changes remain held. S1 remains partial; optional

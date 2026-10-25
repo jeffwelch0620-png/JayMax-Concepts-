@@ -90,13 +90,15 @@ def table_privileges(profile):
     return result
 
 
-async def catalog_contracts(conn):
+async def catalog_contracts(conn, *, schemas=None):
     """Metadata fingerprints; caller must set search_path=pg_catalog in a read-only transaction.
 
     Used to compare a frozen independently installed LOCAL reference, never to
     silently accept the catalog of the target being assessed as its own baseline.
     Function bodies are hashed in memory and never returned or written.
     """
+    # An explicit feature-local capture must not widen the historical candidate.
+    selected = SCHEMAS if schemas is None else tuple(schemas)
     functions = {}
     rows = await conn.fetch('''SELECT n.nspname AS schema, p.proname AS name,
         format('%I.%I(%s)',n.nspname,p.proname,oidvectortypes(p.proargtypes)) AS signature,
@@ -105,7 +107,7 @@ async def catalog_contracts(conn):
         FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
         WHERE n.nspname=ANY($1::text[]) AND p.prokind IN ('f','p')
         AND NOT EXISTS(SELECT 1 FROM pg_depend d WHERE d.classid='pg_proc'::regclass
-            AND d.objid=p.oid AND d.deptype='e') ORDER BY 3''', list(SCHEMAS))
+            AND d.objid=p.oid AND d.deptype='e') ORDER BY 3''', list(selected))
     for row in rows:
         functions[row['signature']] = {
             'name': row['schema'] + '.' + row['name'],
@@ -119,7 +121,7 @@ async def catalog_contracts(conn):
         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname=ANY($1::text[]) AND c.relkind IN ('r','p','v','m','S','f')
         AND NOT EXISTS(SELECT 1 FROM pg_depend d WHERE d.classid='pg_class'::regclass
-            AND d.objid=c.oid AND d.deptype='e') ORDER BY 2''', list(SCHEMAS))
+            AND d.objid=c.oid AND d.deptype='e') ORDER BY 2''', list(selected))
     for row in rows:
         columns = await conn.fetch('''SELECT a.attname,format_type(a.atttypid,a.atttypmod) AS type,
             a.attnotnull,a.attidentity::text AS attidentity,a.attgenerated::text AS attgenerated,pg_get_expr(d.adbin,d.adrelid) AS default_expr

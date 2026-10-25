@@ -74,3 +74,8 @@ tools/ops/**/*.sql text eol=lf
 tools/ops/**/*.crt text eol=lf
 backend/requirements.txt text eol=lf
 docs/READ_ONLY_HEALTH_CALIBRATION_PROPOSAL_20261023.md text eol=lf
+
+# Independent manager journal references use LF; preserve older raw-byte rules.
+migrations/20261025_manager_handoff_notes.sql text eol=lf
+supabase/manager_handoff.schema.sql text eol=lf
+supabase/manager_handoff.manifest.json text eol=lf

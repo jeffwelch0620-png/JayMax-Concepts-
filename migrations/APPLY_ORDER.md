@@ -39,3 +39,7 @@ For an existing hosted database, compare recorded migration history and object d
 | 29 | [20261007_native_private_access.sql](20261007_native_private_access.sql) |
 | 30 | [20261013_purchase_source_lookup_index.sql](20261013_purchase_source_lookup_index.sql) |
 | 31 | [20261018_reviewed_inventory_pars.sql](20261018_reviewed_inventory_pars.sql) |
+
+## Separate manager receiving extension
+
+After the reviewed native source order, [20261025_manager_handoff_notes.sql](20261025_manager_handoff_notes.sql) is a separate default-off receiving migration. It is not added to the sealed 31-file reviewed-par installer or the historical runtime candidate. Its independent structure reference and manifest are in `supabase/manager_handoff.schema.sql` and `supabase/manager_handoff.manifest.json`. No live timezone rows or role policies/grants are seeded. A separate exact installation, per-object permission and activation review is required; existing native installers must not apply it automatically.

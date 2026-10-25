@@ -5826,6 +5826,16 @@ app.include_router(purchase_api.create_router(db_pg.pool, check_store_id, _purch
 import actual_inventory_api
 app.include_router(actual_inventory_api.create_router(db_pg.pool, check_store_id, _purchase_actor))
 
+# Receiving operations use current account rows, not cached token role claims.
+import manager_actor
+import manager_handoff
+
+async def _manager_handoff_actor(request, store_id):
+    return await manager_actor.resolve(request, store_id, _decode_token, db_auxiliary.pool,
+                                       USE_PG and bool(AUTH_SECRET))
+
+app.include_router(manager_handoff.create_router(db_pg.pool, _manager_handoff_actor))
+
 async def _staff_count_actor(request, conn, store_id, pin):
     token = (request.headers.get('authorization') or '').removeprefix('Bearer ').strip()
     user = _decode_token(token) if token else None
