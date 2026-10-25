@@ -1,12 +1,12 @@
-# First manager overview integration slice
+# Inventory integration receiving contracts and coverage
 
-October 25, 2026. Local implementation; publication, review, merge and hosted acceptance remain separate. Inventory Build Main is the sole coordinating chat. Companion App Integration remains a source and history reference.
+October 25, 2026. The first read-only slice is merged as PR71 with approved-head and merged-main CI passing separately. Its local acceptance receipts remain below; hosted acceptance is unverified. The follow-on persistent handoff-note contract is a documentation-only proposal awaiting owner review, with no implementation, SQL or live changes. Inventory Build Main is the sole coordinating chat. Companion App Integration remains a source and history reference.
 
 The first functional slice adds **Manager overview** to Inventory's restaurant navigation for personal owner and manager accounts. Start at **Bert's → October 25, 2026 → Bulk Prep** in the fictional local acceptance fixture. The owner confirmed that Supabase is a development database with no operational data; this slice does not query that claim or insert sample records there. Production screens never substitute fixtures when a read fails.
 
 ## Accepted sources and ownership
 
-- Inventory accepted PR70: `6e95313a8fd688d4a887c2b3d4ba78f9eb20740d`, reviewed tree `4f05943c77b307bdb828632f0112c003b8e9afff`.
+- Original receiving source PR70: `6e95313a8fd688d4a887c2b3d4ba78f9eb20740d`, reviewed tree `4f05943c77b307bdb828632f0112c003b8e9afff`. Current accepted PR71: `a67aa375f1012a24dcbed765e860f34349be58c7`, approved head `c5f063c`, identical tree `c476c83450046d1fa552ef7ec93e87ad9668b552`.
 - Companion accepted PR72: `b73a80d63adde989babee3c75c198e3148bf6ce9`. Its `app/team/operations-home.tsx`, `app/shared/operations-home.ts` and `app/shared/shift-brief.ts` supply the daily-brief/navigation direction. No Companion component, D1 workspace service, candidate SQL, permission model or stock writer is copied in this slice.
 - Inventory remains authoritative for purchased-item counts, explicit count values, received purchases, recipes/units and production/stock commands. Prep and sales explain Track 1. Assignment, production submission, manager acceptance and stock posting are separate events.
 - The existing accounting Dashboard and the legacy Operations/archive screen remain available. The latter is not the integrated Companion scheduling system.
@@ -55,7 +55,7 @@ This is the initial core-workflow coverage matrix, not a claim of complete Compa
 | --- | --- | --- |
 | Catalog, units, recipes, receiving, actual counts, Track 1 | Retained Inventory authority; count context is now exposed in the local overview | Reuse existing identity/revision/unit contracts. Never import Companion's parallel food stock writers. |
 | Dated prep plans, release, execution, correction review | Existing Inventory workflow; read-only local overview and dated navigation implemented | Add assignment/submission/verification context using existing scoped readers when needed; retain one accepted production/stock effect. |
-| Manager operations, shifts, closing, handoffs and follow-through | Next integration slice; source `operations-home`, `shift-log`, `close-*`, `followthrough-forms` and workspace services | Select one manager handoff workflow; map its existing Inventory overlap, persistence, actor authority, history and exact retry before adding receiving commands. |
+| Manager operations, shifts, closing, handoffs and follow-through | First persistent slice proposed below: manager shift summary / next-shift note, sourced from `operations.ts`, `shift-log.tsx` and `operations-home.ts`. Design only; no implementation or SQL. | Review the store-wide note contract, then implement draft/save/submit/correct and recovery locally. Full responsibility-transfer handoffs remain distinct and require their real people/leadership dependencies. |
 | Scheduling, coverage, leave, attendance and corrections | Companion candidate/source only; not integrated by this PR | Reconcile selected scheduling contracts and candidate dependencies with Inventory's receiving schema; then prove draft/save/reload/publish and cross-store denial. Do not replay migrations 001–063 wholesale. |
 | Reporting, dayparts, tour and manager summaries | Existing Inventory reporting retained; newer JMax contributions pending reconciliation | Pin each contribution and map its fields to actual versus theoretical sources, explicit units and completeness. No combined totals fabricated by this overview. |
 | People, identity and permissions | Existing personal Inventory login retained; shared adoption and broader administration remain release work | Map trusted server actors and approved memberships for new commands. No identity or permissions inferred from a roster label. |
@@ -72,3 +72,93 @@ Additional proposal inputs from the second PR71 review are retained for the next
 Plaintext staff-PIN storage is a confirmed source-level release concern in the existing native/legacy paths and belongs beside S1, I1, G04, G13 and O1 in the release backlog. Before rollout, that backlog must record an agreed accountable owner and a measurable exit criterion for each item. Owner assignments and the PIN-storage migration/design are pending; no people are appointed, credentials changed or storage acceptance claimed by this review note. Do not publish credential values or expand exploit detail.
 
 Hosted execution, service pauses and credential, grant and schema changes remain held. Prompt before a new draft push and again for merge; automatic Render test deployment is a separate stated consequence of merge approval. Historical PR cards do not need bulk reattachment: accepted cumulative Git trees and targeted links supply provenance.
+
+## Proposed persistent manager handoff note
+
+**Design for owner review only.** The accepted receiving baseline is merged Inventory PR71 `a67aa375f1012a24dcbed765e860f34349be58c7`, identical to approved `c5f063c` (tree `c476c83450046d1fa552ef7ec93e87ad9668b552`). Approved-head and merged-main CI each passed four checks. Companion source remains PR72 `b73a80d63adde989babee3c75c198e3148bf6ce9`; its five existing untracked duplicates are excluded. PR71 is the Stage 2 read-only seed. This proposal extends that receiving workflow with a narrowly selected persistent journal; it is not full Stage 1 inventory of every Companion command or complete operations adoption.
+
+### Selected behavior and source boundary
+
+Recommend **Bert's / October 25, 2026 / Bulk Prep: a production-shift summary and next-shift note**. A personal owner/manager saves a draft, submits it for the next manager to read, reloads the saved record, and can correct a submitted note with an explicit reason. The note reports readiness; it does not certify readiness, accept work, resolve an issue or post production. Proposed first scope is a store-wide manager journal, visible/editable to current authorized managers of that store and owners. This is an explicit receiving policy for review, not an assertion that Inventory already has Companion department memberships.
+
+Companion has separate flows which must not be conflated:
+
+| Existing source | Adopt or defer in this slice |
+| --- | --- |
+| `app/shared/operations.ts`: `shiftentry.save`, `shiftentry.submit`, `previousShift`; `app/team/shift-log.tsx`: `ShiftForm`; `app/shared/types.ts`: `ShiftEntry` | Adopt the draft/submitted model, explicit business date, reported readiness, summary, next-shift text, uniqueness and correction history. Adapt its complete `Workspace` input to a narrow Inventory read model. |
+| `app/shared/operations-home.ts`, `app/team/operations-home.tsx` | Show the latest prior submitted note for the selected store/track. A draft or missing record never becomes an opening handoff or readiness confirmation. |
+| `app/shared/followthrough.ts`: `handoff.create` / `handoff.transition`; `app/shared/types.ts`: `OvernightHandoff`; candidate `015_overnight_issues.sql` | Defer named responsibility transfer. It requires dated outgoing/incoming leadership, a verified receiver, safe-deferral confirmation and escalation/notification intent. Acceptance transfers responsibility; it does not resolve work. None of those events may be fabricated from reading a note. |
+| Candidate `014_manager_handoffs.sql` | Its name refers to shift-linked task handoffs. It is not the shift-summary storage implementation and must not be replayed for this journal. |
+| Inventory `SchedulingTab.js` / `legacy_staff_tasks.py` | Preserve archived legacy text-assigned tasks. Do not repurpose their names/IDs as personal managers or reopen retired task writes. |
+
+The original summary is department-scoped. The recommended receiving note deliberately uses existing Inventory store-manager scope and the current prep track; it does not silently map `bulk` to Companion's `production` membership or grant BOH/FOH/commissary authority. Full department-specific permissions, linked Manager Log issue IDs, opening/closing shifts, notifications and named ownership transfer remain deferred. No source records are imported.
+
+### Proposed fields, records and relationships
+
+One note per `(store_id, business_date, prep_track)` for the initial production-summary workflow. Multiple managers collaborate through revisions of that record, not competing copies. Date/track/store and creator are immutable after creation. Proposed public input fields are `summary` (nonblank, maximum 6,000 characters), `next_shift_note` (maximum 4,000), and `reported_readiness` (`not_assessed`, `ready`, `action_needed`); submitted corrections also require a reason (maximum 2,000). No quantities, recipe changes, stock actions, arbitrary linked issue IDs or client-supplied actors/timestamps are accepted.
+
+These are logical receiving deltas, not SQL or applied objects:
+
+| Proposed relation | Purpose and integrity |
+| --- | --- |
+| `operations.store_settings` | Store FK, reviewed IANA timezone and config revision. No inferred production timezone or seeded live configuration. Fictional Bert's fixture uses `America/New_York`; actual enabled-store values require review. Missing/invalid configuration holds this feature. |
+| `operations.handoff_notes` | UUID record ID, store FK, business date, daily/bulk track, creator account ID, captured timezone/settings revision, current revision/status and server timestamps. Unique store/date/track. Status is `draft` or `submitted`; correction does not reopen submitted work. |
+| `operations.handoff_note_revisions` | Append-only complete content snapshot per note/revision, action, trusted actor ID, server time and correction reason. Composite store/note FK and unique note/revision prevent foreign-store history or duplicate revisions. Preserve the original submit time separately from later correction time. |
+| `operations.handoff_command_receipts` | Unique actor/store/request-key receipt, normalized command fingerprint, target ID and accepted revision/result. Commit atomically with the projection and revision. No credential, bearer token or PIN is stored. |
+
+Actor IDs preserve Inventory's text account IDs (`usr_…`); do not coerce them into Companion membership UUIDs or match by email. History retains the actor ID if an account is later deleted. Do not add a cascading account FK or block existing account deletion without a separate lifecycle decision; a missing current account displays as a former manager and cannot authorize a new request. Labels are presentation, never identity or permission. Unsent text and retained requests are not another source-of-truth ledger.
+
+Business date is explicit and evaluated against the server's reviewed store timezone. Do not use the browser timezone or default to UTC when store configuration is absent. Creation must match the settings revision the manager reviewed and capture its timezone; changed settings require refresh, not reinterpretation of an existing note's immutable date. Preserve the source rule against future-dated shift summaries. Historical corrections are allowed with a reason. Previous-note selection uses the latest **submitted** earlier business date for the same store/track, across dates without service; it shows the record's actual date. It presents currently corrected history, not an as-known reconstruction. Drafts and different tracks/stores are excluded.
+
+### Server authority before persistence
+
+Add a narrowly scoped server actor resolver for this module. Require PostgreSQL mode and configured personal-session signing material even if blanket development authentication is disabled; missing signing configuration holds the feature. Verify the existing personal bearer token, require a nonempty `sub`, then look up that exact account ID in current PostgreSQL `app_users` through the existing account pool. Use the current row's role and locations, not the token's cached role or an email lookup. Require owner or manager; managers need current membership in the requested restaurant, using the existing `papa_leonis` / `papa` translation. Reject missing/deleted users, malformed sessions, staff, readonly and foreign-store requests. Resolve before every read, command, receipt check and replay. No Mongo fallback, shared PIN, roster identify, caller-controlled `oai-authenticated-user-*`, actor body field or email auto-link.
+
+The account read reuses `db_auxiliary` rather than granting the operational connection broad account/password access. If that pool is explicitly configured but unavailable, fail closed using its existing no-fallback behavior. Existing middleware can still deny newly granted access from an older token; require normal sign-in rather than bypass it. This gives current authority at request dispatch; it does not promise cancellation of a command already in flight when an account changes, or implement the complete I1 session/provider lifecycle. Strict cross-service revocation remains a release/identity design item. Do not claim those larger gaps solved by this helper.
+
+Store and record scope must also be included in every operational SQL read/update, not just checked in the UI. Never load a record globally by UUID and then return its foreign-store contents. The first store-wide journal does not broaden any existing food, account-management, department or scheduling capability. Headers purporting to identify a person are ignored; without a valid personal session they authorize nothing.
+
+### Commands, revision and transport recovery
+
+Proposed routes, matching Inventory's `/api/pg` convention: a selected-day GET under `/operations/{store}/handoff-notes/days/{day}?track=bulk`, a scoped note/history GET, and a typed commands route. History pages are bounded to 50 revisions with a stable revision cursor; a page is not a complete-history claim. Reuse the existing revision-header convention and `Idempotency-Key`; require strict bounded inputs and reject extras. Exact route and migration filenames will be finalized with implementation review, not treated as deployed here.
+
+| Command | Preconditions | Result |
+| --- | --- | --- |
+| Create draft | Expected revision 0; stable new UUID; no record already exists for this store/date/track | Revision 1 draft with immutable context/creator and a creation receipt. A competing create returns the existing scoped record for review, not another note. |
+| Save draft | Current matching revision and draft status | Append revision; replace the current draft content. Never silently merge another manager's changes. |
+| Submit | Current matching revision, draft status and valid saved content | Append submitted revision and first-submitted server time. No prep acceptance, notification delivery or stock effect. |
+| Correct submitted | Current matching revision, submitted status and explicit reason | Append correction preserving all earlier versions and first-submit time; remain submitted. No delete/history rewrite action. |
+
+One database transaction locks/checks the scoped record and commits the current projection, immutable revision and receipt. Rollback leaves none of them partially saved. For a duplicate request key, first reauthorize the current actor, then compare actor/store/action/record/context/expected revision/normalized content. Exact replay returns its original accepted revision **and the separate current record**; a later correction must not be overwritten by the old acknowledgement. A changed body under the same key is a conflict. A stale revision under a new key is a conflict with current context for explicit review.
+
+The browser retains unsent edits in the existing App draft map by person/store/date/track/record. Before sending a mutation, retain the exact pending body, key and expected revision in an actor/store-bound session journal following the existing purchase/par recovery pattern. This contains operational note text, but never credentials or authority. A blocked/full/malformed journal stops the POST before sending; no silent downgrade or new retry key. This is a personal-manager browser feature, not adoption of a shared-tablet/offline policy. Account-scoped storage and UI checks are not encryption or a confidentiality boundary against other same-origin scripts; do not claim shared-device data erasure from this design.
+
+After an uncertain response, hold editing/new commands and offer an explicit retry of that exact request. Reload/sign-in recovery checks the current personal actor and current authorization before displaying/replaying its retained request; another account/store cannot adopt it. A successful status/read must match request fingerprint, context and revision before clearing recovery. A temporary negative receipt read is not proof that the original request cannot still commit. Confirmed newer records stay current, and unconfirmed/corrupt recovery stays held. Logout removes access to the pending form; it is not a stock or note rollback. The existing personal-session recovery convention retains only that account's recovery journal until acknowledgement or explicit discard; broader shared-device cache erasure and retention policy must be settled before employee rollout.
+
+### Proposed restricted-role matrix and rollout
+
+No role names, credentials or privileges are changed by this contract. Each proposed schema object must enter the reviewed R1 per-object matrix when implementation is proposed; never use schema-wide ALL grants or a security-definer wrapper to bypass it.
+
+| Role class | Proposed minimum surface |
+| --- | --- |
+| Operational backend runtime | `operations` USAGE; store settings SELECT; notes SELECT/INSERT and only justified projection UPDATE; revisions and receipts SELECT/INSERT only. Explicit applicable RLS policies, store-qualified commands and tested transaction/locking dependencies. No object ownership, DELETE, TRUNCATE, DDL or delegation. |
+| Existing accounts/notification connection | Existing account lookup remains separate. No new operational writes or schema usage. Extend permission inspection's private-schema coverage to include the new namespace; verify denial explicitly. |
+| Anonymous/browser database roles | No new table/function/sequence access. UI uses the authenticated backend, never direct client database writes. |
+| Reviewed installer/schema owner | Future additive schema/config/policy work only under its separate reviewed authority. No new live role or global ownership/membership change inferred here. |
+
+Future implementation would add one ordered **Inventory** migration, the receiving snapshot/manifest/apply-order update and explicit grant/policy test rows. Do not copy candidate migrations 001–063, change their numbering or apply any SQL now. Backend and browser capabilities default **off** (`MANAGER_HANDOFF_NOTES_ENABLED` / `REACT_APP_MANAGER_HANDOFF_NOTES` proposed); missing schema, timezone or account authority fails closed. CI can enable the fictional profile explicitly. Do not change Render flags or auto-install SQL at startup. Keep existing dashboards, source Prep workflows and archived Operations tasks available. Do not add a named-manager acceptance button or a notification promise to this note form.
+
+### Fictional local acceptance and next decision
+
+The first fixture remains Bert's / October 25 / Bulk Prep, with two clearly fictional personal managers and an owner, plus foreign-store/staff/readonly fixtures. Local tests must prove:
+
+1. Draft save → reload → submit → another authorized manager read → correction → history, including the original next-shift text and first-submit time.
+2. Header substitution, body actor/role spoofing, email auto-link, missing signing configuration, invalid signatures, deleted/downgraded accounts, foreign-store reads/writes/retries and staff manager-command attempts are refused; completed revocations are checked again on retries.
+3. Two editors and competing creates cannot lose work or create duplicate context rows; stale commands require explicit review. Account display-label changes do not relink records.
+4. Same-key same-body replay is one revision/receipt; changed payload conflicts. Failure before commit, response loss after commit, reload, same-account reauthentication and a newer correction preserve exact recovery and current state.
+5. Blocked/corrupt session storage, changed actor/store/date/track and late responses cannot expose another context or silently send a new command. No empty/error response becomes completed work.
+6. Store timezone and future-date rules, missing days, empty lists, drafts and corrections produce honest previous-note/readiness labels. Missing configured timezone is unavailable, not UTC fallback.
+7. Runtime and auxiliary/anonymous allow/deny tests match the per-object matrix. No handoff action changes purchased counts, purchases, prep production, inventory ledger entries, Food Cost, credentials or existing account grants.
+8. Capability-off/missing-schema states preserve the existing application; full regression/build and fresh CI follow the eventual implementation, not this documentation-only proposal.
+
+**Recommendation for approval:** implement this store-wide production-summary/next-shift-note contract locally with fictional disposable PostgreSQL and existing personal Inventory identities. The first build includes draft/save/submit/correct/history and bounded recovery; named receiver acceptance, full department policy, notifications and global provider/login migration stay out of it. Before coding, Jeff should accept the store-wide visibility/collaborative-edit scope, one note per store/date/track, and the personal-browser recovery convention. These are the concrete scope choices in this proposal, not additional S1 prerequisites. Hosted execution, configuration, credential, grant and schema application remain held; a new draft push and merge each retain their requested approval prompt.

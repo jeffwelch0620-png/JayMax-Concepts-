@@ -8,14 +8,17 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-The accepted baseline is [merged PR70](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/70)
-**6e95313**, tree-identical to reviewed **ca84815**. The four
-[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40206917665)
-and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40208642033)
-passed separately. This is accepted-source evidence, not fresh CI for the local
-integration work below; current Render deployment completion was not inspected.
+The accepted baseline is [merged PR71](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/71)
+**a67aa375**, tree-identical to approved **c5f063c**. The four
+[approved-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40214920647)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40215493932)
+passed separately. Merge and automatic Render test deployment were approved;
+deployment completion and live acceptance were not inspected. PR70's earlier
+[head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40206917665)
+and [main](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40208642033)
+receipts remain historical source evidence.
 
-The first LOCAL integration slice is a distinct personal-owner/manager
+The first merged integration slice is a distinct personal-owner/manager
 **Manager overview** tab, with purchased-item count context and dated prep
 progress/review flags. It uses two existing authorized GET readers, isolates
 unconfirmed sections and stale scope responses, and opens the native Prep
@@ -33,8 +36,9 @@ overview's one-time prep context on manual tab selection, preserving retained
 drafts. Its four real-component App navigation cases reproduce the old failure
 and verify ordinary Today/Daily entry, original dated-draft recovery and
 restaurant/session isolation. The amended full frontend run passed **1,154 tests
-in 88 suites** and the strict production build passed. Fresh CI must pass on the
-amended head before the merge handoff. The fictional desktop preview was inspected and its exact prep
+in 88 suites** and the strict production build passed. Approved-head and
+merged-main CI separately passed all four checks. These are PR71 receipts,
+not new application tests for the documentation-only proposal below. The fictional desktop preview was inspected and its exact prep
 navigation context verified. Initial test-setup failures and the corrected strict
 build warning are recorded in the
 [receiving contract, acceptance and coverage matrix](docs/INTEGRATION_MANAGER_OVERVIEW_20261025.md).
@@ -42,9 +46,16 @@ build warning are recorded in the
 Inventory Build Main remains the sole coordinating chat; Companion PR72
 **b73a80d** is the source baseline. This read-only milestone does not adopt its
 D1 workspace service, candidate migrations, persistent operations or scheduling.
-The next slice is the receiving contract for one persistent manager handoff.
-[PR71](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/71) remains draft;
-merge requires separate approval. Prompt before each new draft publication.
+The next local contract is proposed for one **manager production-shift summary
+and next-shift note**: draft, submit, reload and correct with history. It uses
+existing personal Inventory accounts with a fresh server-side role/store lookup,
+one shared note per store/date/track and exact-request recovery. Full named
+responsibility-transfer handoffs depend on real leadership/people mappings and
+remain separate. The [canonical coverage and proposed receiving contract](docs/INTEGRATION_MANAGER_OVERVIEW_20261025.md#proposed-persistent-manager-handoff-note)
+lists the logical tables, permission rows, default-off capability and fictional
+acceptance plan. This is documentation-only preparation for owner review; no
+implementation, migration file, SQL, grant or configuration change is included.
+Prompt before each new draft publication and merge.
 Hosted work, service controls and
 credential, grant and schema changes remain held. S1 remains partial; optional
 harness work is parked while local integration proceeds. Ordering stays manual
