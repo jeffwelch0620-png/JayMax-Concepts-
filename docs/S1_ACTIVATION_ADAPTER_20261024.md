@@ -224,6 +224,15 @@ Do not request live approval if any gate fails. No code/test merge authorizes
 real credentials, an API/PIN test or a new live window. The original live cause
 remains unknown; all hosted work and credential/grant/schema changes stay held.
 
+PR69 review amendments keep post-claim resource refusal journaled by retaining
+the durably initialized Journal before calling post_claim_check and permitting
+start_dispatch. Genuine storage/callback uncertainty remains explicit. Prepare
+now accepts --roles, --no-roster and --pin-disabled, delegates shape validation
+to the existing profile validator before writing, and prints only the safe
+shape summary. Use those flags for G1 matching rather than hand-editing profiles
+or requiring a separate Python builder for reduced variants. The amendment is
+local/operator-only and does not establish live acceptance.
+
 1. Finish the authorized PR66 amendment checks and JMax readback, commit cleanly
    and push to the existing draft; return for merge approval after fresh CI.
 2. Obtain independent review, fresh CI and separate merge/automatic-deployment

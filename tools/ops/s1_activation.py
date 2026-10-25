@@ -254,7 +254,6 @@ class Journal:
         with opener(claim) as stream:
             stream.write((digest(approval)+'\n').encode());stream.flush();os.fsync(stream.fileno())
         self.resource_monitor.set_phase('post_claim_setup')
-        self.resource_monitor.check()
         self.stream = opener(directory/('s1-'+profile['attemptId']+'.jsonl'))
         self.order,self.index,self.pending = sequence(profile),0,None
         self.integrity_checks = []
@@ -265,6 +264,11 @@ class Journal:
         except BaseException:
             self.stream.close()
             raise Held('initial_evidence_failed') from None
+
+    def post_claim_check(self):
+        # The controller must retain this journal before a resource refusal can
+        # throw, so it can close the consumed claim without permitting dispatch.
+        self.guard()
 
     def _append(self,value):
         try:

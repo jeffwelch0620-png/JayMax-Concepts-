@@ -132,6 +132,7 @@ def test_above_operator_floor_claims_and_marks_post_setup(tmp_path,monkeypatch):
     journal=activation.Journal(profile,approval(profile,tmp_path),actors(profile),tmp_path,
         require_dispatch_window=True,resource_monitor=monitor,on_claim_start=lambda:started.append(True))
     try:
+        journal.post_claim_check()
         assert started==[True] and monitor.current=='post_claim_setup'
         assert monitor.snapshot()['post_claim_setup']['samples']>=1
         assert len(list(tmp_path.glob('*.claim')))==1
@@ -152,26 +153,127 @@ def test_post_claim_journal_open_failure_keeps_claim_uncertain_and_correct_phase
                                     owner_reference=bound['ownerReference'],input_mode='fixture')
     assert result['claimStatus']=='creation_unconfirmed' and not result['evidenceClosureConfirmed']
     assert len(list(tmp_path.glob('*.claim')))==1
-    assert result['resourceObservations']['supervisor']['post_claim_setup']['samples']>=1
+    assert result['resourceObservations']['supervisor']['post_claim_setup']['samples']==0
+    assert result['failureDiagnostics']['primaryFailure']['stage']=='controller_claim'
     assert 'PRIVATE' not in json.dumps(result)
 
 
-def test_post_claim_resource_failure_has_fixed_reason_and_preserves_claim(tmp_path,monkeypatch):
+def test_post_claim_resource_failure_closes_journal_before_dispatch(tmp_path,monkeypatch):
     low=[False];original=observations.Monitor.check
     monkeypatch.setattr(probe,'memory',lambda:{**HIGH,'freeBytes':(400 if low[0] else 2048)*2**20})
     def check(monitor,**kwargs):
         if monitor.current=='post_claim_setup':low[0]=True
         return original(monitor,**kwargs)
     monkeypatch.setattr(observations.Monitor,'check',check)
-    monkeypatch.setattr(operator,'supervise',fake_ready_supervisor)
+    replies=[]
+    def supervise(_target,args,*,on_event,guard,seconds):
+        try:
+            replies.append(on_event({'event':'inputs_ready'}))
+            pytest.fail('post-claim refusal must not permit worker dispatch')
+        except BaseException as error:
+            error.ownedCleanupConfirmed=True
+            raise
+    monkeypatch.setattr(operator,'supervise',supervise)
     profile=activation.prepare(real_time_resources=True,operator_start_floor_mib=1536)
     bound=approval(profile,tmp_path)
     result=operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,
                                     owner_reference=bound['ownerReference'],input_mode='fixture')
     assert result['failureDiagnostics']['primaryFailure']['reason']=='resource_guard_failed'
-    assert result['claimStatus']=='creation_unconfirmed' and not result['evidenceClosureConfirmed']
+    assert result['failureDiagnostics']['primaryFailure']['stage']=='controller_claim'
+    assert result['claimStatus']=='created' and result['evidenceClosureConfirmed']
+    assert result['status']=='held' and result['requestsCompleted']==0 and not result['requestPending']
+    assert result['cleanupConfirmed'] and replies==[]
     assert len(list(tmp_path.glob('*.claim')))==1
     assert result['resourceObservations']['supervisor']['post_claim_setup']['minFreeMiB']==400
+    rows=[json.loads(line) for line in next(tmp_path.glob('*.jsonl')).read_text().splitlines()]
+    assert [row['event'] for row in rows]==['claimed','closed']
+    assert rows[-1]['status']=='held' and rows[-1]['cleanupConfirmed']
+    assert rows[-1]['failureDiagnostics']==result['failureDiagnostics']
+    assert rows[-1]['resourceObservations']==result['resourceObservations']
+    assert not result['quietWaitGate']['passed']
+    monkeypatch.setattr(probe,'memory',lambda:HIGH)
+    with pytest.raises(FileExistsError):
+        operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,
+                                  owner_reference=bound['ownerReference'],input_mode='fixture')
+
+
+def test_normal_post_claim_check_follows_durable_claimed_row_and_precedes_dispatch(tmp_path,monkeypatch):
+    monkeypatch.setattr(probe,'memory',lambda:HIGH)
+    events=[];original=activation.Journal.post_claim_check
+    def checked(journal):
+        rows=[json.loads(line) for line in next(tmp_path.glob('*.jsonl')).read_text().splitlines()]
+        assert [row['event'] for row in rows]==['claimed'] and not journal.stream.closed
+        events.append('checked');return original(journal)
+    def supervise(_target,args,*,on_event,guard,seconds):
+        assert on_event({'event':'inputs_ready'})=={'start_dispatch':True}
+        events.append('dispatch_permitted')
+        error=operator.ProcessHeld('worker_held');error.ownedCleanupConfirmed=True;raise error
+    monkeypatch.setattr(activation.Journal,'post_claim_check',checked)
+    monkeypatch.setattr(operator,'supervise',supervise)
+    profile=activation.prepare(real_time_resources=True);bound=approval(profile,tmp_path)
+    result=operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,
+                                    owner_reference=bound['ownerReference'],input_mode='fixture')
+    assert events==['checked','dispatch_permitted']
+    assert result['claimStatus']=='created' and result['evidenceClosureConfirmed'] and result['cleanupConfirmed']
+    assert result['requestsCompleted']==0
+
+
+def test_initial_journal_flush_failure_still_reports_uncertain_creation(tmp_path,monkeypatch):
+    monkeypatch.setattr(probe,'memory',lambda:HIGH)
+    original=activation.os.fsync;calls=[]
+    def sync(fd):
+        calls.append(fd)
+        if len(calls)==2:raise OSError('PRIVATE journal storage failure')
+        return original(fd)
+    monkeypatch.setattr(activation.os,'fsync',sync)
+    monkeypatch.setattr(operator,'supervise',fake_ready_supervisor)
+    profile=activation.prepare(real_time_resources=True);bound=approval(profile,tmp_path)
+    result=operator.execute_approved(profile,bound,actors(profile),evidence_directory=tmp_path,
+                                    owner_reference=bound['ownerReference'],input_mode='fixture')
+    assert result['claimStatus']=='creation_unconfirmed' and not result['evidenceClosureConfirmed']
+    assert result['requestsCompleted']==0 and result['cleanupConfirmed']
+    assert len(list(tmp_path.glob('*.claim')))==1 and 'PRIVATE' not in json.dumps(result)
+
+
+@pytest.mark.parametrize('options,roles,roster,pin,count,real,floor',[
+    ([],['owner','manager','staff'],True,True,21,False,None),
+    (['--roles','owner','--no-roster'],['owner'],False,True,13,False,None),
+    (['--roles','owner,staff','--no-roster'],['owner','staff'],False,True,16,False,None),
+    (['--roles','owner','--pin-disabled'],['owner'],True,False,5,False,None),
+    (['--pin-disabled','--no-roster'],['owner','manager','staff'],False,False,11,False,None),
+    (['--roles','owner','--no-roster','--real-time-resources','--operator-start-floor-mib','1536'],
+     ['owner'],False,True,13,True,1536)])
+def test_cli_prepares_explicit_shape_and_prints_only_safe_summary(tmp_path,monkeypatch,capsys,
+                                                               options,roles,roster,pin,count,real,floor):
+    output=tmp_path/'PRIVATE-profile.json'
+    monkeypatch.setattr(sys,'argv',['s1_operator','prepare','--output',str(output),*options])
+    assert operator.main()==0
+    profile=json.loads(output.read_text());activation.check_profile(profile)
+    lines=capsys.readouterr().out.splitlines()
+    assert lines[0]=='Inert S1 profile saved; executionApproved remains false.'
+    assert json.loads(lines[1])=={'roles':roles,'roster':roster,'pinConfigured':pin,
+        'requestCount':count,'realTimeResources':real,'operatorStartFloorMiB':floor}
+    assert len(lines)==2 and 'PRIVATE' not in '\n'.join(lines)
+    assert profile['roles']==roles and profile['roster'] is roster and profile['pinConfigured'] is pin
+    assert len(activation.sequence(profile))==count and profile['executionApproved'] is False
+    assert profile.get('operatorStartFloorMiB')==floor
+    if not pin:
+        assert [label for label in activation.sequence(profile) if label.startswith('P')]==['P01','P12']
+        assert activation.steps(profile)['P01'].status==403
+
+
+@pytest.mark.parametrize('roles',['manager,owner','owner,owner','owner,unknown','staff','','owner,',
+                                 'owner,staff,manager'])
+def test_cli_refuses_invalid_roles_before_writing_profile(tmp_path,monkeypatch,capsys,roles):
+    output=tmp_path/'PRIVATE-profile.json'
+    monkeypatch.setattr(sys,'argv',['s1_operator','prepare','--roles',roles,'--output',str(output)])
+    assert operator.main()==1 and not output.exists()
+    text=capsys.readouterr().out
+    value=json.loads(text.splitlines()[0])
+    assert value['status']=='held' and value['failureDiagnostics']['primaryFailure']=={
+        'stage':'controller_profile','request':None,'reason':'held','errorType':'Held'}
+    assert 'PRIVATE' not in text
+    if roles:assert roles not in text
 
 
 def test_actual_worker_transport_dip_is_post_claim_setup_not_pre_claim(tmp_path,monkeypatch):

@@ -272,6 +272,7 @@ def execute_approved(profile,approval,actors,*,evidence_directory,owner_referenc
             activation.dispatch_window(profile,approval,actors,evidence_directory,resource_monitor=monitor)
             journal=activation.Journal(profile,approval,actors,evidence_directory,require_dispatch_window=True,
                                       resource_monitor=monitor,on_claim_start=claim_started)
+            journal.post_claim_check()
             return {'start_dispatch':True}
         if journal is None: raise ProcessHeld('worker_message_invalid')
         if value=={'event':'done'} and journal.pending is None and journal.index==len(journal.order): return
@@ -350,6 +351,9 @@ def main():
     prep.add_argument('--origin',default='https://s1-fixture.invalid');prep.add_argument('--output',type=Path,required=True)
     prep.add_argument('--real-time-resources',action='store_true',help='Fictional rehearsal only: real clock and unchanged memory guards')
     prep.add_argument('--operator-start-floor-mib',type=int,help='Optional raise-only pre-claim floor: integer 1024..8192 MiB')
+    prep.add_argument('--roles',default=','.join(activation.engine.ROLES),help='Comma-separated roles in owner,manager,staff order; owner required')
+    prep.add_argument('--no-roster',action='store_true',help='Use the no-roster request variant')
+    prep.add_argument('--pin-disabled',action='store_true',help='Use the unconfigured-PIN request variant')
     check=subs.add_parser('check');check.add_argument('--profile',type=Path,required=True)
     for command in ('rehearse','run-approved'):
         run=subs.add_parser(command)
@@ -360,9 +364,16 @@ def main():
     try:
         if args.command=='prepare':
             profile=activation.prepare(mode=args.mode,origin=args.origin,real_time_resources=args.real_time_resources,
-                                       operator_start_floor_mib=args.operator_start_floor_mib)
+                                       operator_start_floor_mib=args.operator_start_floor_mib,
+                                       roles=[role.strip() for role in args.roles.split(',')],
+                                       roster=not args.no_roster,pin_configured=not args.pin_disabled)
             with args.output.open('x',encoding='utf-8') as stream: json.dump(profile,stream,indent=2);stream.write('\n')
-            print('Inert S1 profile saved; executionApproved remains false.');return 0
+            print('Inert S1 profile saved; executionApproved remains false.')
+            print(json.dumps({'roles':profile['roles'],'roster':profile['roster'],
+                'pinConfigured':profile['pinConfigured'],'requestCount':len(activation.sequence(profile)),
+                'realTimeResources':profile['clock']=='real',
+                'operatorStartFloorMiB':profile.get('operatorStartFloorMiB')}))
+            return 0
         if args.command=='check':
             print(activation.check_profile(read_json(args.profile)));return 0
         profile=read_json(args.profile)

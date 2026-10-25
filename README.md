@@ -18,13 +18,29 @@ separates post-claim setup in version-2 resource evidence, adds the optional
 raise-only pre-claim operator floor, and requires a same-shape/session real-time
 rehearsal with >=1536 MiB quiet-wait minima before requesting live approval.
 It changes no app endpoint, PIN policy, credential, grant or database schema.
-Final local validation passed **1,889 offline cases** and the overlapping
+Original-head local validation passed **1,889 offline cases** and the overlapping
 **121-case focused selection**. The final actual-clock/resource loopback run
 passed thirteen fictional requests in **139.047 seconds**, with
 all seven phases, source hashes and cleanup verified. Numeric quiet-wait G2
 gate **passed** with a selected 1536 MiB operator floor; fresh accepted-source
-same-session G1 qualification is still required. Prompt before the next draft
-push. No live packet or new hosted execution is authorized.
+same-session G1 qualification is still required. Those receipts are preserved
+as historical evidence after the owner-approved PR69 P1/P2 amendment: the
+controller now retains a durably claimed journal before enforcing the
+post-claim guard, and prepare supports explicit roles/roster/PIN shape flags
+with a safe summary. Genuine storage/callback failures still report uncertainty.
+The amendment remains subject to fresh tests/CI and separate merge approval.
+No live packet or new hosted execution is authorized.
+
+PR69 amendment validation: the corrected focused selection passed **56 cases**.
+The broad local offline run passed **1,903/1,904 cases**; one unchanged Windows
+callback-start timing test failed, then the complete **10-case process suite**
+passed on rerun without code changes. Fresh full CI is required; profiles
+overlap. The amended CLI's actual-clock/resource loopback run passed thirteen
+fictional requests in **139.453 seconds**, with source hashes, journal closure
+and cleanup verified. Numeric **G2 failed** at **1386.793 MiB** on both sides
+against 1536 MiB. Functional completion does not qualify a live attempt; the
+original-head receipts above are historical. Details and initial/corrected
+test results are in the linked qualification runbook.
 
 Earlier accepted baseline was [merged PR67](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/67)
 **e0adc3b**, tree-identical to reviewed **dedeb82**. All four
