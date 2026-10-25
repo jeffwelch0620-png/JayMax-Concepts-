@@ -29,7 +29,10 @@ It records Git-blob and current worktree byte hashes separately; Windows checkou
 line endings can differ. No raw-byte equivalence is inferred from a normalized
 text comparison, and no historical sealed input is normalized or rewritten.
 
-The owner has approved preparation and JMax documentation only. Hosted execution,
+At this proposal's creation the owner approved preparation and JMax documentation
+only. The owner subsequently approved the [bounded local tooling implementation
+and fictional tests](MANAGER_HANDOFF_INSTALLER_LOCAL_ACCEPTANCE_20261025.md).
+That local implementation does not authorize this live plan. Hosted execution,
 service pauses, connection changes, credentials, grants, policies, timezone rows,
 schema installation and feature activation remain held. No maintenance window is
 active. No accounts, sample data or actual settings are created by this proposal.
@@ -46,7 +49,9 @@ active. No accounts, sample data or actual settings are created by this proposal
 | `installed()` checks four RLS-enabled tables and six correctly wired triggers; it does not enforce non-owner runtime identity or fully validate ACLs/policies. | The future activation adapter must refuse privileged/current-owner/mismatched connections and require the independent manifest plus effective permissions. Do not describe PR72's route gate as a complete deployment verifier. |
 | Capability flags are global, without a store-specific switch. | Propose one settings row for Bert's only. Other stores remain unavailable for this journal while settings are absent; owners may see the global tab and a held-state message. This is not a hidden per-store feature flag. Local tests cover the wider authority cases. |
 
-No runtime/backup/installer changes above have been made by this documentation work.
+No runtime/backup/installer changes above were made by the original documentation
+work. The subsequent feature-local tools are recorded in the linked acceptance
+record; the frozen backup/native/par sources remain unchanged.
 The new recovery implementation must not monkeypatch global `SCHEMAS` or rewrite
 sealed source pins. If a shared dependency really must change, return with its
 exact effect on historical installers and a separately reviewed requalification
@@ -260,8 +265,9 @@ not proof an actual dropped response occurred.
 
 ## Proposed next authorization
 
-Request local implementation/rehearsal of the bounded receiving installer,
-effective-role check and journal-aware encrypted recovery profile. Keep real
-credentials, grants, schema, hosted execution and connection/flag changes held;
-prompt before publishing a new draft PR. This is a proposal for the next step,
-not implementation permission inferred from the current documentation request.
+Local implementation/rehearsal of the bounded receiving installer, effective-role
+check and journal-aware encrypted recovery profile has since been separately
+authorized. Finish its local evidence and prompt before a new draft PR push.
+Keep real credentials, grants, schema, hosted execution and connection/flag
+changes held. Independent review/CI/merge and a later hosted-adapter proposal are
+separate gates; local tools must not be pointed at Supabase.

@@ -193,6 +193,14 @@ DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name
 
 # Manager receiving journal: explicit local/CI selection, no hosted configuration.
 OFFLINE_CLASSES += ['manager_handoff::HandoffValidationTests','manager_handoff::HandoffActorTests']
+OFFLINE_CLASSES += ['manager_handoff_install::InstallGuards']
+DATABASE_CASES += tuple(('manager_handoff_install','InstallDatabaseTests',name) for name in (
+ 'test_atomic_three_payloads_and_actual_restricted_logins',
+ 'test_namespace_version_source_and_changed_baseline_refuse',
+ 'test_ledger_late_failure_rolls_back_schema_permissions_and_settings',
+ 'test_unknown_commit_requires_readonly_reconciliation_and_no_retry',
+ 'test_policy_privilege_guard_and_owner_drift_hold',
+ 'test_encrypted_seven_schema_restore_preserves_history_acl_guards_and_exact_replay'))
 DATABASE_CASES += tuple(('manager_handoff','HandoffDatabaseTests',name) for name in (
  'test_shared_draft_submit_correct_history_and_previous_are_stock_independent',
  'test_before_after_commit_status_exact_retry_and_changed_key_conflicts',

@@ -84,7 +84,13 @@ pins the receiving delta, minimum runtime permissions, flag/rollback sequence an
 22-request owner-only fictional acceptance profile. It identifies missing
 feature-local installer/role verification and encrypted `operations` recovery
 coverage as prerequisites. This is documentation only; no executable hosted
-packet, application/tool changes or live activation are included.
+packet, application/tool changes or live activation were included in that dated
+proposal. The owner subsequently approved the local tooling follow-up. The
+[local installer/recovery implementation and acceptance record](docs/MANAGER_HANDOFF_INSTALLER_LOCAL_ACCEPTANCE_20261025.md)
+documents the separate loopback-only adapter, actual restricted LOGIN checks,
+three atomic ledger payloads and encrypted seven-schema fictional recovery.
+No frozen par/backup source or application route is changed. Hosted adaptation,
+fresh CI, draft publication and merge remain separate; prompt before pushing.
 Hosted work, service controls and
 credential, grant and schema changes remain held. S1 remains partial; optional
 harness work is parked while local integration proceeds. Ordering stays manual

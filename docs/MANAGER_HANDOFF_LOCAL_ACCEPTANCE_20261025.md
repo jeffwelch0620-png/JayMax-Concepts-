@@ -211,8 +211,10 @@ or hosted recovery rehearsal.
 3. The [installation and acceptance proposal](MANAGER_HANDOFF_INSTALLATION_PROPOSAL_20261025.md)
    is prepared locally. It identifies the missing encrypted seven-schema recovery
    profile and feature-local installer/actual-role verifier, without changing them.
-   Review it before authorizing local implementation; prompt before any hosted
-   work or real credential, grant, policy, schema or flag change. Holds remain.
+   The owner separately approved local implementation; its [local tooling and
+   encrypted recovery evidence](MANAGER_HANDOFF_INSTALLER_LOCAL_ACCEPTANCE_20261025.md)
+   is now recorded. Prompt before a new draft push and any hosted work or real
+   credential, grant, policy, schema or flag change. Holds remain.
 4. Continue the selective operations/scheduling receiving map and resolve actual
    responsibility/leadership identities before named handoff acceptance. Optional
    S1 harness investigation remains separate from this integration milestone.
