@@ -482,7 +482,7 @@ def test_named_window_bound_is_checked_after_evidence_environment(tmp_path,monke
     assert activation.MIN_DISPATCH_SECONDS==397
     profile=activation.prepare();bound=approval(profile,tmp_path);now=[activation.engine.utc_now()]
     monkeypatch.setattr(activation.engine,'utc_now',lambda:now[0])
-    def delayed_environment(*_):
+    def delayed_environment(*_,**__):
         now[0]=activation.stamp(bound['stopChecksAt'])-timedelta(seconds=396)
     monkeypatch.setattr(activation,'evidence_environment',delayed_environment)
     with pytest.raises(activation.Held,match='window_insufficient_before_claim'):

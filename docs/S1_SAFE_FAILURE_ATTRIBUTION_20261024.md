@@ -22,11 +22,18 @@ zero-intent receipt. No real password/PIN was tested. An invalid rehearsal-origi
 control was corrected and its initial failed receipt preserved. That review is
 separate evidence; these changes do not retrospectively identify the live cause.
 
+PR67 follow-up hypothesis: a resource-floor hold during the real-clock quiet wait
+is a leading hypothesis to test, but remains unconfirmed. Virtual rehearsal skips these memory guards and
+real waits. See the [real resource rehearsal follow-up](S1_REAL_RESOURCE_REHEARSAL_20261024.md)
+for local verification before another live proposal; historical readings do not
+prove which check, if any, caused the original hold.
+
 ## Change
 
 `s1_failure.py` defines closed vocabularies for stages, request labels, reason
-codes and exception types. Unknown/custom exceptions receive constant fallback
-values. Only exact trusted exception classes may supply a single exact allowlisted
+codes and exception types. Unrecognized exceptions receive constant fallback
+values; the N1 follow-up adds fixed categories for recognized base classes.
+Only exact trusted exception classes may supply a single exact allowlisted
 reason argument. No `str(exception)`, `repr`, exception chain, traceback, locals,
 raw request/response, actor, path, token, PIN, password or DSN is serialized.
 
@@ -105,7 +112,18 @@ preserved. No dependencies were downloaded, installed or changed in the app;
 backend requirements and hosted settings are unchanged. The existing five
 FastAPI/multipart deprecation warnings remain.
 
-No new frontend build or PostgreSQL run is needed for this operator-only change.
-CI will run only after separately approved publication; it is not claimed here.
-Prompt before pushing a draft PR, return for merge approval after review/CI, and
-obtain fresh exact approval before any hosted execution or real console input.
+This section records PR67's prepublication local evidence. PR67 subsequently
+merged as `e0adc3b`, tree-identical to reviewed `dedeb82`; reviewed-head and
+merged-main CI each passed all four checks. The later local N1/R1 follow-up and
+its tests are recorded in the linked resource-rehearsal document. Its next draft
+push, fresh CI and merge remain separately gated. Obtain fresh exact approval
+before any hosted execution or real console input.
+
+## Disabled-PIN variant limiter accounting
+
+The existing server reserves a store limiter slot before checking whether its
+PIN portal is disabled. The disabled P01 response is 403 and retains that one
+reservation; it does not refund it. This is expected while the portal is disabled,
+is already covered by the real-app fictional variant test, and is not changed by
+this diagnostic follow-up. Do not count the disabled probe as budget-free or
+enable a portal/change a PIN merely to run a test.

@@ -124,5 +124,41 @@ def diagnostic_operator(channel,profile,approval,actors,input_mode):
         if not loop.is_closed():loop.close()
 
 
+def resource_complete_operator(channel,profile,approval,actors,input_mode):
+    """Fast fictional disabled-portal variant, real worker and final-summary IPC."""
+    from unittest.mock import patch
+    import s1_operator as operator
+    import read_only_probe as probe
+    async def wait(seconds,guard):guard()
+    with patch.object(probe,'memory',lambda:{'freeBytes':2048*2**20,'totalBytes':6144*2**20}),\
+         patch.object(operator,'guarded_wait',wait):
+        operator._operator_worker(channel,profile,approval,actors,'fixture')
+
+
+def resource_dip_operator(channel,profile,approval,actors,input_mode):
+    """Real worker/real-wait branch; synthetic quiet-wait memory drop, no HTTP."""
+    import asyncio
+    from unittest.mock import patch
+    import s1_operator as operator
+    import s1_resources as observations
+    loop=asyncio.new_event_loop()
+    def deny(event,args):
+        if event in ('socket.connect','socket.connect_ex','socket.getaddrinfo','socket.bind'):
+            raise AssertionError('TEST ONLY application socket forbidden')
+    sys.addaudithook(deny)
+    original=observations.Monitor.check
+    low=[False]
+    def check(monitor,**kwargs):
+        low[0]=monitor.current=='quiet_wait'
+        return original(monitor,**kwargs)
+    def memory():return {'freeBytes':(400 if low[0] else 2048)*2**20,'totalBytes':6144*2**20}
+    try:
+        with patch.object(observations.probe,'memory',memory),patch.object(observations.Monitor,'check',check),\
+             patch.object(asyncio.events,'new_event_loop',lambda:loop):
+            operator._operator_worker(channel,profile,approval,actors,'fixture')
+    finally:
+        if not loop.is_closed():loop.close()
+
+
 if __name__=='__main__' and len(sys.argv)==3 and sys.argv[1]=='parent-death':
     parent_death(sys.argv[2])
