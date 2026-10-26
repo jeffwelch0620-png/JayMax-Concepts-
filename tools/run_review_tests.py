@@ -194,6 +194,21 @@ DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name
 # Manager receiving journal: explicit local/CI selection, no hosted configuration.
 OFFLINE_CLASSES += ['manager_handoff::HandoffValidationTests','manager_handoff::HandoffActorTests']
 OFFLINE_CLASSES += ['manager_handoff_install::InstallGuards']
+OFFLINE_MODULES += ['journal_backup_receipts','hosted_journal_backup']
+DATABASE_CASES += tuple(('hosted_journal_backup_pg','JournalDatabaseTests',name) for name in (
+ 'test_seven_schema_export_restore_preserves_bytes_decimal_history_guards_and_replay',
+ 'test_frozen_six_schema_oracle_agrees_in_same_snapshot',
+ 'test_missing_operations_extra_schema_and_foreign_data_hold',
+ 'test_managed_helper_requires_independent_definition_binding_and_restores',
+ 'test_unclassified_external_dependency_and_changed_helper_hold',
+ 'test_nonempty_function_only_wrong_oid_and_role_targets_refuse',
+ 'test_types_default_acls_and_extra_empty_schema_targets_refuse',
+ 'test_nonlogin_role_acl_default_acl_and_rls_roundtrip',
+ 'test_reviewed_extension_version_roundtrip_and_changed_policy_refuses',
+ 'test_missing_and_login_enabled_recovery_roles_refuse_before_bootstrap',
+ 'test_sequence_and_global_role_changes_hold_including_fresh_postsnapshot_read',
+ 'test_overall_timeout_closes_only_owned_source_session',
+ 'test_failed_and_cancelled_dump_close_source_and_have_no_final_file'))
 DATABASE_CASES += tuple(('manager_handoff_install','InstallDatabaseTests',name) for name in (
  'test_closed_start_preserves_original_and_reconciles_not_installed',
  'test_managed_schema_role_and_restore_markers_refuse_before_writes',

@@ -1,0 +1,248 @@
+{
+  "acceptanceDocumentSha256": "f41929acb01e2093812aa54a9aaaae3ba217e6687bee48b3839c6eb6e826e3d9",
+  "acceptedBaseline": "afe4891670a2250ce10ee27a4ce5eae1252d5329",
+  "activationApproved": false,
+  "archiveFormat": "jaymax-encrypted-application-backup-v2",
+  "candidateParent": "321e9efe3923c05aa4a028f2968d448c54efa511",
+  "consumerTransitionQualified": false,
+  "credentialChangesApproved": false,
+  "crossClusterFixture": true,
+  "currentCIObserved": false,
+  "currentHostedStateChecked": false,
+  "differentFictionalOwnerPassword": true,
+  "format": "jaymax-journal-backup-local-acceptance-v1",
+  "frontendChangedOrRetested": false,
+  "fullRepositoryDatabaseProfileRunLocally": false,
+  "grantChangesApproved": false,
+  "hostedExecutionApproved": false,
+  "implementationApproved": true,
+  "initialFixtureFailure": {
+    "artifactName": "journal-database-20261026T021834647405Z.xml",
+    "artifactSha256": "79a043e7473ff4048536e14956096692b7ec1fd7240858dc886e1ba07caf4c67",
+    "failures": 3,
+    "reason": "Fictional loopback pg_dump inherited production TLS; corrected mocked tool boundary only. Subsequent selections passed."
+  },
+  "nextApproval": "Publish a draft PR for independent review; CI/merge/hosted execution remain separate.",
+  "noLiveExecutionPacketGenerated": true,
+  "originalFrozenFilesMatched": 34,
+  "originalFrozenInventorySha256": "f3eba22e6e616ec8e03ee76101cd6b776f40af79b13d1f0962dd21c453852628",
+  "ownedServersStopped": true,
+  "ownedTestTargetsAndRoleStubsCleaned": true,
+  "preparedDate": "2026-10-25",
+  "profile": "receiving7",
+  "providerHandshakeVerified": false,
+  "publicationApproved": false,
+  "realCredentialRecoveryQualified": false,
+  "runtimeSourceHashes": {
+    "backend/application_backup_profiles.py": "e8eb011dd286aa6e5a6680a2b0d0b6d71ee7d6b161ca4a6ca131a96969c7235f",
+    "backend/db_tls.py": "5fb0c2b5efad5b07ce65c91b29ca19bbb3a80f218110cea0a5c841a39e50b339",
+    "backend/hosted_backup.py": "891164d236c56ad9388a2c943f630d06ff7fffcc92668f54e45c2020064048f8",
+    "backend/hosted_backup_cli.py": "4b384759bc4535884646e484d62ed6157d61155b657ab8b5ab7ddc8ee7ece6da",
+    "backend/hosted_journal_backup.py": "f523250c7491fe4e67d7130ee3c008e1ac6a11dbf6f265aab24edd0d7af9e318",
+    "backend/hosted_journal_backup_cli.py": "a29d3b4259a31fbb60d47f2d1dc5a77aa0378300280b8493b326f30fefb33bcd",
+    "backend/journal_backup_receipts.py": "12c2da5053e2bf31026923d52baada19a6b5e79ad1f6eabda23a85170c3b8393",
+    "backend/maintenance_connection.py": "7e44e7e95ef6b4211a9dabf6c68ccfeebd0811ad68c54f5736cc7add24e11a5f",
+    "backend/managed_development.py": "3620a679d6e135a117e216356e061b4963d118e95b9f15ad64cd53453421d68e",
+    "backend/native_backup.py": "3c181be79c9dbec62698e66fafe716e6a62a705d4ddd9f327c31f3d86f31d8db",
+    "backend/readonly_snapshot.py": "803c9551e3e31407497c06a44e6fe898a82f08518bfbdd265e89efdb5c535123",
+    "backend/requirements.txt": "6cbb437674b8d70fabae1f99bb6846c88cc5395168532e5b4eb908dd837324c0",
+    "tools/ops/apply_additive_migration.py": "586976afd3384be39f97212b2c3cdf01bd51e5dbe56024a0944d0fe15e165731",
+    "tools/ops/hosted_additive_index.py": "8c4e08e2d699826c1dbbe370beb5153081e83a3659e55f807239945227f24521"
+  },
+  "schemaChangesApproved": false,
+  "schemas": [
+    "public",
+    "purchasing",
+    "actual_inventory",
+    "prep_inventory",
+    "integrations",
+    "supabase_migrations",
+    "operations"
+  ],
+  "selectedReceipts": {
+    "broad_cross_cluster": {
+      "artifactName": "journal-database-20261026T023156413563Z.xml",
+      "artifactSha256": "3c7bc23dec3c85261377cb6a7f1bcc9a84b6b9f0f2ccfc584ae294e47cd0f832",
+      "errors": 0,
+      "failures": 0,
+      "methods": 12,
+      "note": "12-method cross-cluster checkpoint; overlaps subsequent current-code focused replay.",
+      "seconds": 182.314,
+      "skipped": 0,
+      "subtests": 7,
+      "tests": 19
+    },
+    "broad_offline": {
+      "artifactName": "offline-20261026T024725148283Z.xml",
+      "artifactSha256": "c13e7305a30b8e84beffec88fdad671984c134430c66fb61baad4c7921ae2661",
+      "errors": 0,
+      "failures": 0,
+      "methods": 886,
+      "note": "Passed before final CLI-only amendment; overlaps focused selection.",
+      "seconds": 495.815,
+      "skipped": 0,
+      "subtests": 1242,
+      "tests": 2128
+    },
+    "combined_postgresql": {
+      "artifactName": "journal-database-20261026T023616700752Z.xml",
+      "artifactSha256": "9d05ab07e8c654cd8f561e99cab4d3d366c13502ff7bb9e2023452ef4748e40a",
+      "errors": 0,
+      "failures": 0,
+      "methods": 21,
+      "note": "21 methods combining new adapter and existing PR73; before final packet-only amendments.",
+      "seconds": 507.237,
+      "skipped": 0,
+      "subtests": 16,
+      "tests": 37
+    },
+    "final_cross_cluster": {
+      "artifactName": "journal-final-database-20261026T030133209319Z.xml",
+      "artifactSha256": "312519cc203ff5f412daeec2baea3ae9b8ae51d25d298ad0fecb69b4c229876a",
+      "errors": 0,
+      "failures": 0,
+      "methods": 2,
+      "note": "Current code and packet bindings; separate initialized cluster and different fictional owner password.",
+      "seconds": 40.178,
+      "skipped": 0,
+      "subtests": 0,
+      "tests": 2
+    },
+    "final_focused": {
+      "artifactName": "journal-offline-20261026T025929899734Z.xml",
+      "artifactSha256": "9a44a0a4b75b24d3cbd11c5d178b7c9cbc13530a026bbcad2e09b5b18854077a",
+      "errors": 0,
+      "failures": 0,
+      "methods": 86,
+      "note": "Current code; includes final private target-record/CLI tests; overlaps broad selection.",
+      "seconds": 13.142,
+      "skipped": 0,
+      "subtests": 212,
+      "tests": 298
+    },
+    "final_same_cluster": {
+      "artifactName": "journal-final-database-20261026T024529351876Z.xml",
+      "artifactSha256": "fd714faacb58772548e0eba517fb9611a40004c5b257282cf747c8fa89875530",
+      "errors": 0,
+      "failures": 0,
+      "methods": 2,
+      "note": "Expanded source/project binding; before final target-record amendment.",
+      "seconds": 40.092,
+      "skipped": 0,
+      "subtests": 0,
+      "tests": 2
+    }
+  },
+  "selectionsOverlap": true,
+  "sourceFiles": {
+    "backend/application_backup_profiles.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "e8eb011dd286aa6e5a6680a2b0d0b6d71ee7d6b161ca4a6ca131a96969c7235f",
+      "rawBytesEqual": true,
+      "worktreeSha256": "e8eb011dd286aa6e5a6680a2b0d0b6d71ee7d6b161ca4a6ca131a96969c7235f"
+    },
+    "backend/db_tls.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "5fb0c2b5efad5b07ce65c91b29ca19bbb3a80f218110cea0a5c841a39e50b339",
+      "rawBytesEqual": true,
+      "worktreeSha256": "5fb0c2b5efad5b07ce65c91b29ca19bbb3a80f218110cea0a5c841a39e50b339"
+    },
+    "backend/hosted_backup.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "891164d236c56ad9388a2c943f630d06ff7fffcc92668f54e45c2020064048f8",
+      "rawBytesEqual": true,
+      "worktreeSha256": "891164d236c56ad9388a2c943f630d06ff7fffcc92668f54e45c2020064048f8"
+    },
+    "backend/hosted_backup_cli.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "4b384759bc4535884646e484d62ed6157d61155b657ab8b5ab7ddc8ee7ece6da",
+      "rawBytesEqual": true,
+      "worktreeSha256": "4b384759bc4535884646e484d62ed6157d61155b657ab8b5ab7ddc8ee7ece6da"
+    },
+    "backend/hosted_journal_backup.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "f523250c7491fe4e67d7130ee3c008e1ac6a11dbf6f265aab24edd0d7af9e318",
+      "rawBytesEqual": true,
+      "worktreeSha256": "f523250c7491fe4e67d7130ee3c008e1ac6a11dbf6f265aab24edd0d7af9e318"
+    },
+    "backend/hosted_journal_backup_cli.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "a29d3b4259a31fbb60d47f2d1dc5a77aa0378300280b8493b326f30fefb33bcd",
+      "rawBytesEqual": true,
+      "worktreeSha256": "a29d3b4259a31fbb60d47f2d1dc5a77aa0378300280b8493b326f30fefb33bcd"
+    },
+    "backend/journal_backup_receipts.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "12c2da5053e2bf31026923d52baada19a6b5e79ad1f6eabda23a85170c3b8393",
+      "rawBytesEqual": true,
+      "worktreeSha256": "12c2da5053e2bf31026923d52baada19a6b5e79ad1f6eabda23a85170c3b8393"
+    },
+    "backend/maintenance_connection.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "7e44e7e95ef6b4211a9dabf6c68ccfeebd0811ad68c54f5736cc7add24e11a5f",
+      "rawBytesEqual": true,
+      "worktreeSha256": "7e44e7e95ef6b4211a9dabf6c68ccfeebd0811ad68c54f5736cc7add24e11a5f"
+    },
+    "backend/managed_development.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "3620a679d6e135a117e216356e061b4963d118e95b9f15ad64cd53453421d68e",
+      "rawBytesEqual": true,
+      "worktreeSha256": "3620a679d6e135a117e216356e061b4963d118e95b9f15ad64cd53453421d68e"
+    },
+    "backend/native_backup.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "3c181be79c9dbec62698e66fafe716e6a62a705d4ddd9f327c31f3d86f31d8db",
+      "rawBytesEqual": true,
+      "worktreeSha256": "3c181be79c9dbec62698e66fafe716e6a62a705d4ddd9f327c31f3d86f31d8db"
+    },
+    "backend/readonly_snapshot.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "803c9551e3e31407497c06a44e6fe898a82f08518bfbdd265e89efdb5c535123",
+      "rawBytesEqual": true,
+      "worktreeSha256": "803c9551e3e31407497c06a44e6fe898a82f08518bfbdd265e89efdb5c535123"
+    },
+    "backend/requirements.txt": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "6cbb437674b8d70fabae1f99bb6846c88cc5395168532e5b4eb908dd837324c0",
+      "rawBytesEqual": true,
+      "worktreeSha256": "6cbb437674b8d70fabae1f99bb6846c88cc5395168532e5b4eb908dd837324c0"
+    },
+    "backend/tests/test_hosted_journal_backup.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "1d3dd8e9901f1bb914310a50b7ae84d37db461a70d0c7baaef4f32b92eabf0a1",
+      "rawBytesEqual": true,
+      "worktreeSha256": "1d3dd8e9901f1bb914310a50b7ae84d37db461a70d0c7baaef4f32b92eabf0a1"
+    },
+    "backend/tests/test_hosted_journal_backup_pg.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "7a612f4c70ea60a0d957df253b487d72a50c180eda16238f943e8df3742de7a5",
+      "rawBytesEqual": true,
+      "worktreeSha256": "7a612f4c70ea60a0d957df253b487d72a50c180eda16238f943e8df3742de7a5"
+    },
+    "backend/tests/test_journal_backup_receipts.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "07079373b88c7dfbf9522ddee81deab70992d548f74870579c774d06954c4a85",
+      "rawBytesEqual": true,
+      "worktreeSha256": "07079373b88c7dfbf9522ddee81deab70992d548f74870579c774d06954c4a85"
+    },
+    "tools/ops/apply_additive_migration.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "586976afd3384be39f97212b2c3cdf01bd51e5dbe56024a0944d0fe15e165731",
+      "rawBytesEqual": true,
+      "worktreeSha256": "586976afd3384be39f97212b2c3cdf01bd51e5dbe56024a0944d0fe15e165731"
+    },
+    "tools/ops/hosted_additive_index.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "8c4e08e2d699826c1dbbe370beb5153081e83a3659e55f807239945227f24521",
+      "rawBytesEqual": true,
+      "worktreeSha256": "8c4e08e2d699826c1dbbe370beb5153081e83a3659e55f807239945227f24521"
+    },
+    "tools/run_review_tests.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitIndexBlobSha256": "32b2f486f9ef6b7bbed7ae25c6b54bc1e3c19c143d90eaac786eb7fd26908f6c",
+      "rawBytesEqual": true,
+      "worktreeSha256": "32b2f486f9ef6b7bbed7ae25c6b54bc1e3c19c143d90eaac786eb7fd26908f6c"
+    }
+  },
+  "testRoutingAndCustodyBoundariesMocked": true
+}

@@ -26,13 +26,17 @@ receipts remain historical. PR70's earlier
 and [main](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40208642033)
 receipts remain historical source evidence.
 
-The next local deliverable is the [hosted journal backup-adapter design](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_DESIGN_20261025.md), with a
-[source inventory](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_SOURCE_PINS_20261025.json).
-It proposes an explicit seven-schema profile and versioned receipt/consumer
-transition while leaving the frozen six-schema engine and loopback-only recovery
-guards unchanged. This is design only: implementation, draft publication and all
-hosted execution need separate approval. Credentials, grants, policies, schema,
-connections and activation flags remain held.
+The separately authorized local candidate implements the
+[seven-schema journal backup adapter](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_LOCAL_ACCEPTANCE_20261025.md).
+It adds an explicit authenticated v2 profile, bounded source capture, protected
+custody, owned isolated restore and a new receipt validator. The frozen six-schema
+engine, PR73's loopback/managed-marker guards, business routes and SQL remain
+unchanged. The [dated design](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_DESIGN_20261025.md)
+and [source inventory](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_SOURCE_PINS_20261025.json)
+remain the proposal record. Draft publication still needs approval; local testing
+is not CI, hosted qualification or activation. The consumer transition remains a
+hard pre-H2 gate. Hosted work and real credential, grant, policy, schema,
+connection and activation changes remain held.
 
 The first merged integration slice is a distinct personal-owner/manager
 **Manager overview** tab, with purchased-item count context and dated prep
