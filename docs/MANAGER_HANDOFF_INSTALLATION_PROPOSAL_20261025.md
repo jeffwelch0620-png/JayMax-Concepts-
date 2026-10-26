@@ -168,11 +168,17 @@ is a hard prerequisite of H3.
 | L1: separate local implementation approval | Implement the small feature installer/permission verifier, seven-schema encrypted recovery profile and activation role refusal; retain legacy archive compatibility and sealed par profiles. | Independent review, tests, fictional restricted LOGIN (not only SET ROLE), negative ACL/RLS/guard cases, encrypted restore with replay, failure/unknown-commit rehearsal, measured budgets and clean owned cleanup. Prompt before a new draft PR push. |
 | Hosted recovery prerequisite: mandatory before H2 | Separately implement/review a versioned hosted export/restore adapter supporting the pre-install six-schema and post-install seven-schema profiles without weakening legacy archive validation. Rehearse supported managed dependencies and new journal recovery on fictional targets; bind consumer/runbook transition and exact installed-source compatibility. | The loopback-only adapter does not satisfy this gate. No H2 approval packet may be activated without this reviewed path and a post-install recovery plan; routine/par/S2 backup consumers must not be left on the refusing six-schema exporter. No hosted code or execution is implemented/approved by PR73. |
 | H0: separately approved read-only preflight | Inspect current accepted deployments, actual primary/auxiliary role/project/TLS binding, catalog/schema/name/ledger collisions, resources and exact writers. | Masked evidence only; no role repair, settings writes, grants, activation or service pause. Bind the changed-source/backup/writer dependencies; any stale result must be refreshed. |
-| H1: separately approved preparation window | Fresh writer confirmation and no-other-writes/no-merges commitment; capture then pause only approved writers; strict drain; fresh encrypted export and disposable local restore. | Restore proof covers the actual pre-install baseline. Fresh executable packet binds source/body hashes, role names, writer states, ledger/config baseline, backup and restoration deadline. Restore writers and close if a guard fails. |
-| H2: exact-plan application approval | After the mandatory hosted seven-schema adapter/consumer gate, and under the still-valid drained baseline, apply only the reviewed transaction/payloads and ledger entries. | Recheck all guards immediately before execution; lock timeout 5 s and DDL statement ceiling 30 s are proposed limits to qualify locally, not silently increased permissions. All preexisting data/ledger/ACL invariants match before commit. Unknown commit acknowledgement means read-only reconciliation, never blind retry. |
+| H1: separately approved preparation window | Fresh writer confirmation and no-other-writes/no-merges commitment; record original writer states, pause only approved writers, verify strict drain, then fresh encrypted export and disposable local restore covering the actual installed profile. | Restore proof covers the pre-install baseline. Bind source/body hashes, roles, writer states, ledger/config baseline, backup and restoration deadline. Require the reviewed separate-key custody/verified-access/local-key-deletion procedure, private Boolean attestations and retention/rollback protection; no key/archive/private-record attachments. For v2 installation evidence, export, custody/transfer, verified restore and H2 receipt validation/start must fit the original capture window (at most 45 minutes). Phase timings and margin remain to be qualified; see the PR74 timing record. Restore writers and close on any failed guard. |
+| H2: exact-plan application approval | After the mandatory hosted seven-schema adapter/consumer gate, and under the still-valid drained baseline and active capture window, apply only the reviewed transaction/payloads and ledger entries. | Revalidate receipt/capture and verification windows and every guard immediately before execution; a fresh archival verification window cannot renew an installation capture. Preserve the proposed writer-restoration reserve and stop before the approved deadline. Lock timeout 5 s and DDL ceiling 30 s remain proposed limits to qualify locally. Preexisting data/ledger/ACL invariants match before commit. Unknown acknowledgement means read-only reconciliation, never blind retry. |
 | H3: separately approved activation and acceptance | Require completed R1 qualification of actual restricted operational and accounts LOGINs and running connection bindings, plus post-install recovery; approve flag/build sequencing and the fixed fictional acceptance scope below. | **Blocked until R1 is qualified.** Schema installation and local feature-only role tests do not satisfy it. Successful owner cases are not manager/staff or full production release acceptance. Close with flags off unless keeping them on was explicitly approved. |
 
-H1/H2 may be proposed for one maintenance window after L1 timing results. Do not
+H1/H2 may be proposed for one maintenance window after L1 timing results and the
+[PR74 custody/timing amendments](PR74_REVIEW_AMENDMENTS_20261026.md). The final
+fictional cross-cluster end-to-end test was 24.569 seconds, not separate export/
+restore phase measurements or hosted margin. Proposed conservative planning is
+20 minutes for the two operation ceilings, at least ten minutes reserved to
+restore writers, and at most fifteen minutes for all other work within 45 minutes;
+the exact packet must demonstrate that the phase budgets fit before starting. Do not
 reuse an expired window or name a guaranteed duration now. Budget the full existing
 backup/restore limits, local memory checks and a fixed writer-restoration reserve
 before starting. Capture original API state/commit and exact Toast identities,
@@ -281,9 +287,20 @@ not proof an actual dropped response occurred.
 
 ## Proposed next authorization
 
-Local implementation/rehearsal of the bounded receiving installer, effective-role
-check and journal-aware encrypted recovery profile has since been separately
-authorized. Finish its local evidence and prompt before a new draft PR push.
-Keep real credentials, grants, schema, hosted execution and connection/flag
-changes held. Independent review/CI/merge and a later hosted-adapter proposal are
-separate gates; local tools must not be pointed at Supabase.
+The bounded receiving installer, effective-role check and loopback-only encrypted
+recovery profile are accepted as PR73 merge `afe4891`, tree-identical to reviewed
+`7d0ed3b`; reviewed-head and merged-main CI each passed all four checks. Its
+[local acceptance record](MANAGER_HANDOFF_INSTALLER_LOCAL_ACCEPTANCE_20261025.md)
+is not hosted installation or activation evidence.
+
+The [hosted journal backup-adapter design](HOSTED_JOURNAL_BACKUP_ADAPTER_DESIGN_20261025.md)
+and [source inventory](HOSTED_JOURNAL_BACKUP_ADAPTER_SOURCE_PINS_20261025.json)
+remain the dated proposal. The owner has since authorized the
+[local adapter implementation and fictional testing](HOSTED_JOURNAL_BACKUP_ADAPTER_LOCAL_ACCEPTANCE_20261025.md):
+explicit versioned seven-schema recovery and new receipt validation, with frozen
+six-schema tools unchanged. Prompt before any draft PR push. Consumer adoption
+and its supported/completed/held matrix still require separate reviewed packets
+before H2; the local validator is not a hosted installation executor. S2a/P1 prerequisites and the hard H3 R1 gate remain as described
+above. Real hosted work, credentials, grants, policies, schema, connections and
+activation flags stay held. No executable live packet or maintenance window has
+been created by this design.
