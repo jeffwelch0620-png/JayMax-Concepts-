@@ -82,6 +82,31 @@ observed role/schema change. Sequence drift holds rather than claiming MVCC.
   application-table data may include its existing application authentication rows;
   that is distinct from reconstructing PostgreSQL role credentials.
 
+### October 26 review clarifications: custody and timing
+
+The [required operator custody procedure](HOSTED_JOURNAL_BACKUP_ADAPTER_DESIGN_20261025.md#required-operator-key-and-archive-custody-c1-october-26-amendment)
+now applies to operator closeout. The CLI initially retains the key and encrypted
+archive on the same computer in separate private directories; it does not enforce
+independent custody or delete the key. Before deleting the working key, verify
+separate offline/password-manager custody and successful restore. Record Boolean
+custody confirmations privately; never attach keys, archives or private records to
+chat, JMax, issues or PRs. Retention must preserve the last known-good and required
+rollback sets. Deletion does not prove forensic erasure. Application password
+hashes and currently plaintext staff PINs are in scope: future PIN hashing does
+not sanitize old archives. No custody action or credential change occurred here.
+
+Historical restore can use a fresh verification window, but installation receipt
+validation additionally requires an active original capture window. Export,
+transfer/custody, verified restore and H2 receipt validation/start must fit that
+window, capped at 45 minutes. Neither PR merge nor a newer verification window
+renews an expired capture. The final cross-cluster end-to-end method took 24.569
+seconds; the enclosing two-method suite took 40.178 seconds. Separate export and
+restore phase timings and hosted margin were not measured. The
+[review amendment record](PR74_REVIEW_AMENDMENTS_20261026.md) documents the
+conservative 20-minute combined operation ceilings, proposed ten-minute writer
+restoration reserve and at-most-fifteen-minute allowance for all other work; this
+does not activate a window or certify that those remaining tasks fit.
+
 ## Consumer transition and remaining gates
 
 | Consumer | This local slice | Before receiving H2/H3 |
@@ -91,7 +116,7 @@ observed role/schema change. Sequence drift holds rather than claiming MVCC.
 | New receipt validator | Implemented; requires external artifact/facts/receipt digests, fresh consumer window, ledger/journal coverage and successful cleanup/restore. | Bind it into each newly reviewed executable consumer; this validator alone is not an H2 executor. |
 | Historical calibration | Still means its original scoped observation. | It cannot certify operations coverage without a newly reviewed observation profile. |
 | S2a/P1/R1 | Existing sequence and approvals remain. | S2a precedes administrative windows; P1 if retained precedes H2; actual R1 blocks H3. NOLOGIN/SET ROLE and fictional owner credentials are not R1. |
-| Routine/coworker/scheduled consumers | Not inspected. | Inventory privately under separate approval and classify each supported/completed/explicitly held. Do not leave an active needed backup path on the refusing exporter. |
+| Routine/coworker/scheduled consumers | Not inspected; sequence advancement during capture is a hold, not a usable backup. | Proposed initial post-H2 policy is approved writer-drained quiet windows; no schedule is enabled. A future non-drained schedule needs separate bounded retry/alert handling and must preserve the last verified set. Inventory privately and classify each supported/completed/explicitly held; do not leave a needed backup path on the refusing exporter. |
 
 The consumer matrix is still a hard pre-H2 gate. A green local adapter test or PR
 does not authorize installing `operations`, changing a permission/flag or using an

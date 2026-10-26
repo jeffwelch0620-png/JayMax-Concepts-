@@ -101,7 +101,9 @@ Required fields should bind:
 
 - Exact format, profile ID, ordered schemas and independently expected profile digest.
 - Expected source/project binding held privately, database/major/patch metadata,
-  maintenance transport/session proof and capture time. No password/token hashes.
+  maintenance transport/session proof and capture time. No PostgreSQL role
+  password/token hashes in this metadata. The application dump still includes
+  application account password hashes and configured staff PIN values.
 - Accepted toolchain/source hashes and complete migration-file/ledger fingerprints.
 - All scoped relation data/count/sequence and catalog/ACL/default-ACL fingerprints,
   retaining the current canonical row algorithm and portable comparison ordering.
@@ -114,6 +116,49 @@ counts, timings, phase outcomes and safe error classes/SQLSTATE. Actual data,
 definitions and private bindings remain encrypted or in the protected owner record.
 An archive's self-reported profile/facts cannot replace the caller's independently
 expected profile, source binding and artifact digest.
+
+### Required operator key and archive custody (C1, October 26 amendment)
+
+The CLI initially writes the key and ciphertext into separate protected directories
+on the same Windows computer: `%LOCALAPPDATA%\JayMaxBuild\credentials\<label>\backup.key`
+and `%LOCALAPPDATA%\JayMaxBuild\backups\<label>\backup.jmax.enc`. Separate directories
+are not independent custody. The dump includes all scoped `public` tables,
+including application account password hashes and the currently plaintext staff
+PIN table. PIN hashing is separate release work (called W4 in the review), not
+implemented or authorized by this adapter.
+
+Before treating an export as operator-closeout complete:
+
+1. After authenticated export/readback, place the key in separately controlled
+   offline media or a password manager, outside the archive's folder, sync client
+   and cloud-drive destination. Verify that the authorized recovery operator can
+   retrieve the correct key. Do not delete the only usable key or move it into an
+   unprotected temporary file. Keep any working copy private and off sync while
+   the separately approved restore check needs it.
+2. After successful restore verification and verified separate-custody access,
+   delete the local working key and temporary copies. Record only Boolean
+   `keyMoved`, `separateKeyAccessVerified`, `restoreVerified` and
+   `localKeyCopyDeleted` confirmations in the protected operator record. These
+   are manual custody attestations, not existing CLI receipt fields. If a check
+   fails, retain the protected recovery material, report incomplete custody and
+   close the window safely; do not claim completed closeout. File deletion is not
+   proof of forensic erasure from storage, snapshots or backups.
+3. Never attach the key, archive or private operator record to chat, shared JMax
+   Pages, issues or PRs. Shared progress carries only minimized outcomes. Keep the
+   private key-to-archive association in the authorized recovery custody system.
+4. Before any capture, name the retention owner and expiry/review date privately.
+   Retain the current verified recovery set and the previous known-good set until
+   installation acceptance/rollback needs and any explicit retention hold end.
+   Then destroy superseded archives, their associated keys and controlled copies,
+   including sync/trash/version copies where applicable, and record Boolean
+   destruction confirmation. Do not destroy the last verified recovery set or a
+   rollback-dependent set merely because a newer export exists.
+5. Treat every pre-hashing archive as containing usable staff PINs. Reassess the
+   procedure when PIN hashing lands; existing archives remain sensitive and are
+   not retroactively sanitized by a later code/schema change.
+
+No key transfer/deletion, archive destruction, PIN change or live custody check
+is performed by these documentation amendments.
 
 ## Export state machine
 
@@ -232,7 +277,7 @@ service recovery. Actual restricted operational/accounts LOGIN use remains R1.
 | Source-index/other additive maintenance | `hosted_additive_index.py` also validates the old backup/restore binding. | Classify active/manual use. A post-H2 invocation requires a reviewed v2 consumer; keep unused commands explicitly held. No index SQL change belongs to this design. |
 | S2 / R1 recovery packets | Fresh credential/consumer and recovery evidence are independent approval requirements. | Select the actual installed schema profile in the new packet. No credential cutover may rely on an older six-schema artifact that omits an installed journal. |
 | Read-only calibration | `read_only_probe.py` pins an application/backup scope without operations. | Retain its scoped historical meaning. Introduce a newly reviewed seven-schema observation profile if used for receiving qualification; an old pass cannot certify journal coverage. |
-| Routine/scheduled backups, coworkers or scripts | No current schedule/writer/consumer inventory was inspected. | Inventory privately under a separately approved check; do not assume none exist. Every relevant consumer must be supported or explicitly held before H2. No new schedule or notification is created now. |
+| Routine/scheduled backups, coworkers or scripts | No current schedule/writer/consumer inventory was inspected. Sequence advancement during capture holds with `sequence_changed_during_capture`; this is not a non-stop live-backup guarantee. | Proposed initial post-H2 policy: separately approved writer-drained quiet windows, with original writers restored on failure. No unattended schedule is activated. Any future non-drained schedule requires its own approved bounded retry/alert policy; held attempts never count as backups or replace the last good set. Inventory privately and classify every relevant consumer supported/completed/held before H2. |
 | Future H1/H2 receiving installer | Not implemented as a hosted executor in PR73. | Its new guard must demand a matching profile/source/window/restore receipt and ledger/catalog baseline. The local adapter is not a hosted executor. |
 
 Proposed v2 receipt binds profile/profile digest, archive/encrypted digest, accepted
@@ -246,6 +291,34 @@ Keep a consumer coverage matrix in the eventual executable packet: each row is
 supported and tested, completed before H2, or explicitly held with owner acceptance.
 A successful new export alone does not close this matrix. No active required
 backup path may be left using the refusing six-schema exporter after installation.
+
+### Installation receipt timing (T1, October 26 amendment)
+
+Historical archival restore may use a fresh verification execution window without
+redating the capture. Installation receipt validation is stricter:
+`journal_backup_receipts.validate()` requires both the original capture window
+and the expected verification window to be active. Export, custody/transfer,
+restore verification and H2 receipt validation/start must therefore fit inside
+the original capture window; the future H2 consumer must recheck immediately
+before execution. Starting H2 before expiry is not permission to skip its guards
+or exceed the approved maintenance deadline. Window length is capped at 2,700
+seconds (45 minutes); a longer window requires a separately reviewed code/packet
+change, not an operator adjustment during maintenance.
+
+The final independent-cluster end-to-end test took 24.569 seconds, including
+export, restore, validation and history/replay assertions; the two-method suite
+took 40.178 seconds. These are fictional local measurements, not separately
+instrumented export/restore durations, hosted transfer timings or proven live
+margin. See the [review amendment record](PR74_REVIEW_AMENDMENTS_20261026.md).
+
+Use conservative ceilings until an exact operator packet has measured phases:
+at most ten minutes each for export and restore, and propose a minimum ten-minute
+writer-restoration reserve. Within a 45-minute ceiling this leaves at most fifteen
+minutes for all other work, including drain, transfer/custody, dependency/target
+preparation, review/approval and application checks. This is a planning allowance,
+not measured spare time or an activated window. The eventual proposal must name
+phase budgets, the earlier H2 cutoff and restoration deadline; if they do not fit,
+do not start or silently extend the window. Restore writers and seek a new plan.
 
 ## Proposed fictional acceptance and approval sequence
 

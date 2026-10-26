@@ -33,8 +33,12 @@ custody, owned isolated restore and a new receipt validator. The frozen six-sche
 engine, PR73's loopback/managed-marker guards, business routes and SQL remain
 unchanged. The [dated design](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_DESIGN_20261025.md)
 and [source inventory](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_SOURCE_PINS_20261025.json)
-remain the proposal record. Draft publication still needs approval; local testing
-is not CI, hosted qualification or activation. The consumer transition remains a
+remain the proposal record. [Draft PR74](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/74)
+is published; its original `ad66f5e` CI passed all four checks. The
+[October 26 C1/T1/L1 documentation amendments](docs/PR74_REVIEW_AMENDMENTS_20261026.md)
+define operator key custody, capture-window limits and the proposed routine-backup
+policy. Fresh amended-head CI and owner merge approval remain separate; local
+testing is not hosted qualification or activation. The consumer transition remains a
 hard pre-H2 gate. Hosted work and real credential, grant, policy, schema,
 connection and activation changes remain held.
 
