@@ -1,6 +1,6 @@
 # Inventory integration receiving contracts and coverage
 
-October 25, 2026. The first read-only slice is merged as PR71 with approved-head and merged-main CI passing separately. Its local acceptance receipts remain below; hosted acceptance is unverified. Jeff approved the follow-on persistent handoff-note implementation and fictional disposable PostgreSQL tests. That default-off local receiving extension is now implemented and locally validated; publication, fresh CI, independent review and all hosted activation remain separate gates. Inventory Build Main is the sole coordinating chat. Companion App Integration remains a source and history reference.
+October 25, 2026. The first read-only slice is merged as PR71. The default-off persistent manager-note extension is accepted as PR72 merge `486767a`, tree-identical to reviewed `5730b21`; approved-head and merged-main CI each passed all four checks. Automatic Render test deployment was approved, but deployment completion and hosted acceptance were not inspected. The [installation proposal](MANAGER_HANDOFF_INSTALLATION_PROPOSAL_20261025.md) has a separately authorized [local installer and encrypted recovery implementation](MANAGER_HANDOFF_INSTALLER_LOCAL_ACCEPTANCE_20261025.md), with actual fictional LOGIN checks, atomic three-payload installation and seven-schema recovery. Focused local checks pass; the broad offline run is incomplete and fresh full CI follows a separately approved draft push. No hosted adapter or activation is approved. Inventory Build Main remains the sole coordinator; Companion App Integration remains a source and history reference.
 
 The first functional slice adds **Manager overview** to Inventory's restaurant navigation for personal owner and manager accounts. Start at **Bert's → October 25, 2026 → Bulk Prep** in the fictional local acceptance fixture. The owner confirmed that Supabase is a development database with no operational data; this slice does not query that claim or insert sample records there. Production screens never substitute fixtures when a read fails.
 
@@ -47,6 +47,18 @@ The separate localhost preview was visually inspected at 1280 × 720. It showed 
 
 No backend, migration, credential, grant, API configuration or service-control changes are included. No disposable PostgreSQL or broad backend run is necessary for this frontend-only change. Fresh repository CI still follows draft publication.
 
+## Hosted sequencing after local review
+
+For this receiving plan, propose S2a -> P1 if still on six-schema tools -> reviewed
+hosted seven-schema export/restore adapter -> H0-H3, each under separate approval.
+The adapter and backup-consumer transition are mandatory before H2 creates
+`operations`; doing P1 first alone does not protect subsequent par/S2/routine
+backups from the frozen exporter's schema refusal. The local-only recovery
+prototype does not satisfy that hosted gate. H3 remains blocked until R1-qualified
+restricted operational/accounts LOGINs and their running connection bindings are
+verified. No fresh live-role claim, credential action or S1 harness restart is
+inferred from this sequence. See the [exact installation proposal](MANAGER_HANDOFF_INSTALLATION_PROPOSAL_20261025.md).
+
 ## Coverage and next delivery slices
 
 This is the initial core-workflow coverage matrix, not a claim of complete Companion parity. Exact command/storage mapping for each later family must be reviewed before adoption.
@@ -55,7 +67,7 @@ This is the initial core-workflow coverage matrix, not a claim of complete Compa
 | --- | --- | --- |
 | Catalog, units, recipes, receiving, actual counts, Track 1 | Retained Inventory authority; count context is now exposed in the local overview | Reuse existing identity/revision/unit contracts. Never import Companion's parallel food stock writers. |
 | Dated prep plans, release, execution, correction review | Existing Inventory workflow; read-only local overview and dated navigation implemented | Add assignment/submission/verification context using existing scoped readers when needed; retain one accepted production/stock effect. |
-| Manager operations, shifts, closing, handoffs and follow-through | First persistent slice proposed below: manager shift summary / next-shift note, sourced from `operations.ts`, `shift-log.tsx` and `operations-home.ts`. Design only; no implementation or SQL. | Review the store-wide note contract, then implement draft/save/submit/correct and recovery locally. Full responsibility-transfer handoffs remain distinct and require their real people/leadership dependencies. |
+| Manager operations, shifts, closing, handoffs and follow-through | Manager shift summary / next-shift note is merged in PR72; receiving SQL remains unapplied and capability off. Separately authorized local installer/LOGIN verification and encrypted journal recovery tooling is now implemented; see its acceptance record. Sources: `operations.ts`, `shift-log.tsx` and `operations-home.ts`. | Complete local evidence and independent draft review before a hosted-adapter proposal. Full responsibility-transfer handoffs remain distinct and require their real people/leadership dependencies. |
 | Scheduling, coverage, leave, attendance and corrections | Companion candidate/source only; not integrated by this PR | Reconcile selected scheduling contracts and candidate dependencies with Inventory's receiving schema; then prove draft/save/reload/publish and cross-store denial. Do not replay migrations 001–063 wholesale. |
 | Reporting, dayparts, tour and manager summaries | Existing Inventory reporting retained; newer JMax contributions pending reconciliation | Pin each contribution and map its fields to actual versus theoretical sources, explicit units and completeness. No combined totals fabricated by this overview. |
 | People, identity and permissions | Existing personal Inventory login retained; shared adoption and broader administration remain release work | Map trusted server actors and approved memberships for new commands. No identity or permissions inferred from a roster label. |
@@ -63,7 +75,7 @@ This is the initial core-workflow coverage matrix, not a claim of complete Compa
 | Hiring, training/standards, equipment/maintenance, compliance/incidents, catering, guest reviews/promotions, messaging and AI | Source retained; explicitly deferred beyond the first core slices | Inventory commands/screens that overlap, then classify each module as adopted, retained, deferred or retired with owner review. No silent retirement or parity claim. |
 | Offline/device behavior, local recovery copy and release security | Separate release checklist | Preserve validated backups and existing controls. Resume bounded hosted work only under its specific approval. S1 remains partial; this read-only integration slice does not change that result. |
 
-The next milestone after review is a persistent manager operations/handoff slice with a reviewed receiving contract and fictional save/reload/retry tests. The final integration objective still includes real receiving PostgreSQL persistence for selected operations and scheduling, scoped reports and one combined acceptance proposal. A read-only overview alone does not satisfy it.
+The next milestone is qualification of installation/permissions and encrypted journal recovery for the merged manager-note slice, followed only under separate approval by hosted installation and fictional acceptance. The final integration objective still includes receiving PostgreSQL persistence for selected operations and scheduling, scoped reports and combined acceptance. Merged source and local persistence tests alone do not satisfy hosted integration.
 
 The review's optional `roster_binding_mismatch` diagnostic remains a separate future S1 tooling item. It is not implemented or claimed here, and it does not gate PR71 or further local fictional integration. Existing no-roster validation bypasses roster binding. A wrong or stale PIN is a possible explanation for the earlier generic `probe_shape` hold, not a demonstrated cause; that old result does not distinguish explicit rejection from another malformed positive response. Future receiving writes must resolve trusted server actors and enforce store/record authority; do not port caller-supplied identity-header trust from Companion. Broader shared login/provider adoption remains separately planned release work, rather than an automatic prerequisite for local design under existing Inventory authorization. Targeted credential retirement and par installation retain their own reviewed readiness packets, windows and approvals; the review package does not activate them or add parallel W1–W4 work to this receiving slice.
 

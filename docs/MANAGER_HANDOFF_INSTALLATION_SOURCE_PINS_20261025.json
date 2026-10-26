@@ -1,0 +1,183 @@
+{
+  "acceptedCommit": "486767a1fd0a0223c97c9effa6fea53917d0db24",
+  "acceptedTree": "fcdad3f38f89d3ebe0d34f6c1bcb37eb992f1edf",
+  "activationApproved": false,
+  "actualRuntimeRoleVerified": false,
+  "applyAutomatically": false,
+  "approvedHeadCI": "https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40231545927",
+  "credentialChangesApproved": false,
+  "currentEncryptedBackupSchemas": [
+    "public",
+    "purchasing",
+    "actual_inventory",
+    "prep_inventory",
+    "integrations",
+    "supabase_migrations"
+  ],
+  "currentHostedStateChecked": false,
+  "deliveryVersion": null,
+  "executablePlanSha256": null,
+  "featureSpecificInstallerImplemented": false,
+  "format": "jaymax-manager-handoff-installation-source-inventory-v1",
+  "grantChangesApproved": false,
+  "hostedExecutionApproved": false,
+  "journalEncryptedRecoveryQualified": false,
+  "mergedMainCI": "https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40232202416",
+  "preparedDate": "2026-10-25",
+  "proposedReceivingEncryptedBackupSchemas": [
+    "public",
+    "purchasing",
+    "actual_inventory",
+    "prep_inventory",
+    "integrations",
+    "supabase_migrations",
+    "operations"
+  ],
+  "proposedScope": {
+    "businessDate": "2026-10-25",
+    "maxDirectedHandoffRequests": 22,
+    "maxNewAcceptedCommands": 4,
+    "prepTrack": "bulk",
+    "proposedTimezone": "America/New_York",
+    "settingsRevision": 1,
+    "store": "berts",
+    "timezoneOwnerConfirmed": false
+  },
+  "purpose": "Local proposal source evidence; not an executable or approved hosted packet",
+  "reviewedHead": "5730b21a602a5e375738bf0fa38a884de051fc32",
+  "schemaChangesApproved": false,
+  "sourceFiles": {
+    "backend/auxiliary_permissions.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "d87f3e2970635859c0a0bef97659accebbad3df3355d5c89685a4ad74febb709",
+      "rawBytesEqual": true,
+      "worktreeSha256": "d87f3e2970635859c0a0bef97659accebbad3df3355d5c89685a4ad74febb709"
+    },
+    "backend/db_auxiliary.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "b9bb852f9770d20bdc1d6d24e4bcb9a7e281c85f92e7b528c6fbf78280f4108f",
+      "rawBytesEqual": true,
+      "worktreeSha256": "b9bb852f9770d20bdc1d6d24e4bcb9a7e281c85f92e7b528c6fbf78280f4108f"
+    },
+    "backend/db_pg.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "d727c253d15e9bab7fa9becfb813fe81911630e81dd48f8d07d8ee5dd0770f58",
+      "rawBytesEqual": true,
+      "worktreeSha256": "d727c253d15e9bab7fa9becfb813fe81911630e81dd48f8d07d8ee5dd0770f58"
+    },
+    "backend/deployment_readiness.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "2b5c1bf90ba3159ee38eaf142e0da3f988334d27ecb4db80ec69c7841f1e5458",
+      "rawBytesEqual": true,
+      "worktreeSha256": "2b5c1bf90ba3159ee38eaf142e0da3f988334d27ecb4db80ec69c7841f1e5458"
+    },
+    "backend/hosted_backup.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "891164d236c56ad9388a2c943f630d06ff7fffcc92668f54e45c2020064048f8",
+      "rawBytesEqual": true,
+      "worktreeSha256": "891164d236c56ad9388a2c943f630d06ff7fffcc92668f54e45c2020064048f8"
+    },
+    "backend/hosted_install_preservation.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "3e064e658235e8598cb86c408826ffa0400d03d1df77bd30e9a4114c299204fd",
+      "rawBytesEqual": true,
+      "worktreeSha256": "3e064e658235e8598cb86c408826ffa0400d03d1df77bd30e9a4114c299204fd"
+    },
+    "backend/hosted_native_install.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "a46cf43a009bfc0f1921177fd5473e57dc03a867d5c85e2be660f1e1ad0a7f67",
+      "rawBytesEqual": true,
+      "worktreeSha256": "a46cf43a009bfc0f1921177fd5473e57dc03a867d5c85e2be660f1e1ad0a7f67"
+    },
+    "backend/manager_actor.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "6a9623a07e4d19d3f3d165e97ac49e4511aff68d635f186d48ff204ff0075215",
+      "rawBytesEqual": true,
+      "worktreeSha256": "6a9623a07e4d19d3f3d165e97ac49e4511aff68d635f186d48ff204ff0075215"
+    },
+    "backend/manager_handoff.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "0dcd7683f0c37222fde40f47f3dc2f9fc93606fde12d7294708b8e1f049587e8",
+      "rawBytesEqual": true,
+      "worktreeSha256": "0dcd7683f0c37222fde40f47f3dc2f9fc93606fde12d7294708b8e1f049587e8"
+    },
+    "backend/manager_handoff_schema.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "215b2ee24ad6934bd21c636592e2dcd2743ce32e913fb9968cc7ba7e106077ff",
+      "rawBytesEqual": true,
+      "worktreeSha256": "215b2ee24ad6934bd21c636592e2dcd2743ce32e913fb9968cc7ba7e106077ff"
+    },
+    "backend/runtime_permissions.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "efecc10d91ffd9c6c6599d6d314a959f4a4ad4383dbc8ad2af8e3b16d6b572bb",
+      "rawBytesEqual": true,
+      "worktreeSha256": "efecc10d91ffd9c6c6599d6d314a959f4a4ad4383dbc8ad2af8e3b16d6b572bb"
+    },
+    "backend/server.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "d26914eccfd943f3823effeb3c5f4fd49e0e0e87e696b14093408de89eb2c8b3",
+      "rawBytesEqual": true,
+      "worktreeSha256": "d26914eccfd943f3823effeb3c5f4fd49e0e0e87e696b14093408de89eb2c8b3"
+    },
+    "backend/tests/test_manager_handoff.py": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "a16868f2e7151a6875328048ea4b25b75a6a4e086c729c0f25a9f92279a25e01",
+      "rawBytesEqual": true,
+      "worktreeSha256": "a16868f2e7151a6875328048ea4b25b75a6a4e086c729c0f25a9f92279a25e01"
+    },
+    "docs/PAR_QUALIFICATION_SOURCE_PINS.json": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "4bf0c694812102e897c0ac23133240866e000820896b987ba8aaa0de70455d00",
+      "rawBytesEqual": true,
+      "worktreeSha256": "4bf0c694812102e897c0ac23133240866e000820896b987ba8aaa0de70455d00"
+    },
+    "docs/REVIEWED_PAR_MAINTENANCE_PROPOSAL_20261022.json": {
+      "checkoutLineEndingsOnly": true,
+      "gitBlobSha256": "95ecfcee657ae81266b9170f24f92e761a02dd04379a398655aa1cf8c92707e1",
+      "rawBytesEqual": false,
+      "worktreeSha256": "cdebece1390cd1d4dde086491b9ac217153d374b66915265c40437bd7edad219"
+    },
+    "frontend/src/App.js": {
+      "checkoutLineEndingsOnly": true,
+      "gitBlobSha256": "b534c70315cacd4dbed152e7764c64fac20aea2a0c4abff285c7dba971dbfdd2",
+      "rawBytesEqual": false,
+      "worktreeSha256": "7f4fa1d5067933613a133182112a4a3d08807fc75064f0c07b6b24ec471117f9"
+    },
+    "frontend/src/components/ManagerHandoffTab.js": {
+      "checkoutLineEndingsOnly": true,
+      "gitBlobSha256": "4a5d59c315dad284a24e6a5bd1e2fe18fed488bbfc16fc4b0c1f86d3a6ecf525",
+      "rawBytesEqual": false,
+      "worktreeSha256": "2adf9617b87d4d27204571a2634f89cf6f4b8af524fa1b79475b514f451d67ce"
+    },
+    "frontend/src/lib/api.js": {
+      "checkoutLineEndingsOnly": true,
+      "gitBlobSha256": "4b039248d0e4e5d3805d2ca2cdf310c4f4c90263ccec5d6f4200f7705f5eb72d",
+      "rawBytesEqual": false,
+      "worktreeSha256": "6dc89c8bdfec8df9f3924b0da9ce228bacffff08c408cd01608b7b4e4c1fff7b"
+    },
+    "frontend/src/lib/managerHandoff.js": {
+      "checkoutLineEndingsOnly": true,
+      "gitBlobSha256": "471f18bbbc426224daff3eca74e2f90698382b3cddf36f6b4c88dfa5dbf0364e",
+      "rawBytesEqual": false,
+      "worktreeSha256": "75e58d1fee0744fc462444a0749330a0545600f34068081d27874de33b7ce420"
+    },
+    "migrations/20261025_manager_handoff_notes.sql": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "c36928e5520c18f96093c3e1eff21ca3287bc9e347d9a9dc8d9c0c21cb5f08f5",
+      "rawBytesEqual": true,
+      "worktreeSha256": "c36928e5520c18f96093c3e1eff21ca3287bc9e347d9a9dc8d9c0c21cb5f08f5"
+    },
+    "supabase/manager_handoff.manifest.json": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "84f5cbe8ac8dfdd053ebb0af81fdd2b63e6af598ab7cd4ea74953c00f0322571",
+      "rawBytesEqual": true,
+      "worktreeSha256": "84f5cbe8ac8dfdd053ebb0af81fdd2b63e6af598ab7cd4ea74953c00f0322571"
+    },
+    "supabase/manager_handoff.schema.sql": {
+      "checkoutLineEndingsOnly": false,
+      "gitBlobSha256": "48d9d2a75f49aff531eef9d266375f4dd14a505bbc5cf5d74ff49240a7775826",
+      "rawBytesEqual": true,
+      "worktreeSha256": "48d9d2a75f49aff531eef9d266375f4dd14a505bbc5cf5d74ff49240a7775826"
+    }
+  }
+}
