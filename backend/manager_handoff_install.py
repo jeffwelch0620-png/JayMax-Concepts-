@@ -3,6 +3,7 @@
 Three explicit ledger entries in one transaction: schema, permissions, settings.
 No role creation, credentials, memberships, flags, app configuration or retry.
 """
+import asyncio
 import hashlib
 import json
 from pathlib import Path
@@ -13,6 +14,7 @@ import manager_handoff_recovery as recovery
 import runtime_permissions
 from hosted_test_trial import migration_body
 from native_backup import quoted
+from readonly_snapshot import preserve_cleanup_failure
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / 'migrations/20261025_manager_handoff_notes.sql'
@@ -48,6 +50,7 @@ def sources():
              'backend/hosted_test_trial.py', 'backend/hosted_backup.py', 'backend/native_backup.py',
              'backend/hosted_native_install.py', 'backend/hosted_install_preservation.py',
              'backend/schema_reconciliation.py',
+             'backend/readonly_snapshot.py',
              'migrations/20261025_manager_handoff_notes.sql', 'supabase/manager_handoff.schema.sql',
              'supabase/manager_handoff.manifest.json')
     return {name: recovery.digest((ROOT / name).read_bytes()) for name in names}
@@ -94,6 +97,7 @@ async def ledger(conn):
 
 
 async def baseline(conn, runtime, accounts):
+    await recovery.refuse_managed(conn)
     await conn.execute('SET LOCAL search_path=pg_catalog')
     if int(await conn.fetchval('SHOW server_version_num')) // 10000 != 17:
         raise Held('Reviewed PostgreSQL major required')
@@ -172,37 +176,50 @@ async def installed_state(conn, plan):
 
 async def apply(url, plan, expected_hash):
     checked(plan, expected_hash, url)
-    conn = await recovery.connect(url); tx = conn.transaction(); committing = False
-    try:
-        await tx.start()
-        await conn.execute("SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s'; SET LOCAL search_path=pg_catalog")
-        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('manager-handoff-local-install',0))")
-        tables = plan['baseline']['facts']['rows']
-        for table in sorted(tables):
-            # Sequences are fingerprinted independently, never treated as row locks.
-            if await conn.fetchval("SELECT relkind='S' FROM pg_class WHERE oid=to_regclass($1)", table):
-                continue
-            await conn.execute('LOCK TABLE ' + '.'.join(quoted(x) for x in table.split('.')) + ' IN SHARE MODE')
-        if await baseline(conn, plan['runtimeRole'], plan['accountsRole']) != plan['baseline']:
-            raise Held('Prepared baseline changed')
-        for e in plan['entries']:
-            await conn.execute(e['body'])
-            await conn.execute('INSERT INTO supabase_migrations.schema_migrations(version,name,statements) VALUES($1,$2,$3)',
-                               e['version'], e['name'], [e['body']])
-        await installed_state(conn, plan)
-        # Effective permission and policy verification shares the apply transaction.
-        await permissions(conn, plan['runtimeRole'], plan['accountsRole'], actual=False)
-        committing = True
-        await _commit(tx)
-        return {'status': 'installed_local_only', 'ledgerEntries': 3,
-                'hostedExecutionApproved': False, 'featureActivated': False}
-    except BaseException as error:
-        if committing:
-            raise Unknown('Local commit acknowledgement unknown; read-only reconciliation required') from None
-        await tx.rollback()
-        raise error
-    finally:
-        await conn.close()
+    conn = await recovery.connect(url)
+    started = committing = committed = False
+
+    async def close():
+        try:
+            await conn.close(timeout=5)
+        except BaseException as cleanup:
+            if committed:
+                cleanup.commitAcknowledged = True
+            raise
+
+    async with preserve_cleanup_failure(close, 'connectionCloseErrorType'):
+        tx = conn.transaction()
+        try:
+            await tx.start(); started = True
+            await conn.execute("SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s'; SET LOCAL search_path=pg_catalog")
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('manager-handoff-local-install',0))")
+            tables = plan['baseline']['facts']['rows']
+            for table in sorted(tables):
+                # Sequences are fingerprinted independently, never treated as row locks.
+                if await conn.fetchval("SELECT relkind='S' FROM pg_class WHERE oid=to_regclass($1)", table):
+                    continue
+                await conn.execute('LOCK TABLE ' + '.'.join(quoted(x) for x in table.split('.')) + ' IN SHARE MODE')
+            if await baseline(conn, plan['runtimeRole'], plan['accountsRole']) != plan['baseline']:
+                raise Held('Prepared baseline changed')
+            for e in plan['entries']:
+                await conn.execute(e['body'])
+                await conn.execute('INSERT INTO supabase_migrations.schema_migrations(version,name,statements) VALUES($1,$2,$3)',
+                                   e['version'], e['name'], [e['body']])
+            await installed_state(conn, plan)
+            await permissions(conn, plan['runtimeRole'], plan['accountsRole'], actual=False)
+            committing = True
+            await _commit(tx); committed = True
+            return {'status': 'installed_local_only', 'ledgerEntries': 3,
+                    'hostedExecutionApproved': False, 'featureActivated': False}
+        except BaseException as error:
+            if committing:
+                raise Unknown('Local commit acknowledgement unknown; read-only reconciliation required') from None
+            if started:
+                try:
+                    await asyncio.wait_for(tx.rollback(), 5)
+                except BaseException as cleanup:
+                    error.snapshotCleanupErrorType = type(cleanup).__name__
+            raise
 
 
 async def reconcile(url, plan, expected_hash):

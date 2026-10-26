@@ -45,8 +45,29 @@ def target(url):
 
 async def connect(url):
     target(url)  # Refuse remote names/IPs, control DBs and URL options before network.
-    return await asyncpg.connect(url, timeout=10, command_timeout=30,
-                                 statement_cache_size=0, server_settings={'application_name': 'handoff-local-only'})
+    conn = await asyncpg.connect(url, timeout=10, command_timeout=30,
+                                statement_cache_size=0, server_settings={'application_name': 'handoff-local-only'})
+    try:
+        await refuse_managed(conn)
+    except BaseException as original:
+        try:
+            await conn.close(timeout=5)
+        except BaseException as cleanup:
+            original.connectionCloseErrorType = type(cleanup).__name__
+        raise
+    return conn
+
+
+async def refuse_managed(conn):
+    """Defense in depth against a renamed managed project behind loopback forwarding.
+
+    Absence of markers is not independent cluster/target attestation.
+    """
+    if await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_namespace
+            WHERE nspname IN ('auth','storage','realtime','vault')) OR
+            EXISTS(SELECT 1 FROM pg_catalog.pg_roles
+            WHERE rolname IN ('supabase_admin','authenticator'))"""):
+        raise Held('Managed hosted project markers refused')
 
 
 async def facts(conn, schemas=SCHEMAS):
@@ -142,6 +163,7 @@ async def export(url, pg_dump, key):
     conn = await connect(url)
     try:
         async with conn.transaction(isolation='repeatable_read', readonly=True):
+            await refuse_managed(conn)
             await conn.execute("SET LOCAL statement_timeout='30s'")
             found = set(await conn.fetchval("SELECT array_agg(nspname::text) FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname<>'information_schema'"))
             if found != set(SCHEMAS):
@@ -175,6 +197,7 @@ async def restore(url, encrypted, key, expected_source, pg_restore):
         raise Held('Restore into source refused')
     conn = await connect(url)
     try:
+        await refuse_managed(conn)
         # Refuse existing objects, including objects outside the expected schemas.
         if await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                 WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname<>'information_schema') OR

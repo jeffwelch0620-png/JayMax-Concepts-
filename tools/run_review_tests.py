@@ -195,6 +195,8 @@ DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name
 OFFLINE_CLASSES += ['manager_handoff::HandoffValidationTests','manager_handoff::HandoffActorTests']
 OFFLINE_CLASSES += ['manager_handoff_install::InstallGuards']
 DATABASE_CASES += tuple(('manager_handoff_install','InstallDatabaseTests',name) for name in (
+ 'test_closed_start_preserves_original_and_reconciles_not_installed',
+ 'test_managed_schema_role_and_restore_markers_refuse_before_writes',
  'test_atomic_three_payloads_and_actual_restricted_logins',
  'test_namespace_version_source_and_changed_baseline_refuse',
  'test_ledger_late_failure_rolls_back_schema_permissions_and_settings',

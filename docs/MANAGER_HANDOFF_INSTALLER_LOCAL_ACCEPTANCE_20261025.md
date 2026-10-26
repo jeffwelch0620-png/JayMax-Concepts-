@@ -52,6 +52,13 @@ Compare restored data, ownership, ACLs, constraints, functions, triggers and RLS
 then prove the original saved request still replays against the newer correction.
 No plaintext archive survives its owned temporary restore directory.
 
+Restore uses `--no-owner`, but post-restore facts include ownership, ACLs and
+role-addressed policies. The documented tested path uses the same-named owner
+role and a cluster where the operational/accounts roles already exist. The tools
+do not reconstruct roles or passwords. Cross-cluster recovery is unverified;
+there is no cluster-identifier binding that categorically blocks it. Do not
+describe an untested cross-cluster restore as an enforced refusal or a passed case.
+
 The existing `hosted_backup` module and old six-schema archive format remain
 unchanged. The new code neither monkeypatches `SCHEMAS` nor rewrites sealed par
 pins. This local profile refuses managed/extension/foreign-server dependencies
@@ -112,8 +119,35 @@ are unchanged; their previous CI receipts are historical, not newly run tests.
 
 ## Remaining gates
 
-Finish local validation and JMax readback, then prompt before publishing a draft
-PR. Independent review, fresh CI and merge approval remain separate. The earlier
+PR73 review amendments D1/L1/L2/N1 make the hosted adapter/backup-consumer gate
+mandatory before H2, document the S2a/P1/adapter/H0-H3 order, require actual R1
+qualification before H3, and state the restore-fidelity boundary above. The
+installer now preserves its primary/start/UNKNOWN error if rollback or connection
+cleanup also fails, retaining safe cleanup error classes; failed close after an
+acknowledged commit carries `commitAcknowledged=true` and never returns success.
+Managed project schema/role markers are refused on owned connections and rechecked
+in the mutation/snapshot paths. Marker absence is additional defense, not proof
+that every loopback-forwarded target is safe. Only fictional markers are created
+in local tests. The amendment passed **107 focused offline cases** (48 methods
+and 59 subtests) and **32 disposable PostgreSQL cases** (20 methods and 12
+subtests), including both new real database regressions and all existing journal
+methods. The database run took 301.79 seconds and its owned server stopped.
+Evidence: `install-offline-20261026T001602718492Z` and
+`install-database-20261026T001757129337Z` (UTC filenames; October 25 Eastern).
+No test/resource threshold was lowered: the loaded database start check passed
+at 1,055 MiB / 17.5 percent after an earlier lower memory observation. All 22
+accepted raw-byte inputs remain unchanged, and compilation/guide/link checks
+passed. Fresh amended-head CI remains a separate required gate.
+
+PR73 was published at initial head `6bb5429`; its
+[initial CI](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40245339030)
+passed all four checks. The owner subsequently authorized these review amendments
+and merge after successful tests/CI. Initial-head results are historical and are
+not substituted for the amended-head checks. Hosted testing and real credential,
+grant, policy, schema, connection and flag changes remain held.
+
+Finish amendment JMax readback and fresh tested-head CI before the owner-authorized
+merge. Prompt before any later new draft PR. The earlier
 source inventory is the dated proposal baseline, not a claim this implementation
 was present at that time; its raw byte hashes are preserved rather than rewritten.
 

@@ -47,6 +47,18 @@ The separate localhost preview was visually inspected at 1280 × 720. It showed 
 
 No backend, migration, credential, grant, API configuration or service-control changes are included. No disposable PostgreSQL or broad backend run is necessary for this frontend-only change. Fresh repository CI still follows draft publication.
 
+## Hosted sequencing after local review
+
+For this receiving plan, propose S2a -> P1 if still on six-schema tools -> reviewed
+hosted seven-schema export/restore adapter -> H0-H3, each under separate approval.
+The adapter and backup-consumer transition are mandatory before H2 creates
+`operations`; doing P1 first alone does not protect subsequent par/S2/routine
+backups from the frozen exporter's schema refusal. The local-only recovery
+prototype does not satisfy that hosted gate. H3 remains blocked until R1-qualified
+restricted operational/accounts LOGINs and their running connection bindings are
+verified. No fresh live-role claim, credential action or S1 harness restart is
+inferred from this sequence. See the [exact installation proposal](MANAGER_HANDOFF_INSTALLATION_PROPOSAL_20261025.md).
+
 ## Coverage and next delivery slices
 
 This is the initial core-workflow coverage matrix, not a claim of complete Companion parity. Exact command/storage mapping for each later family must be reviewed before adoption.

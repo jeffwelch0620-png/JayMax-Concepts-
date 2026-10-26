@@ -42,7 +42,7 @@ active. No accounts, sample data or actual settings are created by this proposal
 | Finding in accepted source | Required treatment before live enablement |
 | --- | --- |
 | The migration starts with `CREATE SCHEMA operations`, has its own outer transaction, and adds no ledger row. | Refuse any existing namespace/name collision. A new adapter must preserve the raw migration, bind the precisely extracted transaction body, and atomically record the executed body in the reviewed migration ledger. Do not nest its `COMMIT` inside an installer transaction or use `IF NOT EXISTS` to accept partial installation. |
-| `hosted_backup.SCHEMAS` lists six application/ledger schemas and excludes `operations`; its schema check refuses any unclassified application schema. | The current encrypted exporter would refuse a target containing `operations`. Add a reviewed, explicitly versioned receiving recovery profile and matching validator/restore/dependency/fingerprint coverage before DDL. Prefer a separate feature-specific toolchain so frozen par source bytes remain valid. Preserve old six-schema archive compatibility; never classify the journal as managed or silently skip it. |
+| `hosted_backup.SCHEMAS` lists six application/ledger schemas and excludes `operations`; its schema check refuses any unclassified application schema. | After H2 creates `operations`, the frozen hosted exporter refuses every later export, affecting six-schema-dependent par preparation, S2 backups and routine recovery. A reviewed/versioned **hosted** seven-schema export/restore adapter and its consumer transition are mandatory **before H2**, preserving the old six-schema reader. The new local-only profile is not that adapter. Doing P1 first alone does not protect later backups or waive this gate. Prefer a separate toolchain so frozen par source bytes remain valid; never classify the journal as managed or silently skip it. |
 | PR72's restore test uses a whole fictional database dump, not the encrypted hosted exporter profile. | Keep its successful persistence proof, but do not claim encrypted journal recovery is already qualified. Rehearse an encrypted seven-schema export/restore with submitted/corrected notes and exact replay. |
 | The historical runtime catalog profile omits `operations`; its account-table denial check does not qualify the new journal permissions. | Add a separate feature-local effective-role, RLS, ACL and guard assessment; do not silently widen historical native/par profiles or treat a prior pass as permission proof for this feature. |
 | The route uses `db_pg.pool`; its actor resolver reads current `app_users` through `db_auxiliary.pool`. | Qualify the actual operational and accounts connections, not just named role metadata. Explicit separate auxiliary configuration is required; the generic unconfigured auxiliary fallback to the primary pool is not acceptable for this activation. Preserve existing login/notification duties. |
@@ -88,7 +88,11 @@ migrations, extend the sealed 31-file installer or rewrite its source pins.
 ### Proposed effective permission delta
 
 Bind the actual reviewed role names privately in the later executable packet.
-Prefer existing qualified restricted logins. Creating a role, changing a password,
+**H3 requires R1-qualified restricted operational and accounts LOGINs, including
+their actual running connection bindings. Until R1 is qualified, H3 is blocked.**
+PR73's feature-local fictional qualification does not establish full native/account
+permissions or today's live roles/connections; no new hosted inspection was done.
+Creating a role, changing a password,
 role attributes/membership/ownership or cutting over an app connection requires
 its own explicit approval if the existing role cannot meet this matrix.
 
@@ -147,14 +151,26 @@ Any redeployment/settings operation needs explicit approval; do not trigger it n
 
 ## Ordered execution proposal and approval gates
 
+The proposed hosted order is **S2a -> P1 (if still planned with six-schema tools)
+-> reviewed hosted seven-schema adapter -> H0-H3**. S2a remains private by label,
+requires its own consumer evidence and approval, and precedes this plan's future
+administrative maintenance windows. This ordering does not authorize credentials,
+restart the optional S1 harness or block continued local review/PR merge. It does
+not rewrite a frozen par installer predicate. Any remaining six-schema-dependent
+backup consumers must transition to a reviewed supported path, or be explicitly
+held, before H2; completing P1 alone is not an alternative to the adapter gate.
+Local R1 design can continue alongside this sequence, but actual R1 qualification
+is a hard prerequisite of H3.
+
 | Gate | Proposed work | Completion evidence / stop rule |
 | --- | --- | --- |
 | L0: current local proposal | Pin accepted sources, identify exact delta and missing tools, update JMax. | This document and source inventory only. No application code, SQL execution or hosted checks. |
 | L1: separate local implementation approval | Implement the small feature installer/permission verifier, seven-schema encrypted recovery profile and activation role refusal; retain legacy archive compatibility and sealed par profiles. | Independent review, tests, fictional restricted LOGIN (not only SET ROLE), negative ACL/RLS/guard cases, encrypted restore with replay, failure/unknown-commit rehearsal, measured budgets and clean owned cleanup. Prompt before a new draft PR push. |
+| Hosted recovery prerequisite: mandatory before H2 | Separately implement/review a versioned hosted export/restore adapter supporting the pre-install six-schema and post-install seven-schema profiles without weakening legacy archive validation. Rehearse supported managed dependencies and new journal recovery on fictional targets; bind consumer/runbook transition and exact installed-source compatibility. | The loopback-only adapter does not satisfy this gate. No H2 approval packet may be activated without this reviewed path and a post-install recovery plan; routine/par/S2 backup consumers must not be left on the refusing six-schema exporter. No hosted code or execution is implemented/approved by PR73. |
 | H0: separately approved read-only preflight | Inspect current accepted deployments, actual primary/auxiliary role/project/TLS binding, catalog/schema/name/ledger collisions, resources and exact writers. | Masked evidence only; no role repair, settings writes, grants, activation or service pause. Bind the changed-source/backup/writer dependencies; any stale result must be refreshed. |
 | H1: separately approved preparation window | Fresh writer confirmation and no-other-writes/no-merges commitment; capture then pause only approved writers; strict drain; fresh encrypted export and disposable local restore. | Restore proof covers the actual pre-install baseline. Fresh executable packet binds source/body hashes, role names, writer states, ledger/config baseline, backup and restoration deadline. Restore writers and close if a guard fails. |
-| H2: exact-plan application approval | Under the still-valid drained baseline, apply only the reviewed transaction/payloads and ledger entries. | Recheck all guards immediately before execution; lock timeout 5 s and DDL statement ceiling 30 s are proposed limits to qualify locally, not silently increased permissions. All preexisting data/ledger/ACL invariants match before commit. Unknown commit acknowledgement means read-only reconciliation, never blind retry. |
-| H3: separately approved activation and acceptance | Qualify actual restricted connections and post-install recovery; approve flag/build sequencing and the fixed fictional acceptance scope below. | Schema installation alone is not activation. Successful owner cases are not manager/staff or full production release acceptance. Close with flags off unless keeping them on was explicitly approved. |
+| H2: exact-plan application approval | After the mandatory hosted seven-schema adapter/consumer gate, and under the still-valid drained baseline, apply only the reviewed transaction/payloads and ledger entries. | Recheck all guards immediately before execution; lock timeout 5 s and DDL statement ceiling 30 s are proposed limits to qualify locally, not silently increased permissions. All preexisting data/ledger/ACL invariants match before commit. Unknown commit acknowledgement means read-only reconciliation, never blind retry. |
+| H3: separately approved activation and acceptance | Require completed R1 qualification of actual restricted operational and accounts LOGINs and running connection bindings, plus post-install recovery; approve flag/build sequencing and the fixed fictional acceptance scope below. | **Blocked until R1 is qualified.** Schema installation and local feature-only role tests do not satisfy it. Successful owner cases are not manager/staff or full production release acceptance. Close with flags off unless keeping them on was explicitly approved. |
 
 H1/H2 may be proposed for one maintenance window after L1 timing results. Do not
 reuse an expired window or name a guaranteed duration now. Budget the full existing

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
@@ -20,6 +20,54 @@ from test_manager_handoff import body
 
 
 class InstallGuards(unittest.IsolatedAsyncioTestCase):
+    async def test_start_and_rollback_failures_keep_original_when_close_also_fails(self):
+        for started in (False, True):
+            with self.subTest(started=started):
+                original = ConnectionResetError('TEST ONLY original failure')
+                tx = Mock(start=AsyncMock(side_effect=None if started else original),
+                          rollback=AsyncMock(side_effect=RuntimeError('TEST ONLY rollback failure')))
+                conn = Mock(transaction=Mock(return_value=tx), execute=AsyncMock(side_effect=original),
+                            close=AsyncMock(side_effect=OSError('TEST ONLY close failure')))
+                with patch.object(install, 'checked'), patch.object(recovery, 'connect', AsyncMock(return_value=conn)):
+                    with self.assertRaises(ConnectionResetError) as caught:
+                        await install.apply('TEST ONLY', {}, 'TEST ONLY')
+                self.assertIs(caught.exception, original)
+                self.assertEqual(original.connectionCloseErrorType, 'OSError')
+                if started:
+                    tx.rollback.assert_awaited_once()
+                    self.assertEqual(original.snapshotCleanupErrorType, 'RuntimeError')
+                else:
+                    tx.rollback.assert_not_awaited()
+                conn.close.assert_awaited_once_with(timeout=5)
+
+    async def test_unknown_commit_survives_close_failure_and_acknowledged_close_never_reports_success(self):
+        for lost_ack in (True, False):
+            with self.subTest(lost_ack=lost_ack):
+                tx = Mock(start=AsyncMock(), rollback=AsyncMock(),
+                          commit=AsyncMock(side_effect=ConnectionResetError('TEST ONLY lost acknowledgement') if lost_ack else None))
+                close_error = OSError('TEST ONLY cleanup')
+                conn = Mock(transaction=Mock(return_value=tx), execute=AsyncMock(), close=AsyncMock(side_effect=close_error))
+                state = {'facts': {'rows': {}}}
+                plan = {'baseline': state, 'entries': [], 'runtimeRole': 'fictional_runtime', 'accountsRole': 'fictional_accounts'}
+                with patch.object(install, 'checked'), patch.object(recovery, 'connect', AsyncMock(return_value=conn)), \
+                     patch.object(install, 'baseline', AsyncMock(return_value=state)), \
+                     patch.object(install, 'installed_state', AsyncMock()), patch.object(install, 'permissions', AsyncMock()):
+                    with self.assertRaises(install.Unknown if lost_ack else OSError) as caught:
+                        await install.apply('TEST ONLY', plan, 'TEST ONLY')
+                self.assertEqual(caught.exception.connectionCloseErrorType, 'OSError')
+                tx.rollback.assert_not_awaited()
+                if not lost_ack:
+                    self.assertIs(caught.exception, close_error)
+                    self.assertTrue(close_error.commitAcknowledged)
+
+    async def test_marker_refusal_closes_owned_connection_and_preserves_marker_error(self):
+        conn = Mock(fetchval=AsyncMock(return_value=True), close=AsyncMock(side_effect=OSError('TEST ONLY close')))
+        with patch.object(asyncpg, 'connect', AsyncMock(return_value=conn)), self.assertRaises(recovery.Held) as caught:
+            await recovery.connect('postgresql://fictional@127.0.0.1:5544/native_purchase_test_only')
+        self.assertEqual(str(caught.exception), 'Managed hosted project markers refused')
+        self.assertEqual(caught.exception.connectionCloseErrorType, 'OSError')
+        conn.close.assert_awaited_once_with(timeout=5)
+
     def test_source_reference_and_three_explicit_nontransactional_payloads(self):
         m = install.reference(); values = install.payloads('fictional_runtime')
         self.assertEqual(len(values), 3)
@@ -118,6 +166,58 @@ class InstallDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def installed(self):
         p = await self.plan(); result = await install.apply(self.url, p, install.sha(p))
         self.assertEqual(result['ledgerEntries'], 3); return p
+
+    async def test_closed_start_preserves_original_and_reconciles_not_installed(self):
+        p = await self.plan(); original = ConnectionResetError('TEST ONLY start connection lost')
+        actual = await recovery.connect(self.url)
+        async def broken_start():
+            await actual.close(); raise original
+        tx = Mock(start=AsyncMock(side_effect=broken_start), rollback=AsyncMock())
+        wrapper = Mock(transaction=Mock(return_value=tx), close=actual.close)
+        with patch.object(recovery, 'connect', AsyncMock(return_value=wrapper)), self.assertRaises(ConnectionResetError) as caught:
+            await install.apply(self.url, p, install.sha(p))
+        self.assertIs(caught.exception, original); tx.rollback.assert_not_awaited()
+        self.assertEqual(await install.reconcile(self.url, p, install.sha(p)), {'outcome': 'not_installed', 'retryAuthorized': False})
+
+    async def test_managed_schema_role_and_restore_markers_refuse_before_writes(self):
+        p = await self.plan()
+        async def refusals():
+            with self.assertRaisesRegex(recovery.Held, 'Managed hosted project markers refused'):
+                await self.plan()
+            with self.assertRaisesRegex(recovery.Held, 'Managed hosted project markers refused'):
+                await install.apply(self.url, p, install.sha(p))
+            with patch.object(old_backup, 'tool', new_callable=AsyncMock) as tool:
+                with self.assertRaisesRegex(recovery.Held, 'Managed hosted project markers refused'):
+                    await recovery.export(self.url, 'TEST ONLY not executed', Fernet.generate_key())
+                tool.assert_not_awaited()
+            async with self.pool.acquire() as c:
+                self.assertIsNone(await c.fetchval("SELECT to_regnamespace('operations')"))
+                self.assertEqual(await install.ledger(c), p['baseline']['ledger'])
+        async with self.pool.acquire() as c: await c.execute('CREATE SCHEMA auth')
+        try:
+            await refusals()
+        finally:
+            async with self.pool.acquire() as c: await c.execute('DROP SCHEMA auth')
+        await self.admin.execute('CREATE ROLE authenticator NOLOGIN')
+        try:
+            await refusals()
+        finally:
+            await self.admin.execute('DROP ROLE authenticator')
+        db = 'native_purchase_test_marker_restore_' + uuid4().hex; self.restores.append(db)
+        await self.admin.execute('CREATE DATABASE ' + db)
+        url = self.url.rsplit('/', 1)[0] + '/' + db
+        c = await recovery.connect(url)
+        try:
+            await c.execute('CREATE SCHEMA auth')
+        finally:
+            await c.close()
+        key = Fernet.generate_key()
+        envelope = recovery.seal(dict(format=recovery.FORMAT, schemas=list(recovery.SCHEMAS),
+                                      sourceDatabase=self.db, postgresMajor=17), b'PGDMP TEST ONLY', key)
+        with patch.object(old_backup, 'tool', new_callable=AsyncMock) as tool:
+            with self.assertRaisesRegex(recovery.Held, 'Managed hosted project markers refused'):
+                await recovery.restore(url, envelope, key, self.db, 'TEST ONLY not executed')
+            tool.assert_not_awaited()
 
     async def test_atomic_three_payloads_and_actual_restricted_logins(self):
         p = await self.installed()

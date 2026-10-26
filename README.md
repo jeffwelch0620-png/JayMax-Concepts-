@@ -91,6 +91,12 @@ documents the separate loopback-only adapter, actual restricted LOGIN checks,
 three atomic ledger payloads and encrypted seven-schema fictional recovery.
 No frozen par/backup source or application route is changed. Hosted adaptation,
 fresh CI, draft publication and merge remain separate; prompt before pushing.
+Before future hosted work, plan S2a, then P1 if retained on six-schema tooling,
+then a reviewed hosted seven-schema export/restore adapter before H0-H3. H2 must
+wait for that adapter and its backup-consumer transition: completing P1 alone
+does not prevent later frozen exports from refusing `operations`. H3 is blocked
+until R1-qualified operational/accounts LOGINs and actual connection use are
+verified. These are approval-gated plans, not current hosted-role observations.
 Hosted work, service controls and
 credential, grant and schema changes remain held. S1 remains partial; optional
 harness work is parked while local integration proceeds. Ordering stays manual
