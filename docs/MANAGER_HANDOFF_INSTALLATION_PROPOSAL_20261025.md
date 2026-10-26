@@ -281,9 +281,18 @@ not proof an actual dropped response occurred.
 
 ## Proposed next authorization
 
-Local implementation/rehearsal of the bounded receiving installer, effective-role
-check and journal-aware encrypted recovery profile has since been separately
-authorized. Finish its local evidence and prompt before a new draft PR push.
-Keep real credentials, grants, schema, hosted execution and connection/flag
-changes held. Independent review/CI/merge and a later hosted-adapter proposal are
-separate gates; local tools must not be pointed at Supabase.
+The bounded receiving installer, effective-role check and loopback-only encrypted
+recovery profile are accepted as PR73 merge `afe4891`, tree-identical to reviewed
+`7d0ed3b`; reviewed-head and merged-main CI each passed all four checks. Its
+[local acceptance record](MANAGER_HANDOFF_INSTALLER_LOCAL_ACCEPTANCE_20261025.md)
+is not hosted installation or activation evidence.
+
+The [hosted journal backup-adapter design](HOSTED_JOURNAL_BACKUP_ADAPTER_DESIGN_20261025.md)
+and [source inventory](HOSTED_JOURNAL_BACKUP_ADAPTER_SOURCE_PINS_20261025.json)
+now define the next proposed local implementation: explicit versioned seven-schema
+recovery, unchanged frozen six-schema tools, and a tested consumer transition
+before H2. Return for approval before that implementation; prompt again before
+any draft PR push. S2a/P1 prerequisites and the hard H3 R1 gate remain as described
+above. Real hosted work, credentials, grants, policies, schema, connections and
+activation flags stay held. No executable live packet or maintenance window has
+been created by this design.

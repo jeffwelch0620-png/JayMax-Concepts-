@@ -8,18 +8,31 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-The accepted baseline is [merged PR72](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/72)
-**486767a**, tree-identical to approved **5730b21**. The four
-[approved-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40231545927)
-and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40232202416)
-passed separately. Merge and automatic Render test deployment were approved;
-deployment completion and live acceptance were not inspected. PR71's
+The accepted baseline is [merged PR73](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/73)
+**afe4891**, tree-identical to reviewed **7d0ed3b**. All four
+[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40249207186)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40249573863)
+passed separately. Each CI run passed 1,190 frontend tests plus the strict build;
+reviewed-head CI also passed 1,979 Windows offline and 376 backend/PostgreSQL cases.
+Merge and automatic Render test deployment were approved; deployment completion
+and live acceptance were not inspected. PR72's
+[head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40231545927)
+and [main](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40232202416)
+receipts remain historical. PR71's
 [head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40214920647)
 and [main](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40215493932)
 receipts remain historical. PR70's earlier
 [head](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40206917665)
 and [main](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40208642033)
 receipts remain historical source evidence.
+
+The next local deliverable is the [hosted journal backup-adapter design](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_DESIGN_20261025.md), with a
+[source inventory](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_SOURCE_PINS_20261025.json).
+It proposes an explicit seven-schema profile and versioned receipt/consumer
+transition while leaving the frozen six-schema engine and loopback-only recovery
+guards unchanged. This is design only: implementation, draft publication and all
+hosted execution need separate approval. Credentials, grants, policies, schema,
+connections and activation flags remain held.
 
 The first merged integration slice is a distinct personal-owner/manager
 **Manager overview** tab, with purchased-item count context and dated prep
