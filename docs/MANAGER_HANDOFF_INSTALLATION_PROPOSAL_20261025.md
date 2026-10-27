@@ -151,8 +151,10 @@ Any redeployment/settings operation needs explicit approval; do not trigger it n
 
 ## Ordered execution proposal and approval gates
 
-The proposed hosted order is **S2a -> P1 (if still planned with six-schema tools)
--> reviewed hosted seven-schema adapter -> H0-H3**. S2a remains private by label,
+The proposed hosted order is **S2a -> P1 with retained six-schema tools (or an
+explicitly accepted disposition) -> reviewed hosted deliverables 1–4 below ->
+H0–H2 -> separate post-install v2 recovery window -> actual R1 qualification ->
+H3**. S2a remains private by label,
 requires its own consumer evidence and approval, and precedes this plan's future
 administrative maintenance windows. This ordering does not authorize credentials,
 restart the optional S1 harness or block continued local review/PR merge. It does
@@ -162,30 +164,70 @@ held, before H2; completing P1 alone is not an alternative to the adapter gate.
 Local R1 design can continue alongside this sequence, but actual R1 qualification
 is a hard prerequisite of H3.
 
+### Remaining hosted deliverables before H2 (PR75 D1)
+
+This checklist distinguishes implemented local safeguards from unimplemented hosted
+execution. It is a proposal, not a live packet or authorization.
+
+1. **Hosted installer adapter — not started.** PR73's installer remains literal
+   loopback/UUID-test-database only. A separate reviewed adapter must preserve its
+   exact-plan, managed-target and transaction protections for the actual target;
+   the local implementation is not permission to point it at Supabase.
+2. **Hosted transition coordinator or reviewed exact operator runbook — local
+   rehearsal only; hosted delivery not started.** PR75's coordinator is also
+   loopback-only. Bind real source/project/roles, phase-specific evidence, writer
+   states, deadlines, custody and failure/reconciliation rules in the hosted path.
+3. **Real seven-consumer matrix with owner acceptance — fictional rows rehearsed;
+   real inventory not started.** Resolve legacy backup, journal backup, par,
+   source-index, calibration, security-recovery and routine consumers as supported,
+   completed or held. An active required recovery path cannot be held or broken.
+4. **Qualified exact pre-install packet budgets — not started.** Export, restore
+   verification, verified custody move/working-key deletion, plan checks and apply
+   must fit the same original capture window, at most **2,700 seconds**, including
+   a writer-restoration reserve of at least **600 seconds**. Initial planning caps
+   are export 600 + restore verification 600 + custody move **120** + apply and its
+   guards 600 + restoration reserve 600 = **2,520 seconds**, leaving at most 180
+   seconds for all remaining preparation/receipt/operator work. The 120-second
+   custody allowance is explicit but unqualified; actual transfer, independent-key
+   access verification and local working-copy deletion must be measured before a
+   packet uses it. A larger required allowance must fit by reallocating qualified
+   phases within the same limit, not by shrinking the reserve or extending the
+   window. **If the complete sealed budget does not fit, do not activate the
+   packet.** Local fixture timing does not establish hosted margin, and this
+   checklist does not add a global timeout to the frozen legacy restore.
+5. **Post-install seven-schema/v2 proof — local rehearsal only; hosted proof not
+   started.** Obtain a fresh authenticated export and independent disposable
+   restore in a **separate approved, writer-drained window** after H2. Keep feature
+   activation held through proof/custody closeout; never renew the expired
+   pre-install capture or relabel its six-schema/v1 proof as v2.
+
+Required order: **S2a -> P1 with retained six-schema tooling (or a separately
+accepted disposition) -> deliverables 1–4 -> H0–H2 -> deliverable 5 in its separate
+window -> actual R1 qualification -> H3**. The pre-install chain uses six-schema/v1
+recovery; v2 is the post-install proof. Local feature-role LOGIN tests and inert
+restore stubs are not actual R1. S2a, real credential/grant/schema changes,
+service pauses, hosted installation and activation all remain separately held.
+
 | Gate | Proposed work | Completion evidence / stop rule |
 | --- | --- | --- |
 | L0: current local proposal | Pin accepted sources, identify exact delta and missing tools, update JMax. | This document and source inventory only. No application code, SQL execution or hosted checks. |
 | L1: separate local implementation approval | Implement the small feature installer/permission verifier, seven-schema encrypted recovery profile and activation role refusal; retain legacy archive compatibility and sealed par profiles. | Independent review, tests, fictional restricted LOGIN (not only SET ROLE), negative ACL/RLS/guard cases, encrypted restore with replay, failure/unknown-commit rehearsal, measured budgets and clean owned cleanup. Prompt before a new draft PR push. |
 | Hosted recovery prerequisite: mandatory before H2 | Separately implement/review a versioned hosted export/restore adapter supporting the pre-install six-schema and post-install seven-schema profiles without weakening legacy archive validation. Rehearse supported managed dependencies and new journal recovery on fictional targets; bind consumer/runbook transition and exact installed-source compatibility. | The loopback-only adapter does not satisfy this gate. No H2 approval packet may be activated without this reviewed path and a post-install recovery plan; routine/par/S2 backup consumers must not be left on the refusing six-schema exporter. No hosted code or execution is implemented/approved by PR73. |
 | H0: separately approved read-only preflight | Inspect current accepted deployments, actual primary/auxiliary role/project/TLS binding, catalog/schema/name/ledger collisions, resources and exact writers. | Masked evidence only; no role repair, settings writes, grants, activation or service pause. Bind the changed-source/backup/writer dependencies; any stale result must be refreshed. |
-| H1: separately approved preparation window | Fresh writer confirmation and no-other-writes/no-merges commitment; record original writer states, pause only approved writers, verify strict drain, then fresh encrypted export and disposable local restore covering the actual installed profile. | Restore proof covers the pre-install baseline. Bind source/body hashes, roles, writer states, ledger/config baseline, backup and restoration deadline. Require the reviewed separate-key custody/verified-access/local-key-deletion procedure, private Boolean attestations and retention/rollback protection; no key/archive/private-record attachments. For v2 installation evidence, export, custody/transfer, verified restore and H2 receipt validation/start must fit the original capture window (at most 45 minutes). Phase timings and margin remain to be qualified; see the PR74 timing record. Restore writers and close on any failed guard. |
+| H1: separately approved preparation window | Fresh writer confirmation and no-other-writes/no-merges commitment; record original writer states, pause only approved writers, verify strict drain, then fresh encrypted export and disposable local restore covering the actual installed profile. | Restore proof covers the pre-install baseline. Bind source/body hashes, roles, writer states, ledger/config baseline, backup and restoration deadline. Require the reviewed separate-key custody/verified-access/local-key-deletion procedure, private Boolean attestations and retention/rollback protection; no key/archive/private-record attachments. For the six-schema/v1 pre-install proof, export, verified restore, custody/transfer and H2 receipt validation/application must fit the original capture window (at most 45 minutes), preserving the restoration reserve. The seven-schema/v2 post-install proof uses the separate window specified above. Phase timings and margin remain to be qualified; see the PR74 timing record. Restore writers and close on any failed guard. |
 | H2: exact-plan application approval | After the mandatory hosted seven-schema adapter/consumer gate, and under the still-valid drained baseline and active capture window, apply only the reviewed transaction/payloads and ledger entries. | Revalidate receipt/capture and verification windows and every guard immediately before execution; a fresh archival verification window cannot renew an installation capture. Preserve the proposed writer-restoration reserve and stop before the approved deadline. Lock timeout 5 s and DDL ceiling 30 s remain proposed limits to qualify locally. Preexisting data/ledger/ACL invariants match before commit. Unknown acknowledgement means read-only reconciliation, never blind retry. |
 | H3: separately approved activation and acceptance | Require completed R1 qualification of actual restricted operational and accounts LOGINs and running connection bindings, plus post-install recovery; approve flag/build sequencing and the fixed fictional acceptance scope below. | **Blocked until R1 is qualified.** Schema installation and local feature-only role tests do not satisfy it. Successful owner cases are not manager/staff or full production release acceptance. Close with flags off unless keeping them on was explicitly approved. |
 
-H1/H2 may be proposed for one maintenance window after L1 timing results and the
-[PR74 custody/timing amendments](PR74_REVIEW_AMENDMENTS_20261026.md). The final
-fictional cross-cluster end-to-end test was 24.569 seconds, not separate export/
-restore phase measurements or hosted margin. Proposed conservative planning is
-20 minutes for the two operation ceilings, at least ten minutes reserved to
-restore writers, and at most fifteen minutes for all other work within 45 minutes;
-the exact packet must demonstrate that the phase budgets fit before starting. Do not
-reuse an expired window or name a guaranteed duration now. Budget the full existing
-backup/restore limits, local memory checks and a fixed writer-restoration reserve
-before starting. Capture original API state/commit and exact Toast identities,
-schedule/role/command fingerprints. Last known writers were `jaymax-api` and Toast
-jobs 3/4, with Companion local-only; this is historical, not fresh confirmation.
-Never terminate Supabase platform sessions, silently pause another writer, change
-job schedules or force a deployment to make a guard pass.
+H1/H2 may be proposed for one capture window only after the exact phase budgets
+in deliverable 4 are qualified. The earlier 24.569-second cross-cluster fixture
+and PR75's 101.609-second complete fixture chain are historical local timings,
+not hosted transfer/custody margin. The separate post-install proof window does
+not extend or renew H1/H2. Restore writers by each approved deadline, even when
+acceptance is incomplete. Capture original API state/commit and exact Toast
+identities, schedule/role/command fingerprints. Last known writers were
+`jaymax-api` and Toast jobs 3/4, with Companion local-only; this is historical,
+not fresh confirmation. Never terminate Supabase platform sessions, silently
+pause another writer, change job schedules or force a deployment to pass a guard.
 
 The local memory gate remains at least 1 GiB and 15% free before disposable
 PostgreSQL; no local database is started by this proposal. Do not lower existing

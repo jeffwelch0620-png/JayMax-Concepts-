@@ -77,6 +77,50 @@ windows, with no schedule enabled here. S2a precedes administrative windows;
 retained P1 and actual R1 qualification before H3 remain separate. This local
 coordinator is not the future hosted executor and does not reopen the S1 harness.
 
+### Remaining hosted deliverables before H2 (PR75 D1)
+
+This checklist distinguishes implemented local safeguards from unimplemented hosted
+execution. It is a proposal, not a live packet or authorization.
+
+1. **Hosted installer adapter — not started.** PR73's installer remains literal
+   loopback/UUID-test-database only. A separate reviewed adapter must preserve its
+   exact-plan, managed-target and transaction protections for the actual target;
+   the local implementation is not permission to point it at Supabase.
+2. **Hosted transition coordinator or reviewed exact operator runbook — local
+   rehearsal only; hosted delivery not started.** PR75's coordinator is also
+   loopback-only. Bind real source/project/roles, phase-specific evidence, writer
+   states, deadlines, custody and failure/reconciliation rules in the hosted path.
+3. **Real seven-consumer matrix with owner acceptance — fictional rows rehearsed;
+   real inventory not started.** Resolve legacy backup, journal backup, par,
+   source-index, calibration, security-recovery and routine consumers as supported,
+   completed or held. An active required recovery path cannot be held or broken.
+4. **Qualified exact pre-install packet budgets — not started.** Export, restore
+   verification, verified custody move/working-key deletion, plan checks and apply
+   must fit the same original capture window, at most **2,700 seconds**, including
+   a writer-restoration reserve of at least **600 seconds**. Initial planning caps
+   are export 600 + restore verification 600 + custody move **120** + apply and its
+   guards 600 + restoration reserve 600 = **2,520 seconds**, leaving at most 180
+   seconds for all remaining preparation/receipt/operator work. The 120-second
+   custody allowance is explicit but unqualified; actual transfer, independent-key
+   access verification and local working-copy deletion must be measured before a
+   packet uses it. A larger required allowance must fit by reallocating qualified
+   phases within the same limit, not by shrinking the reserve or extending the
+   window. **If the complete sealed budget does not fit, do not activate the
+   packet.** Local fixture timing does not establish hosted margin, and this
+   checklist does not add a global timeout to the frozen legacy restore.
+5. **Post-install seven-schema/v2 proof — local rehearsal only; hosted proof not
+   started.** Obtain a fresh authenticated export and independent disposable
+   restore in a **separate approved, writer-drained window** after H2. Keep feature
+   activation held through proof/custody closeout; never renew the expired
+   pre-install capture or relabel its six-schema/v1 proof as v2.
+
+Required order: **S2a -> P1 with retained six-schema tooling (or a separately
+accepted disposition) -> deliverables 1–4 -> H0–H2 -> deliverable 5 in its separate
+window -> actual R1 qualification -> H3**. The pre-install chain uses six-schema/v1
+recovery; v2 is the post-install proof. Local feature-role LOGIN tests and inert
+restore stubs are not actual R1. S2a, real credential/grant/schema changes,
+service pauses, hosted installation and activation all remain separately held.
+
 ## Custody and authority limits
 
 Closeout requires `keyMoved`, `separateKeyAccessVerified`, `restoreVerified`,
@@ -149,6 +193,40 @@ These samples do not establish sustained live-memory qualification. The earlier
 all-five run fell below 1 GiB after startup. No guard was lowered: retain the
 1 GiB / 15% server-start gate and obtain more loaded headroom or an independently
 approved execution arrangement before live work.
+
+## PR75 review amendments and deferred interface note
+
+The [independent review](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/75#issuecomment-6430479145)
+reported no blocking code defect. D1's explicit remaining deliverables, ordering
+and custody allowance are added above and in the installation proposal. The
+original head `e689f73` subsequently passed all four
+[CI checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40424814637).
+Fresh CI is required on this documentation amendment before merge.
+
+L1 is a low-priority interface consistency follow-up. The existing
+`hosted_journal_backup.open_profile` contract is asymmetric: `LEGACY6` takes
+**encrypted-file and key-file paths**, delegates to the frozen legacy reader and
+requires `expected_project`; `RECEIVING7` takes **encrypted bytes and key bytes**
+and delegates to `open_envelope` with its independently expected binding, digest
+and dependency policy. Do not assume interchangeable input types. The existing
+legacy-path compatibility test and receiving-byte envelope tests cover those
+supported paths. Uniform path inputs, a path round-trip and explicit `Held`
+normalization for wrong legacy input types remain a separate optional code slice;
+none is claimed here. The advisory docstring edit is deliberately deferred with
+that slice to preserve tested reader bytes and existing source bindings. D1 is
+the review's merge condition; L1 is not reclassified as a blocker.
+
+One review wording correction: outer timeout after engine entry or lost commit
+acknowledgement returns `commit_unknown_activation_held`. An exception carrying
+`commitAcknowledged=True` instead returns
+`installed_reconciliation_required_activation_held`; both hold activation and
+refuse automatic retry, but the known acknowledgement is not discarded.
+
+The sibling JSON and its JMax Files copy remain the sealed **pre-amendment local
+evidence snapshot at e689f73**. Its `acceptanceDocumentSha256` refers to that
+commit's original document, not this documentation-only revision. No runtime,
+SQL, test selection, source pin or execution authority changes in this amendment;
+the PR and JMax track amended-head/merged-main CI and publication separately.
 
 ## Validation record
 
