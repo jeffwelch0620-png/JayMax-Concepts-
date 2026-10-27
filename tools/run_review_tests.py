@@ -195,6 +195,13 @@ DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name
 OFFLINE_CLASSES += ['manager_handoff::HandoffValidationTests','manager_handoff::HandoffActorTests']
 OFFLINE_CLASSES += ['manager_handoff_install::InstallGuards']
 OFFLINE_MODULES += ['journal_backup_receipts','hosted_journal_backup']
+OFFLINE_MODULES += ['receiving_install_evidence','receiving_install_coordinator']
+DATABASE_CASES += tuple(('receiving_install_coordinator_pg','TransitionDatabaseTests',name) for name in (
+ 'test_complete_six_to_seven_chain_and_post_failure_keeps_installation',
+ 'test_changed_baseline_refuses_before_install_without_repair',
+ 'test_lost_commit_ack_reconciles_readonly_and_never_retries',
+ 'test_managed_markers_still_refuse_at_coordinator_boundary',
+ 'test_wrong_cluster_identity_refuses_preparation'))
 DATABASE_CASES += tuple(('hosted_journal_backup_pg','JournalDatabaseTests',name) for name in (
  'test_seven_schema_export_restore_preserves_bytes_decimal_history_guards_and_replay',
  'test_frozen_six_schema_oracle_agrees_in_same_snapshot',

@@ -1,0 +1,333 @@
+{
+  "acceptanceDocumentSha256": "4649d647d181d760983269201a55f0d12e3cdf3996e1108637a15715fe2d7983",
+  "acceptedBaseline": "826f54ef64c27367ffa55d35052c2c31ede7e610",
+  "actionPinsUnchanged": true,
+  "candidateParent": "826f54ef64c27367ffa55d35052c2c31ede7e610",
+  "criticalFrozenFilesUnchanged": 14,
+  "crlfOnlyCheckoutDifferences": [
+    ".github/workflows/ci.yml",
+    "README.md"
+  ],
+  "currentHostedStateChecked": false,
+  "custodyIsFictionalModel": true,
+  "explicitRuntimeInventoryCount": 28,
+  "featureActivated": false,
+  "fictionalDatabaseRoleAndSchemaTestsApproved": true,
+  "finalTimeoutClassification": "Timeout before installer entry is failed/held; timeout after entry is conservatively commit-unknown/held until read-only reconciliation. No retry authority.",
+  "fixtureArtifactCleanupScope": "Owned per-test databases, role stubs, encryption keys and TemporaryDirectory artifacts. Stopped harness cluster directories and synthetic control-password files remain as local diagnostic fixtures; no real credentials are present.",
+  "format": "jaymax-receiving-coordinator-local-acceptance-v1",
+  "frontendChangedOrRetested": false,
+  "fullRepositoryPostgreSQLProfileRunLocally": false,
+  "gitIndexFileHashes": {
+    ".github/workflows/ci.yml": "bc59e9ce73fc823a2205e89748d5f8b6848311f53b6eaaf76d131c56a5e068b8",
+    "README.md": "7b62b67fd01c4b2899c476a516522acd71e81418a1a93c3642317f4fbf391052",
+    "backend/application_backup_profiles.py": "e8eb011dd286aa6e5a6680a2b0d0b6d71ee7d6b161ca4a6ca131a96969c7235f",
+    "backend/db_tls.py": "5fb0c2b5efad5b07ce65c91b29ca19bbb3a80f218110cea0a5c841a39e50b339",
+    "backend/hosted_backup.py": "891164d236c56ad9388a2c943f630d06ff7fffcc92668f54e45c2020064048f8",
+    "backend/hosted_backup_cli.py": "4b384759bc4535884646e484d62ed6157d61155b657ab8b5ab7ddc8ee7ece6da",
+    "backend/hosted_install_preservation.py": "3e064e658235e8598cb86c408826ffa0400d03d1df77bd30e9a4114c299204fd",
+    "backend/hosted_journal_backup.py": "f523250c7491fe4e67d7130ee3c008e1ac6a11dbf6f265aab24edd0d7af9e318",
+    "backend/hosted_journal_backup_cli.py": "a29d3b4259a31fbb60d47f2d1dc5a77aa0378300280b8493b326f30fefb33bcd",
+    "backend/hosted_native_install.py": "a46cf43a009bfc0f1921177fd5473e57dc03a867d5c85e2be660f1e1ad0a7f67",
+    "backend/hosted_test_trial.py": "fe3bb55f360da192c3cc8782b4cfe584dcc7cbcdae8abfba395e65ca2f62cffe",
+    "backend/journal_backup_receipts.py": "12c2da5053e2bf31026923d52baada19a6b5e79ad1f6eabda23a85170c3b8393",
+    "backend/maintenance_connection.py": "7e44e7e95ef6b4211a9dabf6c68ccfeebd0811ad68c54f5736cc7add24e11a5f",
+    "backend/managed_development.py": "3620a679d6e135a117e216356e061b4963d118e95b9f15ad64cd53453421d68e",
+    "backend/manager_actor.py": "6a9623a07e4d19d3f3d165e97ac49e4511aff68d635f186d48ff204ff0075215",
+    "backend/manager_handoff.py": "0dcd7683f0c37222fde40f47f3dc2f9fc93606fde12d7294708b8e1f049587e8",
+    "backend/manager_handoff_install.py": "4d3282eff0af6f22b9a6772ace4a25c5a722a76c3279728a935d895fa6a6610e",
+    "backend/manager_handoff_recovery.py": "f40380eb4d613e74b343ec82651d8ad26804178a7753b850fb63de99adf0f5d7",
+    "backend/native_backup.py": "3c181be79c9dbec62698e66fafe716e6a62a705d4ddd9f327c31f3d86f31d8db",
+    "backend/readonly_snapshot.py": "803c9551e3e31407497c06a44e6fe898a82f08518bfbdd265e89efdb5c535123",
+    "backend/receiving_install_coordinator.py": "baa4a0c0c8db3c3c767732a14639c5566c9dc73b8c2207ace6967f96b8a015ad",
+    "backend/receiving_install_evidence.py": "b10d8bc3c32da1150e47acbef3531e6a6b736f6c3c81f8cecbcc1598d34d1f49",
+    "backend/requirements.txt": "6cbb437674b8d70fabae1f99bb6846c88cc5395168532e5b4eb908dd837324c0",
+    "backend/runtime_permissions.py": "efecc10d91ffd9c6c6599d6d314a959f4a4ad4383dbc8ad2af8e3b16d6b572bb",
+    "backend/schema_reconciliation.py": "2674a3804ab5a5e99b00061f48086f99f286e1ecbb07b741ec91f449f0aaa78f",
+    "backend/tests/test_receiving_install_coordinator.py": "4559e886161f683575f972c80549d359fc2f46c4ea2c1c805f9f55bf6667cf92",
+    "backend/tests/test_receiving_install_coordinator_pg.py": "21ef346d00522cf12dd3b077de7bd842b77cd1d8cb6aacbac77fac3f3a52477b",
+    "backend/tests/test_receiving_install_evidence.py": "10b5026576cf4ee24249ee93e8ccf516cf7cd657ced9d08c6332ab36b8fc6a8c",
+    "migrations/20261025_manager_handoff_notes.sql": "c36928e5520c18f96093c3e1eff21ca3287bc9e347d9a9dc8d9c0c21cb5f08f5",
+    "supabase/manager_handoff.manifest.json": "84f5cbe8ac8dfdd053ebb0af81fdd2b63e6af598ab7cd4ea74953c00f0322571",
+    "supabase/manager_handoff.schema.sql": "48d9d2a75f49aff531eef9d266375f4dd14a505bbc5cf5d74ff49240a7775826",
+    "tools/ops/apply_additive_migration.py": "586976afd3384be39f97212b2c3cdf01bd51e5dbe56024a0944d0fe15e165731",
+    "tools/ops/hosted_additive_index.py": "8c4e08e2d699826c1dbbe370beb5153081e83a3659e55f807239945227f24521",
+    "tools/run_review_tests.py": "0d3d2bb19900694c65430800d0eb4ab598eaa0df92eadc37788c7bf85b5dff26"
+  },
+  "hostedExecutionApproved": false,
+  "implementationApproved": true,
+  "independentPhysicalKeyCustodyVerified": false,
+  "initialBroadRun": {
+    "artifactName": "offline-20261026T230134870790Z.log",
+    "artifactSha256": "002f696ff22c9e20c556c5188352c4ca432651f9031b7a4eb813b74929178855",
+    "note": "Pre-final-custody run under memory pressure showed an unattributed failure; not a passing receipt. Final complete broad run passed.",
+    "status": "stopped_incomplete"
+  },
+  "measurementInterpretation": "Server start gates passed; loaded samples fell below 1 GiB and 15%. No sustained live-memory qualification is claimed.",
+  "newCIObserved": false,
+  "newCIService": "Disposable PostgreSQL 17 with synthetic-only credentials; no deployment or secrets added.",
+  "nextApproval": "Prompt owner before draft PR push; CI, independent review, merge and all hosted execution remain separate.",
+  "ownedFixtureDatabasesAndStubsCleaned": true,
+  "ownedServersStopped": true,
+  "ownedWorkingKeysAndTempArtifactsCleaned": true,
+  "phaseMetricsByMethod": {
+    "test_changed_baseline_refuses_before_install_without_repair": {
+      "applicationAndGuardsSeconds": 4.906,
+      "completeChainAndDatabaseCloseoutSeconds": 34.907,
+      "databaseCloseoutSeconds": 2.5,
+      "fixtureSetupSeconds": 3.219,
+      "legacyExportSeconds": 3.297,
+      "legacyRestoreSeconds": 4.015,
+      "memoryAfterFixtureCloseout": {
+        "availableMiB": 948,
+        "availablePercent": 15.72
+      },
+      "memoryAtFixtureStart": {
+        "availableMiB": 940,
+        "availablePercent": 15.59
+      },
+      "planPrepareSeconds": 16.297,
+      "preKeyCustodyModelSeconds": 0.0
+    },
+    "test_complete_six_to_seven_chain_and_post_failure_keeps_installation": {
+      "applicationAndGuardsSeconds": 25.625,
+      "completeChainAndDatabaseCloseoutSeconds": 101.609,
+      "databaseCloseoutSeconds": 3.781,
+      "fictionalLoginAndHistorySeconds": 8.312,
+      "fixtureSetupSeconds": 2.703,
+      "independentRestorePreparationSeconds": 0.61,
+      "journalExportSeconds": 3.516,
+      "journalRestoreSeconds": 5.125,
+      "legacyExportSeconds": 3.469,
+      "legacyRestoreSeconds": 5.109,
+      "memoryAfterFixtureCloseout": {
+        "availableMiB": 882,
+        "availablePercent": 14.62
+      },
+      "memoryAtFixtureStart": {
+        "availableMiB": 942,
+        "availablePercent": 15.61
+      },
+      "planPrepareSeconds": 16.688,
+      "postKeyCustodyModelSeconds": 0.016,
+      "preKeyCustodyModelSeconds": 0.0,
+      "transitionFinishSeconds": 13.593
+    },
+    "test_lost_commit_ack_reconciles_readonly_and_never_retries": {
+      "applicationAndGuardsSeconds": 24.187,
+      "completeChainAndDatabaseCloseoutSeconds": 65.032,
+      "databaseCloseoutSeconds": 2.563,
+      "fixtureSetupSeconds": 2.5,
+      "legacyExportSeconds": 3.375,
+      "legacyRestoreSeconds": 4.266,
+      "memoryAfterFixtureCloseout": {
+        "availableMiB": 790,
+        "availablePercent": 13.09
+      },
+      "memoryAtFixtureStart": {
+        "availableMiB": 912,
+        "availablePercent": 15.12
+      },
+      "planPrepareSeconds": 16.844,
+      "preKeyCustodyModelSeconds": 0.0
+    },
+    "test_managed_markers_still_refuse_at_coordinator_boundary": {
+      "applicationAndGuardsSeconds": 0.282,
+      "completeChainAndDatabaseCloseoutSeconds": 27.813,
+      "databaseCloseoutSeconds": 1.86,
+      "fixtureSetupSeconds": 2.532,
+      "legacyExportSeconds": 3.266,
+      "legacyRestoreSeconds": 4.062,
+      "memoryAfterFixtureCloseout": {
+        "availableMiB": 1133,
+        "availablePercent": 18.79
+      },
+      "memoryAtFixtureStart": {
+        "availableMiB": 1078,
+        "availablePercent": 17.87
+      },
+      "planPrepareSeconds": 15.203,
+      "preKeyCustodyModelSeconds": 0.015
+    },
+    "test_wrong_cluster_identity_refuses_preparation": {
+      "completeChainAndDatabaseCloseoutSeconds": 12.593,
+      "databaseCloseoutSeconds": 1.812,
+      "fixtureSetupSeconds": 2.468,
+      "legacyExportSeconds": 3.36,
+      "legacyRestoreSeconds": 4.046,
+      "memoryAfterFixtureCloseout": {
+        "availableMiB": 1086,
+        "availablePercent": 18.01
+      },
+      "memoryAtFixtureStart": {
+        "availableMiB": 1124,
+        "availablePercent": 18.64
+      },
+      "planPrepareSeconds": 0.422
+    }
+  },
+  "phaseMetricsReceiptByMethod": {
+    "test_changed_baseline_refuses_before_install_without_repair": "coordinator-database-20261026T232603353826Z.xml",
+    "test_complete_six_to_seven_chain_and_post_failure_keeps_installation": "coordinator-final-database-20261026T234457093365Z.xml",
+    "test_lost_commit_ack_reconciles_readonly_and_never_retries": "coordinator-final-database-20261026T234457093365Z.xml",
+    "test_managed_markers_still_refuse_at_coordinator_boundary": "coordinator-database-20261026T232603353826Z.xml",
+    "test_wrong_cluster_identity_refuses_preparation": "coordinator-database-20261026T232603353826Z.xml"
+  },
+  "preparedDate": "2026-10-26",
+  "priorCheckpointServerStartMemory": [
+    {
+      "availableMiB": 1183,
+      "availablePercent": 19.62
+    },
+    {
+      "availableMiB": 1118,
+      "availablePercent": 18.54
+    }
+  ],
+  "providerHandshakeVerified": false,
+  "publicationApproved": false,
+  "realCredentialChangesApproved": false,
+  "realCredentialRecoveryVerified": false,
+  "realGrantChangesApproved": false,
+  "realSchemaChangesApproved": false,
+  "selectedReceipts": {
+    "final_offline": {
+      "artifactName": "offline-20261026T234808244253Z.xml",
+      "artifactSha256": "77be338c97473123b319eba3b8a3457da7b4dad792527d360ce4cbcea8e061e5",
+      "errors": 0,
+      "failures": 0,
+      "methods": 907,
+      "note": "Final full offline selection, including the outer-timeout classification and semantic migration-inventory refusal.",
+      "seconds": 386.057,
+      "skipped": 0,
+      "subtests": 1282,
+      "tests": 2189
+    },
+    "final_postgresql": {
+      "artifactName": "coordinator-final-database-20261026T234457093365Z.xml",
+      "artifactSha256": "044c626b72d0d1c2dc711897a61097a2c447b7a8ae7579739793faa4fe59d49a",
+      "errors": 0,
+      "failures": 0,
+      "methods": 2,
+      "note": "Final affected rerun after the timeout classification: complete two-cluster recovery chain and lost-acknowledgement reconciliation. Overlaps the five-method checkpoint.",
+      "seconds": 168.174,
+      "skipped": 0,
+      "subtests": 0,
+      "tests": 2
+    },
+    "first_corrected_postgresql": {
+      "artifactName": "coordinator-database-20261026T232129540342Z.xml",
+      "artifactSha256": "e3b589b151fac01d012dd390cd1bd096661c49f12fb30599133ce0a2aa4c696c",
+      "errors": 0,
+      "failures": 1,
+      "methods": 2,
+      "note": "Historical: changed-baseline passed; v2 held the full-chain fixture with empty migration inventory. Not a passing final selection.",
+      "seconds": 99.719,
+      "skipped": 0,
+      "subtests": 0,
+      "tests": 2
+    },
+    "focused_checkpoint": {
+      "artifactName": "coordinator-offline-20261026T234253622421Z.xml",
+      "artifactSha256": "8c23204774fd278906881af7227d1048654736a081d5f5c217804b4436c263a4",
+      "errors": 0,
+      "failures": 0,
+      "methods": 33,
+      "note": "Final overlapping focused selection; includes both outer-timeout positions and migration-inventory refusal.",
+      "seconds": 8.917,
+      "skipped": 0,
+      "subtests": 102,
+      "tests": 135
+    },
+    "initial_postgresql": {
+      "artifactName": "coordinator-database-20261026T230805799950Z.xml",
+      "artifactSha256": "ab85fbd235c3cbe060bfdbc8c601eeedbfabadd9460fd7eb32949bbf5aa6c6ce",
+      "errors": 0,
+      "failures": 4,
+      "methods": 13,
+      "note": "Historical: imported eight existing installer regression methods; four new failures from mixing session-specific fingerprints. Not a passing final selection.",
+      "seconds": 620.109,
+      "skipped": 0,
+      "subtests": 9,
+      "tests": 22
+    },
+    "postgresql_full_checkpoint": {
+      "artifactName": "coordinator-database-20261026T232603353826Z.xml",
+      "artifactSha256": "f968d42650d0a33f1548438bbd18bad70ca7dc6c60616d6a9168f1f1cfd3af4f",
+      "errors": 0,
+      "failures": 0,
+      "methods": 5,
+      "note": "All five named methods passed before the final outer-timeout classification; affected chain/lost-ack methods rerun in final_postgresql.",
+      "seconds": 234.737,
+      "skipped": 0,
+      "subtests": 0,
+      "tests": 5
+    },
+    "pre_timeout_offline_checkpoint": {
+      "artifactName": "offline-20261026T233057933443Z.xml",
+      "artifactSha256": "f3ad475ce89575bf9c94e76e1156329f494a0df8d5488329283df5d27ae46a2f",
+      "errors": 0,
+      "failures": 0,
+      "methods": 906,
+      "note": "Passing full checkpoint before the final outer-timeout classification. Superseded by final_offline; overlapping.",
+      "seconds": 390.446,
+      "skipped": 0,
+      "subtests": 1280,
+      "tests": 2186
+    }
+  },
+  "selectionsOverlap": true,
+  "serverStartMemory": [
+    {
+      "availableMiB": 1293,
+      "availablePercent": 21.44
+    },
+    {
+      "availableMiB": 1146,
+      "availablePercent": 19.0
+    }
+  ],
+  "sourceFileHashScope": "Validated Windows checkout bytes. gitIndexFileHashes separately records normalized Git blob bytes; CRLF-only differences are explicit, not hidden source changes.",
+  "sourceFileHashes": {
+    ".github/workflows/ci.yml": "34cc4e361de4639b6745372c1335f2c97565d9fd36b9a849b37ebe8565d74539",
+    "README.md": "e2182a635e5b54a07d21cc9f715992e8629a577de8dcea6374e70c06787a6969",
+    "backend/application_backup_profiles.py": "e8eb011dd286aa6e5a6680a2b0d0b6d71ee7d6b161ca4a6ca131a96969c7235f",
+    "backend/db_tls.py": "5fb0c2b5efad5b07ce65c91b29ca19bbb3a80f218110cea0a5c841a39e50b339",
+    "backend/hosted_backup.py": "891164d236c56ad9388a2c943f630d06ff7fffcc92668f54e45c2020064048f8",
+    "backend/hosted_backup_cli.py": "4b384759bc4535884646e484d62ed6157d61155b657ab8b5ab7ddc8ee7ece6da",
+    "backend/hosted_install_preservation.py": "3e064e658235e8598cb86c408826ffa0400d03d1df77bd30e9a4114c299204fd",
+    "backend/hosted_journal_backup.py": "f523250c7491fe4e67d7130ee3c008e1ac6a11dbf6f265aab24edd0d7af9e318",
+    "backend/hosted_journal_backup_cli.py": "a29d3b4259a31fbb60d47f2d1dc5a77aa0378300280b8493b326f30fefb33bcd",
+    "backend/hosted_native_install.py": "a46cf43a009bfc0f1921177fd5473e57dc03a867d5c85e2be660f1e1ad0a7f67",
+    "backend/hosted_test_trial.py": "fe3bb55f360da192c3cc8782b4cfe584dcc7cbcdae8abfba395e65ca2f62cffe",
+    "backend/journal_backup_receipts.py": "12c2da5053e2bf31026923d52baada19a6b5e79ad1f6eabda23a85170c3b8393",
+    "backend/maintenance_connection.py": "7e44e7e95ef6b4211a9dabf6c68ccfeebd0811ad68c54f5736cc7add24e11a5f",
+    "backend/managed_development.py": "3620a679d6e135a117e216356e061b4963d118e95b9f15ad64cd53453421d68e",
+    "backend/manager_actor.py": "6a9623a07e4d19d3f3d165e97ac49e4511aff68d635f186d48ff204ff0075215",
+    "backend/manager_handoff.py": "0dcd7683f0c37222fde40f47f3dc2f9fc93606fde12d7294708b8e1f049587e8",
+    "backend/manager_handoff_install.py": "4d3282eff0af6f22b9a6772ace4a25c5a722a76c3279728a935d895fa6a6610e",
+    "backend/manager_handoff_recovery.py": "f40380eb4d613e74b343ec82651d8ad26804178a7753b850fb63de99adf0f5d7",
+    "backend/native_backup.py": "3c181be79c9dbec62698e66fafe716e6a62a705d4ddd9f327c31f3d86f31d8db",
+    "backend/readonly_snapshot.py": "803c9551e3e31407497c06a44e6fe898a82f08518bfbdd265e89efdb5c535123",
+    "backend/receiving_install_coordinator.py": "baa4a0c0c8db3c3c767732a14639c5566c9dc73b8c2207ace6967f96b8a015ad",
+    "backend/receiving_install_evidence.py": "b10d8bc3c32da1150e47acbef3531e6a6b736f6c3c81f8cecbcc1598d34d1f49",
+    "backend/requirements.txt": "6cbb437674b8d70fabae1f99bb6846c88cc5395168532e5b4eb908dd837324c0",
+    "backend/runtime_permissions.py": "efecc10d91ffd9c6c6599d6d314a959f4a4ad4383dbc8ad2af8e3b16d6b572bb",
+    "backend/schema_reconciliation.py": "2674a3804ab5a5e99b00061f48086f99f286e1ecbb07b741ec91f449f0aaa78f",
+    "backend/tests/test_receiving_install_coordinator.py": "4559e886161f683575f972c80549d359fc2f46c4ea2c1c805f9f55bf6667cf92",
+    "backend/tests/test_receiving_install_coordinator_pg.py": "21ef346d00522cf12dd3b077de7bd842b77cd1d8cb6aacbac77fac3f3a52477b",
+    "backend/tests/test_receiving_install_evidence.py": "10b5026576cf4ee24249ee93e8ccf516cf7cd657ced9d08c6332ab36b8fc6a8c",
+    "migrations/20261025_manager_handoff_notes.sql": "c36928e5520c18f96093c3e1eff21ca3287bc9e347d9a9dc8d9c0c21cb5f08f5",
+    "supabase/manager_handoff.manifest.json": "84f5cbe8ac8dfdd053ebb0af81fdd2b63e6af598ab7cd4ea74953c00f0322571",
+    "supabase/manager_handoff.schema.sql": "48d9d2a75f49aff531eef9d266375f4dd14a505bbc5cf5d74ff49240a7775826",
+    "tools/ops/apply_additive_migration.py": "586976afd3384be39f97212b2c3cdf01bd51e5dbe56024a0944d0fe15e165731",
+    "tools/ops/hosted_additive_index.py": "8c4e08e2d699826c1dbbe370beb5153081e83a3659e55f807239945227f24521",
+    "tools/run_review_tests.py": "0d3d2bb19900694c65430800d0eb4ab598eaa0df92eadc37788c7bf85b5dff26"
+  },
+  "sourceState": "Validated local candidate; actual commit recorded separately in JMax and publication prompt.",
+  "startGateUnchanged": {
+    "minimumMiB": 1024,
+    "minimumPercent": 15
+  },
+  "sustainedLiveMemoryQualified": false
+}

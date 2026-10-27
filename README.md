@@ -8,7 +8,23 @@ for catalog/units, purchases, counts, prep/production and stock effects.
 Track 1 usage; count values are explicit. Prep/waste and sales explain variances
 without rewriting that accounting baseline. Taxes/fees stay separate.
 
-The accepted baseline is [merged PR73](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/73)
+The accepted baseline is [merged PR74](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/74),
+**826f54e**, tree-identical to approved **579722f**. All four
+[reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40374351517)
+and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40386282959)
+passed separately: 1,190 frontend tests/strict build, 2,130 Windows offline and
+396 backend/PostgreSQL reported cases. Automatic Render test deployment was
+approved; completion and hosted acceptance were not inspected.
+
+The owner-approved local follow-up adds a
+[receiving recovery coordinator](docs/RECEIVING_COORDINATOR_LOCAL_ACCEPTANCE_20261026.md)
+and fictional six-to-seven-schema rehearsal, preserving accepted engines and
+migrations. A six-schema pre-install proof and seven-schema post-install proof
+remain distinct; working-key closeout and writer-restoration reserve are explicit.
+Prompt before a draft PR push. No hosted execution, real credential/grant/schema
+change, activation or stock effect is authorized by local implementation.
+
+Historical baseline: [merged PR73](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/73)
 **afe4891**, tree-identical to reviewed **7d0ed3b**. All four
 [reviewed-head checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40249207186)
 and [merged-main checks](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40249573863)
@@ -26,19 +42,19 @@ receipts remain historical. PR70's earlier
 and [main](https://github.com/jeffwelch0620-png/JayMax-Concepts-/actions/runs/40208642033)
 receipts remain historical source evidence.
 
-The separately authorized local candidate implements the
+The accepted PR74 implements the
 [seven-schema journal backup adapter](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_LOCAL_ACCEPTANCE_20261025.md).
 It adds an explicit authenticated v2 profile, bounded source capture, protected
 custody, owned isolated restore and a new receipt validator. The frozen six-schema
 engine, PR73's loopback/managed-marker guards, business routes and SQL remain
 unchanged. The [dated design](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_DESIGN_20261025.md)
 and [source inventory](docs/HOSTED_JOURNAL_BACKUP_ADAPTER_SOURCE_PINS_20261025.json)
-remain the proposal record. [Draft PR74](https://github.com/jeffwelch0620-png/JayMax-Concepts-/pull/74)
-is published; its original `ad66f5e` CI passed all four checks. The
+remain the proposal record. PR74 is merged with independent reviewed-head and
+merged-main checks above; its original `ad66f5e` CI is historical. The
 [October 26 C1/T1/L1 documentation amendments](docs/PR74_REVIEW_AMENDMENTS_20261026.md)
 define operator key custody, capture-window limits and the proposed routine-backup
-policy. Fresh amended-head CI and owner merge approval remain separate; local
-testing is not hosted qualification or activation. The consumer transition remains a
+policy. Local testing and merge are not hosted qualification or activation.
+The consumer transition remains a
 hard pre-H2 gate. Hosted work and real credential, grant, policy, schema,
 connection and activation changes remain held.
 

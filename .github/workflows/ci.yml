@@ -59,9 +59,23 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      receiving_recovery:
+        image: postgres:17
+        env:
+          POSTGRES_USER: purchase_implementation_test
+          POSTGRES_DB: native_purchase_test_control
+          POSTGRES_PASSWORD: synthetic-recovery-password-only
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U purchase_implementation_test -d native_purchase_test_control"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       PYTHON_DOTENV_DISABLED: '1'
       NATIVE_PURCHASE_TEST_DSN: postgresql://purchase_implementation_test:synthetic-ci-password-only@127.0.0.1:5432/native_purchase_test_control
+      NATIVE_RECEIVING_RESTORE_TEST_DSN: postgresql://purchase_implementation_test:synthetic-recovery-password-only@127.0.0.1:5433/native_purchase_test_control
       NATIVE_BACKUP_PG_DUMP: /usr/lib/postgresql/17/bin/pg_dump
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
