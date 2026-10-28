@@ -1,101 +1,49 @@
-import React, { act } from "react";
-import { createRoot } from "react-dom/client";
-import { ManagerOverviewTab } from "./ManagerOverviewTab";
-import { overviewFixture, overviewTestOwner as owner, OVERVIEW_TEST_DAY as day } from "../testFixtures/managerOverview";
-jest.mock("../lib/calc", () => ({ ...jest.requireActual("../lib/calc"), todayISO: () => "2026-10-25" }));
-let root, container, api, onOpenCounts, onOpenPrep;
-const button = text => [...container.querySelectorAll("button")].find(b => b.textContent === text);
-const input = label => container.querySelector(`[aria-label="${label}"]`);
-const render = (props = {}) => act(async () => root.render(<ManagerOverviewTab rid="berts" user={owner} readApi={api} onOpenCounts={onOpenCounts} onOpenPrep={onOpenPrep} {...props}/>));
-const click = el => act(async () => el.click());
-async function set(label, value) {
-  const el = input(label);
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype, "value").set.call(el, value);
-    el.dispatchEvent(new Event(el.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
-  });
-}
-beforeEach(() => {
-  global.IS_REACT_ACT_ENVIRONMENT = true; window.sessionStorage.clear();
-  api = { actualInventoryEnabled: true, prepExecutionEnabled: true,
-    actualCounts: jest.fn(rid => Promise.resolve(overviewFixture(rid).counts)),
-    prepExecution: jest.fn((rid, date, track) => Promise.resolve(overviewFixture(rid, date, track).prep)),
-    saveState: jest.fn(), commitPrepExecution: jest.fn(), staffIdentify: jest.fn() };
-  onOpenCounts = jest.fn(); onOpenPrep = jest.fn();
-  container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+import React,{act} from "react";
+import {createRoot} from "react-dom/client";
+import axios from "axios";
+import * as nativeApi from "../lib/api";
+import {ManagerOverviewTab} from "./ManagerOverviewTab";
+import {b1Fixture,b1Owner,b1Clone,b1Id} from "../testFixtures/managerB1";
+jest.mock("axios",()=>({get:jest.fn(),post:jest.fn(),put:jest.fn(),patch:jest.fn(),delete:jest.fn(),interceptors:{request:{use:jest.fn()},response:{use:jest.fn()}}}));
+let root,container,fixture,api;
+const render=(props={})=>act(async()=>root.render(<ManagerOverviewTab rid="berts" user={b1Owner} readApi={api} {...props}/>));
+const refresh=()=>act(async()=>container.querySelector("button").click());
+const prepText=()=>container.querySelector('[aria-label="Dated prep work"]').textContent;
+function transport(url){if(url.includes("/prep-execution/"))return Promise.resolve({data:b1Clone(fixture.prep)});if(url.includes("/staff-prep-tasks/"))return Promise.resolve({data:b1Clone(fixture.assignment)});if(url.includes("/handoff-notes/"))return Promise.resolve({data:b1Clone(fixture.note)});throw new Error("Unapproved read: "+url);}
+beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;fixture=b1Fixture();api={...nativeApi,prepExecutionEnabled:true,staffPrepTasksEnabled:true,managerHandoffEnabled:true};jest.clearAllMocks();axios.get.mockImplementation(transport);container=document.createElement("div");document.body.appendChild(container);root=createRoot(container);});
+afterEach(async()=>{await act(async()=>root.unmount());container.remove();});
+test("T01–T04 native quantities, finish shortfall, pending/rejected exclusion, correction/void and exact decimals",async()=>{await render();const rows=[...container.querySelector('[aria-label="Dated prep work"]').querySelectorAll("li")];expect(rows[0].textContent).toContain("Remaining: 1 lb");expect(rows[1].textContent).toContain("Finished with shortfall: 1 lb");expect(rows[2].textContent).toContain("Reviewed recorded output: 0 lb");expect(rows[2].textContent).toContain("Remaining: 4 lb");for(const i of [3,4]){expect(rows[i].textContent).toContain("Remaining: Not confirmed");expect(rows[i].textContent).toContain("Acknowledged");}expect(rows[5].textContent).toContain("Remaining: 0.876543210988 lb");expect(rows[6].textContent).toContain("Remaining: 0 lb · Above plan: 1 lb");expect(rows[7].textContent).toContain("Remaining: 1 each");expect(container.textContent).toContain("does not read reports");expect(container.textContent).toContain("Gap warning");expect(container.textContent).toContain("draft, not submitted");expect(container.textContent).toContain("Unassigned");expect(container.textContent).toContain("Needs review");});
+test("T10/T11 real API adapters dispatch only allowlisted GETs; interactions preserve all fixture business facts and drafts",async()=>{const before=JSON.stringify(fixture.businessFacts);window.sessionStorage.setItem("TEST-ONLY-unsent-draft","retain me");const callbacks={onOpenCounts:jest.fn(),onOpenPrep:jest.fn(),onOpenHandoff:jest.fn()};await render(callbacks);await act(async()=>{container.querySelectorAll("summary").forEach(s=>{s.click();s.click();});});await act(async()=>{container.querySelector("button").click();container.querySelector("button").click();});await act(async()=>root.render(null));await render(callbacks);expect(JSON.stringify(fixture.businessFacts)).toBe(before);expect(window.sessionStorage.getItem("TEST-ONLY-unsent-draft")).toBe("retain me");expect(container.querySelectorAll("a,input,select,textarea,form")).toHaveLength(0);expect([...container.querySelectorAll("button")].map(b=>b.textContent)).toEqual(["Refresh manager overview"]);Object.values(callbacks).forEach(fn=>expect(fn).not.toHaveBeenCalled());[axios.post,axios.put,axios.patch,axios.delete].forEach(fn=>expect(fn).not.toHaveBeenCalled());expect(axios.get.mock.calls.length).toBeGreaterThanOrEqual(9);for(const [url,options] of axios.get.mock.calls){expect(url).toMatch(/\/api\/pg\/(purchases\/berts\/(prep-execution|staff-prep-tasks)|operations\/berts\/handoff-notes\/days)\/2026-10-26$/);expect(options.params).toEqual({track:"daily"});}});
+test("T05 refresh fences all sections and rereads assignments with unchanged execution revision",async()=>{await render();let resolve;axios.get.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));await refresh();fixture.assignment.members[0].name="TEST ONLY refreshed roster";await refresh();expect(container.textContent).toContain("refreshed roster");const stale=b1Fixture().prep;stale.tasks[0].task_snapshot.name="PRIVATE STALE RESPONSE";await act(async()=>resolve({data:stale}));expect(container.textContent).not.toContain("PRIVATE STALE");expect(axios.get.mock.calls.filter(([url])=>url.includes("staff-prep-tasks"))).toHaveLength(2);});
+test("T05 stale assignment and note cannot replace latest generation",async()=>{let assignmentResolve,noteResolve;axios.get.mockImplementation(url=>url.includes("staff-prep-tasks")?new Promise(r=>{assignmentResolve=r;}):url.includes("handoff-notes")?new Promise(r=>{noteResolve=r;}):transport(url));await render();axios.get.mockImplementation(transport);await refresh();const old=b1Fixture();old.assignment.members[0].name="PRIVATE STALE ASSIGNEE";old.note.previous.summary="PRIVATE STALE NOTE";await act(async()=>{assignmentResolve({data:old.assignment});noteResolve({data:old.note});});expect(container.textContent).not.toContain("PRIVATE STALE");});
+test.each([null,{...b1Owner,role:"staff"},{...b1Owner,role:"readonly"},{...b1Owner,role:"manager",locations:["rudds"]}])("T07 unauthorised actor %# issues no reads",async user=>{await render({user});expect(axios.get).not.toHaveBeenCalled();expect(container.querySelector('[role="alert"]')).not.toBeNull();});
+test("T06 current claims/store change clears private data; delayed results stay hidden",async()=>{await render();let resolve;axios.get.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));await refresh();axios.get.mockClear();await render({rid:"rudds"});await act(async()=>resolve({data:fixture.prep}));expect(container.textContent).not.toContain("TEST ONLY");expect(axios.get).not.toHaveBeenCalled();await render({user:{...b1Owner,role:"manager",locations:["rudds"]}});expect(container.textContent).not.toContain("TEST ONLY");expect(axios.get).not.toHaveBeenCalled();});
+test("T06 account/API instance changes fence old results even at identical plan revision",async()=>{let resolve;axios.get.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));await render();const newerApi={...api};await render({readApi:newerApi,user:{...b1Owner,id:"another_person"}});expect(container.textContent).toContain("Released plan");await act(async()=>resolve({data:{...fixture.prep,tasks:[]}}));expect(container.textContent).not.toContain("No included tasks");expect(container.textContent).toContain("Previous note not confirmed");});
+test.each([401,403,500])("T09 failed refreshed prep %s clears old quantities while independent notes remain",async status=>{await render();axios.get.mockImplementation(url=>url.includes("prep-execution")?Promise.reject({response:{status},message:"PRIVATE"}):transport(url));await refresh();expect(prepText()).not.toContain("Remaining: 1 lb");expect(prepText()).toContain("not confirmed");expect(container.textContent).toContain("previous submitted summary");expect(container.textContent).not.toContain("PRIVATE");});
+test("T09 prep timeout clears data and holds assignment join",async()=>{jest.useFakeTimers();try{axios.get.mockImplementation(url=>url.includes("prep-execution")?new Promise(()=>{}):transport(url));await render();await act(async()=>{jest.advanceTimersByTime(60000);});expect(prepText()).toContain("not confirmed");expect(container.textContent).toContain("Assignments not confirmed");expect(container.textContent).toContain("previous submitted summary");}finally{jest.useRealTimers();}});
+test("T09 unsupported progress and malformed quantities never imply zeros",async()=>{fixture.prep.progress_supported=false;fixture.prep.task_progress=[];fixture.assignment.execution=b1Clone(fixture.prep);await render();expect(prepText()).toContain("unsupported");expect(prepText()).not.toContain("Remaining: 0");expect(prepText()).toContain("Quantities not confirmed");});
+test("T12 disabled readers issue no requests or fixture fallback; no optional activation",async()=>{api.prepExecutionEnabled=api.staffPrepTasksEnabled=api.managerHandoffEnabled=false;await render();expect(axios.get).not.toHaveBeenCalled();expect(container.textContent).toContain("capability is disabled");expect(container.textContent).not.toContain("TEST ONLY");expect(nativeApi.managerHandoffEnabled).toBe(false);});
+test("T08 note failure is independent from prep/assignments",async()=>{axios.get.mockImplementation(url=>url.includes("handoff-notes")?Promise.reject(new Error("PRIVATE")):transport(url));await render();expect(prepText()).toContain("Remaining: 1 lb");expect(container.textContent).toContain("Assigned as recorded");expect(container.textContent).toContain("Previous note not confirmed");expect(container.textContent).not.toContain("PRIVATE");});
+test("T06 wrong selected date/track/store or task snapshot refuses private prep",async()=>{await render();for(const change of [p=>{p.store_id="rudds";},p=>{p.prep_date="2026-10-25";},p=>{p.track="bulk";},p=>{p.tasks[0].store_id="rudds";},p=>{p.tasks[0].version_id=b1Id(99);}]){fixture=b1Fixture();change(fixture.prep);await refresh();expect(prepText()).toContain("not confirmed");expect(prepText()).not.toContain("TEST ONLY");}});
+
+test("T05/T06 replacing only the API instance clears and fences prior-instance reads",async()=>{
+ let oldResolve;await render();axios.get.mockImplementationOnce(()=>new Promise(r=>{oldResolve=r;}));await refresh();
+ let newResolve;const replacement={...api,prepExecution:()=>new Promise(r=>{newResolve=r;})};await render({readApi:replacement});
+ expect(prepText()).not.toContain("Remaining: 1 lb");
+ const stale=b1Clone(fixture.prep);stale.tasks[0].task_snapshot.name="PRIVATE OLD API";
+ await act(async()=>oldResolve({data:stale}));expect(container.textContent).not.toContain("PRIVATE OLD API");
+ await render({rid:"rudds"});await act(async()=>newResolve(fixture.prep));
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
-test("Bert's today/bulk view uses fictional reads and explicit historical/review labels", async () => {
-  await render();
-  expect(input("Manager overview date").value).toBe(day); expect(input("Manager overview track").value).toBe("bulk");
-  expect(container.textContent).toContain("TEST ONLY Bulk Sauce"); expect(container.textContent).toContain("In progress");
-  expect(container.textContent).toContain("Manager review required"); expect(container.textContent).toContain("not live on-hand inventory");
-  expect(container.textContent).toContain("does not calculate Food Cost");
-  await click(button("Open Actual Inventory")); await click(button("Open dated prep workflow"));
-  expect(onOpenCounts).toHaveBeenCalledWith({ rid: "berts" }); expect(onOpenPrep).toHaveBeenCalledWith({ rid: "berts", day, track: "bulk" });
-  expect(api.saveState).not.toHaveBeenCalled(); expect(api.commitPrepExecution).not.toHaveBeenCalled(); expect(api.staffIdentify).not.toHaveBeenCalled();
+test("T09 assignment timeout preserves prep and independently loaded notes",async()=>{
+ jest.useFakeTimers();try{axios.get.mockImplementation(url=>url.includes("staff-prep-tasks")?new Promise(()=>{}):transport(url));
+ await render();await act(async()=>{jest.advanceTimersByTime(60000);});
+ expect(prepText()).toContain("Remaining: 1 lb");expect(container.textContent).toContain("Assignments not confirmed");
+ expect(container.textContent).toContain("previous submitted summary");}finally{jest.useRealTimers();}
 });
-test("missing counts and empty prep never become zero value or complete work", async () => {
-  api.actualCounts.mockResolvedValue([]);
-  const { prep } = overviewFixture(); Object.assign(prep, { draft: null, draft_version_id: null, status: "draft", tasks: [], task_progress: [], completions: [] });
-  api.prepExecution.mockResolvedValue(prep); await render();
-  expect(container.textContent).toContain("Inventory value is unavailable"); expect(container.textContent).toContain("No dated plan saved");
-  expect(container.textContent).toContain("does not confirm that prep is complete"); expect(container.textContent).not.toContain("$0");
-});
-test("mixed-scope count error leaves valid prep available and permits explicit refresh", async () => {
-  api.actualCounts.mockResolvedValue(overviewFixture("rudds").counts); await render();
-  expect(container.textContent).toContain("could not be confirmed"); expect(container.textContent).toContain("TEST ONLY Bulk Sauce");
-  api.actualCounts.mockResolvedValue(overviewFixture().counts); await click(button("Refresh manager overview"));
-  expect(container.textContent).toContain("After that day’s receipts");
-});
-test("late prior-day reads cannot replace selected-day data or navigation", async () => {
-  let resolve; api.prepExecution.mockReturnValueOnce(new Promise(r => { resolve = r; })); await render();
-  await set("Manager overview date", "2026-10-26");
-  const older = overviewFixture().prep; older.tasks[0].task_snapshot.name = "STALE DAY SHOULD NOT APPEAR";
-  await act(async () => resolve(older)); expect(container.textContent).not.toContain("STALE DAY");
-  await click(button("Open dated prep workflow")); expect(onOpenPrep).toHaveBeenLastCalledWith({ rid: "berts", day: "2026-10-26", track: "bulk" });
-});
-test("a prior refresh cannot replace a newer refresh", async () => {
-  let resolve; api.prepExecution.mockReturnValueOnce(new Promise(r => { resolve = r; })); await render();
-  await click(button("Refresh manager overview"));
-  const stale = overviewFixture().prep; stale.tasks[0].task_snapshot.name = "STALE REFRESH";
-  await act(async () => resolve(stale)); expect(container.textContent).not.toContain("STALE REFRESH");
-});
-test("restaurant changes load only that restaurant's remembered date and track", async () => {
-  await render(); await set("Manager overview date", "2026-10-24"); await set("Manager overview track", "daily");
-  window.sessionStorage.setItem(`manager-overview:${owner.id}:rudds`, JSON.stringify({ day: "2026-10-23", track: "bulk" }));
-  api.prepExecution.mockClear(); await render({ rid: "rudds" });
-  expect(api.prepExecution.mock.calls).toEqual([["rudds", "2026-10-23", "bulk"]]);
-  await render(); expect(input("Manager overview date").value).toBe("2026-10-24"); expect(input("Manager overview track").value).toBe("daily");
-});
-test("actor change and reload keep preferences isolated and store no source data", async () => {
-  await render(); await set("Manager overview track", "daily");
-  const saved = JSON.parse(window.sessionStorage.getItem(`manager-overview:${owner.id}:berts`));
-  expect(saved).toEqual({ day, track: "daily" });
-  await render({ user: { ...owner, id: "other-person" } }); expect(input("Manager overview track").value).toBe("bulk");
-  await act(async () => root.unmount()); root = createRoot(container); await render();
-  expect(input("Manager overview track").value).toBe("daily");
-});
-test("scope revocation hides old results immediately and late reads stay hidden", async () => {
-  let resolve; api.prepExecution.mockReturnValueOnce(new Promise(r => { resolve = r; })); await render();
-  api.actualCounts.mockClear(); api.prepExecution.mockClear();
-  await render({ user: { ...owner, role: "manager", locations: ["rudds"] } });
-  await act(async () => resolve(overviewFixture().prep));
-  expect(container.querySelector('[aria-label="Dated prep work"]')).toBeNull(); expect(container.querySelector('[role="alert"]')).not.toBeNull();
-  expect(api.actualCounts).not.toHaveBeenCalled(); expect(api.prepExecution).not.toHaveBeenCalled();
-});
-test("blank date refuses reads and actions, with no stale result shown", async () => {
-  await render(); api.actualCounts.mockClear(); api.prepExecution.mockClear(); await set("Manager overview date", "");
-  expect(container.textContent).not.toContain("TEST ONLY Bulk Sauce"); expect(button("Refresh manager overview").disabled).toBe(true);
-  expect(api.actualCounts).not.toHaveBeenCalled(); expect(api.prepExecution).not.toHaveBeenCalled();
-});
-test("disabled workflows do not issue reads or enable their navigation", async () => {
-  api.actualInventoryEnabled = api.prepExecutionEnabled = false; await render();
-  expect(button("Open Actual Inventory").disabled).toBe(true); expect(button("Open dated prep workflow").disabled).toBe(true);
-  expect(api.actualCounts).not.toHaveBeenCalled(); expect(api.prepExecution).not.toHaveBeenCalled();
-});
-test("blocked browser storage cannot prevent a read-only overview", async () => {
-  const getter = jest.spyOn(window, "sessionStorage", "get").mockImplementation(() => { throw new Error("Storage blocked"); });
-  try { await render(); expect(container.textContent).toContain("TEST ONLY Bulk Sauce"); }
-  finally { getter.mockRestore(); }
+test("T08/T09 missing note and empty plan do not imply ready or complete",async()=>{
+ fixture.note.previous=null;Object.assign(fixture.prep,{draft_version_id:null,draft:null,status:"draft",tasks:[],task_progress:[],completions:[],release:null});
+ fixture.assignment.execution=b1Clone(fixture.prep);fixture.assignment.assignments=[];await render();
+ expect(prepText()).toContain("No dated plan saved");expect(prepText()).toContain("does not confirm that prep is complete");
+ expect(container.textContent).toContain("No previous submitted note confirmed");expect(container.textContent).toContain("draft, not submitted");
+ expect(prepText()).not.toContain("Remaining: 0");
 });
