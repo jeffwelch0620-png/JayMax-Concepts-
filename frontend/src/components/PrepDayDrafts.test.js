@@ -58,3 +58,10 @@ test("a released draft holds day edits and previews while allowing a confirmed r
   expect(button("Preview dated tasks").disabled).toBe(true);expect(button("Save reviewed dated draft").disabled).toBe(true);
   expect(button("Refresh dated draft versions").disabled).toBe(false);expect(container.textContent).toContain("Released draft is held for execution");
 });
+test("each line shows the Draft 0.7 inputs: target, on hand, incoming, need, batch and plan",async()=>{
+  const calculated={...task,planned_quantity:"8",issue:null,target_par:"10",counted_quantity:"3",incoming_base_quantity:"0",base_unit:"oz",needed_quantity:"7",batch_yield:"4",batches:"2"};
+  api.previewPrepDayDraft.mockImplementation((rid,day,body,version)=>Promise.resolve({reviewHash:hash,review:{...review(body,version),unresolved_tasks:0,tasks:[calculated]}}));
+  await set("Prep draft reason","Recalculated");await click(button("Preview dated tasks"));
+  const cells=[...container.querySelectorAll("tbody tr")].pop().querySelectorAll("td");
+  expect([...cells].slice(2,8).map(c=>c.textContent)).toEqual(["10","3","none","7","4 × 2","8 lb"]);
+});

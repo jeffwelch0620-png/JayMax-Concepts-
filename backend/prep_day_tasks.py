@@ -2,7 +2,7 @@
 import prep_tracks
 import os
 from datetime import date,timedelta
-from decimal import Decimal,localcontext
+from decimal import ROUND_CEILING,Decimal,localcontext
 from typing import Literal
 from uuid import UUID
 from fastapi import Header,HTTPException,Request
@@ -85,8 +85,14 @@ async def latest(conn,store,day,track):
     return serial(dict(r)) if r else None
 
 
-def subtract(a,b):
-    with localcontext() as ctx:ctx.prec=100;return max(a-b,Decimal(0))
+def batch_plan(target_base,carryover_base,incoming_base,batch_base):
+    """Draft 0.7 daily/salad prep: N = max(0, T - H - I), then Q = r x ceil(N / r), in base units.
+    T is the target, H the counted carryover, I confirmed incoming supply, r the recipe's batch yield."""
+    with localcontext() as ctx:
+        ctx.prec=100
+        need=max(target_base-carryover_base-incoming_base,Decimal(0))
+        batches=(need/batch_base).to_integral_value(rounding=ROUND_CEILING)
+        return {'need':need,'batches':batches,'planned_base':batches*batch_base}
 
 
 def exact_source_quantity(base,factor):
@@ -126,6 +132,7 @@ async def preview(conn,store,day,body,expected):
         # Historical profiles stay readable even for an omitted obsolete definition.
         if not profile:profile=dict(await conn.fetchrow('SELECT * FROM prep_inventory.unit_profiles WHERE id=$1',UUID(p['unit_profile_id'])))
         factor=Decimal(str(profile['base_units_per_source_unit']));target=None;counted=None;needed=None;qty=None;issue=None
+        incoming=None;batch=None;batches=None
         mode=override.kind if override else ('fixed_quantity' if p['schedule']=='recurring' else 'target_par')
         if not included:mode='omit';qty=Decimal(0);needed=Decimal(0)
         elif mode=='fixed_quantity':
@@ -135,11 +142,18 @@ async def preview(conn,store,day,body,expected):
             line=count_lines.get(p['product_id'])
             if not line:issue='Physical prep count is missing for this product; no zero stock assumed'
             else:
-                counted=line['base_quantity'];needed=subtract(mapping.times(target,factor),counted);qty=exact_source_quantity(needed,factor)
-                if qty is None:issue='Exact deficit cannot be expressed within 12 decimal places in this unit; enter a reviewed fixed quantity'
+                # Confirmed incoming supply (I) arrives with store transfers (M3); none is recorded yet.
+                counted=line['base_quantity'];incoming=Decimal(0);batch=Decimal(str(recipe['usable_base_yield']))
+                calc=batch_plan(mapping.times(target,factor),counted,incoming,batch)
+                needed,batches=calc['need'],calc['batches'];qty=exact_source_quantity(calc['planned_base'],factor)
+                if qty is None:issue='Whole batches cannot be expressed within 12 decimal places in this unit; enter a reviewed fixed quantity'
         tasks.append(serial({'ordinal':len(tasks)+1,'product_id':p['product_id'],'planning_version_id':p['id'],'recipe_version_id':p['recipe_version_id'],
             'unit_profile_id':p['unit_profile_id'],'name':products[p['product_id']]['name'],'source_unit':profile['source_unit'],'base_unit':products[p['product_id']]['base_unit'],
             'factor':factor,'included':included,'mode':mode,'target_par':target,'counted_base_quantity':counted,'needed_base_quantity':needed,
+            'incoming_base_quantity':incoming,'batch_base_yield':batch,'batches':batches,
+            'counted_quantity':exact_source_quantity(counted,factor) if counted is not None else None,
+            'needed_quantity':exact_source_quantity(needed,factor) if needed is not None and mode=='target_par' else None,
+            'batch_yield':exact_source_quantity(batch,factor) if batch is not None else None,
             'planned_quantity':qty,'planned_base_quantity':mapping.times(qty,factor) if qty is not None else None,'issue':issue,
             'override_reason':override.reason if override else None}))
     review=serial({'store_id':store,'prep_date':day,'track':body.track,'base_revision':expected,'inputs':body.model_dump(),
