@@ -55,13 +55,13 @@ class PrepDayTaskTests(unittest.IsolatedAsyncioTestCase):
     async def preview_day(self,body=None,version=0,day='2026-10-08',store='berts'):
         body=body or self.draft_body()
         # Day overrides (prepping above or below par) need owner sign-off (Jeff 2026-10-29).
-        return await (self.owner if body.get('overrides') else self.catalog).post(f'/api/pg/purchases/{store}/prep-day-drafts/{day}/preview',json=body,headers={'If-Match':str(version)})
+        return await (self.owner_client if body.get('overrides') else self.catalog).post(f'/api/pg/purchases/{store}/prep-day-drafts/{day}/preview',json=body,headers={'If-Match':str(version)})
 
     async def write_day(self,body=None,version=0,key=None,day='2026-10-08',payload=None):
         if payload is None:
             body=body or self.draft_body();p=await self.preview_day(body,version,day);self.assertEqual(p.status_code,200,p.text)
             payload={'draft':body,'expected_review_hash':p.json()['reviewHash'],'reviewed':True}
-        return await (self.owner if payload['draft'].get('overrides') else self.catalog).put(f'/api/pg/purchases/berts/prep-day-drafts/{day}',json=payload,headers={'If-Match':str(version),'Idempotency-Key':key or str(uuid4())})
+        return await (self.owner_client if payload['draft'].get('overrides') else self.catalog).put(f'/api/pg/purchases/berts/prep-day-drafts/{day}',json=payload,headers={'If-Match':str(version),'Idempotency-Key':key or str(uuid4())})
 
     async def prep_count(self,quantity='2',stamp='2026-10-07T22:00:00-04:00'):
         body=dict(performed_at=stamp,business_date=stamp[:10],timezone_name='America/New_York',calendar_date_confirmed=True,note='Invented complete physical prep count',complete_scope_confirmed=True,

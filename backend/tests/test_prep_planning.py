@@ -56,7 +56,7 @@ class PrepPlanningTests(unittest.IsolatedAsyncioTestCase):
         return dict(action='save',recipe_version_id=self.r['id'],unit_profile_id=self.u['id'],track='bulk',schedule='daily',weekday_par='2.123456789012',weekend_par='7',note='Invented planning quantities',verified=True)|changes
 
     async def edit(self,body=None,version=0,key=None,product=None,store='berts',client=None):
-        return await (client or self.owner).put(f"/api/pg/purchases/{store}/prep-planning/{product or self.p['product_id']}",json=body or self.payload(),headers={'If-Match':str(version),'Idempotency-Key':key or str(uuid4())})
+        return await (client or self.owner_client).put(f"/api/pg/purchases/{store}/prep-planning/{product or self.p['product_id']}",json=body or self.payload(),headers={'If-Match':str(version),'Idempotency-Key':key or str(uuid4())})
 
     async def read(self,store='berts'):
         r=await (self.other if store=='comm' else self.catalog).get(f'/api/pg/purchases/{store}/prep-planning');self.assertEqual(r.status_code,200,r.text);return r.json()
@@ -72,7 +72,7 @@ class PrepPlanningTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(replay.json()['plan']['revision'],1);self.assertEqual(replay.json()['current_plan']['revision'],2)
         self.assertEqual((await self.edit(self.payload(weekend_par='99'),key=key)).status_code,409)
         self.assertEqual((await self.edit(key=key,client=self.other)).status_code,409)
-        missing=await self.owner.put(f"/api/pg/purchases/berts/prep-planning/{self.p['product_id']}",json=self.payload(),headers={'Idempotency-Key':str(uuid4())})
+        missing=await self.owner_client.put(f"/api/pg/purchases/berts/prep-planning/{self.p['product_id']}",json=self.payload(),headers={'Idempotency-Key':str(uuid4())})
         self.assertEqual(missing.status_code,428)
 
     async def test_pars_tracks_recurring_retirement_and_restore_are_metadata_only(self):

@@ -74,10 +74,10 @@ class CatalogIntegrityTests(unittest.IsolatedAsyncioTestCase):
         self.catalog = httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url='http://test', headers={'Authorization':'Bearer '+token})
         # Pars are owner-only (Jeff 2026-10-29): tests that establish pars use this owner client.
         owner = server._token({'id':'synthetic-owner', 'email':'owner@example.invalid', 'role':'owner', 'locations':[]})
-        self.owner = httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url='http://test', headers={'Authorization':'Bearer '+owner})
+        self.owner_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url='http://test', headers={'Authorization':'Bearer '+owner})
 
     async def asyncTearDown(self):
-        await self.catalog.aclose(); await self.owner.aclose(); server.db_pg._pool = self.previous
+        await self.catalog.aclose(); await self.owner_client.aclose(); server.db_pg._pool = self.previous
         await fixtures.NativeOrderReceivingTests.asyncTearDown(self)
 
     def entry(self, **changes):
