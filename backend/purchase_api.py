@@ -398,9 +398,9 @@ async def post_review(pool, store_id, actor, version_id, body, request_key):
 def create_router(pool_factory, store_check, authorize):
     router=APIRouter(prefix='/api/pg/purchases')
 
-    async def context(request,store_id,write=False):
+    async def context(request,store_id,write=False,require=None):
         store_check(store_id)
-        actor=authorize(request,store_id,write)
+        actor=authorize(request,store_id,write,require) if require else authorize(request,store_id,write)
         if not enabled():
             raise HTTPException(503,'Purchase import is awaiting enablement')
         pool=pool_factory()

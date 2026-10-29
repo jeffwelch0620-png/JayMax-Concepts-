@@ -16,7 +16,7 @@ OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activat
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
