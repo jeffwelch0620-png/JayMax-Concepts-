@@ -40,6 +40,7 @@ For an existing hosted database, compare recorded migration history and object d
 | 30 | [20261013_purchase_source_lookup_index.sql](20261013_purchase_source_lookup_index.sql) |
 | 31 | [20261018_reviewed_inventory_pars.sql](20261018_reviewed_inventory_pars.sql) |
 | 32 | [20261029_salad_prep_track.sql](20261029_salad_prep_track.sql) |
+| 33 | [20261029_count_walk_order.sql](20261029_count_walk_order.sql) |
 
 ## Separate manager receiving extension
 

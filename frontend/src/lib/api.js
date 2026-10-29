@@ -161,6 +161,7 @@ export const actualScope = (rid, body, key) => axios.post(`${actualUrl(rid)}/sco
 export const actualCounts = (rid) => axios.get(`${actualUrl(rid)}/counts`).then(r => r.data);
 export const actualCount = (rid, id) => axios.get(`${actualUrl(rid)}/counts/${id}`).then(r => r.data);
 export const actualSaveCount = (rid, body, key) => axios.post(`${actualUrl(rid)}/counts`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const actualSaveLayout = (rid, body, key) => axios.post(`${actualUrl(rid)}/layout`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const staffCountSheets = (rid) => axios.get(`${actualUrl(rid)}/staff-sheets`).then(r => r.data);
 export const issueStaffCountSheet = (rid, body, key) => axios.post(`${actualUrl(rid)}/staff-sheets`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const decideStaffCountSheet = (rid, id, body, key) => axios.post(`${actualUrl(rid)}/staff-sheets/${id}/decision`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);

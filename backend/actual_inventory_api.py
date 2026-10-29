@@ -1,5 +1,6 @@
 """Track 1 physical counts and explicit-value Food Cost; no prep/sales inputs."""
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal, localcontext, Inexact
@@ -47,6 +48,17 @@ class ScopeInput(StrictModel):
         return value.strip()
 
 
+class LocationQuantity(StrictModel):
+    location_code: str = Field(min_length=1, max_length=60)
+    counted_quantity: Decimal | None = Field(None, ge=0, max_digits=28, decimal_places=10)
+
+    @field_validator('counted_quantity')
+    @classmethod
+    def finite(cls, value):
+        if value is not None and not value.is_finite():raise ValueError('Use a finite decimal')
+        return value
+
+
 class CountLine(StrictModel):
     item_code: str
     counted_quantity: Decimal | None = Field(None, ge=0, max_digits=28, decimal_places=10)
@@ -55,6 +67,9 @@ class CountLine(StrictModel):
     inventory_value: Decimal | None = Field(None, ge=0, max_digits=20, decimal_places=2)
     confirmed: bool = False
     note: str = Field('', max_length=2000)
+    # With a count layout: one entry per location the item is placed in. The server
+    # totals them; counted_quantity is then left blank by the caller.
+    locations: list[LocationQuantity] | None = Field(None, max_length=100)
 
     @field_validator('counted_unit')
     @classmethod
@@ -75,12 +90,37 @@ class CountInput(StrictModel):
     timing: Literal['before_receipts','after_receipts']
     note: str = Field(min_length=1, max_length=2000)
     corrects_snapshot_id: UUID | None = None
+    layout_id: UUID | None = None
     lines: list[CountLine] = Field(min_length=1, max_length=10000)
 
     @field_validator('note')
     @classmethod
     def required_note(cls, value):
         if not value.strip():raise ValueError('A physical count note is required')
+        return value.strip()
+
+
+class LayoutLocation(StrictModel):
+    name: str = Field(min_length=1, max_length=120)
+    items: list[str] = Field(max_length=10000)
+
+    @field_validator('name')
+    @classmethod
+    def named(cls, value):
+        if not value.strip():raise ValueError('Name every storage location')
+        return value.strip()
+
+
+class LayoutInput(StrictModel):
+    scope_id: UUID
+    note: str = Field(min_length=1, max_length=2000)
+    # Array order is the physical walk order; items keep their listed order within a location.
+    locations: list[LayoutLocation] = Field(min_length=1, max_length=200)
+
+    @field_validator('note')
+    @classmethod
+    def required_note(cls, value):
+        if not value.strip():raise ValueError('A layout note is required')
         return value.strip()
 
 
@@ -129,12 +169,16 @@ async def lock_store(conn, store_id):
 
 def request_hash(body, sort_key=None):
     payload=serial(body.model_dump())
+    if isinstance(body,CountInput):
+        if payload.get('layout_id') is None:payload.pop('layout_id',None)
+        for line in payload['lines']:
+            if line.get('locations') is None:line.pop('locations',None)
     if sort_key:payload[sort_key]=sorted(payload[sort_key],key=lambda r:r['item_code'])
     return fingerprint(payload)
 
 
 async def prior_request(conn, table, store_id, key, digest):
-    assert table in ('scopes','count_snapshots','period_closures','reopen_events','scope_bridges')
+    assert table in ('scopes','count_snapshots','period_closures','reopen_events','scope_bridges','count_layouts')
     prior=await conn.fetchrow(f'SELECT * FROM actual_inventory.{table} WHERE request_key=$1',key)
     if prior:
         if prior['store_id']!=store_id or prior['request_fingerprint']!=digest:
@@ -183,11 +227,86 @@ async def configure_scope(pool, store_id, actor, body, key):
             return scope_id
 
 
+def location_code(name):
+    code=re.sub(r'[^a-z0-9]+','-',name.lower()).strip('-')[:60].strip('-')
+    if not code:raise HTTPException(422,'Use letters or numbers in each location name')
+    return code
+
+
+async def get_layout(conn, store_id, layout_id=None, scope_id=None):
+    if not await conn.fetchval("SELECT to_regclass('actual_inventory.count_layouts') IS NOT NULL"):return None
+    header=await conn.fetchrow('''SELECT * FROM actual_inventory.count_layouts WHERE store_id=$1
+        AND ($2::uuid IS NULL OR id=$2) AND ($3::uuid IS NULL OR scope_id=$3) ORDER BY revision DESC LIMIT 1''',store_id,layout_id,scope_id)
+    if header is None:
+        if layout_id:raise HTTPException(404,'Count layout not found at this location')
+        return None
+    locations=await conn.fetch('SELECT * FROM actual_inventory.layout_locations WHERE layout_id=$1 ORDER BY walk_position',header['id'])
+    placements=await conn.fetch('SELECT * FROM actual_inventory.layout_placements WHERE layout_id=$1 ORDER BY location_code,item_position',header['id'])
+    return {'header':dict(header),'locations':[{**dict(l),'items':[p['item_code'] for p in placements if p['location_code']==l['location_code']]} for l in locations]}
+
+
+async def proposed_layout(conn, store_id, scope):
+    """Starting point for a new layout: the previous layout's placements, then the item setup's
+    storage area, then an 'Unassigned' tail. Nothing is saved until a manager confirms it."""
+    previous=await get_layout(conn,store_id)
+    areas={r['item_code']:(r['storage_area'] or '').strip() for r in await conn.fetch(
+        'SELECT item_code,storage_area FROM public.store_items WHERE store_id=$1',store_id)}
+    members=[i['item_code'] for i in scope['items']]
+    locations=[{'name':l['name'],'items':[c for c in l['items'] if c in members]} for l in (previous or {}).get('locations',[])]
+    placed={c for l in locations for c in l['items']}
+    for code in members:
+        if code in placed:continue
+        name=areas.get(code) or 'Unassigned'
+        target=next((l for l in locations if l['name'].lower()==name.lower()),None)
+        if target is None:target={'name':name,'items':[]};locations.append(target)
+        target['items'].append(code)
+    return {'scope_id':scope['header']['id'],'locations':[l for l in locations if l['items']]}
+
+
+async def save_layout(pool, store_id, actor, body, key):
+    digest=request_hash(body)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await lock_store(conn,store_id)
+            prior=await prior_request(conn,'count_layouts',store_id,key,digest)
+            if prior:return prior
+            scope=await get_scope(conn,store_id,body.scope_id)
+            current=await get_scope(conn,store_id)
+            if current['header']['id']!=scope['header']['id']:raise HTTPException(409,'Lay out the current count item list version')
+            members={i['item_code'] for i in scope['items']}
+            codes=[location_code(l.name) for l in body.locations]
+            if len(set(codes))!=len(codes):raise HTTPException(422,'Give each storage location a distinct name')
+            for location in body.locations:
+                if len(set(location.items))!=len(location.items):raise HTTPException(422,f'List each item once in {location.name}')
+                if not set(location.items)<=members:raise HTTPException(422,f'{location.name} lists an item outside the current count list')
+            if not members<={c for l in body.locations for c in l.items}:
+                raise HTTPException(422,'Place every counted item in at least one storage location')
+            revision=await conn.fetchval('SELECT coalesce(max(revision),0)+1 FROM actual_inventory.count_layouts WHERE store_id=$1',store_id)
+            layout_id=await conn.fetchval('''INSERT INTO actual_inventory.count_layouts
+                (store_id,revision,scope_id,note,request_key,request_fingerprint,confirmed_by)
+                VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id''',store_id,revision,body.scope_id,body.note,key,digest,actor)
+            for position,(location,code) in enumerate(zip(body.locations,codes),1):
+                await conn.execute('''INSERT INTO actual_inventory.layout_locations(layout_id,location_code,name,walk_position)
+                    VALUES($1,$2,$3,$4)''',layout_id,code,location.name,position)
+                await conn.executemany('''INSERT INTO actual_inventory.layout_placements
+                    (layout_id,scope_id,store_id,location_code,item_code,item_position) VALUES($1,$2,$3,$4,$5,$6)''',
+                    [(layout_id,body.scope_id,store_id,code,item,n) for n,item in enumerate(location.items,1)])
+            await conn.execute('UPDATE public.store_state SET revision=revision+1,updated_at=now() WHERE store_id=$1',store_id)
+            return layout_id
+
+
 async def get_count(conn, store_id, snapshot_id):
     header=await conn.fetchrow('SELECT * FROM actual_inventory.count_snapshots WHERE id=$1 AND store_id=$2',snapshot_id,store_id)
     if header is None:raise HTTPException(404,'Physical count not found at this location')
-    lines=await conn.fetch('SELECT * FROM actual_inventory.count_lines WHERE snapshot_id=$1 ORDER BY item_code',snapshot_id)
-    return {'header':dict(header),'lines':[dict(r) for r in lines],
+    lines=[dict(r) for r in await conn.fetch('SELECT * FROM actual_inventory.count_lines WHERE snapshot_id=$1 ORDER BY item_code',snapshot_id)]
+    if 'layout_id' in header.keys() and header['layout_id'] is not None:
+        by_item={}
+        for r in await conn.fetch('''SELECT c.item_code,c.location_code,c.counted_quantity FROM actual_inventory.count_line_locations c
+            JOIN actual_inventory.layout_locations l ON l.layout_id=c.layout_id AND l.location_code=c.location_code
+            WHERE c.snapshot_id=$1 ORDER BY l.walk_position''',snapshot_id):
+            by_item.setdefault(r['item_code'],[]).append({'location_code':r['location_code'],'counted_quantity':r['counted_quantity']})
+        for line in lines:line['locations']=by_item.get(line['item_code'],[])
+    return {'header':dict(header),'lines':lines,
             'scope':await get_scope(conn,store_id,header['scope_id'])}
 
 
@@ -224,26 +343,52 @@ async def save_count(pool, store_id, actor, body, key, *, conn=None):
             members={r['item_code']:r for r in scope['items']}
             if len(body.lines)!=len(members) or {r.item_code for r in body.lines}!=set(members):
                 raise HTTPException(422,'Include every item in the physical count scope exactly once; leave uncounted values blank')
+            # With a layout, each placed item is counted per location and the server adds them up.
+            placements={}
+            if body.layout_id:
+                layout=await get_layout(conn,store_id,body.layout_id)
+                if layout['header']['scope_id']!=body.scope_id:raise HTTPException(422,'Use a count layout made for this count list version')
+                for location in layout['locations']:
+                    for code in location['items']:placements.setdefault(code,[]).append(location['location_code'])
+            quantities={}
+            for line in body.lines:
+                if not body.layout_id:
+                    if line.locations is not None:raise HTTPException(422,'Location quantities need a count layout')
+                    quantities[line.item_code]=line.counted_quantity;continue
+                given=[q.location_code for q in line.locations or []]
+                if len(set(given))!=len(given) or set(given)!=set(placements.get(line.item_code,[])):
+                    raise HTTPException(422,f'Enter one quantity (or leave it blank) for each location of {line.item_code}')
+                if line.counted_quantity is not None:
+                    raise HTTPException(422,'Leave the item total blank; it is added up from its locations')
+                values=[q.counted_quantity for q in line.locations]
+                quantities[line.item_code]=None if any(v is None for v in values) else sum(values,Decimal(0))
             complete=True
             for line in body.lines:
-                if line.counted_quantity is not None and line.base_units_per_counted_unit is None:
+                quantity=quantities[line.item_code]
+                if quantity is not None and line.base_units_per_counted_unit is None:
                     raise HTTPException(422,'A measured count needs a verified conversion to inventory units')
-                if line.inventory_value is not None and line.counted_quantity is None:
+                if line.inventory_value is not None and quantity is None:
                     raise HTTPException(422,'Inventory value needs a measured quantity')
-                if line.counted_quantity==0 and line.inventory_value not in (None,0):
+                if quantity==0 and line.inventory_value not in (None,0):
                     raise HTTPException(422,'A zero physical count must have zero inventory value')
-                if line.confirmed and (line.counted_quantity is None or line.inventory_value is None or not line.note.strip()):
+                if line.confirmed and (quantity is None or line.inventory_value is None or not line.note.strip()):
                     raise HTTPException(422,'Confirm the measured quantity, explicit value and note for every completed line')
                 complete=complete and line.confirmed
-            snapshot_id=await conn.fetchval('''INSERT INTO actual_inventory.count_snapshots
-                (store_id,scope_id,count_date,timing,status,note,corrects_snapshot_id,request_key,request_fingerprint,counted_by)
-                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id''',store_id,body.scope_id,body.count_date,body.timing,
-                'complete' if complete else 'incomplete',body.note,body.corrects_snapshot_id,key,digest,actor)
+            # layout_id is named only when used, so databases without the walk-order migration still save counts.
+            layout_column,layout_value=(',layout_id',',$11') if body.layout_id else ('','')
+            snapshot_id=await conn.fetchval(f'''INSERT INTO actual_inventory.count_snapshots
+                (store_id,scope_id,count_date,timing,status,note,corrects_snapshot_id,request_key,request_fingerprint,counted_by{layout_column})
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10{layout_value}) RETURNING id''',store_id,body.scope_id,body.count_date,body.timing,
+                'complete' if complete else 'incomplete',body.note,body.corrects_snapshot_id,key,digest,actor,*([body.layout_id] if body.layout_id else []))
             await conn.executemany('''INSERT INTO actual_inventory.count_lines
                 (snapshot_id,scope_id,store_id,item_code,base_unit,counted_quantity,counted_unit,
                  base_units_per_counted_unit,inventory_value,confirmed,note) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)''',
-                [(snapshot_id,body.scope_id,store_id,l.item_code,members[l.item_code]['base_unit'],l.counted_quantity,
+                [(snapshot_id,body.scope_id,store_id,l.item_code,members[l.item_code]['base_unit'],quantities[l.item_code],
                   l.counted_unit,l.base_units_per_counted_unit,l.inventory_value,l.confirmed,l.note) for l in body.lines])
+            if body.layout_id:
+                await conn.executemany('''INSERT INTO actual_inventory.count_line_locations
+                    (snapshot_id,item_code,layout_id,location_code,counted_quantity) VALUES($1,$2,$3,$4,$5)''',
+                    [(snapshot_id,l.item_code,body.layout_id,q.location_code,q.counted_quantity) for l in body.lines for q in l.locations])
             if await conn.fetchval('SELECT count(*) FROM actual_inventory.count_lines WHERE snapshot_id=$1',snapshot_id)!=len(members):
                 raise HTTPException(500,'Count read-back failed; transaction rolled back')
             await conn.execute('UPDATE public.store_state SET revision=revision+1,updated_at=now() WHERE store_id=$1',store_id)
@@ -465,8 +610,21 @@ def create_router(pool_factory, store_check, authorize):
             if await conn.fetchval("SELECT to_regclass('purchasing.unit_profiles') IS NOT NULL"):
                 from native_units import profiles
                 unit_profiles=[p for p in await profiles(conn,store_id) if p['profile_kind']=='count' and not p['stale']]
-            return serial({'scope':await get_scope(conn,store_id),'scopes':[dict(r) for r in scopes],
+            scope=await get_scope(conn,store_id)
+            layout=await get_layout(conn,store_id,scope_id=scope['header']['id']) if scope else None
+            proposal=await proposed_layout(conn,store_id,scope) if scope and await conn.fetchval(
+                "SELECT to_regclass('actual_inventory.count_layouts') IS NOT NULL") else None
+            return serial({'scope':scope,'scopes':[dict(r) for r in scopes],'layout':layout,'proposedLayout':proposal,
                            'items':[dict(r) for r in items],'unitProfiles':unit_profiles,'baseUnits':list(ALLOWED_UNITS)})
+
+    @router.post('/{store_id}/layout')
+    async def layout(store_id:str,request:Request,body:LayoutInput,idempotency_key:UUID=Header(...)):
+        actor,pool=await context(request,store_id,True)
+        async with pool.acquire() as conn:
+            if not await conn.fetchval("SELECT to_regclass('actual_inventory.count_layouts') IS NOT NULL"):
+                raise HTTPException(503,'Count walk order setup has not been applied')
+        layout_id=await save_layout(pool,store_id,actor,body,idempotency_key)
+        async with pool.acquire() as conn:return serial(await get_layout(conn,store_id,layout_id))
 
     @router.get('/{store_id}/scopes/{scope_id}')
     async def scope_detail(store_id:str,scope_id:UUID,request:Request):

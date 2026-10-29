@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { PhysicalCountForm, ActualPeriodView, ReopenPeriodForm, ScopeHandoffReview, ActualInventoryTab } from "./ActualInventoryTab";
+import { PhysicalCountForm, CountLayoutForm, ActualPeriodView, ReopenPeriodForm, ScopeHandoffReview, ActualInventoryTab } from "./ActualInventoryTab";
 import * as api from "../lib/api";
 import { SalesTrackingTab } from "./SalesTrackingTab";
 
@@ -26,7 +26,7 @@ async function select(label, value) {
   await act(async () => { const node = container.querySelector(`[aria-label="${label}"]`); node.value = value; node.dispatchEvent(new Event("change", { bubbles: true })); });
 }
 async function click(node) { await act(async () => node.click()); }
-async function countHeader() { await input("Physical count date", "2026-10-01"); await select("Count timing", "before_receipts"); await input("Count note", "Measured physical inventory"); }
+async function countHeader() { await input("Physical count date", "2026-10-01"); await input("Count note", "Measured physical inventory"); }
 async function reason(value) {
   const node = container.querySelector('[aria-label="Correction reason"]');
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(node, value); node.dispatchEvent(new Event("input", { bubbles: true })); });
@@ -156,4 +156,71 @@ test("physical count entry selects the requested historical item-list version", 
   expect(container.querySelector('[aria-label="Quantity new"]')).not.toBeNull();
   await select("Count item-list version", "scope-1"); expect(fetchScope).toHaveBeenCalledWith("berts", "scope-1");
   expect(container.querySelector('[aria-label="Quantity new"]')).toBeNull(); expect(container.querySelector('[aria-label="Quantity food"]')).not.toBeNull();
+});
+
+const walkScope = { header: { id: "scope-1", revision: 1 }, items: [
+  { item_code: "flour", base_unit: "lb", name_snapshot: "Flour", location_notes: "Dry" },
+  { item_code: "mozz", base_unit: "lb", name_snapshot: "Mozzarella", location_notes: "Cooler" }] };
+const walkLayout = { header: { id: "layout-1", revision: 1, scope_id: "scope-1" }, locations: [
+  { location_code: "walk-in-cooler", name: "Walk-in cooler", walk_position: 1, items: ["mozz", "flour"] },
+  { location_code: "dry-storage", name: "Dry storage", walk_position: 2, items: ["flour"] }] };
+const button = text => [...container.querySelectorAll("button")].find(b => b.textContent === text);
+
+test("walk-order counts follow locations in order and send per-location quantities for the server to total", async () => {
+  const save = jest.fn().mockResolvedValue({ header: { id: "snapshot-1", status: "incomplete" }, lines: [{}, {}] });
+  await act(async () => root.render(<PhysicalCountForm scope={walkScope} layout={walkLayout} onSave={save} />)); await countHeader();
+  expect([...container.querySelectorAll("h4")].map(h => h.textContent)).toEqual(["1. Walk-in cooler", "2. Dry storage", "Item totals and values"]);
+  expect(container.querySelector('[aria-label="Quantity flour"]')).toBeNull();
+  await input("Quantity flour at walk-in-cooler", "1.25"); await input("Quantity flour at dry-storage", "2.000000000005");
+  await input("Quantity mozz at walk-in-cooler", "4");
+  expect(container.querySelector('[aria-label="Total flour"]').textContent).toBe("3.250000000005");
+  expect(container.querySelector('[aria-label="Total mozz"]').textContent).toBe("4");
+  await click(button("Save count snapshot"));
+  const body = save.mock.calls[0][0];
+  expect(body.layout_id).toBe("layout-1"); expect(body.timing).toBe("before_receipts");
+  const flour = body.lines.find(l => l.item_code === "flour");
+  expect(flour.counted_quantity).toBeNull(); expect(flour.base_units_per_counted_unit).toBe("1");
+  expect(flour.locations).toEqual([{ location_code: "walk-in-cooler", counted_quantity: "1.25" }, { location_code: "dry-storage", counted_quantity: "2.000000000005" }]);
+});
+
+test("a blank location keeps the item uncounted; counts without a layout send no location fields", async () => {
+  const save = jest.fn().mockResolvedValue({ header: { id: "snapshot-1", status: "incomplete" }, lines: [{}, {}] });
+  await act(async () => root.render(<PhysicalCountForm scope={walkScope} layout={walkLayout} onSave={save} />)); await countHeader();
+  await input("Quantity flour at walk-in-cooler", "1");
+  expect(container.querySelector('[aria-label="Total flour"]').textContent).toBe("Not counted yet");
+  await click(button("Save count snapshot"));
+  const flour = save.mock.calls[0][0].lines.find(l => l.item_code === "flour");
+  expect(flour.base_units_per_counted_unit).toBeNull(); expect(flour.locations[1].counted_quantity).toBeNull();
+  await act(async () => root.render(null));
+  const plain = jest.fn().mockResolvedValue({ header: { id: "snapshot-2", status: "incomplete" }, lines: [{}, {}] });
+  const otherVersion = { ...walkLayout, header: { ...walkLayout.header, scope_id: "scope-older" } };
+  await act(async () => root.render(<PhysicalCountForm scope={walkScope} layout={otherVersion} onSave={plain} />)); await countHeader();
+  await click(button("Save count snapshot"));
+  expect(plain.mock.calls[0][0]).not.toHaveProperty("layout_id"); expect(plain.mock.calls[0][0].lines[0]).not.toHaveProperty("locations");
+});
+
+test("before/after receipts is a delivery-day exception, not an everyday choice", async () => {
+  const save = jest.fn().mockResolvedValue({ header: { id: "snapshot-1", status: "incomplete" }, lines: [{}] });
+  await act(async () => root.render(<PhysicalCountForm scope={scope} onSave={save} />));
+  expect(container.querySelector('[aria-label="Count timing"]')).toBeNull();
+  await countHeader(); await click(container.querySelector('[aria-label="Counted on a delivery day"]'));
+  await select("Count timing", "after_receipts"); await click(button("Save count snapshot"));
+  expect(save.mock.calls[0][0].timing).toBe("after_receipts");
+});
+
+test("walk-order editor starts from the proposal, keeps order, and requires every item placed", async () => {
+  const proposal = { locations: [{ name: "Walk-in cooler", items: ["mozz"] }, { name: "Dry storage", items: ["flour"] }] };
+  const save = jest.fn().mockResolvedValue({ header: { id: "layout-2", revision: 2 } });
+  await act(async () => root.render(<CountLayoutForm scope={walkScope} layout={null} proposal={proposal} onSave={save} />));
+  expect(container.querySelector('[aria-label="Location 1 name"]').value).toBe("Walk-in cooler");
+  await click(container.querySelector('[aria-label="flour in location 2"]'));
+  expect(container.textContent).toContain("Not placed yet: Flour");
+  await input("Walk order note", "Walk from cooler to dry storage"); await click(button("Save walk order"));
+  expect(save).not.toHaveBeenCalled(); expect(container.textContent).toContain("place every item");
+  await click(container.querySelector('[aria-label="flour in location 1"]'));
+  await click(container.querySelectorAll("button")[3]);
+  await click(button("Save walk order"));
+  expect(save.mock.calls[0][0]).toEqual({ scope_id: "scope-1", note: "Walk from cooler to dry storage",
+    locations: [{ name: "Dry storage", items: [] }, { name: "Walk-in cooler", items: ["mozz", "flour"] }] });
+  expect(container.textContent).toContain("Walk order 2 saved");
 });
