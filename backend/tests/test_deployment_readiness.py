@@ -91,9 +91,10 @@ class ReadinessConfigurationTests(unittest.TestCase):
         expected={p.name for p in (readiness.ROOT/'migrations').glob('*.sql')} - {'20260930_recurring_prep_items.sql','20261025_manager_handoff_notes.sql'}
         plan=readiness.migration_plan();self.assertEqual({e['file'] for e in plan['migrations']},expected)
         self.assertEqual(len(readiness.MIGRATIONS),len(expected));self.assertEqual(len(set(readiness.MIGRATIONS)),len(expected))
-        self.assertEqual(readiness.MIGRATIONS[-1],'20261018_reviewed_inventory_pars.sql')
-        self.assertEqual(readiness.MIGRATIONS[-2],'20261013_purchase_source_lookup_index.sql')
-        self.assertEqual(readiness.MIGRATIONS[-3],'20261007_native_private_access.sql')
+        self.assertEqual(readiness.MIGRATIONS[-1],'20261029_salad_prep_track.sql')
+        self.assertEqual(readiness.MIGRATIONS[-2],'20261018_reviewed_inventory_pars.sql')
+        self.assertEqual(readiness.MIGRATIONS[-3],'20261013_purchase_source_lookup_index.sql')
+        self.assertEqual(readiness.MIGRATIONS[-4],'20261007_native_private_access.sql')
         self.assertEqual(len(readiness.ORIGINAL_NATIVE_MIGRATIONS),29)
         self.assertEqual(len(readiness.RUNTIME_CANDIDATE_MIGRATIONS),30)
         self.assertNotIn('20261018_reviewed_inventory_pars.sql',readiness.RUNTIME_CANDIDATE_MIGRATIONS)

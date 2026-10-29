@@ -1,4 +1,5 @@
 """Append-only manager release and production evidence links, never stock writes."""
+import prep_tracks
 import os
 from datetime import date
 from decimal import Decimal
@@ -201,18 +202,21 @@ async def persist(conn, store, command, plan, expected, key, digest, actor):
 
 def install_routes(router, context):
     @router.get('/{store_id}/prep-execution/{day}')
-    async def read_execution(store_id:str, day:date, request:Request, track:Literal['daily','bulk']='daily'):
+    async def read_execution(store_id:str, day:date, request:Request, track:prep_tracks.Track='daily'):
+        prep_tracks.check(store_id, track)
         _, pool = await context(request, store_id)
         async with pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
             await ready(conn); return await state(conn, store_id, day, track)
 
     @router.post('/{store_id}/prep-execution/{day}/preview')
-    async def preview_command(store_id:str, day:date, body:Command, request:Request, track:Literal['daily','bulk']='daily'):
+    async def preview_command(store_id:str, day:date, body:Command, request:Request, track:prep_tracks.Track='daily'):
+        prep_tracks.check(store_id, track)
         _, pool = await context(request, store_id, True)
         async with pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
             return await preview(conn, store_id, day, track, body, drafts.planning.version(request))
 
     @router.post('/{store_id}/prep-execution/{day}/commands')
-    async def write_command(store_id:str, day:date, body:Commit, request:Request, idempotency_key:UUID=Header(...), track:Literal['daily','bulk']='daily'):
+    async def write_command(store_id:str, day:date, body:Commit, request:Request, idempotency_key:UUID=Header(...), track:prep_tracks.Track='daily'):
+        prep_tracks.check(store_id, track)
         actor, pool = await context(request, store_id, True)
         return await commit(pool, store_id, day, track, actor, body, drafts.planning.version(request), idempotency_key)

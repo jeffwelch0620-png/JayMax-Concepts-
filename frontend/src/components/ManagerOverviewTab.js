@@ -3,6 +3,7 @@ import * as api from "../lib/api";
 import { RESTAURANTS, todayISO } from "../lib/calc";
 import { loadManagerOverview, overviewContext, overviewStorage, rememberedOverview } from "../lib/managerOverview";
 import { ManagerPrepDetail } from "./ManagerPrepDetail";
+import { prepTrackLabel } from "../lib/prepTracks";
 import { PageTitle, cardCls, inpCls, btnGhost } from "./common";
 
 const labels = { open: "Open", in_progress: "In progress", complete: "Complete",
@@ -39,7 +40,7 @@ export function ManagerOverviewTab({ rid, user, onOpenCounts, onOpenPrep, onOpen
     <div className="flex gap-4 flex-wrap my-4">
       <label>Prep date <input className={inpCls} aria-label="Manager overview date" type="date" value={selection.day} onChange={e => setSelection({ day: e.target.value })}/></label>
       <label>Prep track <select className={inpCls} aria-label="Manager overview track" value={selection.track} onChange={e => setSelection({ track: e.target.value })}>
-        <option value="bulk">Bulk Prep</option><option value="daily">Daily Prep</option>
+        <option value="bulk">Bulk Prep</option><option value="daily">Daily Prep</option>{rid === "berts" && <option value="salad">Salad Bar Prep</option>}
       </select></label>
     </div>
     {!context ? <p role="alert">Choose a valid date and a restaurant available to your personal manager or owner account.</p> : <>
@@ -55,7 +56,7 @@ export function ManagerOverviewTab({ rid, user, onOpenCounts, onOpenPrep, onOpen
           <button className={`${btnGhost} mt-4`} disabled={!countsEnabled} onClick={() => onOpenCounts?.({ rid })}>Open Actual Inventory</button>
         </section>
         <section className={`${cardCls} p-5`} aria-label="Dated prep work">
-          <h2 className="font-bold mb-2">{selection.track === "bulk" ? "Bulk Prep" : "Daily Prep"} · {selection.day}</h2>
+          <h2 className="font-bold mb-2">{prepTrackLabel(selection.track)} · {selection.day}</h2>
           <p className="text-sm text-slate-400">Track 2 explains usage. Assignment, reported production, manager review and stock posting remain separate.</p>
           {prep.state === "loading" ? <p role="status">Loading dated prep work…</p> : prep.state === "unavailable" ? <p role="status">{prep.message}</p> : <>
             <p className="mt-3 font-semibold">{!prep.hasDraft ? "No dated plan saved" : prep.status === "released" ? "Released plan" : "Draft plan"} · revision {prep.revision}</p>

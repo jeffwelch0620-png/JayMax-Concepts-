@@ -1,4 +1,5 @@
 """Versioned Track 2 planning metadata; no production, stock or accounting writes."""
+import prep_tracks
 import os
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -38,7 +39,7 @@ class SavePlan(mapping.Strict):
     action:Literal['save']
     recipe_version_id:UUID
     unit_profile_id:UUID
-    track:Literal['daily','bulk']
+    track:prep_tracks.Track
     schedule:Literal['daily','recurring','on_demand']
     weekday_par:Decimal=Field(ge=0,max_digits=28,decimal_places=12)
     weekend_par:Decimal=Field(ge=0,max_digits=28,decimal_places=12)
@@ -141,6 +142,7 @@ def install_routes(router,context):
 
     @router.put('/{store_id}/prep-planning/{product_id}')
     async def write_plan(store_id:str,product_id:UUID,body:Command,request:Request,idempotency_key:UUID=Header(...)):
+        prep_tracks.check(store_id,getattr(body,'track',None))
         actor,pool=await context(request,store_id,True)
         return await save(pool,store_id,product_id,actor,body,idempotency_key,version(request))
 

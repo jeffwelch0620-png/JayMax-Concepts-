@@ -1,4 +1,5 @@
 """Reviewed dated Track 2 drafts and overrides. No execution or stock writers."""
+import prep_tracks
 import os
 from datetime import date,timedelta
 from decimal import Decimal,localcontext
@@ -47,7 +48,7 @@ class Override(mapping.Strict):
 
 
 class DraftIn(mapping.Strict):
-    track:Literal['daily','bulk']
+    track:prep_tracks.Track
     day_group:Literal['weekday','weekend']
     count_event_id:UUID|None=None
     overrides:list[Override]=Field(default_factory=list,max_length=500)
@@ -193,22 +194,26 @@ async def commit(pool,store,day,actor,body,key,expected):
 
 def install_routes(router,context):
     @router.get('/{store_id}/prep-day-drafts/{day}')
-    async def read_draft(store_id:str,day:date,request:Request,track:Literal['daily','bulk']='daily'):
+    async def read_draft(store_id:str,day:date,request:Request,track:prep_tracks.Track='daily'):
+        prep_tracks.check(store_id, track)
         _,pool=await context(request,store_id)
         async with pool.acquire() as conn,conn.transaction(isolation='repeatable_read',readonly=True):return await read(conn,store_id,day,track)
 
     @router.post('/{store_id}/prep-day-drafts/{day}/preview')
     async def preview_draft(store_id:str,day:date,body:DraftIn,request:Request):
+        prep_tracks.check(store_id,body.track)
         _,pool=await context(request,store_id,True)
         async with pool.acquire() as conn,conn.transaction(isolation='repeatable_read',readonly=True):return await preview(conn,store_id,day,body,planning.version(request))
 
     @router.put('/{store_id}/prep-day-drafts/{day}')
     async def save_draft(store_id:str,day:date,body:CommitIn,request:Request,idempotency_key:UUID=Header(...)):
+        prep_tracks.check(store_id,body.draft.track)
         actor,pool=await context(request,store_id,True)
         return await commit(pool,store_id,day,actor,body,idempotency_key,planning.version(request))
 
     @router.get('/{store_id}/prep-day-drafts/{day}/history')
-    async def history(store_id:str,day:date,request:Request,track:Literal['daily','bulk']='daily'):
+    async def history(store_id:str,day:date,request:Request,track:prep_tracks.Track='daily'):
+        prep_tracks.check(store_id, track)
         _,pool=await context(request,store_id)
         async with pool.acquire() as conn,conn.transaction(isolation='repeatable_read',readonly=True):
             await ready(conn)

@@ -1,4 +1,5 @@
 """Store-scoped manager production summaries; never production or stock writers."""
+import prep_tracks
 import os
 import re
 import asyncpg
@@ -16,7 +17,7 @@ from purchase_api import serial
 from purchase_parser import fingerprint
 
 TABLES = ('store_settings', 'handoff_notes', 'handoff_note_revisions', 'handoff_command_receipts')
-TRACK = Literal['daily', 'bulk']
+TRACK = prep_tracks.Track
 # Match browser String.trim exactly; Python strip also removes extra controls.
 TRIM = '\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
 
@@ -228,6 +229,7 @@ def create_router(pool_factory, authorize):
 
     @router.get('/days/{day}')
     async def read_day(store: str, day: date, request: Request, track: TRACK = 'bulk'):
+        prep_tracks.check(store, track)
         actor, pool = await context(request, store)
         async with read_connection(pool) as conn:
             return dict(await day_state(conn, store, day, track), actor_id=actor)
@@ -248,12 +250,14 @@ def create_router(pool_factory, authorize):
 
     @router.post('/commands')
     async def command(store: str, body: Command, request: Request, idempotency_key: UUID = Header(...)):
+        prep_tracks.check(store, body.prep_track)
         actor, pool = await context(request, store)
         async with database_errors():
             return await execute(pool, store, actor, body, idempotency_key, version(request))
 
     @router.post('/status')
     async def status(store: str, body: Command, request: Request, idempotency_key: UUID = Header(...)):
+        prep_tracks.check(store, body.prep_track)
         actor, pool = await context(request, store)
         expected = version(request)
         async with read_connection(pool) as conn:

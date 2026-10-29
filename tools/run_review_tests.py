@@ -13,7 +13,7 @@ OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activat
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('salad_track::SaladTrackRuleTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
@@ -24,6 +24,8 @@ OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_insta
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
                     'batched_fingerprints::BatchedFingerprintGuards']
 DATABASE_CASES = (
+ ('salad_track','SaladTrackDatabaseTests','test_salad_plan_saves_at_berts_and_is_refused_elsewhere'),
+ ('salad_track','SaladTrackDatabaseTests','test_database_refuses_salad_outside_berts_even_without_the_api'),
  ('s1_observation_pg','S1CollectorDatabaseTests','test_complete_collector_reads_real_metadata_ledger_and_audit_without_writes'),
  ('s1_observation_pg','S1CollectorDatabaseTests','test_real_disposable_identity_without_adapter_is_refused_and_closed'),
  ('s1_observation_pg','S1CollectorDatabaseTests','test_real_ledger_shape_failure_preserves_prefix_and_skips_audit'),

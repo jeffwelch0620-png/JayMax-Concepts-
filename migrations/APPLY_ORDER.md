@@ -39,6 +39,7 @@ For an existing hosted database, compare recorded migration history and object d
 | 29 | [20261007_native_private_access.sql](20261007_native_private_access.sql) |
 | 30 | [20261013_purchase_source_lookup_index.sql](20261013_purchase_source_lookup_index.sql) |
 | 31 | [20261018_reviewed_inventory_pars.sql](20261018_reviewed_inventory_pars.sql) |
+| 32 | [20261029_salad_prep_track.sql](20261029_salad_prep_track.sql) |
 
 ## Separate manager receiving extension
 

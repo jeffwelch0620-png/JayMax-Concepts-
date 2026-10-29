@@ -8,6 +8,7 @@ import { StaffPrepTaskPlan } from "./StaffPrepTasks";
 import { enablePushNotifications, disablePushNotifications, pushSupported } from "../lib/push";
 import { inpCls, btnAcc, btnGhost, cardCls, Pill } from "./common";
 import { useCountSheet, CountSheetControls, CountSheetBanner, CountSheetList, SaveAllCountsButton } from "./CountSheet";
+import { prepTracks, validPrepTrack } from "../lib/prepTracks";
 
 const TRACKS = [
   { id: "daily", label: "Daily Prep" },
@@ -29,7 +30,9 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
   useEffect(() => () => { taskRequests.current += 1; }, []);
   const prepCountDrafts = drafts || privatePrepCountDrafts.current;
   const [rid, setRid] = useState("");
-  const [track, setTrack] = useState("daily");
+  const [chosenTrack, setTrack] = useState("daily");
+  // Salad Bar is a native-only track at Bert's; anywhere else fall back to Daily.
+  const track = validPrepTrack(rid, chosenTrack) && (chosenTrack !== "salad" || api.staffPrepTasksEnabled) ? chosenTrack : "daily";
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
   const [unlocked, setUnlocked] = useState(false);
@@ -290,7 +293,7 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
             )}
 
             {view === "prep" && (
-              api.staffPrepTasksEnabled ? <><select aria-label="Staff prep track" className={inpCls} value={track} onChange={e=>setTrack(e.target.value)}>{TRACKS.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}</select><StaffPrepTaskPlan key={rid} rid={rid} pin={pin} staffId={staffId} track={track} drafts={prepCountDrafts}/></> : <PrepView restaurant={restaurant} track={track} setTrack={setTrack} sheet={sheet} onRefresh={loadPrep}
+              api.staffPrepTasksEnabled ? <><select aria-label="Staff prep track" className={inpCls} value={track} onChange={e=>setTrack(e.target.value)}>{prepTracks(rid).map(t=><option key={t.id} value={t.id}>{t.label}</option>)}</select><StaffPrepTaskPlan key={rid} rid={rid} pin={pin} staffId={staffId} track={track} drafts={prepCountDrafts}/></> : <PrepView restaurant={restaurant} track={track} setTrack={setTrack} sheet={sheet} onRefresh={loadPrep}
                 expanded={expanded} setExpanded={setExpanded}
                 onComplete={(t) => { setCompleting(t); setBatches(t.remaining); setName(staffName); setErr(""); }} />
             )}

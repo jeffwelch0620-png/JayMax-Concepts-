@@ -1,4 +1,5 @@
 """Claimed staff measurements awaiting atomic manager production acceptance."""
+import prep_tracks
 import os
 from datetime import date
 from typing import Literal
@@ -223,32 +224,38 @@ async def decide(pool,store,day,track,actor,body,key):
 def create_router(pool_factory,store_check,manager_authorize,staff_authorize):
     router=APIRouter();base='/api/pg/purchases/{store}/staff-prep-production/{day}';staff='/api/pg/staff/{store}/prep-production/{day}'
     @router.get(base)
-    async def read(store:str,day:date,request:Request,track:Literal['daily','bulk']='daily'):
+    async def read(store:str,day:date,request:Request,track:prep_tracks.Track='daily'):
+        prep_tracks.check(store, track)
         store_check(store);manager_authorize(request,store,False)
         async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):return await state(c,store,day,track)
     @router.post(base+'/preview')
-    async def review(store:str,day:date,request:Request,body:Decision,track:Literal['daily','bulk']='daily'):
+    async def review(store:str,day:date,request:Request,body:Decision,track:prep_tracks.Track='daily'):
+        prep_tracks.check(store, track)
         store_check(store);actor=manager_authorize(request,store,True)
         async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):return await decision_preview(c,store,day,track,body,actor)
     @router.post(base+'/decisions')
-    async def decision(store:str,day:date,request:Request,body:DecisionCommit,idempotency_key:UUID=Header(...),track:Literal['daily','bulk']='daily'):
+    async def decision(store:str,day:date,request:Request,body:DecisionCommit,idempotency_key:UUID=Header(...),track:prep_tracks.Track='daily'):
+        prep_tracks.check(store, track)
         store_check(store);actor=manager_authorize(request,store,True)
         return await decide(pool_factory(),store,day,track,actor,body,idempotency_key)
     @router.post(staff+'/setup')
-    async def staff_setup(store:str,day:date,request:Request,body:Credentials,staff_member_id:UUID,track:Literal['daily','bulk']='daily'):
+    async def staff_setup(store:str,day:date,request:Request,body:Credentials,staff_member_id:UUID,track:prep_tracks.Track='daily'):
+        prep_tracks.check(store, track)
         store_check(store)
         async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):
             await ready(c);_,kind=await staff_authorize(request,c,store,body.pin)
             if not await c.fetchval('SELECT 1 FROM staff_members WHERE id=$1 AND store_id=$2 AND active',staff_member_id,store): raise HTTPException(422,'Select active roster staff at this location')
             return staff_view(dict(await state(c,store,day,track,staff_member_id),setup=await batches.setup(c,store),credential_kind=kind,identity_verified=False))
     @router.post(staff+'/preview')
-    async def staff_review(store:str,day:date,request:Request,body:StaffPreview,track:Literal['daily','bulk']='daily'):
+    async def staff_review(store:str,day:date,request:Request,body:StaffPreview,track:prep_tracks.Track='daily'):
+        prep_tracks.check(store, track)
         store_check(store)
         async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):
             await ready(c);actor,kind=await staff_authorize(request,c,store,body.pin)
             return staff_view(await submission_preview(c,store,day,track,body.submission,actor,kind))
     @router.post(staff+'/submissions')
-    async def staff_submit(store:str,day:date,request:Request,body:StaffCommit,idempotency_key:UUID=Header(...),track:Literal['daily','bulk']='daily'):
+    async def staff_submit(store:str,day:date,request:Request,body:StaffCommit,idempotency_key:UUID=Header(...),track:prep_tracks.Track='daily'):
+        prep_tracks.check(store, track)
         store_check(store)
         async with pool_factory().acquire() as c:
             await ready(c);actor,kind=await staff_authorize(request,c,store,body.pin)
