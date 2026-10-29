@@ -68,14 +68,14 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
                     coverage_note='Target through next fictional delivery, including buffer',verified=True)|changes
 
     async def edit(self,body=None,version=0,key=None,store='berts',client=None,code='test_food'):
-        return await (client or self.catalog).put(f'/api/pg/purchases/{store}/inventory-pars/{code}',json=body or self.review(),
+        return await (client or self.owner_client).put(f'/api/pg/purchases/{store}/inventory-pars/{code}',json=body or self.review(),
             headers={'If-Match':str(version),'Idempotency-Key':key or str(uuid4())})
 
     async def read(self):
         r=await self.catalog.get('/api/pg/purchases/berts/inventory-pars');self.assertEqual(r.status_code,200,r.text);return r.json()
 
     async def status(self,body,key,version=0,store='berts',client=None):
-        return await (client or self.catalog).post(f'/api/pg/purchases/{store}/inventory-pars/test_food/status',json=body,
+        return await (client or self.owner_client).post(f'/api/pg/purchases/{store}/inventory-pars/test_food/status',json=body,
             headers={'If-Match':str(version),'Idempotency-Key':key})
 
     async def test_recovery_status_is_readonly_and_exact_retries_preserve_accounting(self):
@@ -148,7 +148,7 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
         _,a,b=await self.pair();report=(await self.report(a,b)).json()
         first=await self.edit();self.assertEqual(first.status_code,200,first.text)
         p=first.json()['review'];self.assertEqual(p['quantity'],'1.5');self.assertEqual(Decimal(p['base_quantity']),Decimal('30'))
-        self.assertEqual(p['base_unit'],'lb');self.assertEqual(p['actor'],'synthetic-catalog-reviewer')
+        self.assertEqual(p['base_unit'],'lb');self.assertEqual(p['actor'],'synthetic-owner')
         self.assertEqual(next(r for r in (await self.read())['items'] if r['code']=='test_food')['status'],'confirmed')
         zero=await self.edit(self.review(quantity='0'),version=1);self.assertEqual(zero.status_code,200,zero.text)
         self.assertEqual(zero.json()['review']['base_quantity'],'0')
@@ -193,7 +193,7 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.edit(self.review(unit_profile_id=purchase.json()['profile']['id']))).status_code,409)
         self.assertEqual((await self.edit(store='rudds')).status_code,422)
         self.assertEqual((await self.edit(code='prep_sauce')).status_code,422)
-        missing=await self.catalog.put('/api/pg/purchases/berts/inventory-pars/test_food',json=self.review(),headers={'Idempotency-Key':str(uuid4())})
+        missing=await self.owner_client.put('/api/pg/purchases/berts/inventory-pars/test_food',json=self.review(),headers={'Idempotency-Key':str(uuid4())})
         self.assertEqual(missing.status_code,428)
         for role,locations in [('readonly',['berts']),('manager',['rudds'])]:
             token=server._token(dict(id='synthetic-denied',role=role,locations=locations,email='test@example.invalid'))
@@ -261,7 +261,7 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
             for field,text in expected.items():self.assertEqual(row['review'][field],text)
             replay=await self.edit(body,version=index,key=key);self.assertEqual(replay.status_code,200,replay.text)
             self.assertEqual(replay.json()['review'],saved.json()['review'])
-            digest=pars.fingerprint(pars.serial(dict(store='berts',item='test_food',actor='synthetic-catalog-reviewer',expected=index,body=pars.Review(**body).model_dump())))
+            digest=pars.fingerprint(pars.serial(dict(store='berts',item='test_food',actor='synthetic-owner',expected=index,body=pars.Review(**body).model_dump())))
             async with self.pool.acquire() as c:
                 stored=await c.fetchrow('SELECT quantity,request_fingerprint FROM purchasing.inventory_par_versions WHERE request_key=$1',UUID(key))
             self.assertEqual(stored['quantity'],Decimal(quantity));self.assertEqual(stored['request_fingerprint'],digest)

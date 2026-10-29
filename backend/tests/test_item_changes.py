@@ -20,7 +20,7 @@ class ItemChangesTests(unittest.IsolatedAsyncioTestCase):
                 'SELECT * FROM store_state ORDER BY store_id')]
 
     async def change(self, upserts=None, retired=None, revision=0):
-        return await self.catalog.post('/api/pg/items/berts/changes',
+        return await self.owner_client.post('/api/pg/items/berts/changes',
             json=dict(upserts=upserts or [], retire_codes=retired or []), headers={'If-Match':str(revision)})
 
     async def test_partial_edit_preserves_omitted_item_and_physical_count_metadata(self):

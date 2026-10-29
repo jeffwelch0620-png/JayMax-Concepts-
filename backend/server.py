@@ -3896,6 +3896,7 @@ async def pg_link_shared_item(store_id: str, body: catalog_mapping.LinkItem, req
         async with conn.transaction():
             await catalog_mapping.lock_catalog(conn)
             revision=await _check_and_bump_revision(PG_STORE_TO_RESTAURANT[store_id],request,conn)
+            if body.par != 0 and _token_role(request) not in PAR_EDITORS:raise HTTPException(403,PAR_OWNER_MESSAGE)
             result=await catalog_mapping.link(conn,store_id,body)
             return {**result,'revision':revision}
 
@@ -3910,6 +3911,22 @@ async def _pg_ensure_vendor(conn, vendor_id):
                            vendor_id, PG_KNOWN_VENDORS[vendor_id])
     elif not await conn.fetchval("SELECT 1 FROM vendors WHERE id=$1", vendor_id):
         raise HTTPException(400, f"Unknown supplier '{vendor_id}'")
+
+def _token_role(request):
+    token = (request.headers.get('authorization') or '').removeprefix('Bearer ').strip()
+    user = _decode_token(token) if token else None
+    return (user or {}).get('role')
+
+
+async def _hold_par_change(conn, store_id, items, role):
+    """Item saves keep the location par unless the owner changes it."""
+    if role in PAR_EDITORS:
+        return
+    for item in items:
+        current = await conn.fetchval('SELECT par FROM store_items WHERE store_id=$1 AND item_code=$2', store_id, item.code)
+        if Decimal(str(item.par)) != (current if current is not None else Decimal(0)):
+            raise HTTPException(403, PAR_OWNER_MESSAGE)
+
 
 async def _pg_save_item(conn, store_id, body):
     shared = catalog_mapping.enabled()
@@ -4015,6 +4032,7 @@ async def pg_create_item(store_id: str, body: ItemIn, request: Request):
             await catalog_mapping.lock_catalog(conn)
             if price_actor: await conn.execute("SELECT set_config('jmax.price_actor',$1,true)",price_actor)
             revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
+            await _hold_par_change(conn, store_id, [body], _token_role(request))
             result = await _pg_save_item(conn, store_id, body)
             return {**result, "revision": revision}
     finally:
@@ -4040,6 +4058,7 @@ async def pg_change_items(store_id: str, body: ItemChanges, request: Request):
             linked = await conn.fetch("SELECT item_code FROM store_items WHERE store_id=$1 FOR UPDATE", store_id)
             if not set(retired).issubset({row["item_code"] for row in linked}):
                 raise HTTPException(422, "Retire only items linked to this location")
+            await _hold_par_change(conn, store_id, body.upserts, _token_role(request))
             for item in body.upserts:
                 await _pg_save_item(conn, store_id, item)
             for code in retired:
@@ -4061,6 +4080,7 @@ async def pg_replace_items(store_id: str, body: List[ItemIn], request: Request):
             revision = await _check_and_bump_revision(revision_rid, request, conn)
             existing = await conn.fetch("SELECT item_code FROM store_items WHERE store_id=$1 FOR UPDATE", store_id)
             next_codes = {item.code for item in body}
+            await _hold_par_change(conn, store_id, body, _token_role(request))
             for item in body:
                 await _pg_save_item(conn, store_id, item)
             for row in existing:
@@ -5810,7 +5830,15 @@ app.include_router(prep_list_archive.create_router(db_pg.pool, check_store_id, _
 # Purchase authorization is explicit even when development disables blanket auth.
 import purchase_api
 
-def _purchase_actor(request, store_id, write):
+# Who may set pars and who may prep above or below them (Jeff 2026-10-29). Pars: owner/admin only.
+# Preparing more or less than par needs GM sign-off; until the GM and Admin roles exist, the owner.
+PAR_EDITORS = ('owner',)
+PAR_EXCEPTION_APPROVERS = ('owner',)
+PAR_OWNER_MESSAGE = 'Only the owner can establish or change pars'
+PAR_EXCEPTION_MESSAGE = 'Preparing more or less than par needs owner sign-off (GM sign-off once the GM role is set up)'
+
+
+def _purchase_actor(request, store_id, write, require=None):
     token = (request.headers.get('authorization') or '').removeprefix('Bearer ').strip()
     user = _decode_token(token) if token else None
     if not user:
@@ -5818,6 +5846,10 @@ def _purchase_actor(request, store_id, write):
     role = user.get('role')
     if role not in ('owner', 'manager', 'readonly') or (write and role == 'readonly'):
         raise HTTPException(403, 'Purchase review requires manager or owner access')
+    if require == 'par' and role not in PAR_EDITORS:
+        raise HTTPException(403, PAR_OWNER_MESSAGE)
+    if require == 'par_exception' and role not in PAR_EXCEPTION_APPROVERS:
+        raise HTTPException(403, PAR_EXCEPTION_MESSAGE)
     if role != 'owner' and PG_STORE_TO_RESTAURANT[store_id] not in user.get('locations', []):
         raise HTTPException(403, 'Location access denied')
     return user.get('sub') or user.get('email') or role

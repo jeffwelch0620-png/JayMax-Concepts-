@@ -72,9 +72,12 @@ class CatalogIntegrityTests(unittest.IsolatedAsyncioTestCase):
         self.previous = server.db_pg._pool; server.db_pg._pool = self.pool
         token = server._token({'id':'synthetic-catalog-reviewer', 'email':'catalog@example.invalid', 'role':'manager', 'locations':['berts','rudds']})
         self.catalog = httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url='http://test', headers={'Authorization':'Bearer '+token})
+        # Pars are owner-only (Jeff 2026-10-29): tests that establish pars use this owner client.
+        owner = server._token({'id':'synthetic-owner', 'email':'owner@example.invalid', 'role':'owner', 'locations':[]})
+        self.owner_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url='http://test', headers={'Authorization':'Bearer '+owner})
 
     async def asyncTearDown(self):
-        await self.catalog.aclose(); server.db_pg._pool = self.previous
+        await self.catalog.aclose(); await self.owner_client.aclose(); server.db_pg._pool = self.previous
         await fixtures.NativeOrderReceivingTests.asyncTearDown(self)
 
     def entry(self, **changes):
@@ -86,8 +89,8 @@ class CatalogIntegrityTests(unittest.IsolatedAsyncioTestCase):
                 'price':'99.100000000000000001','preferred':True}]}
         return {**value, **changes}
 
-    async def put(self, body, revision, store='berts'):
-        return await self.catalog.put('/api/pg/items/'+store, json=body, headers={'If-Match':str(revision)})
+    async def put(self, body, revision, store='berts', client=None):
+        return await (client or self.catalog).put('/api/pg/items/'+store, json=body, headers={'If-Match':str(revision)})
 
     async def test_ordinary_edits_preserve_exact_price_provenance_description_and_count_actor(self):
         async with self.pool.acquire() as c:
@@ -95,7 +98,7 @@ class CatalogIntegrityTests(unittest.IsolatedAsyncioTestCase):
             await c.execute("UPDATE store_items SET last_counted='2026-10-01',last_counted_by='Invented counter' WHERE item_code='test_food'")
         first=(await self.catalog.get('/api/pg/items/berts')).json()
         self.assertEqual(next(i for i in first if i['code']=='test_food')['vendorSkus'][0]['price'],'99.100000000000000001')
-        response=await self.put([self.entry(counted_nightly=False, par=4)],0)
+        response=await self.put([self.entry(counted_nightly=False, par=4)],0,client=self.owner_client)  # par change: owner only
         self.assertEqual(response.status_code,200,response.text)
         with patch.dict(os.environ, {'ACTUAL_INVENTORY_ENABLED':'false'}):
             after=next(i for i in (await self.catalog.get('/api/pg/items/berts')).json() if i['code']=='test_food')

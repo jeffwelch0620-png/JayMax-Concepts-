@@ -156,7 +156,7 @@ async def save(pool,store,code,actor,body,key,expected):
 def install_routes(router,context):
     @router.post('/{store_id}/inventory-pars/{item_code}/status')
     async def check_saved_par(store_id:str,item_code:str,body:Review,request:Request,idempotency_key:UUID=Header(...)):
-        actor,pool=await context(request,store_id,True)
+        actor,pool=await context(request,store_id,True)  # reads a saved outcome only
         from prep_planning import version
         return await saved_status(pool,store_id,item_code,actor,body,idempotency_key,version(request))
 
@@ -168,7 +168,7 @@ def install_routes(router,context):
 
     @router.put('/{store_id}/inventory-pars/{item_code}')
     async def review_par(store_id:str,item_code:str,body:Review,request:Request,idempotency_key:UUID=Header(...)):
-        actor,pool=await context(request,store_id,True)
+        actor,pool=await context(request,store_id,True,require='par')  # pars: owner/admin only
         from prep_planning import version
         return await save(pool,store_id,item_code,actor,body,idempotency_key,version(request))
 

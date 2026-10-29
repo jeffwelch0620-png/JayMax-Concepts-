@@ -143,7 +143,7 @@ def install_routes(router,context):
     @router.put('/{store_id}/prep-planning/{product_id}')
     async def write_plan(store_id:str,product_id:UUID,body:Command,request:Request,idempotency_key:UUID=Header(...)):
         prep_tracks.check(store_id,getattr(body,'track',None))
-        actor,pool=await context(request,store_id,True)
+        actor,pool=await context(request,store_id,True,require='par')  # pars: owner/admin only
         return await save(pool,store_id,product_id,actor,body,idempotency_key,version(request))
 
     @router.get('/{store_id}/prep-planning/{product_id}/history')

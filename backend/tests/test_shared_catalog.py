@@ -52,7 +52,7 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
             vendor_item_ids=[str(self.sku)],verified=True,expected_catalog_hash=chosen['catalog_hash'])
 
     async def link(self,body=None,revision=0):
-        return await self.catalog.post('/api/pg/catalog/rudds/links',json=body or await self.link_body(),headers={'If-Match':str(revision)})
+        return await self.owner_client.post('/api/pg/catalog/rudds/links',json=body or await self.link_body(),headers={'If-Match':str(revision)})
 
     async def payload(self,store='rudds',**changes):
         async with self.pool.acquire() as c:
@@ -65,7 +65,7 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
         return server.purchase_api.serial({**body,**changes})
 
     async def put(self,body,revision,store='rudds'):
-        return await self.catalog.put('/api/pg/items/'+store,json=[body],headers={'If-Match':str(revision)})
+        return await self.owner_client.put('/api/pg/items/'+store,json=[body],headers={'If-Match':str(revision)})
 
     async def test_unsafe_planning_catalog_keeps_actual_report_and_reads_available(self):
         self.assertEqual((await self.units())[0].status_code,200)
@@ -214,7 +214,7 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
         largest = '9'*512+'.'+'1'*512
         body['par'] = largest
         body['vendor_skus'][0].update(price='1e-512', pack_count='0E-10')
-        response = await self.catalog.post('/api/pg/items/berts/changes',
+        response = await self.owner_client.post('/api/pg/items/berts/changes',
             json={'upserts': [body], 'retire_codes': []}, headers={'If-Match': '0'})
         self.assertEqual(response.status_code, 200, response.text)
         row = next(r for r in (await self.catalog.get('/api/pg/items/berts')).json() if r['code'] == 'test_food')
