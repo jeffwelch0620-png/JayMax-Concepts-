@@ -10,6 +10,7 @@ import { HistoricalPrepLists } from "./HistoricalPrepLists";
 import { StaffPrepCountReview } from "./StaffPrepCounts";
 import { PrepContainers } from "./PrepContainers";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
+import { prepTracks } from "../lib/prepTracks";
 
 function tomorrowISO() {
   const d = new Date();
@@ -30,10 +31,6 @@ const SUBS = [
   { id: "history", label: "History", icon: Layers },
 ];
 
-const TRACKS = [
-  { id: "daily", label: "Daily Prep" },
-  { id: "bulk", label: "Bulk Prep" },
-];
 
 // v matches Python's date.weekday() (Mon=0..Sun=6) on the backend -- NOT JS
 // Date.getDay() (Sun=0). This is a static label table, never derived from a live
@@ -63,8 +60,12 @@ function RecurringScheduleFields({ recurDays, toggleDay, fixedQty, setFixedQty, 
 }
 
 export function PrepTab({ initialContext, drafts, showError = () => {}, rid, items, dishes, persistDishes, prepStock, prepLogs, prepReadStatus, prepCapabilities, applyPrepResult, salesPeriod, showToast }) {
-  const entry = initialContext?.rid === rid && validOverviewDay(initialContext.day) && TRACKS.some(t => t.id === initialContext.track) ? initialContext : null;
-  const [track, setTrack] = useState(entry?.track || "daily");
+  // Salad Bar exists only in the native dated workflow; the legacy list and count readers are Daily/Bulk.
+  const tracks = prepTracks(rid).filter(t => t.id !== "salad" || api.prepDayTasksEnabled);
+  const allowed = value => tracks.some(t => t.id === value);
+  const entry = initialContext?.rid === rid && validOverviewDay(initialContext.day) && allowed(initialContext.track) ? initialContext : null;
+  const [chosenTrack, setTrack] = useState(entry?.track || "daily");
+  const track = allowed(chosenTrack) ? chosenTrack : "daily";
   const [sub, setSub] = useState("list");
   const [prepItems, setPrepItems] = useState([]);
   const reloadPrepItems = () => api.listPrepItems(rid, track).then(setPrepItems).catch(() => {});
@@ -77,7 +78,7 @@ export function PrepTab({ initialContext, drafts, showError = () => {}, rid, ite
         {api.nativePurchasesEnabled || prepCapabilities?.reportingAvailable === false ? "Prep counts and production explain inventory usage. Track 1 physical counts and received purchases remain the accounting baseline." : "Nightly cycle: the closing manager records the evening prep count, the system builds tomorrow's prep list (par − counted = prep quantity), staff mark tasks prepped, and raw inventory is deducted automatically."}
       </div>
       <div className="flex gap-2 mb-4 flex-wrap" data-testid="prep-track-selector">
-        {TRACKS.map((t) => (
+        {tracks.map((t) => (
           <button key={t.id} className={track === t.id ? btnAcc : btnGhost} onClick={() => setTrack(t.id)} data-testid={`prep-track-${t.id}`}>
             {t.label}
           </button>
@@ -86,6 +87,7 @@ export function PrepTab({ initialContext, drafts, showError = () => {}, rid, ite
       <div className="text-xs text-slate-500 -mt-2 mb-4">
         {track === "daily"
           ? "On-site prep, replenished to par every day."
+          : track === "salad" ? "Salad Bar prep at Bert's, planned, recorded and reported separately from Daily and Bulk."
           : api.prepPlanningEnabled ? "Bulk prep planning, separate from Daily Prep. Production location and transfers are tracked separately." : "Commissary-kitchen prep — its own standing items, evening count, and daily list, separate from Daily Prep."}
       </div>
       <div className="flex gap-2 mb-5 flex-wrap" data-testid="prep-subtabs">

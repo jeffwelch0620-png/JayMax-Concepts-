@@ -6,13 +6,13 @@ import { loadAssignmentOverview } from "../lib/managerAssignmentOverview";
 import { loadManagerTakeover } from "../lib/managerTakeover";
 import { ManagerAssignmentOverview } from "./ManagerAssignmentOverview";
 import { cardCls } from "./common";
+import { prepTrackLabel } from "../lib/prepTracks";
 
 // Read-only detail for the overview's selected store/date/track: native planned, reviewed and
 // remaining quantities, recorded assignments and the previous submitted note. GET readers only.
 const loading = () => ({ state: "loading" });
 const labels = { open: "Open", in_progress: "In progress", complete: "Finished",
   needs_review: "Review required", unavailable: "Progress not confirmed" };
-const trackLabel = { daily: "Daily Prep", bulk: "Bulk Prep" };
 
 export function ManagerPrepDetail({ rid, day, track, user, generation = 0, readApi = api }) {
   const [view, setView] = useState(null);
@@ -46,7 +46,7 @@ export function ManagerPrepDetail({ rid, day, track, user, generation = 0, readA
   const current = view?.key === key && view.readApi === readApi ? view : null;
   const prep = current?.prep || loading(), assignments = current?.assignments || loading(), note = current?.note || loading();
   return <div data-testid="manager-prep-detail" className="mt-6 space-y-4">
-    <h2 className="font-bold">Prep quantities and assignments · {trackLabel[track]} · {day}</h2>
+    <h2 className="font-bold">Prep quantities and assignments · {prepTrackLabel(track)} · {day}</h2>
     <p className="text-sm text-slate-400">Remaining against reviewed output is not an instruction to produce. Pending reports and physical stock require manager review before directing more prep.
       Pending and rejected reports do not contribute to reviewed output. This view does not read reports or confirm that none are pending.</p>
     <section className={cardCls + " p-5"} aria-label="Prep quantities"><h3 className="font-semibold">Planned, reviewed and remaining</h3>

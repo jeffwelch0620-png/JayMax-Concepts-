@@ -1,6 +1,7 @@
 import { canonicalStoreId } from "./purchaseContract";
 import { readStateWithDeadline } from "./stateRead";
 import { overviewDecimal, decimalText, overviewDifference } from "./overviewDecimal";
+import { validPrepTrack } from "./prepTracks";
 
 export const overviewUuid = v => typeof v === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 
@@ -14,7 +15,7 @@ export const validOverviewDay = value => {
 };
 export function overviewContext(rid, day, track, user) {
   if (!["berts", "rudds", "papa_leonis"].includes(rid) || !validOverviewDay(day)
-      || !["daily", "bulk"].includes(track) || !text(user?.id)
+      || !validPrepTrack(rid, track) || !text(user?.id)
       || !["owner", "manager"].includes(user?.role)
       || !Array.isArray(user.locations) || !user.locations.every(text)
       || (user.role === "manager" && !user.locations?.includes(rid))) return null;
@@ -186,7 +187,7 @@ export async function loadManagerOverview(context, api, receive) {
 export function rememberedOverview(storage, actorId, rid, fallbackDay) {
   try {
     const saved = JSON.parse(storage?.getItem(`manager-overview:${actorId}:${rid}`) || "null");
-    if (saved && validOverviewDay(saved.day) && ["daily", "bulk"].includes(saved.track)) return { day: saved.day, track: saved.track };
+    if (saved && validOverviewDay(saved.day) && validPrepTrack(rid, saved.track)) return { day: saved.day, track: saved.track };
   } catch { /* View preferences are optional; business records are never cached here. */ }
   return { day: fallbackDay, track: "bulk" };
 }

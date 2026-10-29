@@ -1,5 +1,6 @@
 import { canonicalStoreId } from "./purchaseContract";
 import { validOverviewDay } from "./managerOverview";
+import { validPrepTrack } from "./prepTracks";
 const uuid = v => typeof v === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 const id = v => typeof v === "string" && /^[A-Za-z0-9_.-]{1,160}$/.test(v);
 const integer = v => Number.isSafeInteger(v) && v >= 0 && v <= 2147483647;
@@ -14,7 +15,7 @@ function check(ok) { if (!ok) throw fail(); }
 export const stableHandoff = v => JSON.stringify(sort(v));
 function sort(v) { return Array.isArray(v) ? v.map(sort) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sort(v[k])])) : v; }
 export function handoffContext(rid, day, track, actor) {
-  if (!["berts", "rudds", "papa_leonis"].includes(rid) || !validOverviewDay(day) || day.startsWith("0000") || !["daily", "bulk"].includes(track)
+  if (!["berts", "rudds", "papa_leonis"].includes(rid) || !validOverviewDay(day) || day.startsWith("0000") || !validPrepTrack(rid, track)
     || !id(actor?.id) || !["owner", "manager"].includes(actor.role) || (actor.role === "manager" && (!Array.isArray(actor.locations) || !actor.locations.includes(rid)))) return null;
   return { rid, store: canonicalStoreId(rid), day, track, actor: actor.id,
     key: stableHandoff([actor.id, actor.role, actor.locations, rid, day, track]) };
@@ -24,7 +25,7 @@ export function checkedHandoffRequest(r) {
   check(exact(r, ["key", "version", "body", "fingerprint"]) && uuid(r.key) && integer(r.version) && r.version < 2147483647 && /^[a-f0-9]{64}$/.test(r.fingerprint));
   const b = r.body;
   check(exact(b, bodyKeys) && ["create_draft", "save_draft", "submit", "correct"].includes(b.action)
-    && uuid(b.note_id) && validOverviewDay(b.business_date) && !b.business_date.startsWith("0000") && ["daily", "bulk"].includes(b.prep_track)
+    && uuid(b.note_id) && validOverviewDay(b.business_date) && !b.business_date.startsWith("0000") && ["daily", "bulk", "salad"].includes(b.prep_track)
     && integer(b.settings_revision) && b.settings_revision > 0 && text(b.summary, 6000, true) && b.summary === b.summary.trim()
     && text(b.next_shift_note, 4000) && readiness(b.reported_readiness) && text(b.correction_reason, 2000)
     && b.correction_reason === b.correction_reason.trim() && ((b.action === "correct") === !!b.correction_reason)

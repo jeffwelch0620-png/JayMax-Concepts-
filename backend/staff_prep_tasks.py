@@ -1,4 +1,5 @@
 """Versioned manager assignments and location-authorized, read-only staff prep plans."""
+import prep_tracks
 import os
 from datetime import date
 from decimal import Decimal
@@ -30,7 +31,7 @@ class Commit(Reviewed):
 
 class ReadIn(Credentials):
     day: date
-    track: Literal['daily', 'bulk'] = 'daily'
+    track: prep_tracks.Track = 'daily'
     staff_member_id: UUID | None = None
 
 
@@ -151,17 +152,20 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
     base = '/api/pg/purchases/{store}/staff-prep-tasks/{day}'
 
     @router.get(base)
-    async def read(store: str, day: date, request: Request, track: Literal['daily','bulk']='daily'):
+    async def read(store: str, day: date, request: Request, track: prep_tracks.Track='daily'):
+        prep_tracks.check(store, track)
         store_check(store); manager_authorize(request,store,False)
         async with pool_factory().acquire() as conn, conn.transaction(isolation='repeatable_read',readonly=True): return await state(conn,store,day,track)
 
     @router.post(base+'/preview')
-    async def plan(store: str, day: date, request: Request, body: Assignment, track: Literal['daily','bulk']='daily'):
+    async def plan(store: str, day: date, request: Request, body: Assignment, track: prep_tracks.Track='daily'):
+        prep_tracks.check(store, track)
         store_check(store); manager_authorize(request,store,True)
         async with pool_factory().acquire() as conn, conn.transaction(isolation='repeatable_read',readonly=True): return await preview(conn,store,day,track,body)
 
     @router.post(base+'/assignments')
-    async def save(store: str, day: date, request: Request, body: Commit, idempotency_key: UUID=Header(...), track: Literal['daily','bulk']='daily'):
+    async def save(store: str, day: date, request: Request, body: Commit, idempotency_key: UUID=Header(...), track: prep_tracks.Track='daily'):
+        prep_tracks.check(store, track)
         store_check(store); actor=manager_authorize(request,store,True)
         return await commit(pool_factory(),store,day,track,actor,body,idempotency_key)
 

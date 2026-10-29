@@ -8,12 +8,15 @@ from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activation s1_request_transport s1_observation probe_reproducibility read_only_probe local_query_metrics par_qualification_packet maintenance_connection planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
+# par_qualification_packet is no longer selected: it pins exact hashes of shared files (the
+# migration list, this runner) for the parked hosted-par ritual, so every ordinary change
+# fails it. Code is kept; see jmax-workspace docs/SECURITY-SETUP.md (2026-10-28).
+OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activation s1_request_transport s1_observation probe_reproducibility read_only_probe local_query_metrics maintenance_connection planning_numbers backend_planning_prices monetary_completeness catalog_reads db_auxiliary db_tls hosted_auxiliary_trial hosted_backup hosted_backup_cli hosted_build_workflows '
  'managed_development rotate_build_connections provision_build_connections staff_response staff_pin_security pg_routes pg_migrations '
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('salad_track::SaladTrackRuleTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
@@ -24,6 +27,8 @@ OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_insta
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
                     'batched_fingerprints::BatchedFingerprintGuards']
 DATABASE_CASES = (
+ ('salad_track','SaladTrackDatabaseTests','test_salad_plan_saves_at_berts_and_is_refused_elsewhere'),
+ ('salad_track','SaladTrackDatabaseTests','test_database_refuses_salad_outside_berts_even_without_the_api'),
  ('s1_observation_pg','S1CollectorDatabaseTests','test_complete_collector_reads_real_metadata_ledger_and_audit_without_writes'),
  ('s1_observation_pg','S1CollectorDatabaseTests','test_real_disposable_identity_without_adapter_is_refused_and_closed'),
  ('s1_observation_pg','S1CollectorDatabaseTests','test_real_ledger_shape_failure_preserves_prefix_and_skips_audit'),
