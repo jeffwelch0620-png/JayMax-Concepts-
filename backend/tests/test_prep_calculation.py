@@ -75,8 +75,8 @@ class BatchPlanDatabaseTests(day.PrepDayTaskTests):
                                                    "ON CONFLICT(store_id,prep_date,track) DO UPDATE SET track=EXCLUDED.track RETURNING id")
                         snapshot = dict(review, tasks=[forged])
                         version = await c.fetchval('''INSERT INTO prep_inventory.day_list_versions(list_id,store_id,revision,count_event_id,day_group,note,actor,
-                            review_snapshot,review_hash,request_key,request_fingerprint) VALUES($1,'berts',1,$2,'weekday','Forged','tester',$3,$4,$5,$4) RETURNING id''',
-                            list_id, UUID(count['id']), snapshot, b'\x00' * 32, uuid4())
+                            review_snapshot,review_hash,request_key,request_fingerprint) VALUES($1,'berts',1,$2,'weekday',$6,'tester',$3,$4,$5,$4) RETURNING id''',
+                            list_id, UUID(count['id']), snapshot, b'\x00' * 32, uuid4(), review['inputs']['note'])
                         await c.execute('''INSERT INTO prep_inventory.day_tasks(version_id,store_id,ordinal,product_id,planning_version_id,recipe_version_id,
                             unit_profile_id,included,planned_quantity,factor,planned_base_quantity,task_snapshot) VALUES($1,'berts',1,$2,$3,$4,$5,true,$6,$7,$8,$9)''',
                             version, UUID(forged['product_id']), UUID(forged['planning_version_id']), UUID(forged['recipe_version_id']),
