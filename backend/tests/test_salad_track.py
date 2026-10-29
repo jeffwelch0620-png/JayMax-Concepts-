@@ -32,6 +32,12 @@ class SaladTrackRuleTests(unittest.TestCase):
             self.assertIn(name, text)
         self.assertEqual(text.count("store_id = 'berts'"), 3)
 
+    def test_manager_notes_installed_later_have_an_idempotent_salad_upgrade(self):
+        text = (readiness.ROOT / 'migrations/20261029_salad_manager_notes.sql').read_text(encoding='utf-8')
+        self.assertIn('handoff_notes_salad_store_check', text)
+        self.assertIn('IF NOT EXISTS', text)
+        self.assertNotIn('20261029_salad_manager_notes.sql', readiness.MIGRATIONS)
+
 
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'), 'Disposable PostgreSQL required')
 class SaladTrackDatabaseTests(planning_tests.PrepPlanningTests):

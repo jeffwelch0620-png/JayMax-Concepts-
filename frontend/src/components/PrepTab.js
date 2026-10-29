@@ -10,7 +10,7 @@ import { HistoricalPrepLists } from "./HistoricalPrepLists";
 import { StaffPrepCountReview } from "./StaffPrepCounts";
 import { PrepContainers } from "./PrepContainers";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost, btnDanger } from "./common";
-import { prepTracks, validPrepTrack } from "../lib/prepTracks";
+import { prepTracks } from "../lib/prepTracks";
 
 function tomorrowISO() {
   const d = new Date();
@@ -60,9 +60,12 @@ function RecurringScheduleFields({ recurDays, toggleDay, fixedQty, setFixedQty, 
 }
 
 export function PrepTab({ initialContext, drafts, showError = () => {}, rid, items, dishes, persistDishes, prepStock, prepLogs, prepReadStatus, prepCapabilities, applyPrepResult, salesPeriod, showToast }) {
-  const entry = initialContext?.rid === rid && validOverviewDay(initialContext.day) && validPrepTrack(rid, initialContext.track) ? initialContext : null;
+  // Salad Bar exists only in the native dated workflow; the legacy list and count readers are Daily/Bulk.
+  const tracks = prepTracks(rid).filter(t => t.id !== "salad" || api.prepDayTasksEnabled);
+  const allowed = value => tracks.some(t => t.id === value);
+  const entry = initialContext?.rid === rid && validOverviewDay(initialContext.day) && allowed(initialContext.track) ? initialContext : null;
   const [chosenTrack, setTrack] = useState(entry?.track || "daily");
-  const track = validPrepTrack(rid, chosenTrack) ? chosenTrack : "daily";
+  const track = allowed(chosenTrack) ? chosenTrack : "daily";
   const [sub, setSub] = useState("list");
   const [prepItems, setPrepItems] = useState([]);
   const reloadPrepItems = () => api.listPrepItems(rid, track).then(setPrepItems).catch(() => {});
@@ -75,7 +78,7 @@ export function PrepTab({ initialContext, drafts, showError = () => {}, rid, ite
         {api.nativePurchasesEnabled || prepCapabilities?.reportingAvailable === false ? "Prep counts and production explain inventory usage. Track 1 physical counts and received purchases remain the accounting baseline." : "Nightly cycle: the closing manager records the evening prep count, the system builds tomorrow's prep list (par − counted = prep quantity), staff mark tasks prepped, and raw inventory is deducted automatically."}
       </div>
       <div className="flex gap-2 mb-4 flex-wrap" data-testid="prep-track-selector">
-        {prepTracks(rid).map((t) => (
+        {tracks.map((t) => (
           <button key={t.id} className={track === t.id ? btnAcc : btnGhost} onClick={() => setTrack(t.id)} data-testid={`prep-track-${t.id}`}>
             {t.label}
           </button>

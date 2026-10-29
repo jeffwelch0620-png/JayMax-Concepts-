@@ -9,6 +9,7 @@ ALTER TABLE prep_inventory.planning_versions
   ADD CONSTRAINT planning_versions_track_check CHECK (track IN ('daily','bulk','salad')),
   ADD CONSTRAINT planning_versions_salad_store_check CHECK (track <> 'salad' OR store_id = 'berts');
 -- Day lists and the separately installed manager note journal are widened where present.
+-- If the journal is installed later, apply 20261029_salad_manager_notes.sql right after it.
 DO $$
 BEGIN
   IF to_regclass('prep_inventory.day_lists') IS NOT NULL THEN

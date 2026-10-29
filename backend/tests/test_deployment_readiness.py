@@ -88,7 +88,7 @@ class ReadinessConfigurationTests(unittest.TestCase):
         backend['PREP_BATCHES_ENABLED']=' true ';self.assertIn('explicit true/false',str(readiness.configuration(backend,frontend)['problems']))
 
     def test_plan_covers_native_files_once_and_excludes_already_applied_recurring_file(self):
-        expected={p.name for p in (readiness.ROOT/'migrations').glob('*.sql')} - {'20260930_recurring_prep_items.sql','20261025_manager_handoff_notes.sql'}
+        expected={p.name for p in (readiness.ROOT/'migrations').glob('*.sql')} - {'20260930_recurring_prep_items.sql','20261025_manager_handoff_notes.sql','20261029_salad_manager_notes.sql'}
         plan=readiness.migration_plan();self.assertEqual({e['file'] for e in plan['migrations']},expected)
         self.assertEqual(len(readiness.MIGRATIONS),len(expected));self.assertEqual(len(set(readiness.MIGRATIONS)),len(expected))
         self.assertEqual(readiness.MIGRATIONS[-1],'20261029_salad_prep_track.sql')
