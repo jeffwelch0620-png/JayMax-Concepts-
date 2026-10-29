@@ -320,6 +320,28 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncpg.ForeignKeyViolationError):
                 await c.execute("UPDATE vendor_items SET item_code='other_food' WHERE id=$1",self.sku)
 
+    async def test_a_location_adds_its_own_vendor_to_a_shared_item(self):
+        """Same item, several vendors: Rudd's adds a US Foods product (different pack) under the item
+        Bert's buys from its own supplier. Bert's settings and the shared identity stay untouched."""
+        self.assertEqual((await self.link()).status_code,200)
+        body=await self.payload()
+        body['vendor_skus'][0]['preferred']=False
+        body['vendor_skus'].append({'vendor_id':'us_foods','vendor_sku':'USF-ROLLS-1','vendor_description':'Invented rolls 12 dz',
+            'purchase_unit':'case','base_per_purchase_unit':'12','pack_count':None,'unit_qty':None,'unit_uom':None,
+            'price':'31.50','preferred':True,'available':True})
+        response=await self.put(body,1);self.assertEqual(response.status_code,200,response.text)
+        async with self.pool.acquire() as c:
+            added=await c.fetchrow("SELECT * FROM vendor_items WHERE vendor_id='us_foods' AND vendor_sku='USF-ROLLS-1'")
+            self.assertEqual((added['item_code'],added['base_per_purchase_unit']),('test_food',Decimal('12')))
+            rudds=await c.fetchrow("SELECT * FROM purchasing.store_vendor_items WHERE store_id='rudds' AND vendor_item_id=$1",added['id'])
+            self.assertTrue(rudds['preferred']);self.assertEqual(rudds['price'],Decimal('31.50'))
+            self.assertFalse(await c.fetchval("SELECT EXISTS(SELECT 1 FROM purchasing.store_vendor_items WHERE store_id='berts' AND vendor_item_id=$1)",added['id']))
+            self.assertTrue(await c.fetchval("SELECT preferred FROM purchasing.store_vendor_items WHERE store_id='berts' AND vendor_item_id=$1",self.sku))
+            self.assertFalse(await c.fetchval("SELECT preferred FROM purchasing.store_vendor_items WHERE store_id='rudds' AND vendor_item_id=$1",self.sku))
+        # Changing an existing shared supplier product is still held.
+        body=await self.payload();body['vendor_skus'][0]['pack_count']=200
+        self.assertEqual((await self.put(body,2)).status_code,409)
+
     async def test_stale_hash_unverified_wrong_sku_and_alias_collision_do_not_write(self):
         base=await self.link_body()
         for changes,status in [({'expected_catalog_hash':'0'*64},409),({'verified':False},422),({'vendor_item_ids':[str(uuid4())]},422),({'vendor_item_ids':[str(self.sku),str(self.sku)]},422)]:

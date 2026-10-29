@@ -107,6 +107,11 @@ async def hold_shared_changes(conn,store,body):
         if (key not in ('category','item_type','is_high_value','notes') or key in body.model_fields_set) and not same(original[key],getattr(body,key)):
             raise HTTPException(409,'This product is shared across locations. Shared product and pack changes require catalog review; location settings and supplier prices can be edited here.')
     for sk in body.vendor_skus:
+        # A brand-new supplier product may be added under a shared item (shop the same item across
+        # vendors, Jeff 2026-10-29). It is linked for this location only, and its pack counts for
+        # accounting only after its own verified purchase-unit profile. Existing ones stay held.
+        if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM public.vendor_items WHERE vendor_id=$1 AND vendor_sku=$2)',sk.vendor_id,sk.vendor_sku):
+            continue
         row=await conn.fetchrow('SELECT * FROM public.vendor_items WHERE vendor_id=$1 AND vendor_sku=$2 AND item_code=$3',sk.vendor_id,sk.vendor_sku,body.code)
         if row is None or any(not same(row[key],getattr(sk,key)) for key in ('vendor_description','purchase_unit','base_per_purchase_unit','pack_count','unit_qty','unit_uom')):
             raise HTTPException(409,'This supplier product is shared. Review its identity and physical pack in the shared catalog before changing it.')
