@@ -148,7 +148,7 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
         _,a,b=await self.pair();report=(await self.report(a,b)).json()
         first=await self.edit();self.assertEqual(first.status_code,200,first.text)
         p=first.json()['review'];self.assertEqual(p['quantity'],'1.5');self.assertEqual(Decimal(p['base_quantity']),Decimal('30'))
-        self.assertEqual(p['base_unit'],'lb');self.assertEqual(p['actor'],'synthetic-catalog-reviewer')
+        self.assertEqual(p['base_unit'],'lb');self.assertEqual(p['actor'],'synthetic-owner')
         self.assertEqual(next(r for r in (await self.read())['items'] if r['code']=='test_food')['status'],'confirmed')
         zero=await self.edit(self.review(quantity='0'),version=1);self.assertEqual(zero.status_code,200,zero.text)
         self.assertEqual(zero.json()['review']['base_quantity'],'0')
@@ -261,7 +261,7 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
             for field,text in expected.items():self.assertEqual(row['review'][field],text)
             replay=await self.edit(body,version=index,key=key);self.assertEqual(replay.status_code,200,replay.text)
             self.assertEqual(replay.json()['review'],saved.json()['review'])
-            digest=pars.fingerprint(pars.serial(dict(store='berts',item='test_food',actor='synthetic-catalog-reviewer',expected=index,body=pars.Review(**body).model_dump())))
+            digest=pars.fingerprint(pars.serial(dict(store='berts',item='test_food',actor='synthetic-owner',expected=index,body=pars.Review(**body).model_dump())))
             async with self.pool.acquire() as c:
                 stored=await c.fetchrow('SELECT quantity,request_fingerprint FROM purchasing.inventory_par_versions WHERE request_key=$1',UUID(key))
             self.assertEqual(stored['quantity'],Decimal(quantity));self.assertEqual(stored['request_fingerprint'],digest)

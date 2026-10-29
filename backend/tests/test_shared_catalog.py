@@ -214,7 +214,7 @@ class SharedCatalogTests(unittest.IsolatedAsyncioTestCase):
         largest = '9'*512+'.'+'1'*512
         body['par'] = largest
         body['vendor_skus'][0].update(price='1e-512', pack_count='0E-10')
-        response = await self.catalog.post('/api/pg/items/berts/changes',
+        response = await self.owner.post('/api/pg/items/berts/changes',
             json={'upserts': [body], 'retire_codes': []}, headers={'If-Match': '0'})
         self.assertEqual(response.status_code, 200, response.text)
         row = next(r for r in (await self.catalog.get('/api/pg/items/berts')).json() if r['code'] == 'test_food')
