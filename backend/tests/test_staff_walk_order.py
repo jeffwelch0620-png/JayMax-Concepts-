@@ -2,6 +2,7 @@
 totalled by the server and carried into the accepted Track 1 count."""
 import os
 import unittest
+from decimal import Decimal
 from uuid import uuid4
 
 import staff_count_drafts as drafts
@@ -67,8 +68,8 @@ class StaffWalkOrderTests(staff.StaffCountDraftTests):
         count = result.json()['count']
         self.assertEqual(count['header']['layout_id'], self.layout['header']['id'])
         self.assertEqual(count['lines'][0]['base_quantity'], '60')
-        self.assertEqual({q['location_code']: q['counted_quantity'] for q in count['lines'][0]['locations']},
-                         {'walk-in-cooler': '1', 'dry-storage': '2'})
+        self.assertEqual({q['location_code']: Decimal(q['counted_quantity']) for q in count['lines'][0]['locations']},
+                         {'walk-in-cooler': Decimal(1), 'dry-storage': Decimal(2)})
 
     async def test_blank_location_is_incomplete_and_wrong_shapes_are_refused(self):
         await self.walk_order()
