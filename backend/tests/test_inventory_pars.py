@@ -68,14 +68,14 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
                     coverage_note='Target through next fictional delivery, including buffer',verified=True)|changes
 
     async def edit(self,body=None,version=0,key=None,store='berts',client=None,code='test_food'):
-        return await (client or self.catalog).put(f'/api/pg/purchases/{store}/inventory-pars/{code}',json=body or self.review(),
+        return await (client or self.owner).put(f'/api/pg/purchases/{store}/inventory-pars/{code}',json=body or self.review(),
             headers={'If-Match':str(version),'Idempotency-Key':key or str(uuid4())})
 
     async def read(self):
         r=await self.catalog.get('/api/pg/purchases/berts/inventory-pars');self.assertEqual(r.status_code,200,r.text);return r.json()
 
     async def status(self,body,key,version=0,store='berts',client=None):
-        return await (client or self.catalog).post(f'/api/pg/purchases/{store}/inventory-pars/test_food/status',json=body,
+        return await (client or self.owner).post(f'/api/pg/purchases/{store}/inventory-pars/test_food/status',json=body,
             headers={'If-Match':str(version),'Idempotency-Key':key})
 
     async def test_recovery_status_is_readonly_and_exact_retries_preserve_accounting(self):
@@ -193,7 +193,7 @@ class InventoryParTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.edit(self.review(unit_profile_id=purchase.json()['profile']['id']))).status_code,409)
         self.assertEqual((await self.edit(store='rudds')).status_code,422)
         self.assertEqual((await self.edit(code='prep_sauce')).status_code,422)
-        missing=await self.catalog.put('/api/pg/purchases/berts/inventory-pars/test_food',json=self.review(),headers={'Idempotency-Key':str(uuid4())})
+        missing=await self.owner.put('/api/pg/purchases/berts/inventory-pars/test_food',json=self.review(),headers={'Idempotency-Key':str(uuid4())})
         self.assertEqual(missing.status_code,428)
         for role,locations in [('readonly',['berts']),('manager',['rudds'])]:
             token=server._token(dict(id='synthetic-denied',role=role,locations=locations,email='test@example.invalid'))
