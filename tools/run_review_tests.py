@@ -87,6 +87,8 @@ DATABASE_CASES = (
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_task_missing_later_price_is_refused_before_any_stock_write'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_unknown_supplier_conversion_is_refused_before_any_prep_write'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_legacy_helper_ignores_unavailable_supplier_and_keeps_selected_unknown'),
+ ('shared_catalog','SharedCatalogTests','test_a_location_adds_its_own_vendor_to_a_shared_item'),
+ ('shared_catalog','SharedCatalogTests','test_shared_global_changes_and_conflicting_duplicate_sku_are_held_atomically'),
  ('shared_catalog','SharedCatalogTests','test_backend_planning_prices_use_location_alias_and_never_change_actual_report'),
  ('shared_catalog','SharedCatalogTests','test_monetary_reader_holds_preserve_adapter_evidence_and_actual_report'),
  ('legacy_prep_atomicity','LegacyPrepAtomicityTests','test_direct_later_invalid_cost_or_arithmetic_reaches_no_stock_writes'),
