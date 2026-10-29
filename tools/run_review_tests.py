@@ -31,6 +31,8 @@ DATABASE_CASES = (
  ('prep_count_zones','PrepCountZoneTests','test_zones_must_match_the_layout'),
  ('prep_count_zones','PrepCountZoneTests','test_layout_places_every_item_and_replays_by_key'),
  ('prep_count_zones','PrepCountZoneTests','test_database_refuses_zone_rows_that_do_not_add_up'),
+ ('prep_calculation','BatchPlanDatabaseTests','test_saved_plan_is_the_fewest_whole_batches_covering_the_deficit'),
+ ('prep_calculation','BatchPlanDatabaseTests','test_database_refuses_an_unrounded_or_oversized_plan'),
  ('staff_walk_order','StaffWalkOrderTests','test_sheet_follows_walk_order_and_acceptance_keeps_location_quantities'),
  ('staff_walk_order','StaffWalkOrderTests','test_blank_location_is_incomplete_and_wrong_shapes_are_refused'),
  ('staff_walk_order','StaffWalkOrderTests','test_sheet_issued_before_a_walk_order_stays_totals_only'),

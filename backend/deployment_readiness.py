@@ -38,7 +38,7 @@ MIGRATIONS=(
  '20261008_container_waste_corrections.sql','20261007_native_private_access.sql',
  '20261013_purchase_source_lookup_index.sql','20261018_reviewed_inventory_pars.sql',
  '20261029_salad_prep_track.sql','20261029_count_walk_order.sql',
- '20261029_prep_count_zones.sql')
+ '20261029_prep_count_zones.sql','20261029_prep_batch_rounding.sql')
 # Historical installation receipts and the unapproved runtime candidate retain
 # their reviewed baselines. Later feature DDL never becomes part of those receipts.
 ORIGINAL_NATIVE_MIGRATIONS=MIGRATIONS[:MIGRATIONS.index('20261013_purchase_source_lookup_index.sql')]
