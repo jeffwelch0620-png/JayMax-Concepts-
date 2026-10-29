@@ -2,7 +2,6 @@ import { canonicalStoreId } from "./purchaseContract";
 import { readStateWithDeadline } from "./stateRead";
 import { overviewDecimal, decimalText, overviewDifference } from "./overviewDecimal";
 
-export const B1_SCOPE = Object.freeze({ rid: "berts", day: "2026-10-26", track: "daily" });
 export const overviewUuid = v => typeof v === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 
 const text = v => typeof v === "string" && v.trim().length > 0;
@@ -101,14 +100,14 @@ export function prepOverview(value, context) {
     hasDraft: value.draft_version_id !== null, progressAvailable: supported, historicalReviews, tasks };
 }
 
-// B1 uses native base quantities; no report totals or stock balance are inferred.
-export function b1PrepOverview(value, context) {
+// Native base quantities only; no report totals or stock balance are inferred.
+// A task from another store or plan version rejects the whole read; a task whose own
+// identity fields disagree with its snapshot only holds that task's quantities.
+export function prepQuantityOverview(value, context) {
   const result = prepOverview(value, context);
   for (const task of value.tasks) {
     checked(overviewUuid(task.id) && task.store_id === context.storeId
-      && task.version_id === value.draft_version_id && overviewUuid(task.version_id)
-      && ["product_id", "planning_version_id", "recipe_version_id", "unit_profile_id"].every(k =>
-        overviewUuid(task[k]) && task[k] === task.task_snapshot[k]));
+      && task.version_id === value.draft_version_id && overviewUuid(task.version_id));
   }
   if (value.draft_version_id !== null) checked(overviewUuid(value.draft_version_id));
   checked(unique(value.tasks.map(t => t.product_id)));
@@ -119,6 +118,8 @@ export function b1PrepOverview(value, context) {
     const identity = { productId: task.product_id, recipeVersionId: task.recipe_version_id,
       profileId: task.unit_profile_id, planningVersionId: task.planning_version_id };
     try {
+      checked(["product_id", "planning_version_id", "recipe_version_id", "unit_profile_id"].every(k =>
+        overviewUuid(task[k]) && task[k] === task.task_snapshot?.[k]));
       const unit = task.task_snapshot.base_unit;
       checked(["lb", "oz", "g", "kg", "fl_oz", "ml", "l", "gal", "each"].includes(unit) && progress);
       const planned = overviewDecimal(task.planned_base_quantity);

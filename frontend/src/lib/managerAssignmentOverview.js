@@ -1,5 +1,5 @@
 // Selective Package 1 read/join behavior. No writer component is imported.
-import { b1PrepOverview, overviewUuid } from "./managerOverview";
+import { prepQuantityOverview, overviewUuid } from "./managerOverview";
 import { readStateWithDeadline } from "./stateRead";
 const ordered = v => Array.isArray(v) ? v.map(ordered) : v && typeof v === "object"
   ? Object.fromEntries(Object.keys(v).sort().map(k => [k, ordered(v[k])])) : v;
@@ -7,7 +7,7 @@ const same = (a, b) => JSON.stringify(ordered(a)) === JSON.stringify(ordered(b))
 function check(ok) { if (!ok) throw new Error("Assignment source not confirmed."); }
 export function assignmentOverview(value, context, expected) {
   check(value?.store_id === context.storeId && value.day === context.day && value.track === context.track);
-  const prep = b1PrepOverview(value.execution, context);
+  const prep = prepQuantityOverview(value.execution, context);
   check(prep.draftVersionId === expected.draftVersionId && prep.revision === expected.revision
     && prep.status === expected.status && same(prep.tasks, expected.tasks)
     && Array.isArray(value.members) && Array.isArray(value.assignments)

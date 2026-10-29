@@ -7,9 +7,6 @@ import { resetComponentApiMock } from "./testHelpers/componentApiMock";
 import { overviewFixture } from "./testFixtures/managerOverview";
 jest.mock("./lib/api", () => require("./testHelpers/componentApiMock").createComponentApiMock());
 jest.mock("./lib/useStoreState", () => ({ useStoreState: jest.fn() }));
-// Exercise retained App focus callbacks independently of B1, which exposes none.
-jest.mock("./components/ManagerOverviewTab", () => ({ManagerOverviewTab: props =>
-  <button onClick={() => props.onOpenHandoff({rid:props.rid,day:"2026-10-25",track:"bulk"})}>TEST ONLY existing handoff callback</button>}));
 jest.mock("./lib/calc", () => ({ ...jest.requireActual("./lib/calc"), todayISO: () => "2026-10-26" }));
 jest.mock("./components/AiAssistant", () => ({ AiAssistant: () => null }));
 jest.mock("./components/ManagerHandoffTab", () => ({ ManagerHandoffTab: props => <p data-testid="receiving-handoff">{JSON.stringify({ rid: props.rid, actor: props.user.id, focus: props.initialContext })}</p> }));
@@ -26,9 +23,11 @@ beforeEach(() => {
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
-test("retained App handoff callback preserves day/track independently of legacy state loading", async () => {
+test("overview handoff link preserves the selected day/track independently of legacy state loading", async () => {
   await act(async () => root.render(<App/>)); await click(container.querySelector('[data-testid="nav-tab-managerOverview"]'));
-  await click(button("TEST ONLY existing handoff callback"));
+  const date = container.querySelector('[aria-label="Manager overview date"]');
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(date, "2026-10-25"); date.dispatchEvent(new Event("input", { bubbles: true })); });
+  await click(button("Open dated manager handoff"));
   expect(JSON.parse(container.querySelector('[data-testid="receiving-handoff"]').textContent)).toEqual({ rid: "berts", actor: "usr_manager", focus: { rid: "berts", day: "2026-10-25", track: "bulk" } });
   await click(container.querySelector('[data-testid="nav-tab-managerHandoff"]'));
   expect(JSON.parse(container.querySelector('[data-testid="receiving-handoff"]').textContent).focus).toBeNull();
@@ -41,7 +40,7 @@ test.each(["staff", "readonly"])("%s has no manager handoff entry", async role =
   api.currentSession.mockReturnValue({ user: { id: "usr_other", role, locations: ["berts"] } });
   await act(async () => root.render(<App/>)); expect(container.querySelector('[data-testid="nav-tab-managerHandoff"]')).toBeNull();
 });
-test("capability off hides the existing global handoff entry", async () => {
+test("capability off preserves overview reads and hides both handoff entry points", async () => {
   api.managerHandoffEnabled = false; await act(async () => root.render(<App/>));
   expect(container.querySelector('[data-testid="nav-tab-managerHandoff"]')).toBeNull();
   await click(container.querySelector('[data-testid="nav-tab-managerOverview"]'));

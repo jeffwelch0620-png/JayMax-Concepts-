@@ -1,86 +1,76 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import * as api from "../lib/api";
-import { B1_SCOPE, b1PrepOverview, overviewContext } from "../lib/managerOverview";
-import { readStateWithDeadline } from "../lib/stateRead";
-import { loadAssignmentOverview } from "../lib/managerAssignmentOverview";
-import { loadManagerTakeover } from "../lib/managerTakeover";
-import { ManagerAssignmentOverview } from "./ManagerAssignmentOverview";
-import { PageTitle, cardCls, btnGhost } from "./common";
+import { RESTAURANTS, todayISO } from "../lib/calc";
+import { loadManagerOverview, overviewContext, overviewStorage, rememberedOverview } from "../lib/managerOverview";
+import { ManagerPrepDetail } from "./ManagerPrepDetail";
+import { PageTitle, cardCls, inpCls, btnGhost } from "./common";
 
+const labels = { open: "Open", in_progress: "In progress", complete: "Complete",
+  needs_review: "Manager review required", unavailable: "Progress not confirmed" };
 const loading = () => ({ state: "loading" });
-const labels = { open: "Open", in_progress: "In progress", complete: "Finished",
-  needs_review: "Review required", unavailable: "Progress not confirmed" };
-export function ManagerOverviewTab({ rid, user, readApi = api }) {
+export function ManagerOverviewTab({ rid, user, onOpenCounts, onOpenPrep, onOpenHandoff, readApi = api }) {
+  const scope = JSON.stringify([user?.id, rid]);
+  const initial = useMemo(() => ({ ...rememberedOverview(overviewStorage(), user?.id, rid, todayISO()), scope }), [scope, rid, user?.id]);
+  const [selected, setSelected] = useState(initial);
+  const selection = selected.scope === scope ? selected : initial;
+  const setSelection = patch => setSelected({ ...selection, ...patch });
   const [refresh, setRefresh] = useState(0), [view, setView] = useState(null);
-  const context = rid === B1_SCOPE.rid ? overviewContext(rid, B1_SCOPE.day, B1_SCOPE.track, user) : null;
-  const key = JSON.stringify([context?.key || "", refresh, readApi.prepExecutionEnabled === true,
-    readApi.staffPrepTasksEnabled === true, readApi.managerHandoffEnabled === true]);
+  const context = overviewContext(rid, selection.day, selection.track, user);
+  const key = context?.key || "";
+  const countsEnabled = readApi.actualInventoryEnabled === true, prepEnabled = readApi.prepExecutionEnabled === true;
   useEffect(() => {
     let active = true;
-    if (!context) { setView(null); return; }
-    setView({ key, readApi, prep: loading(), assignments: loading(), note: loading() });
-    const receive = (section, value) => {
-      if (active) setView(prior => prior?.key === key && prior.readApi === readApi ? { ...prior, [section]: value } : prior);
-    };
-    async function prepRead() {
-      if (readApi.prepExecutionEnabled !== true) return { state: "unavailable", message: "Dated prep unavailable: capability is disabled." };
-      try {
-        const value = await readStateWithDeadline(() => readApi.prepExecution(rid, B1_SCOPE.day, B1_SCOPE.track), "Overview read timed out.");
-        return { ...b1PrepOverview(value, context), readAt: new Date().toISOString() };
-      } catch { return { state: "unavailable", message: "Dated prep not confirmed: read failed or source mismatched. Refresh." }; }
-    }
-    prepRead().then(async prep => {
-      receive("prep", prep);
-      if (active) receive("assignments", await loadAssignmentOverview(context, prep, readApi));
+    if (!key) { setView(null); return; }
+    try { overviewStorage()?.setItem(`manager-overview:${user.id}:${rid}`, JSON.stringify({ day: selection.day, track: selection.track })); } catch { /* Optional navigation preference. */ }
+    setView({ key, counts: loading(), prep: loading() });
+    loadManagerOverview(context, readApi, (section, value) => {
+      if (active) setView(prior => prior?.key === key ? { ...prior, [section]: value } : prior);
     });
-    loadManagerTakeover(rid, B1_SCOPE.day, B1_SCOPE.track, user, readApi).then(note => receive("note", note));
     return () => { active = false; };
-    // key includes actor/authority, fixed store/date/track, generation and capabilities.
+    // The key includes actor, authority scope, restaurant, date and track.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, readApi]);
-  const current = view?.key === key && view.readApi === readApi ? view : null;
-  const prep = current?.prep || loading(), assignments = current?.assignments || loading(), note = current?.note || loading();
+  }, [key, refresh, readApi, countsEnabled, prepEnabled]);
+  const currentView = view?.key === key ? view : null;
+  const count = currentView?.counts || loading(), prep = currentView?.prep || loading();
+  const restaurant = RESTAURANTS.find(r => r.id === rid);
   return <div data-testid="manager-overview" className="fade-slide-in">
     <PageTitle right={<button className={btnGhost} disabled={!context} onClick={() => setRefresh(n => n + 1)}>Refresh manager overview</button>}>Manager overview</PageTitle>
-    <p>B1 · Bert’s · {B1_SCOPE.day} · Daily Prep · Read only</p>
-    {!context ? <p role="alert">This B1 view requires Bert’s and a personal manager or owner account authorized for that restaurant.</p> : <>
-      <p>Remaining against reviewed output is not an instruction to produce. Pending reports and physical stock require manager review before directing more prep.</p>
-      <p>Pending and rejected reports do not contribute to reviewed output. This view does not read reports or confirm that none are pending.</p>
-      <section className={cardCls + " p-5"} aria-label="Dated prep work"><h2>Daily Prep · {B1_SCOPE.day}</h2>
-        {prep.state === "loading" ? <p role="status">Loading dated prep…</p> : prep.state !== "ready" ? <p role="status">{prep.message}</p> : <>
-          <p>{!prep.hasDraft ? "No dated plan saved" : prep.status === "released" ? "Released plan" : "Draft plan"} · execution revision {prep.revision} · local read {prep.readAt}</p>
-          <p>Plan {prep.draftVersionId || "none"}. Each section has its own read; this is not an atomic snapshot.</p>
-          {!prep.progressAvailable && <p>Task progress and quantities not confirmed: native progress is unsupported.</p>}
-          {prep.historicalReviews > 0 && <p>Earlier task versions have {prep.historicalReviews} production record(s) requiring review.</p>}
-          {!prep.tasks.length && <p>No included tasks recorded. This does not confirm that prep is complete.</p>}
-          <ul>{prep.tasks.map(t => <li key={t.id} className="my-4"><strong>{t.name}</strong> · {labels[t.state]}
-            {t.quantityState === "unavailable" ? <p>Quantities not confirmed. Refresh and review native evidence.</p> : <>
-              <p>Planned: {t.planned} {t.unit} · Reviewed recorded output: {t.reviewed} {t.unit}</p>
-              {t.quantityState === "review_required" ? <p>Review required · Remaining: Not confirmed pending native reconciliation.</p> : <>
-                <p>Remaining: {t.remaining} {t.unit}{t.excess !== "0" ? " · Above plan: " + t.excess + " " + t.unit : ""}</p>
-                {t.closed && t.remaining !== "0" && <p>Finished with shortfall: {t.remaining} {t.unit}</p>}
-              </>}
-            </>}
-            <details><summary>Read-only source details for {t.name}</summary>
-              <p>Task {t.id} · Product {t.productId} · Recipe version {t.recipeVersionId} · Unit profile {t.profileId} · Planning version {t.planningVersionId}</p>
-              {t.links?.map(l => <p key={l.execution_id}>Link {l.execution_id} · Batch root {l.batch_root_id} · Product version {l.product_version_id} · Acknowledged {l.acknowledged_batch_event_id} · Effective {l.effective_batch_event_id}{l.needs_review ? " · Review required" : ""}</p>)}
-            </details>
-          </li>)}</ul>
-        </>}
-      </section>
-      <ManagerAssignmentOverview value={assignments}/>
-      <section className={cardCls + " p-5"} aria-label="Previous submitted note"><h2>Previous submitted note</h2>
-        <p>Reading does not accept responsibility or confirm readiness. Notes use the native date and Daily Prep track; no AM/PM interpretation is added.</p>
-        {note.state === "loading" ? <p role="status">Loading previous note…</p> : note.state !== "ready" ? <p role="status">{note.message}</p> : <>
-          <p>Local read {note.readAt}</p>
-          {note.previous ? <><p>{note.previous.business_date} · revision {note.previous.revision} · submitted · Note {note.previous.id}</p>
-            {note.older && <p>Gap warning: this note is older than the previous calendar day.</p>}
-            <p>{note.previous.summary}</p><p>{note.previous.next_shift_note}</p>
-          </> : <p>No previous submitted note confirmed. This does not mean ready.</p>}
-          {note.currentStatus === "draft" && <p>A note for the selected date is draft, not submitted.</p>}
-        </>}
-      </section>
-      <p>Current recorded evidence, including corrections; not a reconstruction of what was known on the selected date. No stock balance or Food Cost is calculated here.</p>
+    <p>{restaurant?.name || "Choose a restaurant"} · Read-only overview. Open the original workflow to act.</p>
+    <div className="flex gap-4 flex-wrap my-4">
+      <label>Prep date <input className={inpCls} aria-label="Manager overview date" type="date" value={selection.day} onChange={e => setSelection({ day: e.target.value })}/></label>
+      <label>Prep track <select className={inpCls} aria-label="Manager overview track" value={selection.track} onChange={e => setSelection({ track: e.target.value })}>
+        <option value="bulk">Bulk Prep</option><option value="daily">Daily Prep</option>
+      </select></label>
+    </div>
+    {!context ? <p role="alert">Choose a valid date and a restaurant available to your personal manager or owner account.</p> : <>
+      <div className="grid gap-4 md:grid-cols-2">
+        <section className={`${cardCls} p-5`} aria-label="Recorded physical count">
+          <h2 className="font-bold mb-2">Recorded physical count</h2>
+          <p className="text-sm text-slate-400">Purchased items · Track 1 · latest current count on or before {selection.day}. This is not live on-hand inventory.</p>
+          {count.state === "loading" ? <p role="status">Loading count history…</p> : count.state === "unavailable" ? <p role="status">{count.message}</p> : count.count ? <>
+            <p className="mt-3 font-semibold">{count.count.date} · {count.count.status === "complete" ? "Complete" : "Incomplete"}</p>
+            <p>{count.count.timing === "after_receipts" ? "After" : "Before"} that day’s receipts · item-list revision {count.count.scopeRevision}</p>
+            <p className="text-sm text-slate-400">View explicit count values in Actual Inventory. This view does not calculate Food Cost.</p>
+          </> : <p className="mt-3">No physical count is recorded for this date or earlier. Inventory value is unavailable.</p>}
+          <button className={`${btnGhost} mt-4`} disabled={!countsEnabled} onClick={() => onOpenCounts?.({ rid })}>Open Actual Inventory</button>
+        </section>
+        <section className={`${cardCls} p-5`} aria-label="Dated prep work">
+          <h2 className="font-bold mb-2">{selection.track === "bulk" ? "Bulk Prep" : "Daily Prep"} · {selection.day}</h2>
+          <p className="text-sm text-slate-400">Track 2 explains usage. Assignment, reported production, manager review and stock posting remain separate.</p>
+          {prep.state === "loading" ? <p role="status">Loading dated prep work…</p> : prep.state === "unavailable" ? <p role="status">{prep.message}</p> : <>
+            <p className="mt-3 font-semibold">{!prep.hasDraft ? "No dated plan saved" : prep.status === "released" ? "Released plan" : "Draft plan"} · revision {prep.revision}</p>
+            {!prep.progressAvailable && <p>Task progress is not confirmed by this read.</p>}
+            {prep.historicalReviews > 0 && <p>Earlier task versions have {prep.historicalReviews} production record(s) requiring manager review. Open the dated workflow to review the history.</p>}
+            {!prep.tasks.length ? <p>No included prep tasks are recorded. This does not confirm that prep is complete.</p> : <ul className="mt-3 space-y-2">{prep.tasks.map(task => <li key={task.id}>
+              <strong>{task.name}</strong><span> · {labels[task.state]}</span>
+            </li>)}</ul>}
+          </>}
+          <button className={`${btnGhost} mt-4`} disabled={!prepEnabled} onClick={() => onOpenPrep?.({ rid, day: selection.day, track: selection.track })}>Open dated prep workflow</button>
+        </section>
+      </div>
+      {readApi.managerHandoffEnabled && <button className={`${btnGhost} mt-4`} onClick={() => onOpenHandoff?.({ rid, day: selection.day, track: selection.track })}>Open dated manager handoff</button>}
+      <p className="mt-4 text-sm text-slate-400">Counts and task history are shown as currently recorded, including corrections. They do not reconstruct what was known on a past date.</p>
+      <ManagerPrepDetail rid={rid} day={selection.day} track={selection.track} user={user} generation={refresh} readApi={readApi}/>
     </>}
   </div>;
 }

@@ -124,7 +124,7 @@ test("view preferences are per person/store and never contain records", () => {
 
 // B1 receiving tests use a separate native-shaped fictional basket.
 describe("B1 native quantity projection",()=>{
- const b1=require("../testFixtures/managerB1"), project=require("./managerOverview").b1PrepOverview;
+ const b1=require("../testFixtures/managerB1"), project=require("./managerOverview").prepQuantityOverview;
  const c=overviewContext("berts","2026-10-26","daily",b1.b1Owner);
  test("T01–T04 exact native examples, no cross-product total and no mutation",()=>{
    const f=b1.b1Fixture(), before=JSON.stringify(f);const p=project(f.prep,c);

@@ -8,10 +8,6 @@ import { overviewFixture } from "./testFixtures/managerOverview";
 
 jest.mock("./lib/api", () => require("./testHelpers/componentApiMock").createComponentApiMock());
 jest.mock("./lib/useStoreState", () => ({ useStoreState: jest.fn() }));
-// Test-only caller of the retained App callback. B1 has no editable destination.
-// Real B1 no-escape behavior is covered by AppManagerOverview/ManagerOverviewTab.
-jest.mock("./components/ManagerOverviewTab", () => ({ManagerOverviewTab: props =>
-  <button onClick={() => props.onOpenPrep({rid:props.rid,day:"2026-10-25",track:"bulk"})}>TEST ONLY existing prep callback</button>}));
 // A different fictional today makes a stale historical date observable.
 jest.mock("./lib/calc", () => ({ ...jest.requireActual("./lib/calc"), todayISO: () => "2026-10-26" }));
 jest.mock("./components/AiAssistant", () => ({ AiAssistant: () => null }));
@@ -35,7 +31,8 @@ async function set(label, value) {
 }
 async function openDatedPrep() {
   await clickId("nav-tab-managerOverview");
-  await click("TEST ONLY existing prep callback");
+  await set("Manager overview date", overviewDay);
+  await click("Open dated prep workflow");
 }
 function expectPrep(rid, day, track) {
   expect(input("Prep draft date").value).toBe(day);
