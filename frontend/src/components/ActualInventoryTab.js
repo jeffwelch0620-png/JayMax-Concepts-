@@ -113,7 +113,9 @@ export function PhysicalCountForm({ scope, onSave, onRecount = null, unitProfile
 
 export function CountLayoutForm({ scope, layout, proposal, onSave }) {
   const names = Object.fromEntries(scope.items.map(i => [i.item_code, i.name_snapshot]));
-  const start = (layout && layout.header.scope_id === scope.header.id ? layout.locations : proposal?.locations || []).map(l => ({ name: l.name, items: [...l.items] }));
+  const members = new Set(scope.items.map(i => i.item_code));
+  const start = (layout && layout.header.scope_id === scope.header.id ? layout.locations : proposal?.locations || [])
+    .map(l => ({ name: l.name, items: l.items.filter(c => members.has(c)) })).filter(l => l.items.length);
   const [locations, setLocations] = useState(start.length ? start : [{ name: "", items: scope.items.map(i => i.item_code) }]);
   const [note, setNote] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [saved, setSaved] = useState(null);
   const attempt = useRef(null);
@@ -380,7 +382,7 @@ export function ActualInventoryTab({ restaurantId, view = "counts" }) {
       {view === "counts" && countScope && <Field label="Purchased-item list for this count"><select aria-label="Count item-list version" className={inpCls} disabled={busy} value={countScope.header.id} onChange={e => {
         const id = e.target.value; run(async () => { const s = await api.actualScopeDetails(restaurantId, id); if (mounted.current) { setSelectedScope(s); setRecount(null); setNewCount(n => n + 1); } });
       }}>{(setup.scopes || [setup.scope.header]).map(s => <option key={s.id} value={s.id}>Version {s.revision} · {s.note}</option>)}</select></Field>}
-      {view === "counts" && countScope && <PhysicalCountForm key={`${countScope.header.id}:${newCount}:${recount?.header.id || "new"}:${setup.layout?.header.id || "none"}`} scope={countScope} onSave={saveCount} onRecount={recount} unitProfiles={setup.unitProfiles || []} layout={setup.layout} />}
+      {view === "counts" && countScope && <PhysicalCountForm key={`${countScope.header.id}:${newCount}:${recount?.header.id || "new"}:${setup.layout?.header.id || "none"}`} scope={countScope} onSave={saveCount} onRecount={recount} unitProfiles={setup.unitProfiles || []} layout={recount ? recount.layout || null : setup.layout} />}
       {view === "counts" && <div className={`${cardCls} p-4 space-y-2`}><h3 className="font-semibold">Physical count history</h3>{counts.map(c => <div className="flex gap-3 text-sm items-center" key={c.id}><span>{c.count_date} · {timingLabel(c.timing)} · {c.status}{supersededCounts.has(c.id) ? " · replaced by recount" : protectedCounts.has(c.id) ? " · protected by closed period / handoff" : ""}</span><button className={btnGhost} disabled={busy || supersededCounts.has(c.id) || protectedCounts.has(c.id)} onClick={() => run(async () => { setRecount(await api.actualCount(restaurantId, c.id)); setNewCount(n => n + 1); })}>Append recount</button></div>)}</div>}
       {view === "report" && <>
         <section className={`${cardCls} p-4 space-y-3`}><h3 className="font-semibold">Change the purchased-item list</h3>

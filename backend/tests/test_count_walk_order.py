@@ -93,6 +93,7 @@ class CountWalkOrderTests(counts.ActualInventoryTests):
         self.assertEqual(saved.status_code, 200, saved.text)
         count = saved.json()
         self.assertEqual(count['header']['status'], 'complete')
+        self.assertEqual(count['layout']['header']['id'], layout['header']['id'])  # recounts reuse it
         lines = {l['item_code']: l for l in count['lines']}
         self.assertEqual(Decimal(lines['test_food']['counted_quantity']), Decimal('2'))
         self.assertEqual(Decimal(lines['other_food']['counted_quantity']), Decimal('3'))

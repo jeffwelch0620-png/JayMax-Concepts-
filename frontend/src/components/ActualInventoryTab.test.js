@@ -224,3 +224,31 @@ test("walk-order editor starts from the proposal, keeps order, and requires ever
     locations: [{ name: "Dry storage", items: [] }, { name: "Walk-in cooler", items: ["mozz", "flour"] }] });
   expect(container.textContent).toContain("Walk order 2 saved");
 });
+
+test("a recount follows its original count's layout and keeps its location quantities", async () => {
+  const save = jest.fn().mockResolvedValue({ header: { id: "snapshot-3", status: "incomplete" }, lines: [{}, {}] });
+  const original = { header: { id: "snapshot-1", count_date: "2026-10-04", timing: "before_receipts", layout_id: "layout-1" }, layout: walkLayout, lines: [
+    { item_code: "flour", counted_quantity: "3", counted_unit: "bag", base_units_per_counted_unit: "50", inventory_value: "70.00", locations: [{ location_code: "walk-in-cooler", counted_quantity: "1" }, { location_code: "dry-storage", counted_quantity: "2" }] },
+    { item_code: "mozz", counted_quantity: "4", counted_unit: "case", base_units_per_counted_unit: "20", inventory_value: "60.00", locations: [{ location_code: "walk-in-cooler", counted_quantity: "4" }] }] };
+  await act(async () => root.render(<PhysicalCountForm scope={walkScope} layout={original.layout} onRecount={original} onSave={save} />));
+  expect(container.querySelector('[aria-label="Quantity flour at dry-storage"]').value).toBe("2");
+  expect(container.querySelector('[aria-label="Total flour"]').textContent).toBe("3");
+});
+
+test("a recount of a count without a layout keeps plain totals even when a walk order now exists", async () => {
+  const original = { header: { id: "snapshot-1", count_date: "2026-10-04", timing: "before_receipts", layout_id: null }, layout: null, lines: [
+    { item_code: "flour", counted_quantity: "3", counted_unit: "bag", base_units_per_counted_unit: "50", inventory_value: "70.00" },
+    { item_code: "mozz", counted_quantity: "4", counted_unit: "case", base_units_per_counted_unit: "20", inventory_value: "60.00" }] };
+  await act(async () => root.render(<PhysicalCountForm scope={walkScope} layout={original.layout} onRecount={original} onSave={jest.fn()} />));
+  expect(container.querySelector('[aria-label="Quantity flour"]').value).toBe("3");
+  expect(container.querySelector('[aria-label="Quantity flour at walk-in-cooler"]')).toBeNull();
+});
+
+test("walk-order editor drops proposal items that are no longer in the count list", async () => {
+  const save = jest.fn().mockResolvedValue({ header: { id: "layout-2", revision: 2 } });
+  const stale = { locations: [{ name: "Walk-in cooler", items: ["mozz", "removed_item"] }, { name: "Old shelf", items: ["removed_item"] }, { name: "Dry storage", items: ["flour"] }] };
+  await act(async () => root.render(<CountLayoutForm scope={walkScope} layout={null} proposal={stale} onSave={save} />));
+  expect(container.querySelector('[aria-label="Location 3 name"]')).toBeNull();
+  await input("Walk order note", "Updated list"); await click(button("Save walk order"));
+  expect(save.mock.calls[0][0].locations).toEqual([{ name: "Walk-in cooler", items: ["mozz"] }, { name: "Dry storage", items: ["flour"] }]);
+});

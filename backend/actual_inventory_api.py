@@ -306,7 +306,8 @@ async def get_count(conn, store_id, snapshot_id):
             WHERE c.snapshot_id=$1 ORDER BY l.walk_position''',snapshot_id):
             by_item.setdefault(r['item_code'],[]).append({'location_code':r['location_code'],'counted_quantity':r['counted_quantity']})
         for line in lines:line['locations']=by_item.get(line['item_code'],[])
-    return {'header':dict(header),'lines':lines,
+    layout=await get_layout(conn,store_id,header['layout_id']) if 'layout_id' in header.keys() and header['layout_id'] is not None else None
+    return {'header':dict(header),'lines':lines,'layout':layout,
             'scope':await get_scope(conn,store_id,header['scope_id'])}
 
 
