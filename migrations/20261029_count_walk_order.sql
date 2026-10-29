@@ -14,7 +14,7 @@ CREATE TABLE actual_inventory.count_layouts (
  scope_id uuid NOT NULL,
  note text NOT NULL CHECK (length(btrim(note)) > 0),
  request_key uuid NOT NULL UNIQUE,
- request_fingerprint text NOT NULL,
+ request_fingerprint bytea NOT NULL CHECK (octet_length(request_fingerprint) = 32),
  confirmed_by text NOT NULL,
  created_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE (store_id, revision), UNIQUE (id, scope_id, store_id),
