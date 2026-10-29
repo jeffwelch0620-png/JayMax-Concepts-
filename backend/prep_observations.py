@@ -230,10 +230,10 @@ async def preview(conn, store, purpose, body=None, old_id=None, change=None, con
                 v, u = x['product'], x['profile']
                 p['lines'].append({'line_number': n, 'product_id': v['product_id'], 'product_version_id': v['id'], 'profile_id': u['id'],
                     'base_unit': v['base_unit'], 'quantity': x['quantity'], 'factor': u['base_units_per_source_unit'],
-                    'base_quantity': mapping.times(x['quantity'], u['base_units_per_source_unit']), 'evidence': x['evidence'],
-                    **({'zones': x['zones']} if x['zones'] is not None else {})})
+                    'base_quantity': mapping.times(x['quantity'], u['base_units_per_source_unit']), 'evidence': x['evidence']})
             p['definitions'] = [{k: v for k, v in x.items() if k != 'zones'} for x in resolved]
-            if layout: p['zone_layout_id'] = layout['header']['id']
+            # Kept beside the lines: a database trigger compares the lines to the saved count exactly.
+            if layout: p.update(zone_layout_id=layout['header']['id'], zones={str(x['product']['product_id']): x['zones'] for x in resolved})
             if not old and await conn.fetchval("SELECT 1 FROM prep_inventory.observations WHERE store_id=$1 AND purpose='count' AND kind='initial' AND performed_at=$2", store, body.performed_at):
                 raise HTTPException(409, 'A physical prep count already exists at this time; correct its existing record')
     p.update(purpose=purpose, kind=kind, predecessor_id=old_id, root_id=old['root_id'] if old else None,
@@ -243,7 +243,8 @@ async def preview(conn, store, purpose, body=None, old_id=None, change=None, con
     for m in p['movements']: m['quantity'] = format(m['quantity'], 'f')
     for l in p['lines']:
         for k in ('quantity', 'factor', 'base_quantity'): l[k] = format(l[k], 'f')
-        for z in l.get('zones', []): z['quantity'] = format(z['quantity'], 'f')
+    for counted in p.get('zones', {}).values():
+        for z in counted: z['quantity'] = format(z['quantity'], 'f')
     p = serial(p)
     return {'review': p, 'reviewHash': fingerprint(p).hex()}
 
@@ -265,9 +266,9 @@ async def persist(conn, store, plan, key, digest, actor):
         await conn.execute('''INSERT INTO prep_inventory.count_observations(event_id,store_id,line_number,product_id,product_version_id,profile_id,base_unit,quantity,factor,base_quantity,evidence)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)''', ident, store, l['line_number'], uid(l['product_id']), uid(l['product_version_id']), uid(l['profile_id']),
             l['base_unit'], Decimal(l['quantity']), Decimal(l['factor']), Decimal(l['base_quantity']), l['evidence'])
-        if l.get('zones'):
+        if p.get('zones'):
             await conn.executemany('''INSERT INTO prep_inventory.count_zone_quantities(event_id,store_id,product_id,layout_id,zone_code,quantity)
-                VALUES($1,$2,$3,$4,$5,$6)''', [(ident, store, uid(l['product_id']), uid(p['zone_layout_id']), z['zone_code'], Decimal(z['quantity'])) for z in l['zones']])
+                VALUES($1,$2,$3,$4,$5,$6)''', [(ident, store, uid(l['product_id']), uid(p['zone_layout_id']), z['zone_code'], Decimal(z['quantity'])) for z in p['zones'][l['product_id']]])
     return serial({'event': dict(saved), 'replayed': False})
 
 
