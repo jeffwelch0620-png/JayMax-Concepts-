@@ -36,6 +36,9 @@ class Quantity(actual.StrictModel):
     item_code: str
     counted_quantity: Decimal | None = Field(None, ge=0, max_digits=28, decimal_places=10)
     note: str = Field('', max_length=2000)
+    # On a walk-order sheet: one entry per location the item is placed in; the server adds
+    # them up, so counted_quantity is left blank.
+    locations: list[actual.LocationQuantity] | None = Field(None, max_length=100)
 
 
 class SubmitInput(NoteModel):
@@ -69,6 +72,22 @@ class DecisionInput(NoteModel):
     decision: Literal['accepted','rejected']
     quantities_reviewed: bool = False
     values: list[Value] = Field(default_factory=list, max_length=10000)
+
+
+def submit_payload(body):
+    # Sheets without a walk order keep their earlier request fingerprints.
+    payload = body.model_dump(mode='json', exclude={'pin'})
+    for line in payload['lines']:
+        if line.get('locations') is None: line.pop('locations', None)
+    return payload
+
+
+def sheet_layout(layout, members):
+    """The walk order frozen onto an issued sheet: locations in walk order, issued items only."""
+    if not layout: return None
+    return {'id':str(layout['header']['id']),'revision':layout['header']['revision'],
+            'locations':[{'location_code':l['location_code'],'name':l['name'],
+                          'items':[c for c in l['items'] if c in members]} for l in layout['locations']]}
 
 
 async def ready(conn):
@@ -137,7 +156,9 @@ async def issue(pool, store, actor, body, key):
             if not p or p['base_unit'] != item['base_unit']: raise HTTPException(409, f"Verify the count-unit profile for {item['item_code']} first")
             items.append({**item, 'profile_id':str(p['id']), 'counted_unit':p['source_unit'],
                           'base_units_per_counted_unit':str(p['base_units_per_source_unit'])})
-        snapshot = serial({'scope_revision':scope['header']['revision'],'items':items})
+        layout = sheet_layout(await actual.get_layout(conn, store, scope_id=body.scope_id), {i['item_code'] for i in items})
+        snapshot = serial({'scope_revision':scope['header']['revision'],'items':items,
+                           **({'layout':layout} if layout else {})})
         sheet_id = await conn.fetchval('''INSERT INTO actual_inventory.staff_sheets
             (store_id,scope_id,count_date,timing,note,sheet_snapshot,request_key,request_fingerprint,issued_by)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id''', store, body.scope_id, body.count_date,
@@ -153,7 +174,7 @@ def check_current(review, expected):
 
 async def submit(pool, store, sheet_id, actor, kind, body, key):
     # Shared PIN is never retained or hashed into audit evidence.
-    digest = fingerprint({'sheet':str(sheet_id),'body':body.model_dump(mode='json',exclude={'pin'}),'actor':actor,'kind':kind})
+    digest = fingerprint({'sheet':str(sheet_id),'body':submit_payload(body),'actor':actor,'kind':kind})
     async with pool.acquire() as conn, conn.transaction():
         await ready(conn); await actual.lock_store(conn, store)
         old = await prior(conn, 'staff_submissions', store, key, digest)
@@ -162,7 +183,24 @@ async def submit(pool, store, sheet_id, actor, kind, body, key):
         members = {i['item_code'] for i in review['sheet']['sheet_snapshot']['items']}
         if len(body.lines) != len(members) or {r.item_code for r in body.lines} != members:
             raise HTTPException(422, 'Include each issued item once; leave uncounted quantities blank')
-        quantities = serial([r.model_dump() for r in sorted(body.lines,key=lambda r:r.item_code)])
+        layout = review['sheet']['sheet_snapshot'].get('layout')
+        placements = {}
+        for location in (layout or {}).get('locations', []):
+            for code in location['items']: placements.setdefault(code, []).append(location['location_code'])
+        lines = []
+        for r in sorted(body.lines,key=lambda r:r.item_code):
+            line = r.model_dump()
+            if not layout:
+                if r.locations is not None: raise HTTPException(422, 'This sheet has no walk order; enter item totals')
+                line.pop('locations'); lines.append(line); continue
+            given = [q.location_code for q in r.locations or []]
+            if len(set(given)) != len(given) or set(given) != set(placements.get(r.item_code, [])):
+                raise HTTPException(422, f'Enter one quantity (or leave it blank) for each location of {r.item_code}')
+            if r.counted_quantity is not None: raise HTTPException(422, 'Leave the item total blank; it is added up from its locations')
+            values = [q.counted_quantity for q in r.locations]
+            line['counted_quantity'] = None if any(v is None for v in values) else sum(values, Decimal(0))
+            lines.append(line)
+        quantities = serial(lines)
         revision = (review['latest']['revision'] if review['latest'] else 0)+1
         row = await conn.fetchrow('''INSERT INTO actual_inventory.staff_submissions
             (sheet_id,store_id,revision,counter_name,credential_kind,submitted_by,note,quantities,request_key,request_fingerprint)
@@ -197,12 +235,15 @@ async def decide(pool, store, sheet_id, actor, body, key):
             for item in items:
                 q = quantities[item['item_code']]; v = values[item['item_code']]
                 if q['counted_quantity'] is None: raise HTTPException(422, 'Uncounted quantities remain incomplete; staff must submit a complete revision')
-                lines.append(actual.CountLine(item_code=item['item_code'],counted_quantity=q['counted_quantity'],
+                # A walk-order count passes the location quantities and the count totals them again.
+                walked = q.get('locations') is not None
+                lines.append(actual.CountLine(item_code=item['item_code'],counted_quantity=None if walked else q['counted_quantity'],
                     counted_unit=item['counted_unit'],base_units_per_counted_unit=item['base_units_per_counted_unit'],
-                    inventory_value=v.inventory_value,confirmed=True,note=v.note))
+                    inventory_value=v.inventory_value,confirmed=True,note=v.note,locations=q['locations'] if walked else None))
             sheet = review['sheet']
+            layout = sheet['sheet_snapshot'].get('layout')
             count = actual.CountInput(scope_id=sheet['scope_id'],count_date=sheet['count_date'],timing=sheet['timing'],
-                note=body.note,lines=lines)
+                note=body.note,layout_id=layout['id'] if layout else None,lines=lines)
             snapshot_id = await actual.save_count(pool,store,actor,count,key,conn=conn)
         elif body.values:
             raise HTTPException(422, 'Reject without inventory values; rejection does not create an accounting count')

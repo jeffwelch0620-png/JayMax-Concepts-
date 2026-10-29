@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { cardCls, inpCls, btnAcc, btnGhost, Field } from "./common";
-import { countDraftError, validCountReview } from "./StaffCountDrafts";
+import { countDraftError, validCountReview, deliveryDayNote } from "./StaffCountDrafts";
 
 export function StaffSubmissionReview({ review, onDecide }) {
   const items = review.sheet.sheet_snapshot.items;
+  const layoutNames = Object.fromEntries((review.sheet.sheet_snapshot.layout?.locations || []).map(l => [l.location_code, l.name]));
   const [values, setValues] = useState(() => Object.fromEntries(items.map(i => [i.item_code, { item_code:i.item_code,inventory_value:"",confirmed:false,note:"" }])));
   const [note, setNote] = useState(""), [checked, setChecked] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [saved, setSaved] = useState(null);
   const attempt = useRef(null), frozen = busy || !!attempt.current || !!saved;
@@ -24,7 +25,7 @@ export function StaffSubmissionReview({ review, onDecide }) {
   }
   function change(code, patch) { setValues(v => ({ ...v,[code]:{ ...v[code],...patch,confirmed:patch.confirmed ?? false } })); setChecked(false); }
   return <section className={`${cardCls} p-4 space-y-3`} aria-label="Manager staff count review">
-    <h3>Staff count review · {review.sheet.count_date} · Scope {review.sheet.sheet_snapshot.scope_revision}</h3>
+    <h3>Staff count review · {review.sheet.count_date}{deliveryDayNote(review.sheet)} · Scope {review.sheet.sheet_snapshot.scope_revision}</h3>
     <p>{review.sheet.note} · Issued by {review.sheet.issued_by}</p>
     {review.decision ? <p>Final decision: {review.decision.decision} · {review.decision.reviewed_by}. Original submissions remain in history.</p> : <>
       {review.latest ? <p>Revision {review.latest.revision} · Counter: {review.latest.counter_name} · {review.latest.credential_kind === "shared_pin" ? "Shared PIN; counter name self-reported" : "Signed-in submission"} · {review.latest.note}</p> : <p>Awaiting staff quantities. You may reject an unused sheet.</p>}
@@ -33,7 +34,7 @@ export function StaffSubmissionReview({ review, onDecide }) {
       <fieldset disabled={frozen} className="space-y-3">
         {items.map(i => { const q = review.latest?.quantities.find(r => r.item_code === i.item_code); return <div key={i.item_code} className="border border-slate-700 p-3 rounded-lg">
           <p>{i.name_snapshot} · {i.item_code} · {q?.counted_quantity ?? "Uncounted"} {i.counted_unit} · {i.base_units_per_counted_unit} {i.base_unit} per unit</p>
-          <p>Locations: {i.location_notes} · Staff evidence: {q?.note || "None entered"}</p>
+          <p>Locations: {q?.locations ? q.locations.map(l => `${layoutNames[l.location_code] || l.location_code} ${l.counted_quantity ?? "blank"}`).join(" · ") : i.location_notes} · Staff evidence: {q?.note || "None entered"}</p>
           <Field label="Explicit total inventory value (USD)"><input aria-label={`Review value ${i.item_code}`} className={inpCls} inputMode="decimal" value={values[i.item_code].inventory_value} onChange={e => change(i.item_code,{inventory_value:e.target.value})} /></Field>
           <Field label="Quantity and value evidence"><input aria-label={`Review evidence ${i.item_code}`} className={inpCls} value={values[i.item_code].note} onChange={e => change(i.item_code,{note:e.target.value})} /></Field>
           <label><input aria-label={`Review confirm ${i.item_code}`} type="checkbox" checked={values[i.item_code].confirmed} onChange={e => change(i.item_code,{confirmed:e.target.checked})} /> I verified this measured quantity, issued conversion and explicit value.</label>
@@ -52,23 +53,24 @@ export function StaffSubmissionReview({ review, onDecide }) {
 }
 
 function IssueSheetForm({ scope, onIssue }) {
-  const [date,setDate] = useState(""), [timing,setTiming] = useState(""), [note,setNote] = useState(""), [busy,setBusy] = useState(false), [error,setError] = useState(""), [saved,setSaved] = useState(false);
+  const [date,setDate] = useState(""), [deliveryDay,setDeliveryDay] = useState(false), [after,setAfter] = useState(false), [note,setNote] = useState(""), [busy,setBusy] = useState(false), [error,setError] = useState(""), [saved,setSaved] = useState(false);
   const attempt = useRef(null);
   async function issue() {
-    if (!attempt.current) attempt.current = { key:crypto.randomUUID(),body:{scope_id:scope.header.id,count_date:date,timing,note:note.trim()} };
+    if (!attempt.current) attempt.current = { key:crypto.randomUUID(),body:{scope_id:scope.header.id,count_date:date,timing:deliveryDay && after ? "after_receipts" : "before_receipts",note:note.trim()} };
     setBusy(true); setError("");
-    try { const result=await onIssue(attempt.current.body,attempt.current.key); if (!result?.sheet?.id || result.sheet.scope_id !== scope.header.id || result.sheet.count_date !== date || result.sheet.timing !== timing) throw new Error("Issued sheet was not confirmed. Retry the same request."); setSaved(true); }
+    try { const result=await onIssue(attempt.current.body,attempt.current.key); if (!result?.sheet?.id || result.sheet.scope_id !== scope.header.id || result.sheet.count_date !== date || result.sheet.timing !== attempt.current.body.timing) throw new Error("Issued sheet was not confirmed. Retry the same request."); setSaved(true); }
     catch(e) { if ([409,422].includes(e?.response?.status)) attempt.current=null; setError(countDraftError(e)); }
     finally { setBusy(false); }
   }
   return <div className={`${cardCls} p-4 space-y-3`}><h3>Issue a staff quantity sheet · Current scope {scope.header.revision}</h3>
-    <p>Every purchased item needs a current verified count-unit profile. The sheet fixes its date, receipt boundary, locations and conversions. Count between deliveries requires manager review before period close.</p>
+    <p>Every purchased item needs a current verified count-unit profile. The sheet fixes its date, the store’s saved walk order and the conversions; set up the walk order first so staff count location by location.</p>
     <fieldset disabled={busy || !!attempt.current || saved} className="space-y-3">
       <Field label="Staff sheet physical date"><input aria-label="Staff sheet physical date" type="date" className={inpCls} value={date} onChange={e => setDate(e.target.value)} /></Field>
-      <Field label="Staff sheet receipt timing"><select aria-label="Staff sheet receipt timing" className={inpCls} value={timing} onChange={e => setTiming(e.target.value)}><option value="">Choose timing</option><option value="before_receipts">Before all receipts on this date</option><option value="after_receipts">After all receipts on this date</option></select></Field>
+      <label className="flex gap-2 text-sm"><input aria-label="Staff sheet on a delivery day" type="checkbox" checked={deliveryDay} onChange={e => setDeliveryDay(e.target.checked)} />Exception: this count is on a delivery day</label>
+      {deliveryDay && <Field label="Staff sheet receipt timing"><select aria-label="Staff sheet receipt timing" className={inpCls} value={after ? "after_receipts" : "before_receipts"} onChange={e => setAfter(e.target.value === "after_receipts")}><option value="before_receipts">Before all receipts on this date</option><option value="after_receipts">After all receipts on this date</option></select></Field>}
       <Field label="Staff sheet instructions"><input aria-label="Staff sheet instructions" className={inpCls} value={note} onChange={e => setNote(e.target.value)} /></Field>
     </fieldset>
-    {error && <p role="alert">{error}</p>}{saved ? <><p role="status">Count sheet issued and confirmed. Staff can enter quantities in the Counts portal.</p><button className={btnGhost} onClick={() => { attempt.current=null; setSaved(false); setDate(""); setTiming(""); setNote(""); }}>Start another staff sheet</button></> : <button className={btnAcc} disabled={busy || !date || !timing || !note.trim()} onClick={issue}>{attempt.current ? "Retry same sheet issue" : "Issue staff count sheet"}</button>}
+    {error && <p role="alert">{error}</p>}{saved ? <><p role="status">Count sheet issued and confirmed. Staff can enter quantities in the Counts portal.</p><button className={btnGhost} onClick={() => { attempt.current=null; setSaved(false); setDate(""); setDeliveryDay(false); setAfter(false); setNote(""); }}>Start another staff sheet</button></> : <button className={btnAcc} disabled={busy || !date || !note.trim()} onClick={issue}>{attempt.current ? "Retry same sheet issue" : "Issue staff count sheet"}</button>}
   </div>;
 }
 

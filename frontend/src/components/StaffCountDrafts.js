@@ -1,24 +1,36 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { cardCls, inpCls, btnAcc, btnGhost, Field } from "./common";
+import { locationTotal } from "../lib/overviewDecimal";
 
 export const countDraftError = e => typeof e?.response?.data?.detail === "string" ? e.response.data.detail : e.message || "The saved outcome could not be confirmed.";
 export const validCountReview = (r, rid) => !!r?.sheet?.id && r.sheet.store_id === (rid === "papa_leonis" ? "papa" : rid) && typeof r.reviewHash === "string" && /^[a-f0-9]{64}$/.test(r.reviewHash) && Array.isArray(r.sheet.sheet_snapshot?.items) && Array.isArray(r.errors) && Array.isArray(r.history) && (!r.latest || Array.isArray(r.latest.quantities));
 
+// Where an item sits on the sheet's walk order: location codes in walk order.
+export const itemLocations = (layout, code) => (layout?.locations || []).filter(l => l.items.includes(code)).map(l => l.location_code);
+export const deliveryDayNote = sheet => sheet.timing === "after_receipts" ? " · after that day’s delivery" : "";
+
 export function StaffQuantityForm({ review, pin, counterName = "", onSubmit }) {
-  const items = review.sheet.sheet_snapshot.items;
+  const items = review.sheet.sheet_snapshot.items, layout = review.sheet.sheet_snapshot.layout || null;
+  const byCode = Object.fromEntries(items.map(i => [i.item_code, i]));
   const [name, setName] = useState(counterName), [note, setNote] = useState("");
   const [rows, setRows] = useState(() => Object.fromEntries(items.map(i => {
     const prior = review.latest?.quantities.find(q => q.item_code === i.item_code);
-    return [i.item_code, { item_code: i.item_code, counted_quantity: prior?.counted_quantity ?? "", note: prior?.note || "" }];
+    const locations = layout && Object.fromEntries(itemLocations(layout, i.item_code).map(c => [c, prior?.locations?.find(q => q.location_code === c)?.counted_quantity ?? ""]));
+    return [i.item_code, { item_code: i.item_code, counted_quantity: prior?.counted_quantity ?? "", note: prior?.note || "", locations }];
   })));
+  const line = code => { const r = rows[code];
+    if (!layout) return { item_code: code, note: r.note, counted_quantity: r.counted_quantity === "" ? null : r.counted_quantity };
+    return { item_code: code, note: r.note, counted_quantity: null, locations: itemLocations(layout, code).map(c => ({ location_code: c, counted_quantity: r.locations[c] === "" ? null : r.locations[c] })) };
+  };
+  const setLocation = (code, loc, value) => setRows(r => ({ ...r, [code]: { ...r[code], locations: { ...r[code].locations, [loc]: value } } }));
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [saved, setSaved] = useState(false);
   const attempt = useRef(null), frozen = busy || !!attempt.current || saved;
   async function submit() {
     setError("");
     if (!name.trim() || !note.trim()) { setError("Enter the counter name and measurement note."); return; }
     if (!attempt.current) attempt.current = { key: crypto.randomUUID(), body: { pin, counter_name: name.trim(), note: note.trim(), expected_review_hash: review.reviewHash,
-      lines: items.map(i => ({ ...rows[i.item_code], counted_quantity: rows[i.item_code].counted_quantity === "" ? null : rows[i.item_code].counted_quantity })) } };
+      lines: items.map(i => line(i.item_code)) } };
     setBusy(true);
     try {
       const result = await onSubmit(attempt.current.body, attempt.current.key);
@@ -28,14 +40,20 @@ export function StaffQuantityForm({ review, pin, counterName = "", onSubmit }) {
     finally { setBusy(false); }
   }
   return <section className={`${cardCls} p-4 space-y-3`} aria-label="Staff physical quantity draft">
-    <h3>Physical quantities · {review.sheet.count_date} · {review.sheet.timing.replaceAll("_", " ")}</h3>
-    <p>{review.sheet.note}</p><p>Count all listed locations in the issued units. Blank means uncounted; enter 0 for a measured zero. This submits quantities for manager review. It does not change accounting inventory or Food Cost.</p>
+    <h3>Physical quantities · {review.sheet.count_date}{deliveryDayNote(review.sheet)}</h3>
+    <p>{review.sheet.note}</p><p>{layout ? "Walk the locations in order and count what is in each one, in the issued units. Items kept in more than one place are added up for you." : "Count all listed locations in the issued units."} Blank means uncounted; enter 0 for a measured zero. This submits quantities for manager review. It does not change accounting inventory or Food Cost.</p>
     <p>Counter names are entered for attribution. A shared PIN does not verify a person's identity.</p>
     {!!review.errors.length && <p role="alert">{review.errors.join("; ")}</p>}
     <fieldset disabled={frozen || !!review.errors.length} className="space-y-3">
       <Field label="Counter name"><input aria-label="Draft counter name" className={inpCls} value={name} onChange={e => setName(e.target.value)} /></Field>
       <Field label="Measurement note"><input aria-label="Draft measurement note" className={inpCls} value={note} onChange={e => setNote(e.target.value)} /></Field>
-      {items.map(i => <div key={i.item_code} className="border border-slate-700 p-3 rounded-lg">
+      {layout ? layout.locations.map((l, n) => <div key={l.location_code} className="border border-slate-700 p-3 rounded-lg space-y-3" aria-label={`Location ${l.name}`}>
+        <h4 className="font-semibold">{n + 1}. {l.name}</h4>
+        {l.items.map(code => { const i = byCode[code], places = itemLocations(layout, code), total = locationTotal(places.map(c => rows[code].locations[c])); return <div key={code} className="space-y-1">
+          <Field label={`${i.name_snapshot} (${i.counted_unit})`}><input aria-label={`Draft quantity ${code} at ${l.location_code}`} className={inpCls} inputMode="decimal" value={rows[code].locations[l.location_code]} onChange={e => setLocation(code, l.location_code, e.target.value)} /></Field>
+          {places.length > 1 && <p className="text-xs text-slate-400">Also counted in {layout.locations.filter(o => o.location_code !== l.location_code && places.includes(o.location_code)).map(o => o.name).join(", ")} · Total {total ?? "incomplete"} {i.counted_unit}</p>}
+        </div>; })}
+      </div>) : items.map(i => <div key={i.item_code} className="border border-slate-700 p-3 rounded-lg">
         <p>{i.name_snapshot} · {i.item_code} · {i.location_notes}</p><p>{i.counted_unit} · {i.base_units_per_counted_unit} {i.base_unit} per counted unit</p>
         <Field label={`Measured quantity (${i.counted_unit})`}><input aria-label={`Draft quantity ${i.item_code}`} className={inpCls} inputMode="decimal" value={rows[i.item_code].counted_quantity} onChange={e => setRows(r => ({ ...r, [i.item_code]: { ...r[i.item_code], counted_quantity: e.target.value } }))} /></Field>
         <Field label="Count locations / measurement evidence"><input aria-label={`Draft evidence ${i.item_code}`} className={inpCls} value={rows[i.item_code].note} onChange={e => setRows(r => ({ ...r, [i.item_code]: { ...r[i.item_code], note: e.target.value } }))} /></Field>

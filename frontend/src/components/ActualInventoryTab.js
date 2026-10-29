@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { StaffCountReview } from "./StaffCountReview";
 import { PageTitle, Field, MetricCard, cardCls, inpCls, btnAcc, btnGhost } from "./common";
-import { overviewDecimal, decimalText } from "../lib/overviewDecimal";
+import { locationTotal } from "../lib/overviewDecimal";
 
 const blank = v => v === "" || v == null ? null : v;
 const errorText = e => {
@@ -10,12 +10,6 @@ const errorText = e => {
   return typeof d === "string" ? d : d?.reasons?.join("; ") || d?.message || e.message || "Request failed. Retry or check saved history.";
 };
 const timingLabel = value => value === "before_receipts" ? "before that day’s receipts" : "after that day’s receipts";
-
-// Exact running total of per-location quantities; null while any location is blank.
-const locationTotal = values => {
-  if (!values.length || values.some(v => v === "" || v == null)) return null;
-  try { return decimalText(values.reduce((sum, v) => sum + overviewDecimal(String(v).trim()), 0n)); } catch { return "?"; }
-};
 
 export function PhysicalCountForm({ scope, onSave, onRecount = null, unitProfiles = [], layout = null }) {
   // A layout applies only to its own item-list version; anything outside the list is ignored.
