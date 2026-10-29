@@ -78,7 +78,43 @@ test("unconfirmed manager response holds success and retries the same decision",
 test("manager issuance uses current scope and stable retries after interrupted response",async()=>{
   api.staffCountSheets.mockResolvedValue([]);api.issueStaffCountSheet.mockRejectedValueOnce(new Error("Interrupted")).mockImplementation((rid,body)=>Promise.resolve({sheet:{id:"issued",...body}}));
   await render(<StaffCountReview restaurantId="berts" scope={{header:{id:"scope-1",revision:1}}} />);
-  await input("Staff sheet physical date","2026-10-05");await input("Staff sheet receipt timing","before_receipts");await input("Staff sheet instructions","All raw storage");await click(button("Issue staff count sheet"));
+  await input("Staff sheet physical date","2026-10-05");expect(container.querySelector('[aria-label="Staff sheet receipt timing"]')).toBeNull();await input("Staff sheet instructions","All raw storage");await click(button("Issue staff count sheet"));
   await click(button("Retry same sheet issue"));expect(api.issueStaffCountSheet.mock.calls[1]).toEqual(api.issueStaffCountSheet.mock.calls[0]);
   expect(api.issueStaffCountSheet.mock.calls[0][1]).toMatchObject({scope_id:"scope-1",count_date:"2026-10-05",timing:"before_receipts"});expect(container.textContent).toContain("Count sheet issued and confirmed");
+});
+test("delivery-day exception is the only way to issue an after-receipts sheet",async()=>{
+  api.staffCountSheets.mockResolvedValue([]);api.issueStaffCountSheet.mockImplementation((rid,body)=>Promise.resolve({sheet:{id:"issued",...body}}));
+  await render(<StaffCountReview restaurantId="berts" scope={{header:{id:"scope-1",revision:1}}} />);
+  await input("Staff sheet physical date","2026-10-08");await click(container.querySelector('[aria-label="Staff sheet on a delivery day"]'));
+  await input("Staff sheet receipt timing","after_receipts");await input("Staff sheet instructions","Late count");await click(button("Issue staff count sheet"));
+  expect(api.issueStaffCountSheet.mock.calls[0][1].timing).toBe("after_receipts");expect(container.textContent).toContain("Count sheet issued and confirmed");
+});
+const walk={id:"layout-1",revision:1,locations:[{location_code:"walk-in",name:"Walk-in cooler",items:["food","other"]},{location_code:"dry",name:"Dry storage",items:["food"]}]};
+const other={...item,item_code:"other",name_snapshot:"Invented other",counted_unit:"each"};
+const walkReview={...review,latest:null,history:[],sheet:{...review.sheet,sheet_snapshot:{scope_revision:1,items:[item,other],layout:walk}}};
+test("walk-order sheet lists locations in order and sends per-location quantities with a running total",async()=>{
+  const submit=jest.fn().mockImplementation(body=>Promise.resolve(staffAck(body)));
+  await render(<StaffQuantityForm review={walkReview} onSubmit={submit} pin="4826" />);
+  expect([...container.querySelectorAll("h4")].map(h=>h.textContent)).toEqual(["1. Walk-in cooler","2. Dry storage"]);
+  expect(container.querySelector('[aria-label="Draft quantity food"]')).toBeNull();
+  await input("Draft counter name","Invented Counter");await input("Draft measurement note","Walked the store");
+  await input("Draft quantity food at walk-in","1.5");expect(container.textContent).toContain("Total incomplete case");
+  await input("Draft quantity food at dry","0.25");expect(container.textContent).toContain("Total 1.75 case");
+  await input("Draft quantity other at walk-in","0");await click(button("Submit quantities for review"));
+  expect(submit.mock.calls[0][0].lines).toEqual([
+    {item_code:"food",note:"",counted_quantity:null,locations:[{location_code:"walk-in",counted_quantity:"1.5"},{location_code:"dry",counted_quantity:"0.25"}]},
+    {item_code:"other",note:"",counted_quantity:null,locations:[{location_code:"walk-in",counted_quantity:"0"}]}]);
+});
+test("walk-order revision starts from the last submission and blanks stay blank",async()=>{
+  const submit=jest.fn().mockImplementation(body=>Promise.resolve(staffAck(body)));
+  const latest={...review.latest,quantities:[{item_code:"food",counted_quantity:null,note:"",locations:[{location_code:"walk-in",counted_quantity:"2"},{location_code:"dry",counted_quantity:null}]},{item_code:"other",counted_quantity:"1",note:"",locations:[{location_code:"walk-in",counted_quantity:"1"}]}]};
+  await render(<StaffQuantityForm review={{...walkReview,latest,history:[latest]}} onSubmit={submit} counterName="Invented Counter" />);
+  expect(container.querySelector('[aria-label="Draft quantity food at walk-in"]').value).toBe("2");
+  await input("Draft measurement note","Second walk");await click(button("Submit quantities for review"));
+  expect(submit.mock.calls[0][0].lines[0].locations[1]).toEqual({location_code:"dry",counted_quantity:null});
+});
+test("manager review names each location's staff quantity",async()=>{
+  const latest={...review.latest,quantities:[{item_code:"food",counted_quantity:"3",note:"",locations:[{location_code:"walk-in",counted_quantity:"1"},{location_code:"dry",counted_quantity:"2"}]},{item_code:"other",counted_quantity:"0",note:"",locations:[{location_code:"walk-in",counted_quantity:"0"}]}]};
+  await render(<StaffSubmissionReview review={{...walkReview,latest,history:[latest]}} onDecide={jest.fn()} />);
+  expect(container.textContent).toContain("Walk-in cooler 1 · Dry storage 2");
 });

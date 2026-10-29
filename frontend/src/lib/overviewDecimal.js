@@ -23,6 +23,12 @@ export function decimalText(value) {
   const whole = digits.slice(0, -12), fraction = digits.slice(-12).replace(/0+$/, "");
   return fraction ? `${whole}.${fraction}` : whole;
 }
+// Exact sum of per-location quantities; null while any location is blank, "?" if one is not a number.
+export function locationTotal(values) {
+  if (!values.length || values.some(v => v === "" || v == null)) return null;
+  try { return decimalText(values.reduce((sum, v) => sum + overviewDecimal(String(v).trim()), 0n)); } catch { return "?"; }
+}
+
 export function overviewDifference(planned, reviewed) {
   const difference = overviewDecimal(planned) - overviewDecimal(reviewed), zero = BigInt(0);
   return { remaining: decimalText(difference > zero ? difference : zero),
