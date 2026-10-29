@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import Header, HTTPException, Request
 from pydantic import AwareDatetime, Field, model_validator
 import prep_batches as batches
+import prep_count_zones as count_zones
 import prep_mapping as mapping
 from native_units import lock_store
 from purchase_api import serial
@@ -58,19 +59,40 @@ class WasteIn(Stamp):
 class CountLine(mapping.Strict):
     product_version_id: UUID
     profile_id: UUID
-    quantity: Decimal = Field(ge=0, max_digits=28, decimal_places=12)
+    quantity: Decimal | None = Field(None, ge=0, max_digits=28, decimal_places=12)
     evidence: str = Field(min_length=1, max_length=2000)
+    # With a zone layout: one quantity per zone the item is kept in; the server adds them up.
+    zones: list[count_zones.ZoneQuantity] | None = Field(None, max_length=50)
+
+    @model_validator(mode='after')
+    def one_basis(self):
+        if (self.quantity is None) == (self.zones is None):
+            raise ValueError('Enter either the item total or its zone quantities')
+        return self
 
 
 class CountIn(Stamp):
     complete_scope_confirmed: Literal[True]
+    zone_layout_id: UUID | None = None
     lines: list[CountLine] = Field(min_length=1, max_length=500)
 
     @model_validator(mode='after')
     def unique(self):
         if len({l.product_version_id for l in self.lines}) != len(self.lines):
             raise ValueError('Count each prepared identity once')
+        if (self.zone_layout_id is None) != all(l.zones is None for l in self.lines) or (self.zone_layout_id and any(l.zones is None for l in self.lines)):
+            raise ValueError('A zone count gives zone quantities for every item')
         return self
+
+
+def body_dump(body):
+    # Counts without zones keep their earlier review and request fingerprints.
+    payload = body.model_dump(mode='json')
+    if isinstance(body, CountIn):
+        if payload.get('zone_layout_id') is None: payload.pop('zone_layout_id', None)
+        for line in payload['lines']:
+            if line.get('zones') is None: line.pop('zones', None)
+    return payload
 
 
 class ChangeIn(mapping.Strict):
@@ -145,7 +167,7 @@ async def preview(conn, store, purpose, body=None, old_id=None, change=None, con
         if old and (old['performed_at'] != body.performed_at or old['business_date'] != body.business_date or old['timezone_name'] != body.timezone_name):
             raise HTTPException(422, 'Correction must retain the original observation time and date boundary')
         p = {'performed_at': body.performed_at, 'business_date': body.business_date, 'timezone_name': body.timezone_name,
-             'body': body.model_dump(mode='json'), 'movements': movements, 'lines': [], 'scope': [],
+             'body': body_dump(body), 'movements': movements, 'lines': [], 'scope': [],
              'raw_item_code': None, 'product_id': None, 'base_unit': None, 'source_batch_id': None}
         if purpose == 'waste':
             from prep_openings import activity_time, source_valid
@@ -190,18 +212,28 @@ async def preview(conn, store, purpose, body=None, old_id=None, change=None, con
             products = await conn.fetch('SELECT * FROM prep_inventory.products WHERE store_id=$1 ORDER BY id::text', store)
             p['scope'] = old['review_snapshot']['scope'] if old else [str(x['id']) for x in products]
             resolved = []
+            layout = await count_zones.get_layout(conn, store, body.zone_layout_id) if body.zone_layout_id else None
+            placed = count_zones.placements(layout) if layout else {}
             for l in body.lines:
                 product = await mapping.current_product(conn, store, l.product_version_id)
                 profile = await mapping.current_profile(conn, store, l.profile_id, l.product_version_id)
-                resolved.append({'product': product, 'profile': profile, 'quantity': l.quantity, 'evidence': l.evidence})
+                quantity, counted = l.quantity, None
+                if layout:
+                    where = placed.get(str(product['product_id']))
+                    if not where: raise HTTPException(422, f"Add {product['name']} to a count zone first")
+                    quantity = count_zones.zone_total(product['name'], where, l.zones)
+                    counted = [{'zone_code': z.zone_code, 'quantity': z.quantity} for z in sorted(l.zones, key=lambda z: where.index(z.zone_code))]
+                resolved.append({'product': product, 'profile': profile, 'quantity': quantity, 'evidence': l.evidence, 'zones': counted})
             if len(resolved) != len(p['scope']) or sorted(str(x['product']['product_id']) for x in resolved) != p['scope']:
                 raise HTTPException(422, 'Full prep count requires every item in its declared scope once, with an explicit quantity including zero')
             for n, x in enumerate(sorted(resolved, key=lambda x: str(x['product']['product_id'])), 1):
                 v, u = x['product'], x['profile']
                 p['lines'].append({'line_number': n, 'product_id': v['product_id'], 'product_version_id': v['id'], 'profile_id': u['id'],
                     'base_unit': v['base_unit'], 'quantity': x['quantity'], 'factor': u['base_units_per_source_unit'],
-                    'base_quantity': mapping.times(x['quantity'], u['base_units_per_source_unit']), 'evidence': x['evidence']})
-            p['definitions'] = resolved
+                    'base_quantity': mapping.times(x['quantity'], u['base_units_per_source_unit']), 'evidence': x['evidence'],
+                    **({'zones': x['zones']} if x['zones'] is not None else {})})
+            p['definitions'] = [{k: v for k, v in x.items() if k != 'zones'} for x in resolved]
+            if layout: p['zone_layout_id'] = layout['header']['id']
             if not old and await conn.fetchval("SELECT 1 FROM prep_inventory.observations WHERE store_id=$1 AND purpose='count' AND kind='initial' AND performed_at=$2", store, body.performed_at):
                 raise HTTPException(409, 'A physical prep count already exists at this time; correct its existing record')
     p.update(purpose=purpose, kind=kind, predecessor_id=old_id, root_id=old['root_id'] if old else None,
@@ -211,6 +243,7 @@ async def preview(conn, store, purpose, body=None, old_id=None, change=None, con
     for m in p['movements']: m['quantity'] = format(m['quantity'], 'f')
     for l in p['lines']:
         for k in ('quantity', 'factor', 'base_quantity'): l[k] = format(l[k], 'f')
+        for z in l.get('zones', []): z['quantity'] = format(z['quantity'], 'f')
     p = serial(p)
     return {'review': p, 'reviewHash': fingerprint(p).hex()}
 
@@ -232,6 +265,9 @@ async def persist(conn, store, plan, key, digest, actor):
         await conn.execute('''INSERT INTO prep_inventory.count_observations(event_id,store_id,line_number,product_id,product_version_id,profile_id,base_unit,quantity,factor,base_quantity,evidence)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)''', ident, store, l['line_number'], uid(l['product_id']), uid(l['product_version_id']), uid(l['profile_id']),
             l['base_unit'], Decimal(l['quantity']), Decimal(l['factor']), Decimal(l['base_quantity']), l['evidence'])
+        if l.get('zones'):
+            await conn.executemany('''INSERT INTO prep_inventory.count_zone_quantities(event_id,store_id,product_id,layout_id,zone_code,quantity)
+                VALUES($1,$2,$3,$4,$5,$6)''', [(ident, store, uid(l['product_id']), uid(p['zone_layout_id']), z['zone_code'], Decimal(z['quantity'])) for z in l['zones']])
     return serial({'event': dict(saved), 'replayed': False})
 
 
@@ -241,8 +277,11 @@ async def setup(conn, store):
     batch = await batches.setup(conn, store)
     events = await conn.fetch('''SELECT * FROM prep_inventory.observations e WHERE store_id=$1
         AND NOT EXISTS(SELECT 1 FROM prep_inventory.observations WHERE predecessor_id=e.id) ORDER BY recorded_at DESC,id''', store)
+    zoned = await count_zones.installed(conn)
     return serial({'products': foundation['products'], 'profiles': foundation['profiles'], 'rawItems': foundation['rawItems'],
                    'lots': batch['lots'], 'policy': batch['policy'], 'events': [dict(x) for x in events],
+                   'zoneLayout': await count_zones.get_layout(conn, store) if zoned else None,
+                   'proposedZoneLayout': await count_zones.proposed_layout(conn, store) if zoned else None,
                    'scope': 'Full prepared inventory; purchased items excluded', 'countBehavior': 'Observation only; no balance reset',
                    'cost': {'status': 'not_calculated', 'amount': None}})
 
@@ -283,7 +322,10 @@ def install_routes(router, context):
 
     async def record(request, store, purpose, body, key, old=None):
         actor, pool = await ctx(request, store, True)
-        digest = fingerprint({'body': body.model_dump(mode='json'), 'purpose': purpose, 'predecessor': str(old) if old else None})
+        dumped = body.model_dump(mode='json')
+        if not old: dumped['body'] = body_dump(body.body)
+        elif body.change.replacement is not None: dumped['change']['replacement'] = body_dump(body.change.replacement)
+        digest = fingerprint({'body': dumped, 'purpose': purpose, 'predecessor': str(old) if old else None})
         async with pool.acquire() as conn:
             async with conn.transaction():
                 await ready(conn)
@@ -295,6 +337,16 @@ def install_routes(router, context):
                 plan = await preview(conn, store, purpose, body.body if not old else None, old, body.change if old else None)
                 if plan['reviewHash'] != body.expected_review_hash: raise HTTPException(409, 'Observation source/scope changed. Review a fresh preview.')
                 return await persist(conn, store, plan, key, digest, actor)
+
+    @router.post('/{store_id}/prep-count-zones')
+    async def save_zone_layout(store_id: str, body: count_zones.ZoneLayoutIn, request: Request, idempotency_key: UUID = Header(...)):
+        actor, pool = await ctx(request, store_id, True)
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await ready(conn)
+                if not await count_zones.installed(conn): raise HTTPException(503, 'Prep count zones are awaiting schema setup')
+                await lock_store(conn, store_id)
+                return await count_zones.save_layout(conn, store_id, actor, body, idempotency_key, count_zones.layout_digest(body, actor))
 
     @router.post('/{store_id}/prep-observations/{purpose}')
     async def initial_record(store_id: str, purpose: PURPOSE, body: RecordIn, request: Request, idempotency_key: UUID = Header(...)):

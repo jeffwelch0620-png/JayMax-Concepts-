@@ -133,6 +133,7 @@ export const previewNativePrepPeriodReopen = (rid, body) => axios.post(`${purcha
 export const saveNativePrepPeriodReopen = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-period-journal/reopen`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const nativePrepObservationHistory = (rid, purpose, root) => axios.get(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/${encodeURIComponent(root)}/history`).then(r => r.data);
 export const previewNativePrepObservation = (rid, purpose, body) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/preview`, body).then(r => r.data);
+export const saveNativePrepZones = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/prep-count-zones`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const saveNativePrepObservation = (rid, purpose, body, key) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const previewNativePrepObservationChange = (rid, purpose, id, body) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/${encodeURIComponent(id)}/change-preview`, body).then(r => r.data);
 export const saveNativePrepObservationChange = (rid, purpose, id, body, key) => axios.post(`${purchaseUrl(rid)}/prep-observations/${encodeURIComponent(purpose)}/${encodeURIComponent(id)}/changes`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);

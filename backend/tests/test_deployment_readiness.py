@@ -91,7 +91,7 @@ class ReadinessConfigurationTests(unittest.TestCase):
         expected={p.name for p in (readiness.ROOT/'migrations').glob('*.sql')} - {'20260930_recurring_prep_items.sql','20261025_manager_handoff_notes.sql','20261029_salad_manager_notes.sql'}
         plan=readiness.migration_plan();self.assertEqual({e['file'] for e in plan['migrations']},expected)
         self.assertEqual(len(readiness.MIGRATIONS),len(expected));self.assertEqual(len(set(readiness.MIGRATIONS)),len(expected))
-        self.assertEqual(readiness.MIGRATIONS[-1],'20261029_count_walk_order.sql')
+        self.assertEqual(readiness.MIGRATIONS[-1],'20261029_prep_count_zones.sql')
         self.assertEqual(readiness.MIGRATIONS[-2],'20261029_salad_prep_track.sql')
         self.assertEqual(readiness.MIGRATIONS[-3],'20261018_reviewed_inventory_pars.sql')
         self.assertEqual(readiness.MIGRATIONS[-4],'20261013_purchase_source_lookup_index.sql')
@@ -155,7 +155,7 @@ class DeploymentReadinessTests(fixtures.NativeBackupTests):
             await conn.execute((readiness.ROOT/'migrations/20261007_native_private_access.sql').read_text())
         report=await self.probe();self.assertEqual(report['status'],'passed',report['issues'])
         self.assertTrue(report['readOnly']);self.assertFalse(report['operationalReleaseApproved'])
-        self.assertEqual(len(report['migrations']),33)
+        self.assertEqual(len(report['migrations']),34)
         # The inspector itself cannot write, and captures no operational row data.
         async with self.pool.acquire() as conn:
             before=await conn.fetchval('SELECT count(*) FROM purchasing.posting_batches')
