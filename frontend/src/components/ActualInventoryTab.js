@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { StaffCountReview } from "./StaffCountReview";
 import { PageTitle, Field, MetricCard, cardCls, inpCls, btnAcc, btnGhost } from "./common";
+import { overviewDecimal, decimalText } from "../lib/overviewDecimal";
 
 const blank = v => v === "" || v == null ? null : v;
 const errorText = e => {
@@ -10,28 +11,50 @@ const errorText = e => {
 };
 const timingLabel = value => value === "before_receipts" ? "before that day’s receipts" : "after that day’s receipts";
 
-export function PhysicalCountForm({ scope, onSave, onRecount = null, unitProfiles = [] }) {
+// Exact running total of per-location quantities; null while any location is blank.
+const locationTotal = values => {
+  if (!values.length || values.some(v => v === "" || v == null)) return null;
+  try { return decimalText(values.reduce((sum, v) => sum + overviewDecimal(String(v).trim()), 0n)); } catch { return "?"; }
+};
+
+export function PhysicalCountForm({ scope, onSave, onRecount = null, unitProfiles = [], layout = null }) {
+  // A layout applies only to its own item-list version; anything outside the list is ignored.
+  const members = new Set(scope.items.map(i => i.item_code));
+  const walkLocations = layout && layout.header.scope_id === scope.header.id
+    ? layout.locations.map(l => ({ ...l, items: l.items.filter(c => members.has(c)) })).filter(l => l.items.length) : [];
+  const walk = walkLocations.length ? { ...layout, locations: walkLocations } : null;
+  const placed = Object.fromEntries(scope.items.map(i => [i.item_code, walk ? walk.locations.filter(l => l.items.includes(i.item_code)).map(l => l.location_code) : []]));
   const [day, setDay] = useState(onRecount?.header.count_date || "");
-  const [timing, setTiming] = useState(onRecount?.header.timing || "");
+  // Inventory counts are taken on non-delivery days; before/after receipts is an exception.
+  const [deliveryDay, setDeliveryDay] = useState(onRecount?.header.timing === "after_receipts");
+  const [timing, setTiming] = useState(onRecount?.header.timing || "before_receipts");
   const [note, setNote] = useState("");
   const [draft, setDraft] = useState(() => Object.fromEntries(scope.items.map(i => {
     const old = onRecount?.lines.find(l => l.item_code === i.item_code);
     const u = unitProfiles.find(p => p.item_code === i.item_code && p.base_unit === i.base_unit && !p.stale);
+    const oldAt = Object.fromEntries((walk && onRecount?.header.layout_id === walk.header.id ? old?.locations || [] : []).map(q => [q.location_code, q.counted_quantity ?? ""]));
     return [i.item_code, { item_code: i.item_code, counted_quantity: old?.counted_quantity ?? "", counted_unit: old?.counted_unit || u?.source_unit || i.base_unit,
-      base_units_per_counted_unit: old?.base_units_per_counted_unit ?? u?.base_units_per_source_unit ?? "1", inventory_value: old?.inventory_value ?? "", confirmed: false, note: "" }];
+      base_units_per_counted_unit: old?.base_units_per_counted_unit ?? u?.base_units_per_source_unit ?? "1", inventory_value: old?.inventory_value ?? "", confirmed: false, note: "",
+      locations: Object.fromEntries(placed[i.item_code].map(c => [c, oldAt[c] ?? ""])) }];
   })));
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [saved, setSaved] = useState(null);
   const attempt = useRef(null);
   const frozen = busy || !!attempt.current || !!saved;
+  const split = code => placed[code].length > 0;
+  const total = code => split(code) ? locationTotal(placed[code].map(c => draft[code].locations[c])) : blank(draft[code].counted_quantity);
   function change(code, patch) { setDraft(d => ({ ...d, [code]: { ...d[code], ...patch, confirmed: patch.confirmed ?? false } })); }
+  function changeAt(code, location, value) { setDraft(d => ({ ...d, [code]: { ...d[code], locations: { ...d[code].locations, [location]: value }, confirmed: false } })); }
   async function save() {
     setError("");
-    if (!day || !timing || !note.trim()) { setError("Choose the count date, receipt timing and a count note."); return; }
+    if (!day || !note.trim()) { setError("Choose the count date and add a count note."); return; }
     if (!attempt.current) {
-      attempt.current = { key: crypto.randomUUID(), body: { scope_id: scope.header.id, count_date: day, timing, note,
-        corrects_snapshot_id: onRecount?.header.id || null, lines: scope.items.map(i => ({ ...draft[i.item_code],
-          counted_quantity: blank(draft[i.item_code].counted_quantity), inventory_value: blank(draft[i.item_code].inventory_value),
-          base_units_per_counted_unit: blank(draft[i.item_code].counted_quantity) == null ? null : blank(draft[i.item_code].base_units_per_counted_unit) })) } };
+      attempt.current = { key: crypto.randomUUID(), body: { scope_id: scope.header.id, count_date: day, timing: deliveryDay ? timing : "before_receipts", note,
+        corrects_snapshot_id: onRecount?.header.id || null, ...(walk ? { layout_id: walk.header.id } : {}), lines: scope.items.map(i => {
+          const { locations, ...line } = draft[i.item_code];
+          return { ...line, counted_quantity: split(i.item_code) ? null : blank(line.counted_quantity), inventory_value: blank(line.inventory_value),
+            base_units_per_counted_unit: total(i.item_code) == null ? null : blank(line.base_units_per_counted_unit),
+            ...(split(i.item_code) ? { locations: placed[i.item_code].map(c => ({ location_code: c, counted_quantity: blank(locations[c]) })) } : {}) };
+        }) } };
     }
     setBusy(true);
     try {
@@ -43,21 +66,37 @@ export function PhysicalCountForm({ scope, onSave, onRecount = null, unitProfile
       setError(errorText(e));
     } finally { setBusy(false); }
   }
+  const named = Object.fromEntries(scope.items.map(i => [i.item_code, i]));
   return <section className={`${cardCls} p-4 space-y-4`} aria-label="Physical inventory count">
-    <h3 className="font-semibold">{onRecount ? "Append a corrected count" : "Record a physical count"} · Scope {scope.header.revision}</h3>
+    <h3 className="font-semibold">{onRecount ? "Append a corrected count" : "Record a physical count"} · Scope {scope.header.revision}{walk ? ` · Walk order ${walk.header.revision}` : ""}</h3>
     <p className="text-sm text-slate-400">Purchased inventory only. Enter the total value of the inventory physically counted for each item, excluding taxes and fees. A blank quantity or value remains incomplete; an actual zero must be entered as 0.</p>
     <fieldset disabled={frozen} className="space-y-4">
-      <div className="grid md:grid-cols-3 gap-3">
+      <div className="grid md:grid-cols-2 gap-3">
         <Field label="Physical count date"><input aria-label="Physical count date" type="date" className={inpCls} value={day} onChange={e => setDay(e.target.value)} /></Field>
-        <Field label="Count timing"><select aria-label="Count timing" className={inpCls} value={timing} onChange={e => setTiming(e.target.value)}><option value="">Choose receipt timing</option><option value="before_receipts">Before all receipts on this date</option><option value="after_receipts">After all receipts on this date</option></select></Field>
         <Field label="Count note"><input aria-label="Count note" className={inpCls} value={note} onChange={e => setNote(e.target.value)} /></Field>
       </div>
-      <p className="text-xs text-amber-200">Use these boundaries only if the count was taken before all or after all receipts that day. A count between deliveries needs review before closing a period.</p>
+      <label className="flex gap-2 text-sm"><input aria-label="Counted on a delivery day" type="checkbox" checked={deliveryDay} onChange={e => setDeliveryDay(e.target.checked)} />Exception: this count was taken on a delivery day</label>
+      {deliveryDay && <div className="space-y-2">
+        <Field label="Count timing"><select aria-label="Count timing" className={inpCls} value={timing} onChange={e => setTiming(e.target.value)}><option value="before_receipts">Before all receipts on this date</option><option value="after_receipts">After all receipts on this date</option></select></Field>
+        <p className="text-xs text-amber-200">Inventory counts are normally taken on non-delivery days. Use this only if the count was taken before all or after all of that day’s receipts; a count between deliveries needs review before closing a period.</p>
+      </div>}
+      {walk && <>
+        {walk.locations.map(location => <div className="border border-slate-700 rounded-lg p-3 space-y-2" key={location.location_code} aria-label={`Location ${location.name}`}>
+          <h4 className="font-semibold">{location.walk_position}. {location.name}</h4>
+          {location.items.map(code => <div className="grid md:grid-cols-3 gap-3 items-end" key={code}>
+            <p className="text-sm md:col-span-2">{named[code]?.name_snapshot} · {code}</p>
+            <Field label={`Quantity here (${draft[code].counted_unit})`}><input aria-label={`Quantity ${code} at ${location.location_code}`} className={inpCls} inputMode="decimal" value={draft[code].locations[location.location_code]} onChange={e => changeAt(code, location.location_code, e.target.value)} /></Field>
+          </div>)}
+        </div>)}
+        <h4 className="font-semibold">Item totals and values</h4>
+      </>}
       {scope.items.map(i => { const line = draft[i.item_code]; return <div className="border border-slate-700 rounded-lg p-3 space-y-2" key={i.item_code}>
         <p className="font-semibold text-sm">{i.name_snapshot} · {i.item_code} · Inventory unit: {i.base_unit}</p>
-        <p className="text-xs text-slate-400">Locations to include: {i.location_notes}</p>
+        <p className="text-xs text-slate-400">{walk ? `Counted in: ${walk.locations.filter(l => l.items.includes(i.item_code)).map(l => l.name).join(", ")}` : `Locations to include: ${i.location_notes}`}</p>
         <div className="grid md:grid-cols-5 gap-3">
-          <Field label="Measured quantity"><input aria-label={`Quantity ${i.item_code}`} className={inpCls} inputMode="decimal" value={line.counted_quantity} onChange={e => change(i.item_code, { counted_quantity: e.target.value })} /></Field>
+          {split(i.item_code)
+            ? <Field label="Counted total (all locations)"><p aria-label={`Total ${i.item_code}`} className="py-2 font-semibold">{total(i.item_code) ?? "Not counted yet"}</p></Field>
+            : <Field label="Measured quantity"><input aria-label={`Quantity ${i.item_code}`} className={inpCls} inputMode="decimal" value={line.counted_quantity} onChange={e => change(i.item_code, { counted_quantity: e.target.value })} /></Field>}
           <Field label="Counted unit"><input aria-label={`Unit ${i.item_code}`} className={inpCls} value={line.counted_unit} onChange={e => change(i.item_code, { counted_unit: e.target.value })} /></Field>
           <Field label={`${i.base_unit} per counted unit`}><input aria-label={`Conversion ${i.item_code}`} className={inpCls} inputMode="decimal" value={line.base_units_per_counted_unit} onChange={e => change(i.item_code, { base_units_per_counted_unit: e.target.value })} /></Field>
           <Field label="Confirmed total value (USD)"><input aria-label={`Value ${i.item_code}`} className={inpCls} inputMode="decimal" value={line.inventory_value} onChange={e => change(i.item_code, { inventory_value: e.target.value })} /></Field>
@@ -69,6 +108,49 @@ export function PhysicalCountForm({ scope, onSave, onRecount = null, unitProfile
     {error && <p role="alert" className="text-red-300">{error}</p>}
     {saved ? <p role="status" className="text-emerald-300">Count saved and confirmed · {saved.header.status}. {saved.header.status === "incomplete" ? "Append a completed recount before using it for Food Cost." : "Available for actual-usage reporting."}</p>
       : <button className={btnAcc} disabled={busy} onClick={save}>{attempt.current ? "Retry same count save" : "Save count snapshot"}</button>}
+  </section>;
+}
+
+export function CountLayoutForm({ scope, layout, proposal, onSave }) {
+  const names = Object.fromEntries(scope.items.map(i => [i.item_code, i.name_snapshot]));
+  const members = new Set(scope.items.map(i => i.item_code));
+  const start = (layout && layout.header.scope_id === scope.header.id ? layout.locations : proposal?.locations || [])
+    .map(l => ({ name: l.name, items: l.items.filter(c => members.has(c)) })).filter(l => l.items.length);
+  const [locations, setLocations] = useState(start.length ? start : [{ name: "", items: scope.items.map(i => i.item_code) }]);
+  const [note, setNote] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [saved, setSaved] = useState(null);
+  const attempt = useRef(null);
+  const edit = next => { attempt.current = null; setSaved(null); setLocations(next); };
+  const move = (index, step) => { const next = [...locations]; [next[index], next[index + step]] = [next[index + step], next[index]]; edit(next); };
+  const toggle = (index, code) => edit(locations.map((l, n) => n !== index ? l : { ...l, items: l.items.includes(code) ? l.items.filter(c => c !== code) : [...l.items, code] }));
+  const unplaced = scope.items.filter(i => !locations.some(l => l.items.includes(i.item_code)));
+  async function save() {
+    setError("");
+    if (!note.trim() || locations.some(l => !l.name.trim()) || unplaced.length) { setError("Name every location, place every item in at least one location and add a note."); return; }
+    if (!attempt.current) attempt.current = { key: crypto.randomUUID(), body: { scope_id: scope.header.id, note, locations: locations.map(l => ({ name: l.name.trim(), items: l.items })) } };
+    setBusy(true);
+    try { setSaved(await onSave(attempt.current.body, attempt.current.key)); }
+    catch (e) { if ([409, 422].includes(e?.response?.status)) attempt.current = null; setError(errorText(e)); }
+    finally { setBusy(false); }
+  }
+  return <section className={`${cardCls} p-4 space-y-4`} aria-label="Count walk order">
+    <h3 className="font-semibold">Count walk order · Scope {scope.header.revision}</h3>
+    <p className="text-sm text-slate-400">List storage locations in the order you walk them. Place each item in every location where it is kept; counts add the location quantities into one item total.</p>
+    {locations.map((l, index) => <div className="border border-slate-700 rounded-lg p-3 space-y-2" key={index}>
+      <div className="flex gap-2 items-end flex-wrap">
+        <Field label={`Location ${index + 1}`}><input aria-label={`Location ${index + 1} name`} className={inpCls} value={l.name} onChange={e => edit(locations.map((x, n) => n === index ? { ...x, name: e.target.value } : x))} /></Field>
+        <button className={btnGhost} disabled={busy || index === 0} onClick={() => move(index, -1)}>Move up</button>
+        <button className={btnGhost} disabled={busy || index === locations.length - 1} onClick={() => move(index, 1)}>Move down</button>
+        <button className={btnGhost} disabled={busy || locations.length === 1} onClick={() => edit(locations.filter((_, n) => n !== index))}>Remove</button>
+      </div>
+      <div className="grid md:grid-cols-3 gap-1">{scope.items.map(i => <label className="flex gap-2 text-sm" key={i.item_code}>
+        <input type="checkbox" aria-label={`${i.item_code} in location ${index + 1}`} checked={l.items.includes(i.item_code)} onChange={() => toggle(index, i.item_code)} />{names[i.item_code]}</label>)}</div>
+    </div>)}
+    <button className={btnGhost} disabled={busy} onClick={() => edit([...locations, { name: "", items: [] }])}>Add location</button>
+    {unplaced.length > 0 && <p className="text-xs text-amber-200">Not placed yet: {unplaced.map(i => i.name_snapshot).join(", ")}</p>}
+    <Field label="Walk order note"><input aria-label="Walk order note" className={inpCls} value={note} onChange={e => { attempt.current = null; setNote(e.target.value); }} /></Field>
+    {error && <p role="alert" className="text-red-300">{error}</p>}
+    {saved ? <p role="status" className="text-emerald-300">Walk order {saved.header.revision} saved. New counts follow it.</p>
+      : <button className={btnAcc} disabled={busy} onClick={save}>{attempt.current ? "Retry same walk order save" : "Save walk order"}</button>}
   </section>;
 }
 
@@ -208,6 +290,7 @@ export function ScopeHandoffReview({ plan, onAccept }) {
 export function ActualInventoryTab({ restaurantId, view = "counts" }) {
   const [setup, setSetup] = useState(null), [counts, setCounts] = useState([]), [closed, setClosed] = useState([]);
   const [configure, setConfigure] = useState(false), [newCount, setNewCount] = useState(0), [recount, setRecount] = useState(null);
+  const [walkSetup, setWalkSetup] = useState(false);
   const [opening, setOpening] = useState(""), [closing, setClosing] = useState(""), [report, setReport] = useState(null);
   const [reopenPlan, setReopenPlan] = useState(null);
   const [handoffs, setHandoffs] = useState([]), [handoffTarget, setHandoffTarget] = useState(""), [handoffPlan, setHandoffPlan] = useState(null);
@@ -285,7 +368,13 @@ export function ActualInventoryTab({ restaurantId, view = "counts" }) {
     {!!pending.length && <p role="alert" className="text-amber-200">{pending.length} reopened periods await replacement. Start with {pending[0].period_start} to before {pending[0].period_end_exclusive}. These original totals are historical until reviewed replacements are closed.</p>}
     {!setup ? <p>Loading actual inventory…</p> : <>
       <div className="flex gap-3 flex-wrap"><button className={btnGhost} disabled={busy} onClick={() => setConfigure(!configure)}>{configure ? "Hide scope setup" : "Review / version count scope"}</button>
-        {view === "counts" && setup.scope && <button className={btnGhost} onClick={() => { setRecount(null); setNewCount(n => n + 1); }}>Start another count</button>}</div>
+        {view === "counts" && setup.scope && <button className={btnGhost} onClick={() => { setRecount(null); setNewCount(n => n + 1); }}>Start another count</button>}
+        {view === "counts" && setup.scope && setup.proposedLayout !== undefined && <button className={btnGhost} disabled={busy} onClick={() => setWalkSetup(!walkSetup)}>{walkSetup ? "Hide count walk order" : setup.layout ? "Edit count walk order" : "Set up count walk order"}</button>}</div>
+      {view === "counts" && walkSetup && setup.scope && <CountLayoutForm key={`${setup.scope.header.id}:${setup.layout?.header.id || "new"}`} scope={setup.scope} layout={setup.layout} proposal={setup.proposedLayout} onSave={async (body, key) => {
+        const saved = await api.actualSaveLayout(restaurantId, body, key); if (!saved?.header?.id) throw new Error("Walk order was not saved.");
+        if (mounted.current) { setSetup(old => ({ ...old, layout: saved })); setNewCount(n => n + 1); }
+        return saved;
+      }} />}
       {configure && <ScopeForm key={setup.scope?.header.id || "initial"} setup={setup} onSave={async (body, key) => {
         const s = await api.actualScope(restaurantId, body, key); if (!s?.header?.id) throw new Error("Scope confirmation was not saved.");
         if (mounted.current) { setSetup(old => ({ ...old, scope: s, scopes: [s.header, ...(old.scopes || []).filter(h => h.id !== s.header.id)] })); setSelectedScope(s); setConfigure(false); setRecount(null); setNewCount(n => n + 1); }
@@ -293,7 +382,7 @@ export function ActualInventoryTab({ restaurantId, view = "counts" }) {
       {view === "counts" && countScope && <Field label="Purchased-item list for this count"><select aria-label="Count item-list version" className={inpCls} disabled={busy} value={countScope.header.id} onChange={e => {
         const id = e.target.value; run(async () => { const s = await api.actualScopeDetails(restaurantId, id); if (mounted.current) { setSelectedScope(s); setRecount(null); setNewCount(n => n + 1); } });
       }}>{(setup.scopes || [setup.scope.header]).map(s => <option key={s.id} value={s.id}>Version {s.revision} · {s.note}</option>)}</select></Field>}
-      {view === "counts" && countScope && <PhysicalCountForm key={`${countScope.header.id}:${newCount}:${recount?.header.id || "new"}`} scope={countScope} onSave={saveCount} onRecount={recount} unitProfiles={setup.unitProfiles || []} />}
+      {view === "counts" && countScope && <PhysicalCountForm key={`${countScope.header.id}:${newCount}:${recount?.header.id || "new"}:${setup.layout?.header.id || "none"}`} scope={countScope} onSave={saveCount} onRecount={recount} unitProfiles={setup.unitProfiles || []} layout={recount ? recount.layout || null : setup.layout} />}
       {view === "counts" && <div className={`${cardCls} p-4 space-y-2`}><h3 className="font-semibold">Physical count history</h3>{counts.map(c => <div className="flex gap-3 text-sm items-center" key={c.id}><span>{c.count_date} · {timingLabel(c.timing)} · {c.status}{supersededCounts.has(c.id) ? " · replaced by recount" : protectedCounts.has(c.id) ? " · protected by closed period / handoff" : ""}</span><button className={btnGhost} disabled={busy || supersededCounts.has(c.id) || protectedCounts.has(c.id)} onClick={() => run(async () => { setRecount(await api.actualCount(restaurantId, c.id)); setNewCount(n => n + 1); })}>Append recount</button></div>)}</div>}
       {view === "report" && <>
         <section className={`${cardCls} p-4 space-y-3`}><h3 className="font-semibold">Change the purchased-item list</h3>

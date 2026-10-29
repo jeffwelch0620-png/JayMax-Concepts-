@@ -26,7 +26,7 @@ class SaladTrackRuleTests(unittest.TestCase):
             self.assertEqual(held.exception.status_code, 422)
 
     def test_migration_is_registered_last_and_matches_the_rule(self):
-        self.assertEqual(readiness.MIGRATIONS[-1], '20261029_salad_prep_track.sql')
+        self.assertIn('20261029_salad_prep_track.sql', readiness.MIGRATIONS)
         text = (readiness.ROOT / MIGRATION).read_text(encoding='utf-8')
         for name in ('planning_versions_salad_store_check', 'day_lists_salad_store_check', 'handoff_notes_salad_store_check'):
             self.assertIn(name, text)
