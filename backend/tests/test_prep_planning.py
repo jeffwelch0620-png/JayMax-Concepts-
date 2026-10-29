@@ -65,7 +65,7 @@ class PrepPlanningTests(unittest.IsolatedAsyncioTestCase):
         key=str(uuid4());responses=await asyncio.gather(self.edit(key=key),self.edit(key=key))
         for r in responses:self.assertEqual(r.status_code,200,r.text)
         self.assertEqual(responses[0].json()['plan'],responses[1].json()['plan'])
-        self.assertEqual(responses[0].json()['plan']['actor'],'synthetic-catalog-reviewer')
+        self.assertEqual(responses[0].json()['plan']['actor'],'synthetic-owner')
         raced=await asyncio.gather(self.edit(self.payload(weekend_par='8'),version=1),self.edit(self.payload(weekend_par='9'),version=1))
         self.assertEqual(sorted(r.status_code for r in raced),[200,409])
         replay=await self.edit(key=key);self.assertEqual(replay.status_code,200,replay.text)
