@@ -1,5 +1,8 @@
 import { canonicalStoreId } from "./purchaseContract";
 import { readStateWithDeadline } from "./stateRead";
+import { overviewDecimal, decimalText, overviewDifference } from "./overviewDecimal";
+
+export const overviewUuid = v => typeof v === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 
 const text = v => typeof v === "string" && v.trim().length > 0;
 const integer = v => Number.isSafeInteger(v) && v >= 0;
@@ -93,7 +96,73 @@ export function prepOverview(value, context) {
       state: flagged.has(task.id) || p?.needs_review ? "needs_review" : p?.status || "unavailable" };
   });
   return { state: "ready", status: value.status, revision: value.revision,
+    draftVersionId: value.draft_version_id,
     hasDraft: value.draft_version_id !== null, progressAvailable: supported, historicalReviews, tasks };
+}
+
+// Native base quantities only; no report totals or stock balance are inferred.
+// A task from another store or plan version rejects the whole read; a task whose own
+// identity fields disagree with its snapshot only holds that task's quantities.
+export function prepQuantityOverview(value, context) {
+  const result = prepOverview(value, context);
+  for (const task of value.tasks) {
+    checked(overviewUuid(task.id) && task.store_id === context.storeId
+      && task.version_id === value.draft_version_id && overviewUuid(task.version_id));
+  }
+  if (value.draft_version_id !== null) checked(overviewUuid(value.draft_version_id));
+  checked(unique(value.tasks.map(t => t.product_id)));
+  return { ...result, tasks: result.tasks.map(row => {
+    const task = value.tasks.find(t => t.id === row.id);
+    const progress = value.progress_supported ? value.task_progress.find(p => p.task_id === row.id) : null;
+    const changedIds = Array.isArray(progress?.links) && progress.links.some(l => l?.acknowledged_batch_event_id !== l?.effective_batch_event_id);
+    const identity = { productId: task.product_id, recipeVersionId: task.recipe_version_id,
+      profileId: task.unit_profile_id, planningVersionId: task.planning_version_id };
+    try {
+      checked(["product_id", "planning_version_id", "recipe_version_id", "unit_profile_id"].every(k =>
+        overviewUuid(task[k]) && task[k] === task.task_snapshot?.[k]));
+      const unit = task.task_snapshot.base_unit;
+      checked(["lb", "oz", "g", "kg", "fl_oz", "ml", "l", "gal", "each"].includes(unit) && progress);
+      const planned = overviewDecimal(task.planned_base_quantity);
+      checked(planned === overviewDecimal(task.task_snapshot.planned_base_quantity)
+        && planned === overviewDecimal(progress.planned_base_quantity));
+      const reviewed = overviewDecimal(progress.reviewed_base_quantity);
+      const effective = overviewDecimal(progress.effective_base_quantity);
+      checked(Array.isArray(progress.links) && unique(progress.links.map(l => l?.execution_id))
+        && unique(progress.links.map(l => l?.batch_root_id)));
+      let actualSum = BigInt(0), reviewedSum = BigInt(0), changed = row.state === "needs_review";
+      const links = progress.links.map(link => {
+        checked(["execution_id", "acknowledged_batch_event_id", "effective_batch_event_id", "batch_root_id"].every(k => overviewUuid(link?.[k]))
+          && typeof link.needs_review === "boolean");
+        const mismatch = link.acknowledged_batch_event_id !== link.effective_batch_event_id;
+        changed = changed || mismatch || link.needs_review;
+        checked(link.needs_review === mismatch);
+        const amount = overviewDecimal(link.effective_base_quantity);
+        const completion = value.completions.find(c => c.execution_id === link.execution_id);
+        checked(completion?.task_id === task.id && completion.acknowledged_batch_event_id === link.acknowledged_batch_event_id
+          && completion.effective_batch?.id === link.effective_batch_event_id
+          && completion.effective_batch.root_id === link.batch_root_id
+          && completion.effective_batch.store_id === context.storeId
+          && completion.effective_batch.product_id === task.product_id
+          && completion.effective_batch.base_unit === unit && completion.needs_review === mismatch
+          && overviewUuid(completion.effective_batch.product_version_id)
+          && ["initial", "replacement", "void"].includes(completion.effective_batch.kind));
+        checked(amount === (completion.effective_batch.kind === "void" ? BigInt(0)
+          : overviewDecimal(completion.effective_batch.review_snapshot?.usableBaseOutput)));
+        actualSum += amount;
+        if (!mismatch) reviewedSum += amount;
+        return { ...link, product_version_id: completion.effective_batch.product_version_id };
+      });
+      checked(actualSum === effective && reviewedSum === reviewed
+        && value.completions.filter(c => c.task_id === task.id).length === links.length);
+      const quantities = { unit, planned: decimalText(planned), reviewed: decimalText(reviewed),
+        effective: decimalText(effective), links, closed: progress.closed };
+      return { ...row, ...identity, ...quantities, state: changed ? "needs_review" : row.state,
+        quantityState: changed ? "review_required" : "ready",
+        ...(changed ? {} : overviewDifference(task.planned_base_quantity, progress.reviewed_base_quantity)) };
+    } catch {
+      return { ...row, ...identity, state: changedIds ? "needs_review" : row.state, quantityState: "unavailable" };
+    }
+  }) };
 }
 
 // GET readers only. Existing API authentication and server authorization remain authoritative.

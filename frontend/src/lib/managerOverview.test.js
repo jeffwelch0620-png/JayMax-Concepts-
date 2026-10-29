@@ -121,3 +121,28 @@ test("view preferences are per person/store and never contain records", () => {
   expect(rememberedOverview({ getItem: () => { throw Error("blocked"); } }, owner.id, "berts", day)).toEqual({ day, track: "bulk" });
   expect(rememberedOverview({ getItem: () => '{"day":"2026-02-30","track":"daily"}' }, owner.id, "berts", day).track).toBe("bulk");
 });
+
+// B1 receiving tests use a separate native-shaped fictional basket.
+describe("B1 native quantity projection",()=>{
+ const b1=require("../testFixtures/managerB1"), project=require("./managerOverview").prepQuantityOverview;
+ const c=overviewContext("berts","2026-10-26","daily",b1.b1Owner);
+ test("T01–T04 exact native examples, no cross-product total and no mutation",()=>{
+   const f=b1.b1Fixture(), before=JSON.stringify(f);const p=project(f.prep,c);
+   expect(p.tasks[0]).toMatchObject({planned:"4",reviewed:"3",remaining:"1",unit:"lb"});
+   expect(p.tasks[1]).toMatchObject({closed:true,remaining:"1"});
+   expect(p.tasks[2]).toMatchObject({reviewed:"0",remaining:"4"});
+   for(const i of [3,4]){expect(p.tasks[i].quantityState).toBe("review_required");expect(p.tasks[i].remaining).toBeUndefined();}
+   expect(p.tasks[5].remaining).toBe("0.876543210988");expect(p.tasks[6]).toMatchObject({remaining:"0",excess:"1"});
+   expect(p.total).toBeUndefined();expect(JSON.stringify(f)).toBe(before);
+ });
+ test.each([
+  p=>{p.tasks[0].planned_base_quantity=null;},p=>{p.task_progress[0].reviewed_base_quantity="-1";},
+  p=>{p.tasks[0].task_snapshot.base_unit="portion";},p=>{p.task_progress[0].planned_base_quantity="5";},
+  p=>{p.task_progress[0].reviewed_base_quantity=3;},p=>{p.task_progress[0].reviewed_base_quantity="1.0000000000001";},
+  p=>{p.task_progress[0].links.push(p.task_progress[0].links[0]);},p=>{p.completions[0].effective_batch.store_id="rudds";},
+  p=>{p.completions[0].effective_batch.product_id=b1.b1Id(999);},p=>{p.completions[0].effective_batch.base_unit="each";},
+  p=>{p.completions[0].effective_batch.review_snapshot.usableBaseOutput="2";},p=>{p.task_progress[0].links=[];}
+ ])("T04/T06 inconsistent native row holds quantities %#",change=>{const f=b1.b1Fixture();change(f.prep);const t=project(f.prep,c).tasks[0];expect(t.quantityState).toBe("unavailable");expect(t.remaining).toBeUndefined();});
+ test("T03 changed batch IDs require review even when flags are inconsistent",()=>{const f=b1.b1Fixture();f.prep.task_progress[0].links[0].effective_batch_event_id=b1.b1Id(999);const t=project(f.prep,c).tasks[0];expect(t.state).toBe("needs_review");expect(t.remaining).toBeUndefined();});
+ test("T04 explicit zero planned and reviewed is confirmed",()=>{const f=b1.b1Fixture(),t=f.prep.tasks[2],p=f.prep.task_progress[2];t.planned_base_quantity=t.task_snapshot.planned_base_quantity=p.planned_base_quantity="0";expect(project(f.prep,c).tasks[2]).toMatchObject({planned:"0",reviewed:"0",remaining:"0"});});
+});

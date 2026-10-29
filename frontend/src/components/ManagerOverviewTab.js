@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import * as api from "../lib/api";
 import { RESTAURANTS, todayISO } from "../lib/calc";
 import { loadManagerOverview, overviewContext, overviewStorage, rememberedOverview } from "../lib/managerOverview";
+import { ManagerPrepDetail } from "./ManagerPrepDetail";
 import { PageTitle, cardCls, inpCls, btnGhost } from "./common";
 
 const labels = { open: "Open", in_progress: "In progress", complete: "Complete",
@@ -69,6 +70,7 @@ export function ManagerOverviewTab({ rid, user, onOpenCounts, onOpenPrep, onOpen
       </div>
       {readApi.managerHandoffEnabled && <button className={`${btnGhost} mt-4`} onClick={() => onOpenHandoff?.({ rid, day: selection.day, track: selection.track })}>Open dated manager handoff</button>}
       <p className="mt-4 text-sm text-slate-400">Counts and task history are shown as currently recorded, including corrections. They do not reconstruct what was known on a past date.</p>
+      <ManagerPrepDetail rid={rid} day={selection.day} track={selection.track} user={user} generation={refresh} readApi={readApi}/>
     </>}
   </div>;
 }

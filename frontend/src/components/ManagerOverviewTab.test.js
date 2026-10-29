@@ -65,7 +65,9 @@ test("restaurant changes load only that restaurant's remembered date and track",
   await render(); await set("Manager overview date", "2026-10-24"); await set("Manager overview track", "daily");
   window.sessionStorage.setItem(`manager-overview:${owner.id}:rudds`, JSON.stringify({ day: "2026-10-23", track: "bulk" }));
   api.prepExecution.mockClear(); await render({ rid: "rudds" });
-  expect(api.prepExecution.mock.calls).toEqual([["rudds", "2026-10-23", "bulk"]]);
+  // The overview card and the prep detail panel each read the selected day once.
+  expect(api.prepExecution.mock.calls.length).toBeGreaterThan(0);
+  api.prepExecution.mock.calls.forEach(call => expect(call).toEqual(["rudds", "2026-10-23", "bulk"]));
   await render(); expect(input("Manager overview date").value).toBe("2026-10-24"); expect(input("Manager overview track").value).toBe("daily");
 });
 test("actor change and reload keep preferences isolated and store no source data", async () => {
