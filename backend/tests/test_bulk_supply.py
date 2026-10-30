@@ -139,6 +139,8 @@ class BulkSupplyDatabaseTests(day.PrepDayTaskTests):
         sent = await self.scheduled(await self.rudds_count('12'))
         line = sent['lines'][0]
         self.assertEqual((sent['status'], D(line['requested_base_quantity']), D(line['counted_base_quantity'])), ('requested', D(18), D(12)))
+        # The making store sees which count was used, not the requester's whole count record.
+        self.assertEqual(set(sent['review_snapshot']['count']), {'id', 'business_date', 'performed_at', 'timezone_name'})
         # The maker's Bulk run: its own need (5 - 2 = 3) plus Rudd's 18 = 21, one 48 lb batch.
         count = await self.prep_count('2')
         saved = await self.write_day(self.bulk_body(count_event_id=count['id']))

@@ -134,7 +134,8 @@ async def preview(conn, store, body):
         available = await day_tasks.counts(conn, store, body.run_date)
         if not available or available[0]['id'] != body.count_event_id:
             raise HTTPException(409, 'Use the latest prep count from the night before the Bulk run')
-        count = dict(available[0])
+        # Only which count was used: the making store must not see the requester's other prep counts.
+        count = {k: available[0][k] for k in ('id', 'business_date', 'performed_at', 'timezone_name')}
         counted = {str(l['product_id']): l['base_quantity'] for l in await conn.fetch('SELECT product_id, base_quantity FROM prep_inventory.count_observations WHERE event_id=$1', body.count_event_id)}
         for p in sorted(plans.values(), key=lambda p: products[p['product_id']]['name'].casefold()):
             if p['schedule'] != 'daily': continue
