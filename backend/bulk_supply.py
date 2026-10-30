@@ -306,11 +306,12 @@ async def read(conn, store, since):
             WHERE q.request_id=r.id AND a.base_quantity+f.held_base_quantity<q.requested_base_quantity))
         ORDER BY r.run_date DESC, r.created_at DESC LIMIT 500''', store, since)]
     loaded = {i: await one(conn, i) for i in ids}
-    # A short request is closed by a later accepted request for the item, which may be older than the window.
-    short = [r['run_date'] for r in loaded.values() if r['status'] == 'accepted' and any(Decimal(l['shortfall_base_quantity'] or 0) > 0 for l in r['lines'])]
+    # A short request is closed by a delivery accepted after it, whatever that request's own date.
+    short = [r['id'] for r in loaded.values() if r['status'] == 'accepted' and any(Decimal(l['shortfall_base_quantity'] or 0) > 0 for l in r['lines'])]
     if short:
-        for (i,) in await conn.fetch('''SELECT r.id FROM prep_inventory.bulk_requests r WHERE $1 IN (r.store_id, r.maker_store_id) AND r.run_date>=$2
-            AND EXISTS(SELECT 1 FROM prep_inventory.bulk_events e WHERE e.request_id=r.id AND e.action='accept')''', store, date.fromisoformat(min(short))):
+        for (i,) in await conn.fetch('''SELECT DISTINCT r.id FROM prep_inventory.bulk_requests r JOIN prep_inventory.bulk_events e ON e.request_id=r.id AND e.action='accept'
+            WHERE $1 IN (r.store_id, r.maker_store_id) AND e.created_at>=(SELECT min(created_at) FROM prep_inventory.bulk_events
+            WHERE action='accept' AND request_id=ANY($2::uuid[]))''', store, [UUID(i) for i in short]):
             if i not in loaded: loaded[i] = await one(conn, i)
     owed = open_shortfalls(list(loaded.values()))
     owed_ids = {o['request_id'] for o in owed}
