@@ -272,7 +272,9 @@ def open_shortfalls(requests):
     asked beyond what was owed can add a new shortfall. A later scheduled run is par minus a fresh
     count, so it replaces what was owed with its own shortfall."""
     owed = {}
-    for r in sorted((r for r in requests if r['status'] == 'accepted'), key=lambda r: (r['run_date'], r['created_at'])):
+    # In the order deliveries were accepted, not the order requests were opened.
+    accepted_at = lambda r: next((e['created_at'] for e in r.get('events', []) if e['action'] == 'accept'), r['created_at'])
+    for r in sorted((r for r in requests if r['status'] == 'accepted'), key=lambda r: (accepted_at(r), r['id'])):
         for l in r['lines']:
             key = (r['store_id'], l['product_id'])
             supplied = Decimal(l['accepted_base_quantity'] or 0) + Decimal(l.get('held_base_quantity') or 0)

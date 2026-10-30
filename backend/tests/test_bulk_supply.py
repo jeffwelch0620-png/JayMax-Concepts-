@@ -57,6 +57,10 @@ class BulkModelTests(unittest.TestCase):
         self.assertEqual(owed(req('a', '2026-10-05', '10'), req('s', '2026-10-06', '7', accepted='3', kind='spot'), req('t', '2026-10-07', '0', accepted='7', kind='spot')), [])
         # Asking for more than was owed adds only the extra: owed 2, asked 5, got 1 -> 4 owed.
         self.assertEqual(sum(D(s['shortfall_base_quantity']) for s in bulk.open_shortfalls([req('a', '2026-10-05', '2'), req('s', '2026-10-06', '4', accepted='1', kind='spot')])), D(4))
+        # A spot opened before the scheduled request but accepted after it still pays it down.
+        early_spot = req('s', '2026-10-08', '0', accepted='10', kind='spot') | {'created_at': '2026-10-08T08:00', 'events': [{'action': 'accept', 'created_at': '2026-10-08T16:00'}]}
+        run = req('b', '2026-10-08', '10') | {'created_at': '2026-10-08T09:00', 'events': [{'action': 'accept', 'created_at': '2026-10-08T12:00'}]}
+        self.assertEqual(owed(early_spot, run), [])
         # The next scheduled run is par minus a fresh count, so it replaces what was owed with its own result.
         self.assertEqual(owed(req('a', '2026-10-05', '10'), req('b', '2026-10-08', '2', accepted='0')), [('b', D(2))])
         self.assertEqual(owed(req('a', '2026-10-05', '10'), req('b', '2026-10-08', '0')), [])
