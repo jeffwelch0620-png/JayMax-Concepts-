@@ -52,3 +52,23 @@ test("the receiving store confirms what arrived; the sender can only cancel", as
   await render(<TransferCard rid="rudds" store="rudds" transfer={transfer({ status: "received", received_base_quantity: "8", record_date: "2026-10-30", transfer_cost_amount: "5.20", short_base_quantity: "2" })} onChange={changed} />);
   expect(container.textContent).toContain("received 8 lb on 2026-10-30 for $5.20 · 2 lb short (stays in the sending store's usage)");
 });
+
+test("inputs are frozen while a preview is pending and after a lost send, so a retry cannot double a transfer", async () => {
+  api.actualTransfers.mockResolvedValue({ store_id: "berts", transfers: [], items: [{ code: "flour", name: "Flour, all purpose", base_unit: "lb" }], stores: [{ id: "rudds", name: "Rudd's" }] });
+  let answer; api.previewActualTransfer.mockReturnValue(new Promise(resolve => { answer = resolve; }));
+  api.sendActualTransfer.mockRejectedValueOnce(new Error("Network lost")).mockResolvedValue({ transfer: transfer() });
+  await render(<StoreTransfers rid="berts" />);
+  await click(button("Send to another store"));
+  await choose("Transfer item", "flour"); await input("Transfer amount", "10"); await input("Transfer note", "Rudd's ran out");
+  await click(button("Preview transfer"));
+  expect(container.querySelector('[aria-label="Transfer amount"]').closest("fieldset").disabled).toBe(true);
+  expect(button("Checking…")).toBeDefined();
+  await act(async () => answer({ reviewHash: "b".repeat(64), review: { name: "Flour, all purpose", base_unit: "lb", to_store_id: "rudds", estimated_cost_amount: "6.50",
+    cost: { cost_amount: "32.50", base_quantity: "50", record_date: "2026-10-27" } } }));
+  expect(container.textContent).toContain("10 lb of Flour, all purpose");
+  await click(container.querySelector('[aria-label="Review store transfer"]'));
+  await click(button("Send transfer"));
+  expect(container.querySelector('[aria-label="Transfer amount"]').closest("fieldset").disabled).toBe(true);
+  await click(button("Retry the same transfer"));
+  expect(api.sendActualTransfer.mock.calls[1]).toEqual(api.sendActualTransfer.mock.calls[0]);
+});

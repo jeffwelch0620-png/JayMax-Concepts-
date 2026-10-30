@@ -79,7 +79,8 @@ export function RequestForm({ rid, maker, onSent }) {
 export function SpotForm({ rid, items, onSent }) {
   const [rows, setRows] = useState([{ product_id: "", quantity: "", reason: "" }]), [note, setNote] = useState(""), [runDate, setRunDate] = useState(todayISO());
   const s = useSubmit(r => { setRows([{ product_id: "", quantity: "", reason: "" }]); setNote(""); onSent(r); });
-  const edit = (i, patch) => { s.reset(); setRows(x => x.map((r, n) => n === i ? { ...r, ...patch } : r)); };
+  // Inputs stay frozen while a send is unresolved, so a retry replays it rather than sending twice.
+  const edit = (i, patch) => setRows(x => x.map((r, n) => n === i ? { ...r, ...patch } : r));
   const ready = note.trim() && rows.every(r => r.product_id && decimal(r.quantity) && Number(r.quantity) > 0 && r.reason.trim());
   async function send() {
     const request = { run_date: runDate, kind: "spot", note: note.trim(), lines: rows.map(r => ({ product_id: r.product_id, quantity: r.quantity.trim(), reason: r.reason.trim() })) };
@@ -88,6 +89,7 @@ export function SpotForm({ rid, items, onSent }) {
   return <section className={`${cardCls} p-4 space-y-3`} aria-label="Spot Bulk request">
     <h3 className="font-semibold">Spot prep request</h3>
     <p className="text-sm text-slate-400">For a shortfall or an unexpected need between runs. Amounts are in each item's par unit.</p>
+    <fieldset disabled={s.busy || s.pending()} className="space-y-3">
     <Field label="Needed by"><input aria-label="Spot needed by" type="date" className={inpCls} value={runDate} onChange={e => setRunDate(e.target.value)} /></Field>
     {rows.map((r, i) => <div key={i} className="grid md:grid-cols-3 gap-3">
       <Field label="Item"><select aria-label={`Spot item ${i + 1}`} className={inpCls} value={r.product_id} onChange={e => edit(i, { product_id: e.target.value })}><option value="">Choose…</option>{items.map(p => <option key={p.product_id} value={p.product_id}>{p.name} ({p.unit})</option>)}</select></Field>
@@ -96,6 +98,7 @@ export function SpotForm({ rid, items, onSent }) {
     </div>)}
     <div className="flex gap-2"><button className={btnGhost} onClick={() => setRows(x => [...x, { product_id: "", quantity: "", reason: "" }])}>Add item</button></div>
     <Field label="Note"><input aria-label="Spot note" className={inpCls} value={note} onChange={e => setNote(e.target.value)} /></Field>
+    </fieldset>
     {s.error && <p role="alert">{s.error}</p>}
     <button className={btnAcc} disabled={s.busy || !ready} onClick={send}>{s.label("Retry the same request", "Send spot request")}</button>
   </section>;

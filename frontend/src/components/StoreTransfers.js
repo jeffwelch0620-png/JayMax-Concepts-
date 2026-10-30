@@ -28,40 +28,48 @@ function useSubmit(onDone) {
     finally { setBusy(false); }
   }
   const label = (retry, ready) => busy ? "Saving…" : attempt.current ? retry : ready;
-  return { submit, busy, error, setError, label, reset: () => { attempt.current = null; } };
+  return { submit, busy, error, setError, label, pending: () => !!attempt.current, reset: () => { attempt.current = null; } };
 }
 
 export function SendTransferForm({ rid, items, stores, onSent }) {
   const [form, setForm] = useState({ to_store_id: stores[0]?.id || "", item_code: "", sent_base_quantity: "", kind: "lend", sent_date: todayISO(), note: "" });
-  const [review, setReview] = useState(null), [checked, setChecked] = useState(false);
+  const [review, setReview] = useState(null), [checked, setChecked] = useState(false), [previewing, setPreviewing] = useState(false);
+  const revision = useRef(0);
   const s = useSubmit(r => { setReview(null); setChecked(false); setForm(f => ({ ...f, item_code: "", sent_base_quantity: "", note: "" })); onSent(r); });
-  const set = (k, v) => { s.reset(); setReview(null); setChecked(false); setForm(f => ({ ...f, [k]: v })); };
+  // While a send is unresolved (e.g. its response was lost) the inputs stay frozen, so a retry
+  // replays the same request instead of creating a second transfer.
+  const frozen = s.busy || s.pending() || previewing;
+  const set = (k, v) => { if (frozen) return; revision.current += 1; setReview(null); setChecked(false); setForm(f => ({ ...f, [k]: v })); };
   const unit = items.find(i => i.code === form.item_code)?.base_unit || "";
   const ready = form.to_store_id && form.item_code && decimal(form.sent_base_quantity) && Number(form.sent_base_quantity) > 0 && form.note.trim();
   const body = () => ({ ...form, sent_base_quantity: form.sent_base_quantity.trim(), note: form.note.trim() });
   async function preview() {
-    s.setError("");
-    try { const b = body(); setReview({ body: b, result: await api.previewActualTransfer(rid, b) }); }
-    catch (e) { s.setError(detail(e)); }
+    s.setError(""); setPreviewing(true);
+    const asked = revision.current;
+    try {
+      const b = body(), result = await api.previewActualTransfer(rid, b);
+      if (asked === revision.current) setReview({ body: b, result });  // an answer for older inputs is dropped
+    } catch (e) { s.setError(detail(e)); }
+    finally { setPreviewing(false); }
   }
   const r = review?.result?.review;
   return <section className={`${cardCls} p-4 space-y-3`} aria-label="Send store transfer">
     <h3 className="font-semibold">Send to another store</h3>
     <p className="text-sm text-slate-400">For a purchased item the other store is out of, or one of your items used in a batch for them. It leaves your inventory and enters theirs at your latest purchase cost once their manager confirms what arrived.</p>
-    <div className="grid md:grid-cols-3 gap-3">
+    <fieldset disabled={frozen} className="grid md:grid-cols-3 gap-3">
       <Field label="To"><select aria-label="Transfer to store" className={inpCls} value={form.to_store_id} onChange={e => set("to_store_id", e.target.value)}>{stores.map(x => <option key={x.id} value={x.id}>{storeName(x.id)}</option>)}</select></Field>
       <Field label="Item"><select aria-label="Transfer item" className={inpCls} value={form.item_code} onChange={e => set("item_code", e.target.value)}><option value="">Choose…</option>{items.map(i => <option key={i.code} value={i.code}>{i.name} ({i.base_unit})</option>)}</select></Field>
       <Field label={`Amount${unit ? ` (${unit})` : ""}`}><input aria-label="Transfer amount" inputMode="decimal" className={inpCls} value={form.sent_base_quantity} onChange={e => set("sent_base_quantity", e.target.value)} /></Field>
       <Field label="Why"><select aria-label="Transfer reason" className={inpCls} value={form.kind} onChange={e => set("kind", e.target.value)}>{Object.entries(KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
       <Field label="Sent on"><input aria-label="Transfer sent date" type="date" className={inpCls} value={form.sent_date} onChange={e => set("sent_date", e.target.value)} /></Field>
       <Field label="Note"><input aria-label="Transfer note" className={inpCls} value={form.note} onChange={e => set("note", e.target.value)} placeholder="Your name and what it's for" /></Field>
-    </div>
+    </fieldset>
     {s.error && <p role="alert">{s.error}</p>}
     {r ? <>
-      <p>{amount(form.sent_base_quantity, r.base_unit)} of {r.name} to {storeName(r.to_store_id)}, about <strong>${r.estimated_cost_amount}</strong> at your latest purchase cost (${r.cost.cost_amount} for {amount(r.cost.base_quantity, r.base_unit)} on {r.cost.record_date}). The final amount uses what arrives.</p>
-      <label><input type="checkbox" aria-label="Review store transfer" checked={checked} onChange={e => setChecked(e.target.checked)} /> I checked the item, amount and store.</label>
+      <p>{amount(review.body.sent_base_quantity, r.base_unit)} of {r.name} to {storeName(r.to_store_id)}, about <strong>${r.estimated_cost_amount}</strong> at your latest purchase cost (${r.cost.cost_amount} for {amount(r.cost.base_quantity, r.base_unit)} on {r.cost.record_date}). The final amount uses what arrives.</p>
+      <label><input type="checkbox" aria-label="Review store transfer" disabled={frozen} checked={checked} onChange={e => setChecked(e.target.checked)} /> I checked the item, amount and store.</label>
       <button className={btnAcc} disabled={s.busy || !checked} onClick={() => s.submit(() => ({ transfer: review.body, expected_review_hash: review.result.reviewHash, reviewed: true }), (b, k) => api.sendActualTransfer(rid, b, k))}>{s.label("Retry the same transfer", "Send transfer")}</button>
-    </> : <button className={btnAcc} disabled={!ready} onClick={preview}>Preview transfer</button>}
+    </> : <button className={btnAcc} disabled={!ready || frozen} onClick={preview}>{previewing ? "Checking…" : "Preview transfer"}</button>}
   </section>;
 }
 
