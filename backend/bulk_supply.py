@@ -345,17 +345,18 @@ def install_routes(router, context):
         _, pool = await context(request, store_id)
         async with pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True): return await read(conn, store_id, since)
 
+    # Who may request, sign off and accept Bulk: backend/positions.py (Jeff 2026-10-30).
     @router.post('/{store_id}/bulk-requests/preview')
     async def preview_request(store_id: str, body: RequestIn, request: Request):
-        _, pool = await context(request, store_id, True)
+        _, pool = await context(request, store_id, True, require='bulk_request')
         async with pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True): return await preview(conn, store_id, body)
 
     @router.post('/{store_id}/bulk-requests')
     async def send_request(store_id: str, body: RequestCommit, request: Request, idempotency_key: UUID = Header(...)):
-        actor, pool = await context(request, store_id, True)
+        actor, pool = await context(request, store_id, True, require='bulk_request')
         return await send(pool, store_id, actor, body, idempotency_key)
 
     @router.post('/{store_id}/bulk-requests/{request_id}/steps')
     async def sign_step(store_id: str, request_id: UUID, body: StepIn, request: Request, idempotency_key: UUID = Header(...)):
-        actor, pool = await context(request, store_id, True)
+        actor, pool = await context(request, store_id, True, require='bulk_fulfill' if body.action == 'fulfill' else 'bulk_request')
         return await step(pool, store_id, request_id, actor, body, idempotency_key)

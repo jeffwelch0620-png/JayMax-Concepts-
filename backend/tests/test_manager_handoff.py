@@ -75,7 +75,7 @@ class HandoffValidationTests(unittest.TestCase):
     def test_receiving_configuration_is_separate_from_sealed_native_installers(self):
         import deployment_readiness
         self.assertNotIn(manager_handoff_schema.MIGRATION,deployment_readiness.MIGRATIONS)
-        self.assertEqual(len(deployment_readiness.MIGRATIONS),38)
+        self.assertEqual(len(deployment_readiness.MIGRATIONS),39)
         self.assertEqual(manager_handoff_schema.configuration({}, {})['status'],'passed')
         backend={'MANAGER_HANDOFF_NOTES_ENABLED':'true','USE_PG':'true','AUTH_SECRET':'fictional-private'}
         frontend={'REACT_APP_MANAGER_HANDOFF_NOTES':'true','REACT_APP_USE_PG':'true'}
