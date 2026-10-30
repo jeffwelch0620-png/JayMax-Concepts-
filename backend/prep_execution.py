@@ -120,6 +120,7 @@ async def preview(conn, store, day, track, body, expected):
         fresh = p['review'] | {'base_revision':current['revision']-1}
         if fingerprint(fresh).hex() != current['review_hash']: raise HTTPException(409, 'Draft sources changed. Save and review a fresh dated draft before release.')
         if fresh['unresolved_tasks']: raise HTTPException(409, 'Unknown task quantities must be resolved before release')
+        if fresh.get('uncovered_requests'): raise HTTPException(409, "Another store's Bulk request is not covered by this run. Make it to par, or plan at least the requested amount, before release.")
     elif body.action == 'reopen':
         if s['status'] != 'released': raise HTTPException(409, 'Only a released draft can be reopened')
         if s['completions']: raise HTTPException(409, 'Production history is linked. Review task progress independently; the released draft stays pinned.')

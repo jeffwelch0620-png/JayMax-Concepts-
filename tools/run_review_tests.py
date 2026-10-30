@@ -30,6 +30,7 @@ DATABASE_CASES = (
  ('bulk_supply','BulkSupplyDatabaseTests','test_request_is_par_minus_count_and_feeds_the_makers_run'),
  ('bulk_supply','BulkSupplyDatabaseTests','test_sign_off_order_shortfall_and_one_request_per_run'),
  ('bulk_supply','BulkSupplyDatabaseTests','test_database_refuses_a_forged_request_line'),
+ ('bulk_supply','BulkSupplyDatabaseTests','test_run_cannot_be_released_while_a_request_is_uncovered'),
  ('prep_count_zones','PrepCountZoneTests','test_zone_count_adds_up_zones_and_keeps_the_breakdown'),
  ('prep_count_zones','PrepCountZoneTests','test_zones_must_match_the_layout'),
  ('prep_count_zones','PrepCountZoneTests','test_layout_places_every_item_and_replays_by_key'),

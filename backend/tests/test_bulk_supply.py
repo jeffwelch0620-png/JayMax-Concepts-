@@ -204,3 +204,30 @@ class BulkSupplyDatabaseTests(day.PrepDayTaskTests):
                     await c.execute('''INSERT INTO prep_inventory.bulk_request_lines(request_id,store_id,maker_store_id,ordinal,product_id,maker_product_id,base_unit,
                         planning_version_id,factor,target_par,counted_base_quantity,requested_base_quantity) VALUES($1,'rudds','berts',1,$2,$3,'lb',$4,1,30,12,40)''',
                         ident, self.requester['product'], UUID(self.p['product_id']), self.requester['plan'])
+
+    async def test_run_cannot_be_released_while_a_request_is_uncovered(self):
+        flag = patch.dict(os.environ, {'PREP_EXECUTION_ENABLED': 'true'}); flag.start(); self.addCleanup(flag.stop)
+        async with self.pool.acquire() as c:
+            for name in ('20261005_prep_opening_sources.sql', '20261007_prep_execution.sql', '20261030_bulk_release_coverage.sql'):
+                await c.execute((day.recovery.counts.native.ROOT / 'migrations' / name).read_text(encoding='utf-8'))
+        await self.scheduled(await self.rudds_count('12'))  # Rudd's asks for 18 lb
+        count = await self.prep_count('2')
+
+        async def release(version, override):
+            body = self.bulk_body(count_event_id=count['id'], overrides=[dict(planning_version_id=self.maker_plan['id'], reason='Invented maker decision', **override)])
+            saved = await self.write_day(body, version=version); self.assertEqual(saved.status_code, 200, saved.text)
+            draft = saved.json()['draft']
+            command = dict(action='release', draft_version_id=draft['id'], reason='Manager reviewed the Bulk run')
+            return draft, await self.catalog.post(f'/api/pg/purchases/berts/prep-execution/{RUN}/preview', params={'track': 'bulk'}, json=command, headers={'If-Match': '0'})
+
+        for version, override in ((0, dict(kind='omit', quantity=None)), (1, dict(kind='fixed_quantity', quantity='10'))):
+            draft, refused = await release(version, override)
+            self.assertEqual(draft['review_snapshot']['uncovered_requests'], [self.p['product_id']])
+            self.assertEqual(refused.status_code, 409, refused.text)
+            self.assertIn('not covered', refused.text)
+        draft, ok = await release(2, dict(kind='fixed_quantity', quantity='20'))
+        self.assertEqual((draft['review_snapshot']['uncovered_requests'], ok.status_code), ([], 200), ok.text)
+        command = dict(action='release', draft_version_id=draft['id'], reason='Manager reviewed the Bulk run')
+        done = await self.catalog.post(f'/api/pg/purchases/berts/prep-execution/{RUN}/commands', params={'track': 'bulk'}, headers={'If-Match': '0', 'Idempotency-Key': str(uuid4())},
+                                       json=dict(command=command, expected_review_hash=ok.json()['reviewHash'], reviewed=True))
+        self.assertEqual(done.status_code, 200, done.text)  # the database release guard lets a covering run through
