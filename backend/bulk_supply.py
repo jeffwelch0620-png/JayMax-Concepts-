@@ -266,16 +266,24 @@ async def one(conn, request_id):
 
 
 def open_shortfalls(requests):
-    """Accepted short and not yet made up: no later accepted request supplied the same item."""
-    accepted = sorted((r for r in requests if r['status'] == 'accepted'), key=lambda r: (r['run_date'], r['created_at']))
-    out = []
-    for i, r in enumerate(accepted):
+    """What is still owed per store and item. A spot delivery (sent + held) pays down earlier
+    shortfalls, oldest first; a later scheduled run is par minus a fresh count, so it replaces
+    what was owed with its own shortfall."""
+    owed = {}
+    for r in sorted((r for r in requests if r['status'] == 'accepted'), key=lambda r: (r['run_date'], r['created_at'])):
         for l in r['lines']:
-            if Decimal(l['shortfall_base_quantity'] or 0) <= 0: continue
-            later = any(l['product_id'] in {x['product_id'] for x in s['lines'] if Decimal(x['accepted_base_quantity'] or 0) + Decimal(x.get('held_base_quantity') or 0) > 0} for s in accepted[i + 1:])
-            if not later: out.append({'request_id': r['id'], 'run_date': r['run_date'], 'store_id': r['store_id'], 'product_id': l['product_id'],
-                'name': l['name'], 'base_unit': l['base_unit'], 'shortfall_base_quantity': l['shortfall_base_quantity']})
-    return out
+            key = (r['store_id'], l['product_id'])
+            if r.get('kind') == 'spot':
+                supplied = Decimal(l['accepted_base_quantity'] or 0) + Decimal(l.get('held_base_quantity') or 0)
+                for entry in owed.get(key, []):
+                    paid = min(entry[1], supplied); entry[1] -= paid; supplied -= paid
+                owed[key] = [e for e in owed.get(key, []) if e[1] > 0]
+            else:
+                owed[key] = []
+            if Decimal(l['shortfall_base_quantity'] or 0) > 0:
+                owed.setdefault(key, []).append([{'request_id': r['id'], 'run_date': r['run_date'], 'store_id': r['store_id'], 'product_id': l['product_id'],
+                    'name': l['name'], 'base_unit': l['base_unit']}, Decimal(l['shortfall_base_quantity'])])
+    return [entry | {'shortfall_base_quantity': amount} for entries in owed.values() for entry, amount in entries]
 
 
 async def read(conn, store, since):

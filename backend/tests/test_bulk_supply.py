@@ -1,7 +1,7 @@
 """M3 Bulk supply: request (par minus count), the maker's run, sign-off, acceptance, shortfall."""
 import os
 import unittest
-from datetime import date
+from datetime import date, time
 from decimal import Decimal as D
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -41,13 +41,18 @@ class BulkModelTests(unittest.TestCase):
         self.assertEqual(tasks.batch_plan(D(5), D(2), D(0), D(48), D(18)), {'need': D(21), 'batches': D(1), 'planned_base': D(48)})
         self.assertEqual(tasks.batch_plan(D(5), D(9), D(0), D(10), D(12))['batches'], D(2))
 
-    def test_open_shortfall_closes_when_a_later_request_delivers(self):
-        def req(i, run, short, accepted='5'):
-            return {'id': i, 'run_date': run, 'created_at': run, 'store_id': 'berts', 'status': 'accepted',
-                    'lines': [{'product_id': 'p', 'name': 'Chili', 'base_unit': 'oz', 'shortfall_base_quantity': short, 'accepted_base_quantity': accepted}]}
-        self.assertEqual([s['request_id'] for s in bulk.open_shortfalls([req('a', '2026-10-05', '3')])], ['a'])
-        self.assertEqual(bulk.open_shortfalls([req('a', '2026-10-05', '3'), req('b', '2026-10-08', '0')]), [])
-        self.assertEqual(len(bulk.open_shortfalls([req('a', '2026-10-05', '3'), req('b', '2026-10-08', '0', accepted='0')])), 1)
+    def test_spot_prep_pays_down_a_shortfall_and_the_next_run_recounts_it(self):
+        def req(i, run, short, accepted='5', kind='scheduled', held='0'):
+            return {'id': i, 'run_date': run, 'created_at': run, 'store_id': 'berts', 'status': 'accepted', 'kind': kind,
+                    'lines': [{'product_id': 'p', 'name': 'Chili', 'base_unit': 'oz', 'shortfall_base_quantity': short, 'accepted_base_quantity': accepted, 'held_base_quantity': held}]}
+        owed = lambda *rs: [(s['request_id'], D(s['shortfall_base_quantity'])) for s in bulk.open_shortfalls(list(rs))]
+        self.assertEqual(owed(req('a', '2026-10-05', '10')), [('a', D(10))])
+        # A 3 oz spot delivery (2 sent + 1 held) leaves 7 oz still owed; a second spot of 7 clears it.
+        self.assertEqual(owed(req('a', '2026-10-05', '10'), req('s', '2026-10-06', '0', accepted='2', kind='spot', held='1')), [('a', D(7))])
+        self.assertEqual(owed(req('a', '2026-10-05', '10'), req('s', '2026-10-06', '0', accepted='3', kind='spot'), req('t', '2026-10-07', '0', accepted='7', kind='spot')), [])
+        # The next scheduled run is par minus a fresh count, so it replaces what was owed with its own result.
+        self.assertEqual(owed(req('a', '2026-10-05', '10'), req('b', '2026-10-08', '2', accepted='0')), [('b', D(2))])
+        self.assertEqual(owed(req('a', '2026-10-05', '10'), req('b', '2026-10-08', '0')), [])
 
 
 import test_prep_day_tasks as day
@@ -93,14 +98,14 @@ class BulkSupplyDatabaseTests(day.PrepDayTaskTests):
                                                                          'unit_profile_id': ids['profile'], 'weekday_par': par, 'weekend_par': par, **base})
         return ids
 
-    async def rudds_count(self, quantity, business_date='2026-10-07'):
+    async def rudds_count(self, quantity, business_date='2026-10-07', at='22:00'):
         event = uuid4()
         async with self.pool.acquire() as c, c.transaction():
             await c.execute('SET LOCAL session_replication_role = replica')
             await c.execute('''INSERT INTO prep_inventory.observations(id,store_id,purpose,root_id,revision,kind,performed_at,business_date,timezone_name,
                 reason,review_snapshot,review_hash,recorded_by,request_key,request_fingerprint)
-                VALUES($1,'rudds','count',$1,1,'initial',($2::date + time '22:00') AT TIME ZONE 'America/New_York',$2,'America/New_York',
-                'Invented Rudd''s Bulk count','{}'::jsonb,$3,'tester',$4,$3)''', event, date.fromisoformat(business_date), b'\x01' * 32, uuid4())
+                VALUES($1,'rudds','count',$1,1,'initial',($2::date + $5::time) AT TIME ZONE 'America/New_York',$2,'America/New_York',
+                'Invented Rudd''s Bulk count','{}'::jsonb,$3,'tester',$4,$3)''', event, date.fromisoformat(business_date), b'\x01' * 32, uuid4(), time.fromisoformat(at))
             await c.execute('''INSERT INTO prep_inventory.count_observations(event_id,store_id,line_number,product_id,product_version_id,profile_id,base_unit,
                 quantity,factor,base_quantity,evidence) VALUES($1,'rudds',1,$2,$3,$4,'lb',$5,1,$5,'Measured')''',
                 event, self.requester['product'], self.requester['version'], self.requester['profile'], D(quantity))
@@ -157,7 +162,7 @@ class BulkSupplyDatabaseTests(day.PrepDayTaskTests):
         # Still owed stays listed even when its run is older than the history window.
         supply = (await self.catalog.get('/api/pg/purchases/rudds/bulk-supply', params={'since': '2026-12-01'})).json()
         self.assertEqual([(s['request_id'], D(s['shortfall_base_quantity'])) for s in supply['open_shortfalls']], [(rid, D(3))])
-        again = await self.request(dict(run_date=RUN, kind='scheduled', day_group='weekday', count_event_id=str(await self.rudds_count('20')), note='Second'))
+        again = await self.request(dict(run_date=RUN, kind='scheduled', day_group='weekday', count_event_id=str(await self.rudds_count('20', at='23:00')), note='Second'))
         self.assertEqual(again.status_code, 409)
         spot = await self.request(dict(run_date=RUN, kind='spot', note='Make up the shortfall',
                                        lines=[dict(product_id=str(self.requester['product']), quantity='3', reason='Short on Thursday')]))
