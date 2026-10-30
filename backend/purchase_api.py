@@ -544,4 +544,6 @@ def create_router(pool_factory, store_check, authorize):
     install_execution_routes(router,context)
     from prep_containers import install_routes as install_container_routes
     install_container_routes(router,context)
+    from bulk_supply import install_routes as install_bulk_supply_routes
+    install_bulk_supply_routes(router,context)
     return router

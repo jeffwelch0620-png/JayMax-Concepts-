@@ -62,6 +62,10 @@ export const savePrepExecution = (rid, day, track, body, version, key) => axios.
 export const prepDayDraft = (rid, day, track) => axios.get(`${purchaseUrl(rid)}/prep-day-drafts/${day}`, { params: { track } }).then(r => r.data);
 export const previewPrepDayDraft = (rid, day, body, version) => axios.post(`${purchaseUrl(rid)}/prep-day-drafts/${day}/preview`, body, { headers: revisionHeaders(version) }).then(r => r.data);
 export const savePrepDayDraft = (rid, day, body, version, key) => axios.put(`${purchaseUrl(rid)}/prep-day-drafts/${day}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const bulkSupply = (rid, since) => axios.get(`${purchaseUrl(rid)}/bulk-supply`, { params: { since } }).then(r => r.data);
+export const previewBulkRequest = (rid, body) => axios.post(`${purchaseUrl(rid)}/bulk-requests/preview`, body).then(r => r.data);
+export const sendBulkRequest = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/bulk-requests`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const signBulkStep = (rid, id, body, key) => axios.post(`${purchaseUrl(rid)}/bulk-requests/${encodeURIComponent(id)}/steps`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const prepPlanning = rid => axios.get(`${purchaseUrl(rid)}/prep-planning`).then(r => r.data);
 export const savePrepPlan = (rid, product, body, version, key) => axios.put(`${purchaseUrl(rid)}/prep-planning/${encodeURIComponent(product)}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const prepBatchesEnabled = prepSetupEnabled && process.env.REACT_APP_PREP_BATCHES === "true";

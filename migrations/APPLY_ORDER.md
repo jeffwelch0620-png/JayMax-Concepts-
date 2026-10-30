@@ -43,6 +43,7 @@ For an existing hosted database, compare recorded migration history and object d
 | 33 | [20261029_count_walk_order.sql](20261029_count_walk_order.sql) |
 | 34 | [20261029_prep_count_zones.sql](20261029_prep_count_zones.sql) |
 | 35 | [20261029_prep_batch_rounding.sql](20261029_prep_batch_rounding.sql) |
+| 36 | [20261030_bulk_supply.sql](20261030_bulk_supply.sql) |
 
 ## Separate manager receiving extension
 
