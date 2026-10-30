@@ -1,7 +1,9 @@
 -- M3 Bulk supply (Jeff 2026-10-29). Bert's Bulk is made at Rudd's from Bert's own goods:
 --   1. Bert's sends its Bulk count as a request: par minus on hand for each Bulk item.
---   2. Rudd's makes it in its Bulk run, then signs off the amounts sent and the packaging,
---      for delivery or pickup.
+--   2. Rudd's makes it in its Bulk run, then signs off the amounts and packaging: sent to Bert's
+--      (delivery or pickup) and held at Rudd's for Bert's. There is one par per item for the
+--      owning store, met by its stock wherever it is held (Jeff 2026-10-29): Bert's counts its
+--      goods held at Rudd's in its own count (a "Held at Rudd's" count zone).
 --   3. Bert's manager accepts what arrived. Anything short stays open (needed, not fulfilled)
 --      until a spot prep or the next run makes it up.
 -- Scheduled requests (Sunday night count -> Monday, Wednesday night -> Thursday) feed the
@@ -79,6 +81,7 @@ CREATE TABLE prep_inventory.bulk_event_lines (
  request_id uuid NOT NULL,
  ordinal integer NOT NULL,
  base_quantity numeric NOT NULL CHECK (base_quantity >= 0 AND base_quantity NOT IN ('NaN'::numeric, 'Infinity'::numeric)),
+ held_base_quantity numeric NOT NULL DEFAULT 0 CHECK (held_base_quantity >= 0 AND held_base_quantity NOT IN ('NaN'::numeric, 'Infinity'::numeric)),
  packaging text,
  PRIMARY KEY (event_id, ordinal),
  FOREIGN KEY (request_id, ordinal) REFERENCES prep_inventory.bulk_request_lines(request_id, ordinal)
@@ -96,8 +99,8 @@ BEGIN
     IS DISTINCT FROM (SELECT identity_key FROM prep_inventory.products WHERE id = NEW.maker_product_id)
  THEN RAISE EXCEPTION 'The maker''s item must be the same prepared item'; END IF;
  IF NOT EXISTS (SELECT 1 FROM prep_inventory.planning_versions p WHERE p.store_id = NEW.maker_store_id AND p.product_id = NEW.maker_product_id
-    AND p.active AND p.track = 'bulk' AND NOT EXISTS (SELECT 1 FROM prep_inventory.planning_versions q WHERE q.product_id = p.product_id AND q.revision > p.revision))
- THEN RAISE EXCEPTION 'The maker has no active Bulk plan for this item'; END IF;
+    AND p.active AND p.track = 'bulk' AND p.schedule = 'daily' AND NOT EXISTS (SELECT 1 FROM prep_inventory.planning_versions q WHERE q.product_id = p.product_id AND q.revision > p.revision))
+ THEN RAISE EXCEPTION 'The maker has no active to-par Bulk plan for this item'; END IF;
  IF parent.kind = 'spot' THEN
   IF NEW.planning_version_id IS NOT NULL OR NEW.factor IS NOT NULL OR NEW.target_par IS NOT NULL OR NEW.counted_base_quantity IS NOT NULL
      OR NEW.requested_base_quantity <= 0 OR coalesce(length(btrim(NEW.reason)), 0) = 0
@@ -169,16 +172,17 @@ END $$;
 CREATE TRIGGER guard_bulk_event BEFORE INSERT ON prep_inventory.bulk_events
  FOR EACH ROW EXECUTE FUNCTION prep_inventory.guard_bulk_event();
 
--- Sent lines carry packaging when anything was sent; accepted amounts never exceed what was sent.
+-- Made lines carry packaging when anything was sent or held; accepted amounts never exceed what
+-- was sent; held amounts are signed off by the maker only.
 CREATE FUNCTION prep_inventory.guard_bulk_event_line() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE event prep_inventory.bulk_events; sent numeric;
 BEGIN
  SELECT * INTO event FROM prep_inventory.bulk_events WHERE id = NEW.event_id;
  IF event.created_xid <> pg_current_xact_id() OR event.request_id <> NEW.request_id THEN RAISE EXCEPTION 'A signed Bulk step cannot gain lines'; END IF;
  IF event.action = 'cancel' THEN RAISE EXCEPTION 'A cancellation has no lines'; END IF;
- IF event.action = 'fulfill' AND NEW.base_quantity > 0 AND coalesce(length(btrim(NEW.packaging)), 0) = 0 THEN RAISE EXCEPTION 'Sign off the packaging of each item sent'; END IF;
+ IF event.action = 'fulfill' AND NEW.base_quantity + NEW.held_base_quantity > 0 AND coalesce(length(btrim(NEW.packaging)), 0) = 0 THEN RAISE EXCEPTION 'Sign off the packaging of each item made'; END IF;
  IF event.action = 'accept' THEN
-  IF NEW.packaging IS NOT NULL THEN RAISE EXCEPTION 'Packaging is signed off by the maker'; END IF;
+  IF NEW.packaging IS NOT NULL OR NEW.held_base_quantity <> 0 THEN RAISE EXCEPTION 'Packaging and held amounts are signed off by the maker'; END IF;
   SELECT l.base_quantity INTO sent FROM prep_inventory.bulk_event_lines l JOIN prep_inventory.bulk_events e ON e.id = l.event_id
    WHERE e.request_id = NEW.request_id AND e.action = 'fulfill' AND l.ordinal = NEW.ordinal;
   IF NEW.base_quantity > coalesce(sent, 0) THEN RAISE EXCEPTION 'Accepted more than was sent'; END IF;

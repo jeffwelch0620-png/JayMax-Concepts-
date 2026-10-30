@@ -32,7 +32,8 @@ class BulkModelTests(unittest.TestCase):
                     dict(action='cancel', lines=[line]),
                     dict(action='accept', lines=[]),
                     dict(action='fulfill', handoff='delivery', lines=[line, line]),
-                    dict(action='accept', lines=[dict(ordinal=1, base_quantity='-1')])):
+                    dict(action='accept', lines=[dict(ordinal=1, base_quantity='-1')]),
+                    dict(action='accept', lines=[dict(ordinal=1, base_quantity='1', held_base_quantity='1')])):
             with self.assertRaises(ValidationError): bulk.StepIn(note='x', **bad)
 
     def test_a_bulk_run_adds_other_stores_requests_before_rounding(self):
@@ -141,18 +142,20 @@ class BulkSupplyDatabaseTests(day.PrepDayTaskTests):
         sent = await self.scheduled(await self.rudds_count('12'))
         rid = sent['id']
         self.assertEqual((await self.step('rudds', rid, dict(action='accept', note='Too early', lines=[dict(ordinal=1, base_quantity='1')]))).status_code, 409)
-        fulfill = dict(action='fulfill', handoff='pickup', note='Made Thursday', lines=[dict(ordinal=1, base_quantity='15', packaging='3 x 5 lb bags')])
+        fulfill = dict(action='fulfill', handoff='pickup', note='Made Thursday', lines=[dict(ordinal=1, base_quantity='12', held_base_quantity='3', packaging='3 x 5 lb bags')])
         self.assertEqual((await self.step('rudds', rid, fulfill)).status_code, 403)
-        self.assertEqual((await self.step('berts', rid, fulfill | {'lines': [dict(ordinal=1, base_quantity='15')]})).status_code, 422)
+        self.assertEqual((await self.step('berts', rid, fulfill | {'lines': [dict(ordinal=1, base_quantity='0', held_base_quantity='3')]})).status_code, 422)
         done = await self.step('berts', rid, fulfill); self.assertEqual(done.status_code, 200, done.text)
         self.assertEqual(done.json()['request']['status'], 'sent')
         self.assertEqual((await self.step('rudds', rid, dict(action='cancel', note='Late'))).status_code, 409)
-        self.assertEqual((await self.step('rudds', rid, dict(action='accept', note='Over', lines=[dict(ordinal=1, base_quantity='16')]))).status_code, 422)
-        ok = await self.step('rudds', rid, dict(action='accept', note='Checked in', lines=[dict(ordinal=1, base_quantity='15')]))
+        self.assertEqual((await self.step('rudds', rid, dict(action='accept', note='Over', lines=[dict(ordinal=1, base_quantity='13')]))).status_code, 422)
+        ok = await self.step('rudds', rid, dict(action='accept', note='Checked in', lines=[dict(ordinal=1, base_quantity='12')]))
         self.assertEqual(ok.status_code, 200, ok.text)
         line = ok.json()['request']['lines'][0]
-        self.assertEqual((D(line['accepted_base_quantity']), D(line['shortfall_base_quantity']), line['packaging']), (D(15), D(3), '3 x 5 lb bags'))
-        supply = (await self.catalog.get('/api/pg/purchases/rudds/bulk-supply', params={'since': '2026-10-01'})).json()
+        # One par, any location: 18 requested = 12 accepted at Rudd's own store + 3 held at the maker + 3 still owed.
+        self.assertEqual((D(line['accepted_base_quantity']), D(line['held_base_quantity']), D(line['shortfall_base_quantity']), line['packaging']), (D(12), D(3), D(3), '3 x 5 lb bags'))
+        # Still owed stays listed even when its run is older than the history window.
+        supply = (await self.catalog.get('/api/pg/purchases/rudds/bulk-supply', params={'since': '2026-12-01'})).json()
         self.assertEqual([(s['request_id'], D(s['shortfall_base_quantity'])) for s in supply['open_shortfalls']], [(rid, D(3))])
         again = await self.request(dict(run_date=RUN, kind='scheduled', day_group='weekday', count_event_id=str(await self.rudds_count('20')), note='Second'))
         self.assertEqual(again.status_code, 409)

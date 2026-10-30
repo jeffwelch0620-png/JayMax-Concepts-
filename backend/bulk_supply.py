@@ -1,7 +1,9 @@
 """M3 Bulk supply (Jeff 2026-10-29): Bert's Bulk is made at Rudd's from Bert's own goods.
 Bert's sends its Bulk count as a request (par minus on hand), Rudd's makes it in the Monday or
-Thursday run and signs off the amounts and packaging, and Bert's manager accepts what arrived.
-A shortfall stays open until a spot prep or the next run. migrations/20261030_bulk_supply.sql
+Thursday run and signs off the amounts and packaging, sent and held at Rudd's for Bert's, and
+Bert's manager accepts what arrived. There is one par per item for the owning store, met by its
+stock wherever it is held: Bert's goods held at Rudd's are counted in Bert's own count (a
+"Held at Rudd's" count zone). A shortfall stays open until a spot prep or the next run. migrations/20261030_bulk_supply.sql
 enforces the same rules. No stock, purchase or accounting writes."""
 from datetime import date
 from decimal import Decimal
@@ -72,9 +74,10 @@ class RequestCommit(mapping.Strict):
 class StepLine(mapping.Strict):
     ordinal: int = Field(gt=0)
     base_quantity: Decimal = QUANTITY
+    held_base_quantity: Decimal = Field(default=Decimal(0), ge=0, max_digits=28, decimal_places=12)
     packaging: str | None = Field(default=None, min_length=1, max_length=500)
 
-    @field_validator('base_quantity')
+    @field_validator('base_quantity', 'held_base_quantity')
     @classmethod
     def finite(cls, value):
         if not value.is_finite(): raise ValueError('Use a finite decimal')
@@ -93,7 +96,7 @@ class StepIn(mapping.Strict):
         if self.action == 'cancel' and self.lines: raise ValueError('A cancellation has no amounts')
         if self.action != 'cancel' and not self.lines: raise ValueError('Sign off every requested item')
         if len({l.ordinal for l in self.lines}) != len(self.lines): raise ValueError('Sign off each item once')
-        if self.action == 'accept' and any(l.packaging for l in self.lines): raise ValueError('Packaging is signed off by the maker')
+        if self.action == 'accept' and any(l.packaging or l.held_base_quantity for l in self.lines): raise ValueError('Packaging and held amounts are signed off by the maker')
         self.lines.sort(key=lambda l: l.ordinal)
         return self
 
@@ -107,10 +110,10 @@ async def maker_released(conn, maker, run_date):
 
 
 async def maker_products(conn, maker):
-    """The maker's prepared items with an active Bulk plan, by name."""
+    """The maker's prepared items with an active to-par Bulk plan (so requests reach its run), by name."""
     rows = await conn.fetch('''SELECT p.id, p.identity_key, p.base_unit FROM prep_inventory.products p
         JOIN LATERAL (SELECT * FROM prep_inventory.planning_versions v WHERE v.product_id=p.id ORDER BY v.revision DESC LIMIT 1) v ON true
-        WHERE p.store_id=$1 AND v.active AND v.track='bulk' ''', maker)
+        WHERE p.store_id=$1 AND v.active AND v.track='bulk' AND v.schedule='daily' ''', maker)
     return {r['identity_key']: dict(r) for r in rows}
 
 
@@ -161,7 +164,7 @@ async def preview(conn, store, body):
                 'base_unit': products[str(l.product_id)]['base_unit'], 'source_unit': profile['source_unit'],
                 'planning_version_id': None, 'factor': None, 'target_par': None, 'counted_base_quantity': None,
                 'requested_base_quantity': mapping.times(l.quantity, factor), 'reason': l.reason})
-    if not_made: raise HTTPException(409, f"The maker has no active Bulk plan for: {', '.join(not_made)}. Add one there (par can be 0) first.")
+    if not_made: raise HTTPException(409, f"The maker has no active to-par Bulk plan for: {', '.join(not_made)}. Add one there (par can be 0) first.")
     if missing_count: raise HTTPException(409, f"Count these Bulk items before requesting; a missing count is not zero: {', '.join(missing_count)}")
     if not lines: raise HTTPException(409, 'No Bulk items to request')
     for n, line in enumerate(lines, 1): line['ordinal'] = n
@@ -222,8 +225,8 @@ async def step(pool, store, request_id, actor, body, key):
         ordinals = [r['ordinal'] for r in await conn.fetch('SELECT ordinal FROM prep_inventory.bulk_request_lines WHERE request_id=$1 ORDER BY ordinal', request_id)]
         if body.action != 'cancel' and [l.ordinal for l in body.lines] != ordinals:
             raise HTTPException(422, 'Sign off every requested item, entering zero for any not sent or not received')
-        if body.action == 'fulfill' and any(l.base_quantity > 0 and not l.packaging for l in body.lines):
-            raise HTTPException(422, 'Sign off the packaging of each item sent')
+        if body.action == 'fulfill' and any(l.base_quantity + l.held_base_quantity > 0 and not l.packaging for l in body.lines):
+            raise HTTPException(422, 'Sign off the packaging of each item made')
         if body.action == 'accept':
             sent = {r['ordinal']: r['base_quantity'] for r in await conn.fetch('''SELECT l.ordinal, l.base_quantity FROM prep_inventory.bulk_event_lines l
                 JOIN prep_inventory.bulk_events e ON e.id=l.event_id WHERE e.request_id=$1 AND e.action='fulfill' ''', request_id)}
@@ -231,8 +234,8 @@ async def step(pool, store, request_id, actor, body, key):
         event = await conn.fetchval('''INSERT INTO prep_inventory.bulk_events(request_id,action,store_id,handoff,note,actor,request_key,request_fingerprint)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id''', request_id, body.action, store, body.handoff, body.note, actor, key, digest)
         for l in body.lines:
-            await conn.execute('INSERT INTO prep_inventory.bulk_event_lines(event_id,request_id,ordinal,base_quantity,packaging) VALUES($1,$2,$3,$4,$5)',
-                event, request_id, l.ordinal, l.base_quantity, l.packaging)
+            await conn.execute('INSERT INTO prep_inventory.bulk_event_lines(event_id,request_id,ordinal,base_quantity,held_base_quantity,packaging) VALUES($1,$2,$3,$4,$5,$6)',
+                event, request_id, l.ordinal, l.base_quantity, l.held_base_quantity, l.packaging)
         return serial({'request_key': key, 'request': await one(conn, request_id), 'replayed': False})
 
 
@@ -241,7 +244,7 @@ async def one(conn, request_id):
     lines = [dict(l) for l in await conn.fetch('SELECT * FROM prep_inventory.bulk_request_lines WHERE request_id=$1 ORDER BY ordinal', request_id)]
     events = [dict(e) for e in await conn.fetch('SELECT id,action,store_id,handoff,note,actor,created_at FROM prep_inventory.bulk_events WHERE request_id=$1 ORDER BY created_at,id', request_id)]
     amounts = {}
-    for row in await conn.fetch('''SELECT e.action, l.ordinal, l.base_quantity, l.packaging FROM prep_inventory.bulk_event_lines l
+    for row in await conn.fetch('''SELECT e.action, l.ordinal, l.base_quantity, l.held_base_quantity, l.packaging FROM prep_inventory.bulk_event_lines l
         JOIN prep_inventory.bulk_events e ON e.id=l.event_id WHERE e.request_id=$1''', request_id):
         amounts[(row['action'], row['ordinal'])] = row
     reviewed = {l['ordinal']: l for l in r['review_snapshot']['lines']}
@@ -249,9 +252,11 @@ async def one(conn, request_id):
         sent, got = amounts.get(('fulfill', l['ordinal'])), amounts.get(('accept', l['ordinal']))
         l['name'] = reviewed[l['ordinal']]['name']; l['source_unit'] = reviewed[l['ordinal']]['source_unit']
         l['sent_base_quantity'] = sent['base_quantity'] if sent else None
+        l['held_base_quantity'] = sent['held_base_quantity'] if sent else None
         l['packaging'] = sent['packaging'] if sent else None
         l['accepted_base_quantity'] = got['base_quantity'] if got else None
-        l['shortfall_base_quantity'] = max(l['requested_base_quantity'] - got['base_quantity'], Decimal(0)) if got else None
+        # Held at the maker still counts toward the owner's par (one par, any location).
+        l['shortfall_base_quantity'] = max(l['requested_base_quantity'] - got['base_quantity'] - sent['held_base_quantity'], Decimal(0)) if got else None
     actions = [e['action'] for e in events]
     r['status'] = ('cancelled' if 'cancel' in actions else 'accepted' if 'accept' in actions else 'sent' if 'fulfill' in actions else 'requested')
     r['lines'] = lines; r['events'] = events
@@ -260,13 +265,13 @@ async def one(conn, request_id):
 
 
 def open_shortfalls(requests):
-    """Accepted short and not yet made up: no later accepted request for the same item."""
+    """Accepted short and not yet made up: no later accepted request supplied the same item."""
     accepted = sorted((r for r in requests if r['status'] == 'accepted'), key=lambda r: (r['run_date'], r['created_at']))
     out = []
     for i, r in enumerate(accepted):
         for l in r['lines']:
             if Decimal(l['shortfall_base_quantity'] or 0) <= 0: continue
-            later = any(l['product_id'] in {x['product_id'] for x in s['lines'] if Decimal(x['accepted_base_quantity'] or 0) > 0} for s in accepted[i + 1:])
+            later = any(l['product_id'] in {x['product_id'] for x in s['lines'] if Decimal(x['accepted_base_quantity'] or 0) + Decimal(x.get('held_base_quantity') or 0) > 0} for s in accepted[i + 1:])
             if not later: out.append({'request_id': r['id'], 'run_date': r['run_date'], 'store_id': r['store_id'], 'product_id': l['product_id'],
                 'name': l['name'], 'base_unit': l['base_unit'], 'shortfall_base_quantity': l['shortfall_base_quantity']})
     return out
@@ -274,8 +279,14 @@ def open_shortfalls(requests):
 
 async def read(conn, store, since):
     await ready(conn)
-    ids = [r['id'] for r in await conn.fetch('''SELECT id FROM prep_inventory.bulk_requests WHERE $1 IN (store_id, maker_store_id) AND run_date>=$2
-        ORDER BY run_date DESC, created_at DESC LIMIT 200''', store, since)]
+    # Closed history follows the window; anything still waiting on a step or still short stays listed.
+    ids = [r['id'] for r in await conn.fetch('''SELECT r.id FROM prep_inventory.bulk_requests r WHERE $1 IN (r.store_id, r.maker_store_id) AND (r.run_date>=$2
+        OR NOT EXISTS(SELECT 1 FROM prep_inventory.bulk_events e WHERE e.request_id=r.id AND e.action IN ('accept','cancel'))
+        OR EXISTS(SELECT 1 FROM prep_inventory.bulk_request_lines q
+            JOIN prep_inventory.bulk_event_lines a ON a.request_id=q.request_id AND a.ordinal=q.ordinal JOIN prep_inventory.bulk_events ae ON ae.id=a.event_id AND ae.action='accept'
+            JOIN prep_inventory.bulk_event_lines f ON f.request_id=q.request_id AND f.ordinal=q.ordinal JOIN prep_inventory.bulk_events fe ON fe.id=f.event_id AND fe.action='fulfill'
+            WHERE q.request_id=r.id AND a.base_quantity+f.held_base_quantity<q.requested_base_quantity))
+        ORDER BY r.run_date DESC, r.created_at DESC LIMIT 500''', store, since)]
     requests = [await one(conn, i) for i in ids]
     return serial({'store_id': store, 'maker_store_id': MAKERS.get(store), 'makes_for': sorted(s for s, m in MAKERS.items() if m == store),
         'requests': requests, 'open_shortfalls': open_shortfalls(requests)})
