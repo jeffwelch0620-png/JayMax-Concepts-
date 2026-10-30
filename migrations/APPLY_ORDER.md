@@ -46,6 +46,7 @@ For an existing hosted database, compare recorded migration history and object d
 | 36 | [20261030_bulk_supply.sql](20261030_bulk_supply.sql) |
 | 37 | [20261030_bulk_release_coverage.sql](20261030_bulk_release_coverage.sql) |
 | 38 | [20261031_store_transfers.sql](20261031_store_transfers.sql) |
+| 39 | [20261031_login_positions.sql](20261031_login_positions.sql) |
 
 ## Separate manager receiving extension
 

@@ -223,6 +223,12 @@ async def commit(pool,store,day,actor,body,key,expected):
         return serial({'request_key':key,'draft':dict(row),'current_draft':dict(row),'replayed':False})
 
 
+def sign_off(draft):
+    """Prepping above or below par needs sign-off: a GM and up, or for Bulk the Ops Lead or an owner (backend/positions.py)."""
+    if not draft.overrides:return None
+    return 'bulk_par_exception' if draft.track=='bulk' else 'par_exception'
+
+
 def install_routes(router,context):
     @router.get('/{store_id}/prep-day-drafts/{day}')
     async def read_draft(store_id:str,day:date,request:Request,track:prep_tracks.Track='daily'):
@@ -233,14 +239,13 @@ def install_routes(router,context):
     @router.post('/{store_id}/prep-day-drafts/{day}/preview')
     async def preview_draft(store_id:str,day:date,body:DraftIn,request:Request):
         prep_tracks.check(store_id,body.track)
-        # Prepping more or less than par for a day needs sign-off (GM once that role exists).
-        _,pool=await context(request,store_id,True,require='par_exception' if body.overrides else None)
+        _,pool=await context(request,store_id,True,require=sign_off(body))
         async with pool.acquire() as conn,conn.transaction(isolation='repeatable_read',readonly=True):return await preview(conn,store_id,day,body,planning.version(request))
 
     @router.put('/{store_id}/prep-day-drafts/{day}')
     async def save_draft(store_id:str,day:date,body:CommitIn,request:Request,idempotency_key:UUID=Header(...)):
         prep_tracks.check(store_id,body.draft.track)
-        actor,pool=await context(request,store_id,True,require='par_exception' if body.draft.overrides else None)
+        actor,pool=await context(request,store_id,True,require=sign_off(body.draft))
         return await commit(pool,store_id,day,actor,body,idempotency_key,planning.version(request))
 
     @router.get('/{store_id}/prep-day-drafts/{day}/history')

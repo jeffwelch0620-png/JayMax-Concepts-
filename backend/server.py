@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 from typing import Optional, List, Annotated, Any
+import positions
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -116,6 +117,8 @@ def _token(user):
     payload = {"sub": user["id"], "email": user["email"], "role": user["role"],
                "locations": user.get("locations", []),
                "exp": int(datetime.now(timezone.utc).timestamp()) + SESSION_TTL}
+    if user.get("position"):  # logins without a position keep the original session shape
+        payload["position"] = user["position"]
     raw = _b64(json.dumps(payload, separators=(",", ":")).encode())
     key = AUTH_SECRET
     if not key:
@@ -697,10 +700,18 @@ class UserIn(BaseModel):
     password: str
     role: str = "staff"
     locations: List[str] = []
+    position: Optional[str] = None  # a role code from the org hierarchy; sets the access class
+
+class UserAccessIn(BaseModel):
+    position: Optional[str] = None
+    locations: List[str] = []
 
 def _clean_user(doc):
-    return {"id": doc["id"], "email": doc["email"], "role": doc["role"],
+    user = {"id": doc["id"], "email": doc["email"], "role": doc["role"],
             "locations": doc.get("locations", [])}
+    if doc.get("position"):  # logins without a position keep the original response shape
+        user["position"] = doc["position"]
+    return user
 
 # Postgres home of the Mongo `users` collection (table app_users). Same account model,
 # same PBKDF2 hashes and user ids, so migrated users keep their passwords and any
@@ -709,13 +720,19 @@ def _clean_user(doc):
 # collaboration_security middleware compare against.
 def _pg_user_row(row):
     return {"id": row["id"], "email": row["email"], "role": row["role"],
-            "locations": list(row["locations"] or []), "passwordHash": row["password_hash"]}
+            "locations": list(row["locations"] or []), "passwordHash": row["password_hash"],
+            "position": row["position"] if "position" in row.keys() else None}
 
 async def _pg_insert_user(user):
     try:
-        await db_auxiliary.pool().execute(
-            "INSERT INTO app_users (id, email, password_hash, role, locations) VALUES ($1,$2,$3,$4,$5)",
-            user["id"], user["email"], user["passwordHash"], user["role"], user["locations"])
+        if user.get("position"):
+            await db_auxiliary.pool().execute(
+                "INSERT INTO app_users (id, email, password_hash, role, locations, position) VALUES ($1,$2,$3,$4,$5,$6)",
+                user["id"], user["email"], user["passwordHash"], user["role"], user["locations"], user["position"])
+        else:
+            await db_auxiliary.pool().execute(
+                "INSERT INTO app_users (id, email, password_hash, role, locations) VALUES ($1,$2,$3,$4,$5)",
+                user["id"], user["email"], user["passwordHash"], user["role"], user["locations"])
     except asyncpg.UniqueViolationError:
         raise HTTPException(409, "A user with that email already exists")
 
@@ -771,11 +788,34 @@ class PasswordIn(BaseModel):
 async def auth_list_users(request: Request):
     _require_owner(request)
     if USE_PG:
-        rows = await db_auxiliary.pool().fetch("SELECT id, email, role, locations, created_at FROM app_users ORDER BY email")
+        rows = await db_auxiliary.pool().fetch("SELECT * FROM app_users ORDER BY email")
+        # A position is listed only when set, so logins without one keep the original shape.
         return [{"id": r["id"], "email": r["email"], "role": r["role"], "locations": list(r["locations"] or []),
+                 **({"position": r["position"]} if "position" in r.keys() and r["position"] else {}),
                  "createdAt": r["created_at"].isoformat() if r["created_at"] else None} for r in rows]
     docs = await db.users.find({}, {"_id": 0, "passwordHash": 0}).sort("email", 1).to_list(1000)
     return [{**_clean_user(d), "createdAt": d.get("createdAt")} for d in docs]
+
+@api_router.put("/auth/users/{user_id}/access")
+async def auth_set_access(user_id: str, body: UserAccessIn, request: Request):
+    """Owners and the Operations & Integration Lead set a login's position and stores."""
+    actor = _require_owner(request)
+    if not USE_PG:
+        raise HTTPException(503, "Positions need the Postgres account store")
+    current = await db_auxiliary.pool().fetchrow("SELECT * FROM app_users WHERE id=$1", user_id)
+    if not current:
+        raise HTTPException(404, "User not found")
+    if "position" not in current.keys():
+        raise HTTPException(503, "Login positions migration is awaiting setup")
+    role, locations = _access_for(body.position, current["role"], body.locations)
+    if role != "owner" and not locations:
+        raise HTTPException(400, "Pick at least one store")
+    if user_id == actor.get("sub") and role != "owner":
+        raise HTTPException(400, "You can't remove your own owner access")
+    row = await db_auxiliary.pool().fetchrow(
+        "UPDATE app_users SET position=$2, role=$3, locations=$4 WHERE id=$1 RETURNING *", user_id, body.position, role, locations)
+    # Takes effect at the person's next sign-in, when a new session token is issued.
+    return _clean_user(_pg_user_row(row))
 
 @api_router.put("/auth/users/{user_id}/password")
 async def auth_reset_password(user_id: str, body: PasswordIn, request: Request):
@@ -804,17 +844,24 @@ async def auth_delete_user(user_id: str, request: Request):
         raise HTTPException(404, "User not found")
     return {"ok": True}
 
+def _access_for(position, role, locations):
+    """A position sets its access class; owners see every store."""
+    if position is not None:
+        if position not in positions.POSITIONS:
+            raise HTTPException(400, "Unknown position")
+        role = positions.role_for(position)
+    locations = sorted(RIDS) if role == "owner" else sorted(set(locations) & RIDS)
+    return role, locations
+
 @api_router.post("/auth/users")
 async def auth_create_user(body: UserIn, request: Request):
     _require_owner(request)
-    if body.role not in ("owner", "manager", "staff", "readonly") or len(body.password) < 12:
+    role, locations = _access_for(body.position, body.role, body.locations)
+    if role not in ("owner", "manager", "staff", "readonly") or len(body.password) < 12:
         raise HTTPException(400, "Invalid role or password")
-    locations = sorted(set(body.locations) & RIDS)
-    if body.role == "owner":
-        locations = sorted(RIDS)
     user = {"id": "usr_" + uuid.uuid4().hex[:12], "email": body.email.strip().lower(),
-            "passwordHash": _password_hash(body.password), "role": body.role,
-            "locations": locations, "createdAt": _now_iso()}
+            "passwordHash": _password_hash(body.password), "role": role,
+            "locations": locations, "position": body.position, "createdAt": _now_iso()}
     if USE_PG:
         await _pg_insert_user(user)
         return _clean_user(user)
@@ -3896,7 +3943,7 @@ async def pg_link_shared_item(store_id: str, body: catalog_mapping.LinkItem, req
         async with conn.transaction():
             await catalog_mapping.lock_catalog(conn)
             revision=await _check_and_bump_revision(PG_STORE_TO_RESTAURANT[store_id],request,conn)
-            if body.par != 0 and _token_role(request) not in PAR_EDITORS:raise HTTPException(403,PAR_OWNER_MESSAGE)
+            if body.par != 0 and not positions.can(_token_user(request),'set_pars'):raise HTTPException(403,PAR_OWNER_MESSAGE)
             result=await catalog_mapping.link(conn,store_id,body)
             return {**result,'revision':revision}
 
@@ -3912,15 +3959,14 @@ async def _pg_ensure_vendor(conn, vendor_id):
     elif not await conn.fetchval("SELECT 1 FROM vendors WHERE id=$1", vendor_id):
         raise HTTPException(400, f"Unknown supplier '{vendor_id}'")
 
-def _token_role(request):
+def _token_user(request):
     token = (request.headers.get('authorization') or '').removeprefix('Bearer ').strip()
-    user = _decode_token(token) if token else None
-    return (user or {}).get('role')
+    return (_decode_token(token) if token else None) or {}
 
 
-async def _hold_par_change(conn, store_id, items, role):
-    """Item saves keep the location par unless the owner changes it."""
-    if role in PAR_EDITORS:
+async def _hold_par_change(conn, store_id, items, user):
+    """Item saves keep the location par unless an owner or the Ops Lead changes it."""
+    if positions.can(user, 'set_pars'):
         return
     for item in items:
         current = await conn.fetchval('SELECT par FROM store_items WHERE store_id=$1 AND item_code=$2', store_id, item.code)
@@ -4032,7 +4078,7 @@ async def pg_create_item(store_id: str, body: ItemIn, request: Request):
             await catalog_mapping.lock_catalog(conn)
             if price_actor: await conn.execute("SELECT set_config('jmax.price_actor',$1,true)",price_actor)
             revision = await _check_and_bump_revision({"papa": "papa_leonis"}.get(store_id, store_id), request, conn)
-            await _hold_par_change(conn, store_id, [body], _token_role(request))
+            await _hold_par_change(conn, store_id, [body], _token_user(request))
             result = await _pg_save_item(conn, store_id, body)
             return {**result, "revision": revision}
     finally:
@@ -4058,7 +4104,7 @@ async def pg_change_items(store_id: str, body: ItemChanges, request: Request):
             linked = await conn.fetch("SELECT item_code FROM store_items WHERE store_id=$1 FOR UPDATE", store_id)
             if not set(retired).issubset({row["item_code"] for row in linked}):
                 raise HTTPException(422, "Retire only items linked to this location")
-            await _hold_par_change(conn, store_id, body.upserts, _token_role(request))
+            await _hold_par_change(conn, store_id, body.upserts, _token_user(request))
             for item in body.upserts:
                 await _pg_save_item(conn, store_id, item)
             for code in retired:
@@ -4080,7 +4126,7 @@ async def pg_replace_items(store_id: str, body: List[ItemIn], request: Request):
             revision = await _check_and_bump_revision(revision_rid, request, conn)
             existing = await conn.fetch("SELECT item_code FROM store_items WHERE store_id=$1 FOR UPDATE", store_id)
             next_codes = {item.code for item in body}
-            await _hold_par_change(conn, store_id, body, _token_role(request))
+            await _hold_par_change(conn, store_id, body, _token_user(request))
             for item in body:
                 await _pg_save_item(conn, store_id, item)
             for row in existing:
@@ -5830,12 +5876,10 @@ app.include_router(prep_list_archive.create_router(db_pg.pool, check_store_id, _
 # Purchase authorization is explicit even when development disables blanket auth.
 import purchase_api
 
-# Who may set pars and who may prep above or below them (Jeff 2026-10-29). Pars: owner/admin only.
-# Preparing more or less than par needs GM sign-off; until the GM and Admin roles exist, the owner.
-PAR_EDITORS = ('owner',)
-PAR_EXCEPTION_APPROVERS = ('owner',)
-PAR_OWNER_MESSAGE = 'Only the owner can establish or change pars'
-PAR_EXCEPTION_MESSAGE = 'Preparing more or less than par needs owner sign-off (GM sign-off once the GM role is set up)'
+# Who may set pars, prep above or below them, and request or sign off Bulk: backend/positions.py
+# (Jeff 2026-10-29 and 2026-10-30). A route names the permission it needs as `require`.
+PAR_OWNER_MESSAGE = positions.DENIED['set_pars']
+PAR_EXCEPTION_MESSAGE = positions.DENIED['par_exception']
 
 
 def _purchase_actor(request, store_id, write, require=None):
@@ -5846,10 +5890,9 @@ def _purchase_actor(request, store_id, write, require=None):
     role = user.get('role')
     if role not in ('owner', 'manager', 'readonly') or (write and role == 'readonly'):
         raise HTTPException(403, 'Purchase review requires manager or owner access')
-    if require == 'par' and role not in PAR_EDITORS:
-        raise HTTPException(403, PAR_OWNER_MESSAGE)
-    if require == 'par_exception' and role not in PAR_EXCEPTION_APPROVERS:
-        raise HTTPException(403, PAR_EXCEPTION_MESSAGE)
+    permission = 'set_pars' if require == 'par' else require
+    if permission and not positions.can(user, permission):
+        raise HTTPException(403, positions.DENIED[permission])
     if role != 'owner' and PG_STORE_TO_RESTAURANT[store_id] not in user.get('locations', []):
         raise HTTPException(403, 'Location access denied')
     return user.get('sub') or user.get('email') or role

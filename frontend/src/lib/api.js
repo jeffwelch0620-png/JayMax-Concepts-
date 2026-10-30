@@ -226,6 +226,7 @@ export const authLogin = (email, password) => axios.post(`${API}/auth/login`, { 
 // Email/password logins (owner only).
 export const listLogins = () => axios.get(`${API}/auth/users`).then((r) => r.data);
 export const createLogin = (body) => axios.post(`${API}/auth/users`, body).then((r) => r.data);
+export const setLoginAccess = (id, body) => axios.put(`${API}/auth/users/${id}/access`, body).then((r) => r.data);
 export const resetLoginPassword = (id, password) => axios.put(`${API}/auth/users/${id}/password`, { password }).then((r) => r.data);
 export const deleteLogin = (id) => axios.delete(`${API}/auth/users/${id}`).then((r) => r.data);
 export const authLogout = () => localStorage.removeItem(TOKEN_KEY);
