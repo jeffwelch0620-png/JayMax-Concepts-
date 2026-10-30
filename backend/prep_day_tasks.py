@@ -168,8 +168,10 @@ async def preview(conn,store,day,body,expected):
         'source_scope':sorted(p['id'] for p in plans),'count':count,'tasks':tasks,'status':'draft','execution_ready':False,
         'unresolved_tasks':sum(t['included'] and t['planned_quantity'] is None for t in tasks),
         'requested':requested,
-        # Requested items this run does not make to par (no plan, omitted or a fixed quantity).
-        'uncovered_requests':sorted(k for k,v in (requested or {}).items() if Decimal(v) and not any(t['product_id']==k and t['mode']=='target_par' and t['planned_quantity'] is not None for t in tasks))})
+        # Requested items this run does not cover: not in it, omitted, unknown, or planned below the request.
+        # Release is held until each is covered (migrations/20261030_bulk_release_coverage.sql).
+        'uncovered_requests':sorted(k for k,v in (requested or {}).items() if Decimal(v) and not any(t['product_id']==k and t['included']
+            and t['planned_base_quantity'] is not None and Decimal(t['planned_base_quantity'])>=Decimal(v) for t in tasks))})
     return {'review':review,'reviewHash':fingerprint(review).hex()}
 
 

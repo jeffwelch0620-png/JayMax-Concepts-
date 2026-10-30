@@ -26,7 +26,7 @@ class HostedTrialGuards(unittest.TestCase):
             self.assertNotIn('synthetic-secret',str(error.exception))
 
     def test_all_reviewed_migrations_have_one_rollback_safe_outer_transaction(self):
-        self.assertEqual(len(readiness.MIGRATIONS),36)
+        self.assertEqual(len(readiness.MIGRATIONS),37)
         for filename in readiness.MIGRATIONS:
             body = hosted.migration_body((readiness.ROOT/'migrations'/filename).read_bytes())
             self.assertTrue(body.strip(),filename)
