@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { BulkSupply, RequestCard, nextRunDate } from "./BulkSupply";
+import { BulkSupply, RequestCard, nextRunDate, storeName } from "./BulkSupply";
 import * as api from "../lib/api";
 
 jest.mock("../lib/api", () => ({ __esModule: true, bulkSupply: jest.fn(), prepPlanning: jest.fn(), prepDayDraft: jest.fn(), previewBulkRequest: jest.fn(), sendBulkRequest: jest.fn(), signBulkStep: jest.fn() }));
@@ -32,7 +32,8 @@ test("the requesting store previews par minus count and sends the reviewed reque
   await render(<BulkSupply rid="berts" />);
   expect(api.prepDayDraft).not.toHaveBeenCalled(); // forms open on demand
   await click(button("Send Bulk count"));
-  expect(container.textContent).toContain("Held at rudds");
+  expect(container.textContent).toContain("Held at Rudd's"); // store names, not ids
+  expect(container.textContent).toMatch(/Par group \((Monday|Thursday) run\)/); // the run day is shown next to the par choice
   await input("Bulk request note", "Wednesday close");
   await click(button("Preview request"));
   expect(api.previewBulkRequest.mock.calls[0][1]).toMatchObject({ kind: "scheduled", day_group: "weekday", count_event_id: "count-1", note: "Wednesday close" });
@@ -84,4 +85,16 @@ test("the maker signs off sent and held amounts with packaging; held counts towa
   await render(<RequestCard rid="berts" store="berts" request={accepted} onChange={changed} />);
   expect([...container.querySelectorAll("tbody td")].pop().textContent).toBe("—"); // no shortfall: 3 here + 2 held meets the par of 5
   expect(button("Accept delivery")).toBeUndefined();
+});
+
+test("store ids read as names, and a save in flight says Saving, not Retry", async () => {
+  expect([storeName("berts"), storeName("rudds"), storeName("papa"), storeName("unknown")]).toEqual(["Bert's", "Rudd's", "Papa Leoni's", "unknown"]);
+  let finish; api.signBulkStep.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  await render(<RequestCard rid="rudds" store="rudds" request={request()} onChange={jest.fn()} />);
+  await click(button("Sign off what was made"));
+  await input("Packaging Ranch", "5 x 1 gal buckets"); await input("Bulk sign-off note", "Invented Bulk lead");
+  await click(button("Sign off made"));
+  expect(button("Saving…").disabled).toBe(true);
+  expect(button("Retry the same sign-off")).toBeUndefined();
+  await act(async () => finish({ request: request({ status: "sent" }) }));
 });

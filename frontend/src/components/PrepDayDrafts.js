@@ -13,7 +13,7 @@ const stable=value=>JSON.stringify(value&&typeof value==="object"?Array.isArray(
 const blank=track=>({loaded:false,version:0,inputs:{track,day_group:"weekday",count_event_id:null,overrides:[],note:""},preview:null,reviewed:false,pending:null});
 // A calculation input in the plan's unit; when it can't be written exactly in that unit, the same
 // value in its base unit (never "—" for a known input); "—" only when the line has no such input.
-const qty=(v,base,unit)=>v!=null?v:base!=null?`${base} ${unit}`:"—";
+const qty=(v,base,unit)=>v!=null?decimal(v):base!=null?`${decimal(base)} ${unit}`:"—";
 
 export function PrepDayDrafts({initialDay,rid,track="daily",drafts,showToast=()=>{}}){
   const [day,setDay]=useState(()=>validOverviewDay(initialDay)?initialDay:todayISO());
@@ -98,9 +98,9 @@ function DraftForm({rid,day,track,drafts,showToast}){
     </fieldset>
     <button className={btnGhost} disabled={locked} onClick={preview}>Preview dated tasks</button>
     {shown&&<>{!!shown.uncovered_requests?.length&&<p role="alert">Another store requested {shown.uncovered_requests.length} item(s) this run does not cover (not in the run, omitted, count missing, or planned below the request). Release is held until each is covered.</p>}<p>{shown.unresolved_tasks} task(s) have an unknown quantity. {released?"Released for manager execution.":"Draft awaiting release."}</p><div className="overflow-auto"><table className="ops-table"><thead><tr><th>Prep item</th><th>Mode</th><th title="T: target par">Target</th><th title="H: counted last night">On hand</th><th title="I: confirmed incoming supply">Incoming</th>{track==="bulk"&&<th title="R: other stores' Bulk requests for this run">Requested</th>}<th title={track==="bulk"?"N = (T − H − I, never below 0) + R":"N = T − H − I, never below 0"}>Need</th><th title="r: one recipe batch">Batch</th><th title="Q: need rounded up to whole batches">Plan</th><th>Review</th></tr></thead><tbody>{shown.tasks.map(t=><tr key={t.product_id}><td>{t.name}</td><td>{t.included?t.mode:"omitted"}</td>
-      <td>{qty(t.target_par)}</td><td>{qty(t.counted_quantity,t.counted_base_quantity,t.base_unit)}</td><td>{t.incoming_base_quantity==null?"—":Number(t.incoming_base_quantity)===0?"none":`${t.incoming_base_quantity} ${t.base_unit}`}</td>{track==="bulk"&&<td>{t.requested_base_quantity==null?"—":Number(t.requested_base_quantity)===0?"none":`${t.requested_base_quantity} ${t.base_unit}`}</td>}
+      <td>{qty(t.target_par)}</td><td>{qty(t.counted_quantity,t.counted_base_quantity,t.base_unit)}</td><td>{t.incoming_base_quantity==null?"—":Number(t.incoming_base_quantity)===0?"none":`${decimal(t.incoming_base_quantity)} ${t.base_unit}`}</td>{track==="bulk"&&<td>{t.requested_base_quantity==null?"—":Number(t.requested_base_quantity)===0?"none":`${decimal(t.requested_base_quantity)} ${t.base_unit}`}</td>}
       <td>{qty(t.needed_quantity,t.mode==="target_par"?t.needed_base_quantity:null,t.base_unit)}</td><td>{t.batch_base_yield!=null?`${qty(t.batch_yield,t.batch_base_yield,t.base_unit)}${t.batches!=null?` × ${t.batches}`:""}`:"—"}</td>
-      <td><strong>{t.planned_quantity??"Unknown"}</strong> {t.source_unit}</td><td>{t.issue||t.override_reason||"Reviewed source versions"}</td></tr>)}</tbody></table></div></>}
+      <td><strong>{t.planned_quantity!=null?decimal(t.planned_quantity):"Unknown"}</strong> {t.source_unit}</td><td>{t.issue||t.override_reason||"Reviewed source versions"}</td></tr>)}</tbody></table></div></>}
     {draft.preview&&<label><input type="checkbox" aria-label="Review dated prep draft" disabled={locked} checked={draft.reviewed} onChange={e=>setDraft(previous=>({...previous,reviewed:e.target.checked}))}/>I reviewed the tasks, units, count source, overrides and any unknown quantities.</label>}
     <button className={btnGhost} disabled={busy||reading||(!draft.pending&&(released||!draft.preview))} onClick={save}>{draft.pending?"Retry the same dated save":"Save reviewed dated draft"}</button>
     <button className={btnGhost} disabled={busy||reading||!!draft.pending} onClick={()=>load(epoch.current,true)}>Refresh dated draft versions</button>
