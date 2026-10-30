@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
+import { StoreTransfers } from "./StoreTransfers";
 import { StaffCountReview } from "./StaffCountReview";
 import { PageTitle, Field, MetricCard, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 import { locationTotal } from "../lib/overviewDecimal";
@@ -202,10 +203,11 @@ export function ActualPeriodView({ report, onClose, busy = false }) {
     <div className="grid md:grid-cols-4 gap-3">
       <MetricCard label="Opening physical value" value={report.openingValue == null ? "Incomplete" : `$${report.openingValue}`} />
       <MetricCard label="Net food purchases" value={`$${report.netPurchaseCost}`} sub="received date; excludes tax and fees" />
+      {report.transferLines && <MetricCard label="Store transfers" value={`$${report.netTransferCost}`} sub="in minus out, at the sender's latest cost" />}
       <MetricCard label="Closing physical value" value={report.closingValue == null ? "Incomplete" : `$${report.closingValue}`} />
-      <MetricCard label="Actual Food Cost" value={report.actualFoodCost == null ? "Incomplete" : `$${report.actualFoodCost}`} sub="opening value + purchases − closing value" />
+      <MetricCard label="Actual Food Cost" value={report.actualFoodCost == null ? "Incomplete" : `$${report.actualFoodCost}`} sub={report.transferLines ? "opening value + purchases + transfers − closing value" : "opening value + purchases − closing value"} />
     </div>
-    <div className={`${cardCls} p-4 overflow-auto`}><table className="text-sm w-full"><thead><tr>{["Item", "Unit", "Opening qty", "Net purchased qty", "Closing qty", "Actual usage", "Opening value", "Net purchase cost", "Closing value", "Actual Food Cost"].map(h => <th className="text-left p-2 whitespace-nowrap" key={h}>{h}</th>)}</tr></thead><tbody>{report.rows.map(r => <tr key={r.itemCode}>{[r.name, r.baseUnit, r.openingQuantity, r.netPurchaseQuantity, r.closingQuantity, r.actualUsage, r.openingValue, r.netPurchaseCost, r.closingValue, r.actualFoodCost].map((v, i) => <td className="p-2 border-t border-slate-700" key={i}>{v ?? "Incomplete"}</td>)}</tr>)}</tbody></table></div>
+    <div className={`${cardCls} p-4 overflow-auto`}><table className="text-sm w-full"><thead><tr>{["Item", "Unit", "Opening qty", "Net purchased qty", ...(report.transferLines ? ["Net transfer qty"] : []), "Closing qty", "Actual usage", "Opening value", "Net purchase cost", ...(report.transferLines ? ["Net transfer cost"] : []), "Closing value", "Actual Food Cost"].map(h => <th className="text-left p-2 whitespace-nowrap" key={h}>{h}</th>)}</tr></thead><tbody>{report.rows.map(r => <tr key={r.itemCode}>{[r.name, r.baseUnit, r.openingQuantity, r.netPurchaseQuantity, ...(report.transferLines ? [r.netTransferQuantity ?? "0"] : []), r.closingQuantity, r.actualUsage, r.openingValue, r.netPurchaseCost, ...(report.transferLines ? [r.netTransferCost ?? "0"] : []), r.closingValue, r.actualFoodCost].map((v, i) => <td className="p-2 border-t border-slate-700" key={i}>{v ?? "Incomplete"}</td>)}</tr>)}</tbody></table></div>
     <label className="flex gap-2 text-sm"><input aria-label="Confirm period review" type="checkbox" checked={reviewed} disabled={busy || !!attempt.current} onChange={e => setReviewed(e.target.checked)} />I verified both physical counts and values, and all received purchases and credits for this period have been reviewed and posted.</label>
     {!!report.warnings.length && <label className="flex gap-2 text-sm"><input type="checkbox" checked={overages} disabled={busy || !!attempt.current} onChange={e => setOverages(e.target.checked)} />I reviewed and acknowledge these quantity/value overages.</label>}
     {error && <p role="alert" className="text-red-300">{error} Refresh the report before making a new close request.</p>}
@@ -378,6 +380,7 @@ export function ActualInventoryTab({ restaurantId, view = "counts" }) {
       }}>{(setup.scopes || [setup.scope.header]).map(s => <option key={s.id} value={s.id}>Version {s.revision} · {s.note}</option>)}</select></Field>}
       {view === "counts" && countScope && <PhysicalCountForm key={`${countScope.header.id}:${newCount}:${recount?.header.id || "new"}:${setup.layout?.header.id || "none"}`} scope={countScope} onSave={saveCount} onRecount={recount} unitProfiles={setup.unitProfiles || []} layout={recount ? recount.layout || null : setup.layout} />}
       {view === "counts" && <div className={`${cardCls} p-4 space-y-2`}><h3 className="font-semibold">Physical count history</h3>{counts.map(c => <div className="flex gap-3 text-sm items-center" key={c.id}><span>{c.count_date} · {timingLabel(c.timing)} · {c.status}{supersededCounts.has(c.id) ? " · replaced by recount" : protectedCounts.has(c.id) ? " · protected by closed period / handoff" : ""}</span><button className={btnGhost} disabled={busy || supersededCounts.has(c.id) || protectedCounts.has(c.id)} onClick={() => run(async () => { setRecount(await api.actualCount(restaurantId, c.id)); setNewCount(n => n + 1); })}>Append recount</button></div>)}</div>}
+      {view === "counts" && <div className={`${cardCls} p-4`}><StoreTransfers key={restaurantId} rid={restaurantId} /></div>}
       {view === "report" && <>
         <section className={`${cardCls} p-4 space-y-3`}><h3 className="font-semibold">Change the purchased-item list</h3>
           <p className="text-sm">After closing the old list, create the new list in Enter Counts and record its opening count at the same physical boundary. Carry retained balances exactly; confirm zero for added items and remove only zero-balance items. Existing stock needs reconciliation before changing lists.</p>

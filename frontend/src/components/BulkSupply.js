@@ -76,11 +76,15 @@ export function RequestForm({ rid, maker, onSent }) {
   </section>;
 }
 
-export function SpotForm({ rid, items, onSent }) {
+export function SpotForm({ rid, items, onSent, onPending = () => {} }) {
   const [rows, setRows] = useState([{ product_id: "", quantity: "", reason: "" }]), [note, setNote] = useState(""), [runDate, setRunDate] = useState(todayISO());
   const s = useSubmit(r => { setRows([{ product_id: "", quantity: "", reason: "" }]); setNote(""); onSent(r); });
-  const edit = (i, patch) => { s.reset(); setRows(x => x.map((r, n) => n === i ? { ...r, ...patch } : r)); };
+  // Inputs stay frozen while a send is unresolved, so a retry replays it rather than sending twice.
+  const edit = (i, patch) => setRows(x => x.map((r, n) => n === i ? { ...r, ...patch } : r));
   const ready = note.trim() && rows.every(r => r.product_id && decimal(r.quantity) && Number(r.quantity) > 0 && r.reason.trim());
+  // The form can't be hidden while a send is unresolved, which would drop the retry's request key.
+  const unresolved = s.busy || s.pending();
+  useEffect(() => { onPending(unresolved); }, [unresolved]); // eslint-disable-line react-hooks/exhaustive-deps
   async function send() {
     const request = { run_date: runDate, kind: "spot", note: note.trim(), lines: rows.map(r => ({ product_id: r.product_id, quantity: r.quantity.trim(), reason: r.reason.trim() })) };
     await s.submit(async () => ({ request, expected_review_hash: (await api.previewBulkRequest(rid, request)).reviewHash, reviewed: true }), (b, k) => api.sendBulkRequest(rid, b, k));
@@ -88,6 +92,7 @@ export function SpotForm({ rid, items, onSent }) {
   return <section className={`${cardCls} p-4 space-y-3`} aria-label="Spot Bulk request">
     <h3 className="font-semibold">Spot prep request</h3>
     <p className="text-sm text-slate-400">For a shortfall or an unexpected need between runs. Amounts are in each item's par unit.</p>
+    <fieldset disabled={s.busy || s.pending()} className="space-y-3">
     <Field label="Needed by"><input aria-label="Spot needed by" type="date" className={inpCls} value={runDate} onChange={e => setRunDate(e.target.value)} /></Field>
     {rows.map((r, i) => <div key={i} className="grid md:grid-cols-3 gap-3">
       <Field label="Item"><select aria-label={`Spot item ${i + 1}`} className={inpCls} value={r.product_id} onChange={e => edit(i, { product_id: e.target.value })}><option value="">Choose…</option>{items.map(p => <option key={p.product_id} value={p.product_id}>{p.name} ({p.unit})</option>)}</select></Field>
@@ -96,6 +101,7 @@ export function SpotForm({ rid, items, onSent }) {
     </div>)}
     <div className="flex gap-2"><button className={btnGhost} onClick={() => setRows(x => [...x, { product_id: "", quantity: "", reason: "" }])}>Add item</button></div>
     <Field label="Note"><input aria-label="Spot note" className={inpCls} value={note} onChange={e => setNote(e.target.value)} /></Field>
+    </fieldset>
     {s.error && <p role="alert">{s.error}</p>}
     <button className={btnAcc} disabled={s.busy || !ready} onClick={send}>{s.label("Retry the same request", "Send spot request")}</button>
   </section>;
@@ -146,7 +152,7 @@ export function RequestCard({ rid, store, request, onChange }) {
 }
 
 export function BulkSupply({ rid }) {
-  const [data, setData] = useState(null), [items, setItems] = useState([]), [error, setError] = useState(""), [epoch, setEpoch] = useState(0), [form, setForm] = useState(null);
+  const [data, setData] = useState(null), [items, setItems] = useState([]), [error, setError] = useState(""), [epoch, setEpoch] = useState(0), [form, setForm] = useState(null), [pending, setPending] = useState(false);
   const since = (() => { const d = new Date(`${todayISO()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 28); return d.toISOString().slice(0, 10); })();
   useEffect(() => {
     let active = true; setError("");
@@ -163,18 +169,22 @@ export function BulkSupply({ rid }) {
     }).catch(() => {});
     return () => { active = false; };
   }, [rid, form]);
-  if (error) return <p role="alert">{error}</p>;
+  // Only a first load with nothing to show is replaced by its error; a failed refresh shows above the
+  // panel so an unresolved send keeps its form (and its retry key).
+  if (error && !data) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading Bulk supply…</p>;
-  const store = data.store_id, reload = () => { setForm(null); setEpoch(n => n + 1); };
+  // A sent request closes its form; other list changes only refresh it, so an unresolved send keeps its retry.
+  const store = data.store_id, refresh = () => setEpoch(n => n + 1), reload = () => { setPending(false); setForm(null); refresh(); };
   if (!data.maker_store_id && !data.makes_for.length) return null;
   return <div className="space-y-4 mb-6" data-testid="bulk-supply">
+    {error && <p role="alert">Couldn't refresh Bulk supply: {error}</p>}
     {data.maker_store_id && <div className="flex gap-2">
-      <button className={form === "request" ? btnAcc : btnGhost} onClick={() => setForm(form === "request" ? null : "request")}>Send Bulk count</button>
-      <button className={form === "spot" ? btnAcc : btnGhost} onClick={() => setForm(form === "spot" ? null : "spot")}>Spot request</button>
+      <button className={form === "request" ? btnAcc : btnGhost} disabled={pending} onClick={() => setForm(form === "request" ? null : "request")}>Send Bulk count</button>
+      <button className={form === "spot" ? btnAcc : btnGhost} disabled={pending} title={pending ? "Finish or retry the request first" : undefined} onClick={() => setForm(form === "spot" ? null : "spot")}>Spot request</button>
     </div>}
     {data.makes_for.length > 0 && <p className="text-sm text-slate-400">Bulk held here for {data.makes_for.map(storeName).join(", ")} is their stock and counts toward their par: count only your own Bulk in your count.</p>}
     {form === "request" && <RequestForm rid={rid} maker={data.maker_store_id} onSent={reload} />}
-    {form === "spot" && <SpotForm rid={rid} items={items} onSent={reload} />}
+    {form === "spot" && <SpotForm rid={rid} items={items} onSent={reload} onPending={setPending} />}
     {!!data.open_shortfalls.length && <section className={`${cardCls} p-4`} aria-label="Open Bulk shortfalls">
       <h3 className="font-semibold">Still owed</h3>
       <ul>{data.open_shortfalls.map(s => <li key={`${s.request_id}:${s.product_id}`}>{s.name}: {amount(s.shortfall_base_quantity, s.base_unit)} short from {s.run_date}{s.store_id !== store ? ` (${storeName(s.store_id)})` : ""}</li>)}</ul>
@@ -182,7 +192,7 @@ export function BulkSupply({ rid }) {
     <section className={`${cardCls} p-4 space-y-3`} aria-label="Bulk requests">
       <h3 className="font-semibold">{data.makes_for.length ? `Bulk requests from ${data.makes_for.map(storeName).join(", ")}` : "Your Bulk requests"}</h3>
       {!data.requests.length && <p className="text-sm">No requests in the last four weeks.</p>}
-      {data.requests.map(r => <RequestCard key={r.id} rid={rid} store={store} request={r} onChange={reload} />)}
+      {data.requests.map(r => <RequestCard key={r.id} rid={rid} store={store} request={r} onChange={refresh} />)}
     </section>
   </div>;
 }
