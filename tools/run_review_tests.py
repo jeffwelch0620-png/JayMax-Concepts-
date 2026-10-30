@@ -16,7 +16,7 @@ OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activat
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('bulk_supply::BulkModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
@@ -27,6 +27,9 @@ OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_insta
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
                     'batched_fingerprints::BatchedFingerprintGuards']
 DATABASE_CASES = (
+ ('bulk_supply','BulkSupplyDatabaseTests','test_request_is_par_minus_count_and_feeds_the_makers_run'),
+ ('bulk_supply','BulkSupplyDatabaseTests','test_sign_off_order_shortfall_and_one_request_per_run'),
+ ('bulk_supply','BulkSupplyDatabaseTests','test_database_refuses_a_forged_request_line'),
  ('prep_count_zones','PrepCountZoneTests','test_zone_count_adds_up_zones_and_keeps_the_breakdown'),
  ('prep_count_zones','PrepCountZoneTests','test_zones_must_match_the_layout'),
  ('prep_count_zones','PrepCountZoneTests','test_layout_places_every_item_and_replays_by_key'),

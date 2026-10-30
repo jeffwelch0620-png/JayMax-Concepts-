@@ -85,14 +85,20 @@ async def latest(conn,store,day,track):
     return serial(dict(r)) if r else None
 
 
-def batch_plan(target_base,carryover_base,incoming_base,batch_base):
+def batch_plan(target_base,carryover_base,incoming_base,batch_base,requested_base=Decimal(0)):
     """Draft 0.7 daily/salad prep: N = max(0, T - H - I), then Q = r x ceil(N / r), in base units.
-    T is the target, H the counted carryover, I confirmed incoming supply, r the recipe's batch yield."""
+    T is the target, H the counted carryover, I confirmed incoming supply, r the recipe's batch yield.
+    A Bulk run also makes R, what other stores requested from it (M3): N = max(0, T - H - I) + R."""
     with localcontext() as ctx:
         ctx.prec=100
-        need=max(target_base-carryover_base-incoming_base,Decimal(0))
+        need=max(target_base-carryover_base-incoming_base,Decimal(0))+requested_base
         batches=(need/batch_base).to_integral_value(rounding=ROUND_CEILING)
         return {'need':need,'batches':batches,'planned_base':batches*batch_base}
+
+
+async def requested_for_run(conn,store,day):
+    import bulk_supply  # bulk_supply builds on this module
+    return await bulk_supply.requested_for_run(conn,store,day)
 
 
 def exact_source_quantity(base,factor):
@@ -122,6 +128,7 @@ async def preview(conn,store,day,body,expected):
         count=dict(prior_counts[0])
         count_lines={str(l['product_id']):dict(l) for l in await conn.fetch('SELECT * FROM prep_inventory.count_observations WHERE event_id=$1',body.count_event_id)}
     recipes={r['id']:r for r in setup['recipes']};profiles={p['id']:p for p in setup['unitProfiles']};products={p['product_id']:p for p in setup['products']}
+    requested=await requested_for_run(conn,store,day) if body.track=='bulk' else None
     tasks=[]
     for p in sorted(plans,key=lambda p:p['product_id']):
         override=overrides.get(p['id'])
@@ -132,7 +139,7 @@ async def preview(conn,store,day,body,expected):
         # Historical profiles stay readable even for an omitted obsolete definition.
         if not profile:profile=dict(await conn.fetchrow('SELECT * FROM prep_inventory.unit_profiles WHERE id=$1',UUID(p['unit_profile_id'])))
         factor=Decimal(str(profile['base_units_per_source_unit']));target=None;counted=None;needed=None;qty=None;issue=None
-        incoming=None;batch=None;batches=None
+        incoming=None;batch=None;batches=None;asked=None
         mode=override.kind if override else ('fixed_quantity' if p['schedule']=='recurring' else 'target_par')
         if not included:mode='omit';qty=Decimal(0);needed=Decimal(0)
         elif mode=='fixed_quantity':
@@ -144,13 +151,14 @@ async def preview(conn,store,day,body,expected):
             else:
                 # Confirmed incoming supply (I) arrives with store transfers (M3); none is recorded yet.
                 counted=line['base_quantity'];incoming=Decimal(0);batch=Decimal(str(recipe['usable_base_yield']))
-                calc=batch_plan(mapping.times(target,factor),counted,incoming,batch)
+                asked=requested.get(p['product_id'],Decimal(0)) if requested is not None else None
+                calc=batch_plan(mapping.times(target,factor),counted,incoming,batch,asked or Decimal(0))
                 needed,batches=calc['need'],calc['batches'];qty=exact_source_quantity(calc['planned_base'],factor)
                 if qty is None:issue='Whole batches cannot be expressed within 12 decimal places in this unit; enter a reviewed fixed quantity'
         tasks.append(serial({'ordinal':len(tasks)+1,'product_id':p['product_id'],'planning_version_id':p['id'],'recipe_version_id':p['recipe_version_id'],
             'unit_profile_id':p['unit_profile_id'],'name':products[p['product_id']]['name'],'source_unit':profile['source_unit'],'base_unit':products[p['product_id']]['base_unit'],
             'factor':factor,'included':included,'mode':mode,'target_par':target,'counted_base_quantity':counted,'needed_base_quantity':needed,
-            'incoming_base_quantity':incoming,'batch_base_yield':batch,'batches':batches,
+            'incoming_base_quantity':incoming,'requested_base_quantity':asked,'batch_base_yield':batch,'batches':batches,
             'counted_quantity':exact_source_quantity(counted,factor) if counted is not None else None,
             'needed_quantity':exact_source_quantity(needed,factor) if needed is not None and mode=='target_par' else None,
             'batch_yield':exact_source_quantity(batch,factor) if batch is not None else None,
@@ -158,7 +166,10 @@ async def preview(conn,store,day,body,expected):
             'override_reason':override.reason if override else None}))
     review=serial({'store_id':store,'prep_date':day,'track':body.track,'base_revision':expected,'inputs':body.model_dump(),
         'source_scope':sorted(p['id'] for p in plans),'count':count,'tasks':tasks,'status':'draft','execution_ready':False,
-        'unresolved_tasks':sum(t['included'] and t['planned_quantity'] is None for t in tasks)})
+        'unresolved_tasks':sum(t['included'] and t['planned_quantity'] is None for t in tasks),
+        'requested':requested,
+        # Requested items this run does not make to par (no plan, omitted or a fixed quantity).
+        'uncovered_requests':sorted(k for k,v in (requested or {}).items() if Decimal(v) and not any(t['product_id']==k and t['mode']=='target_par' and t['planned_quantity'] is not None for t in tasks))})
     return {'review':review,'reviewHash':fingerprint(review).hex()}
 
 
@@ -170,6 +181,10 @@ async def read(conn,store,day,track):
         saved_count=review['inputs']['count_event_id']
         changed=scope!=review['source_scope'] or (bool(saved_count) and (not available_counts or str(available_counts[0]['id'])!=saved_count))
         scheduled={t['planning_version_id'] for t in review['tasks'] if t['included']}
+        if track=='bulk':
+            # Another store's Bulk request was sent or cancelled after this draft was saved.
+            now=await requested_for_run(conn,store,day)
+            changed=changed or ({k:Decimal(v) for k,v in (review.get('requested') or {}).items() if Decimal(v)} if now is not None else None)!=({k:v for k,v in now.items() if v} if now is not None else None)
         current['source_changed']=changed or any(p['reviewNeeded'] and p['id'] in scheduled for p in setup['plans'])
     phase=None
     if current and await conn.fetchval("SELECT to_regclass('prep_inventory.execution_events') IS NOT NULL"):
