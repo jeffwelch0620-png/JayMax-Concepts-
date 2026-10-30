@@ -140,7 +140,8 @@ async def preview(conn, store, body):
             if p['schedule'] != 'daily': continue
             name = products[p['product_id']]['name']
             profile = profiles.get(p['unit_profile_id'])
-            if p['reviewNeeded'] or not profile: raise HTTPException(409, f'Review the Bulk plan for {name} before requesting it')
+            # The requester only needs its par and unit; the maker's recipe is what gets made.
+            if not profile: raise HTTPException(409, f'Review the Bulk plan for {name} before requesting it')
             maker_item = made.get(keys[p['product_id']])
             if not maker_item or maker_item['base_unit'] != products[p['product_id']]['base_unit']: not_made.append(name); continue
             if p['product_id'] not in counted: missing_count.append(name); continue
@@ -287,9 +288,19 @@ async def read(conn, store, since):
             JOIN prep_inventory.bulk_event_lines f ON f.request_id=q.request_id AND f.ordinal=q.ordinal JOIN prep_inventory.bulk_events fe ON fe.id=f.event_id AND fe.action='fulfill'
             WHERE q.request_id=r.id AND a.base_quantity+f.held_base_quantity<q.requested_base_quantity))
         ORDER BY r.run_date DESC, r.created_at DESC LIMIT 500''', store, since)]
-    requests = [await one(conn, i) for i in ids]
+    loaded = {i: await one(conn, i) for i in ids}
+    # A short request is closed by a later accepted request for the item, which may be older than the window.
+    short = [r['run_date'] for r in loaded.values() if r['status'] == 'accepted' and any(Decimal(l['shortfall_base_quantity'] or 0) > 0 for l in r['lines'])]
+    if short:
+        for (i,) in await conn.fetch('''SELECT r.id FROM prep_inventory.bulk_requests r WHERE $1 IN (r.store_id, r.maker_store_id) AND r.run_date>=$2
+            AND EXISTS(SELECT 1 FROM prep_inventory.bulk_events e WHERE e.request_id=r.id AND e.action='accept')''', store, date.fromisoformat(min(short))):
+            if i not in loaded: loaded[i] = await one(conn, i)
+    owed = open_shortfalls(list(loaded.values()))
+    owed_ids = {o['request_id'] for o in owed}
+    shown = sorted((r for r in loaded.values() if r['run_date'] >= since.isoformat() or r['status'] in ('requested', 'sent') or r['id'] in owed_ids),
+        key=lambda r: (r['run_date'], r['created_at']), reverse=True)
     return serial({'store_id': store, 'maker_store_id': MAKERS.get(store), 'makes_for': sorted(s for s, m in MAKERS.items() if m == store),
-        'requests': requests, 'open_shortfalls': open_shortfalls(requests)})
+        'requests': shown, 'open_shortfalls': owed})
 
 
 async def requested_for_run(conn, maker, run_date):

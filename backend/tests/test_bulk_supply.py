@@ -163,6 +163,13 @@ class BulkSupplyDatabaseTests(day.PrepDayTaskTests):
                                        lines=[dict(product_id=str(self.requester['product']), quantity='3', reason='Short on Thursday')]))
         self.assertEqual(spot.status_code, 200, spot.text)
         self.assertEqual(D(spot.json()['request']['lines'][0]['requested_base_quantity']), D(3))
+        # The spot prep makes up the shortfall; it stays closed even once both runs are older than the window.
+        sid = spot.json()['request']['id']
+        made = await self.step('berts', sid, dict(action='fulfill', handoff='delivery', note='Spot prep', lines=[dict(ordinal=1, base_quantity='3', packaging='1 x 5 lb bag')]))
+        self.assertEqual(made.status_code, 200, made.text)
+        self.assertEqual((await self.step('rudds', sid, dict(action='accept', note='In', lines=[dict(ordinal=1, base_quantity='3')]))).status_code, 200)
+        later = (await self.catalog.get('/api/pg/purchases/rudds/bulk-supply', params={'since': '2026-12-01'})).json()
+        self.assertEqual((later['open_shortfalls'], later['requests']), ([], []))
 
     async def test_database_refuses_a_forged_request_line(self):
         count = await self.rudds_count('12')
