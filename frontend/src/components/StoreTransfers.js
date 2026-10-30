@@ -105,14 +105,16 @@ export function StoreTransfers({ rid }) {
   }, [rid, epoch]); // eslint-disable-line react-hooks/exhaustive-deps
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading store transfers…</p>;
-  const reload = () => { setPending(false); setSending(false); setEpoch(n => n + 1); };
+  // A sent transfer closes the form; other list changes only refresh it, so an unresolved send keeps its retry.
+  const refresh = () => setEpoch(n => n + 1);
+  const sent = () => { setPending(false); setSending(false); refresh(); };
   const waiting = data.transfers.filter(t => t.status === "sent" && t.to_store_id === data.store_id);
   return <div className="space-y-4" data-testid="store-transfers">
     <div className="flex gap-2 items-center"><h3 className="font-semibold">Store transfers</h3>
       <button className={sending ? btnAcc : btnGhost} disabled={pending} title={pending ? "Finish or retry the send first" : undefined} onClick={() => setSending(!sending)}>Send to another store</button></div>
     {!!waiting.length && <p role="status">{waiting.length} transfer(s) to confirm.</p>}
-    {sending && <SendTransferForm rid={rid} items={data.items} stores={data.stores} onSent={reload} onPending={setPending} />}
+    {sending && <SendTransferForm rid={rid} items={data.items} stores={data.stores} onSent={sent} onPending={setPending} />}
     {!data.transfers.length && <p className="text-sm">No transfers in the last four weeks.</p>}
-    {data.transfers.map(t => <TransferCard key={t.id} rid={rid} store={data.store_id} transfer={t} onChange={reload} />)}
+    {data.transfers.map(t => <TransferCard key={t.id} rid={rid} store={data.store_id} transfer={t} onChange={refresh} />)}
   </div>;
 }

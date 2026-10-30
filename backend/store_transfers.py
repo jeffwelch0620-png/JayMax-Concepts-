@@ -144,7 +144,8 @@ async def step(pool, store, transfer_id, actor, body, key):
             if body.received_base_quantity > t['sent_base_quantity']: raise HTTPException(422, 'Received more than was sent')
             if body.record_date < t['sent_date']: raise HTTPException(422, 'A transfer cannot be received before it was sent')
             if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM actual_inventory.active_period_closures p WHERE p.store_id IN ($1,$2)
-                AND $3>=p.period_start AND $3<p.period_end_exclusive)''', t['from_store_id'], t['to_store_id'], body.record_date):
+                AND $3>=p.period_start AND $3<p.period_end_exclusive) OR EXISTS(SELECT 1 FROM public.reporting_periods p
+                WHERE p.store_id IN ($1,$2) AND p.status='closed' AND $3 BETWEEN p.period_start AND p.period_end)''', t['from_store_id'], t['to_store_id'], body.record_date):
                 raise HTTPException(409, 'The received date is in a closed period at one of the stores')
         await conn.execute('''INSERT INTO actual_inventory.store_transfer_events(transfer_id,action,store_id,received_base_quantity,record_date,
             transfer_cost_amount,note,actor,request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)''',

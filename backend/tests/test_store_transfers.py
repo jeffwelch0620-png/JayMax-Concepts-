@@ -43,6 +43,8 @@ class StoreTransferDatabaseTests(actual.ActualInventoryTests):
     async def asyncSetUp(self):
         await super().asyncSetUp()
         async with self.pool.acquire() as c:
+            # Transfers are priced from current purchase facts (posted invoice corrections), as on production.
+            await c.execute((actual.native.ROOT / 'migrations/20261004_posted_invoice_corrections.sql').read_text(encoding='utf-8'))
             await c.execute((actual.native.ROOT / MIGRATION).read_text(encoding='utf-8'))
             await c.execute('''INSERT INTO store_items SELECT (jsonb_populate_record(NULL::store_items, to_jsonb(s) || '{"store_id":"rudds"}')).*
                 FROM store_items s WHERE store_id='berts' AND item_code='test_food' ON CONFLICT DO NOTHING''')
@@ -98,6 +100,11 @@ class StoreTransferDatabaseTests(actual.ActualInventoryTests):
         self.assertEqual((await self.step('rudds', t, action='cancel', note='x')).status_code, 403)
         self.assertEqual((await self.step('rudds', t, action='receive', received_base_quantity='11', record_date='2026-10-06', note='x')).status_code, 422)
         self.assertEqual((await self.step('rudds', t, action='receive', received_base_quantity='8', record_date='2026-10-04', note='x')).status_code, 422)
+        # A receipt inside a legacy closed reporting period at either store is a clear conflict, not a server error.
+        async with self.pool.acquire() as c:
+            await c.execute("INSERT INTO public.reporting_periods(store_id,period_start,period_end,name,status) VALUES('rudds','2026-10-07','2026-10-07','Legacy close','closed')")
+        legacy = await self.step('rudds', t, action='receive', received_base_quantity='8', record_date='2026-10-07', note='x')
+        self.assertEqual(legacy.status_code, 409, legacy.text)
         # Close Bert's period: a receipt dated inside it is held; after it, accepted.
         self.assertEqual((await self.close((await self.report(a, b)).json())).status_code, 200)
         self.assertEqual((await self.step('rudds', t, action='receive', received_base_quantity='8', record_date='2026-10-06', note='x')).status_code, 409)

@@ -171,7 +171,8 @@ export function BulkSupply({ rid }) {
   }, [rid, form]);
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading Bulk supply…</p>;
-  const store = data.store_id, reload = () => { setPending(false); setForm(null); setEpoch(n => n + 1); };
+  // A sent request closes its form; other list changes only refresh it, so an unresolved send keeps its retry.
+  const store = data.store_id, refresh = () => setEpoch(n => n + 1), reload = () => { setPending(false); setForm(null); refresh(); };
   if (!data.maker_store_id && !data.makes_for.length) return null;
   return <div className="space-y-4 mb-6" data-testid="bulk-supply">
     {data.maker_store_id && <div className="flex gap-2">
@@ -188,7 +189,7 @@ export function BulkSupply({ rid }) {
     <section className={`${cardCls} p-4 space-y-3`} aria-label="Bulk requests">
       <h3 className="font-semibold">{data.makes_for.length ? `Bulk requests from ${data.makes_for.map(storeName).join(", ")}` : "Your Bulk requests"}</h3>
       {!data.requests.length && <p className="text-sm">No requests in the last four weeks.</p>}
-      {data.requests.map(r => <RequestCard key={r.id} rid={rid} store={store} request={r} onChange={reload} />)}
+      {data.requests.map(r => <RequestCard key={r.id} rid={rid} store={store} request={r} onChange={refresh} />)}
     </section>
   </div>;
 }
