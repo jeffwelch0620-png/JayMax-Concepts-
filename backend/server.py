@@ -115,8 +115,10 @@ def _token(user):
     if str(user.get("email", "")).startswith("staff:"):
         raise HTTPException(403, "Personal login required")
     payload = {"sub": user["id"], "email": user["email"], "role": user["role"],
-               "locations": user.get("locations", []), "position": user.get("position"),
+               "locations": user.get("locations", []),
                "exp": int(datetime.now(timezone.utc).timestamp()) + SESSION_TTL}
+    if user.get("position"):  # logins without a position keep the original session shape
+        payload["position"] = user["position"]
     raw = _b64(json.dumps(payload, separators=(",", ":")).encode())
     key = AUTH_SECRET
     if not key:
@@ -705,8 +707,11 @@ class UserAccessIn(BaseModel):
     locations: List[str] = []
 
 def _clean_user(doc):
-    return {"id": doc["id"], "email": doc["email"], "role": doc["role"],
-            "locations": doc.get("locations", []), "position": doc.get("position")}
+    user = {"id": doc["id"], "email": doc["email"], "role": doc["role"],
+            "locations": doc.get("locations", [])}
+    if doc.get("position"):  # logins without a position keep the original response shape
+        user["position"] = doc["position"]
+    return user
 
 # Postgres home of the Mongo `users` collection (table app_users). Same account model,
 # same PBKDF2 hashes and user ids, so migrated users keep their passwords and any
