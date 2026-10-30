@@ -133,7 +133,7 @@ async def staff_state(conn, store, body, kind):
     # (Jeff 2026-10-30). Tasks for a station nobody is on stay with the Shift Leader.
     station, defaults = None, {}
     if body.staff_member_id and await stations.installed(conn):
-        station = await stations.member_station(conn, store, body.staff_member_id)
+        station = await stations.member_station(conn, store, body.staff_member_id, body.day)  # only that date's shift
         defaults = await stations.product_stations(conn, store)
     if e['status'] == 'released':
         for t in e['tasks']:

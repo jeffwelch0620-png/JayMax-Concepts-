@@ -55,7 +55,14 @@ class StationDatabaseTests(staff.StaffTaskTests):
         default = await self.portal.put(f"/api/pg/purchases/berts/stations/products/{task['product_id']}", headers=self.headers(),
                                         json={'station_code': 'PREP', 'note': 'Prep cook makes it'})
         self.assertEqual(default.status_code, 200, default.text)
+        # On Prep today: that doesn't route the 2026-10-08 plan's tasks to them.
         self.assertEqual((await self.move(self.member, 'PREP')).status_code, 200)
+        self.assertEqual((await self.staff_plan(member=self.member)).json()['tasks'], [])
+        self.assertEqual((await self.move(self.member, None, reason='shift_end')).status_code, 200)
+        # On Prep for the 2026-10-08 shift (recorded directly; the board only records today).
+        async with self.pool.acquire() as c:
+            await c.execute('''INSERT INTO prep_inventory.station_stints(store_id,staff_member_id,station_code,business_date,source,assigned_by,request_key,request_fingerprint)
+                VALUES('berts',$1,'PREP','2026-10-08','board','tester',$2,$3)''', self.member, uuid4(), b'\x00' * 32)
         plan = (await self.staff_plan(member=self.member)).json()
         self.assertEqual((plan['station'], [(t['id'], t['via']) for t in plan['tasks']]), ('PREP', [(task['id'], 'station')]))
         self.assertEqual((await self.staff_plan(member=self.other_member)).json()['tasks'], [])  # not on a station

@@ -68,9 +68,10 @@ async def product_stations(conn, store):
         FROM prep_inventory.product_stations WHERE store_id=$1 ORDER BY product_id, revision DESC''', store)}
 
 
-async def member_station(conn, store, member_id):
+async def member_station(conn, store, member_id, day):
+    """The station a person is on for that business date's shift (their open stint started that day)."""
     return await conn.fetchval('''SELECT s.station_code FROM prep_inventory.station_stints s WHERE s.store_id=$1 AND s.staff_member_id=$2
-        AND NOT EXISTS (SELECT 1 FROM prep_inventory.stint_ends e WHERE e.stint_id=s.id)''', store, member_id)
+        AND s.business_date=$3 AND NOT EXISTS (SELECT 1 FROM prep_inventory.stint_ends e WHERE e.stint_id=s.id)''', store, member_id, day)
 
 
 async def board(conn, store, day):
@@ -171,6 +172,6 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
             await ready(conn); actor, _ = await staff_authorize(request, conn, store, body.pin)
             await move(conn, store, body.business_date, f'self:{actor}', Move(staff_member_id=body.staff_member_id, station_code=body.station_code),
                        idempotency_key, source='self')
-            return {'station_code': await member_station(conn, store, body.staff_member_id)}
+            return {'station_code': await member_station(conn, store, body.staff_member_id, body.business_date)}
 
     return router
