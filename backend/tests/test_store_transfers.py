@@ -102,7 +102,7 @@ class StoreTransferDatabaseTests(actual.ActualInventoryTests):
         self.assertEqual((await self.step('rudds', t, action='receive', received_base_quantity='8', record_date='2026-10-04', note='x')).status_code, 422)
         # A receipt inside a legacy closed reporting period at either store is a clear conflict, not a server error.
         async with self.pool.acquire() as c:
-            await c.execute("INSERT INTO public.reporting_periods(store_id,period_start,period_end,name,status) VALUES('rudds','2026-10-07','2026-10-07','Legacy close','closed')")
+            await c.execute("INSERT INTO public.reporting_periods(store_id,period_start,period_end,name,status,ref) VALUES('rudds','2026-10-07','2026-10-07','Legacy close','closed','legacy-close-test')")
         legacy = await self.step('rudds', t, action='receive', received_base_quantity='8', record_date='2026-10-07', note='x')
         self.assertEqual(legacy.status_code, 409, legacy.text)
         # Close Bert's period: a receipt dated inside it is held; after it, accepted.

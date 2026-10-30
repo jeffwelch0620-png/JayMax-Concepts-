@@ -74,3 +74,21 @@ test("inputs are frozen while a preview is pending and after a lost send, so a r
   expect(button("Send to another store").disabled).toBe(false);
   expect(api.sendActualTransfer.mock.calls[1]).toEqual(api.sendActualTransfer.mock.calls[0]);
 });
+
+test("a failed list refresh shows its error but keeps an unresolved send and its retry", async () => {
+  api.actualTransfers.mockResolvedValueOnce({ store_id: "berts", transfers: [transfer({ id: "t-old" })], items: [{ code: "flour", name: "Flour, all purpose", base_unit: "lb" }], stores: [{ id: "rudds", name: "Rudd's" }] })
+    .mockRejectedValue(new Error("Network down"));
+  api.previewActualTransfer.mockResolvedValue({ reviewHash: "c".repeat(64), review: { name: "Flour, all purpose", base_unit: "lb", to_store_id: "rudds", estimated_cost_amount: "6.50",
+    cost: { cost_amount: "32.50", base_quantity: "50", record_date: "2026-10-27" } } });
+  api.sendActualTransfer.mockRejectedValue(new Error("Network lost"));
+  api.stepActualTransfer.mockResolvedValue({ transfer: transfer({ id: "t-old", status: "cancelled" }) });
+  await render(<StoreTransfers rid="berts" />);
+  await click(button("Send to another store"));
+  await choose("Transfer item", "flour"); await input("Transfer amount", "10"); await input("Transfer note", "Rudd's ran out");
+  await click(button("Preview transfer"));
+  await click(container.querySelector('[aria-label="Review store transfer"]'));
+  await click(button("Send transfer"));
+  await click(button("Cancel transfer")); // another listed transfer changes, so the list refreshes and the refresh fails
+  expect(container.textContent).toContain("Couldn't refresh transfers: Network down");
+  expect(button("Retry the same transfer")).toBeDefined();
+});

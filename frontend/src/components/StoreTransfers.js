@@ -103,13 +103,16 @@ export function StoreTransfers({ rid }) {
     api.actualTransfers(rid, since).then(d => active && setData(d)).catch(e => active && setError(detail(e)));
     return () => { active = false; };
   }, [rid, epoch]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (error) return <p role="alert">{error}</p>;
+  // Only a first load with nothing to show is replaced by its error; a failed refresh shows above the
+  // panel so an unresolved send keeps its form (and its retry key).
+  if (error && !data) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading store transfers…</p>;
   // A sent transfer closes the form; other list changes only refresh it, so an unresolved send keeps its retry.
   const refresh = () => setEpoch(n => n + 1);
   const sent = () => { setPending(false); setSending(false); refresh(); };
   const waiting = data.transfers.filter(t => t.status === "sent" && t.to_store_id === data.store_id);
   return <div className="space-y-4" data-testid="store-transfers">
+    {error && <p role="alert">Couldn't refresh transfers: {error}</p>}
     <div className="flex gap-2 items-center"><h3 className="font-semibold">Store transfers</h3>
       <button className={sending ? btnAcc : btnGhost} disabled={pending} title={pending ? "Finish or retry the send first" : undefined} onClick={() => setSending(!sending)}>Send to another store</button></div>
     {!!waiting.length && <p role="status">{waiting.length} transfer(s) to confirm.</p>}

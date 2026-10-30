@@ -169,12 +169,15 @@ export function BulkSupply({ rid }) {
     }).catch(() => {});
     return () => { active = false; };
   }, [rid, form]);
-  if (error) return <p role="alert">{error}</p>;
+  // Only a first load with nothing to show is replaced by its error; a failed refresh shows above the
+  // panel so an unresolved send keeps its form (and its retry key).
+  if (error && !data) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading Bulk supply…</p>;
   // A sent request closes its form; other list changes only refresh it, so an unresolved send keeps its retry.
   const store = data.store_id, refresh = () => setEpoch(n => n + 1), reload = () => { setPending(false); setForm(null); refresh(); };
   if (!data.maker_store_id && !data.makes_for.length) return null;
   return <div className="space-y-4 mb-6" data-testid="bulk-supply">
+    {error && <p role="alert">Couldn't refresh Bulk supply: {error}</p>}
     {data.maker_store_id && <div className="flex gap-2">
       <button className={form === "request" ? btnAcc : btnGhost} disabled={pending} onClick={() => setForm(form === "request" ? null : "request")}>Send Bulk count</button>
       <button className={form === "spot" ? btnAcc : btnGhost} disabled={pending} title={pending ? "Finish or retry the request first" : undefined} onClick={() => setForm(form === "spot" ? null : "spot")}>Spot request</button>
