@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { Field, cardCls, inpCls, btnAcc, btnGhost } from "./common";
-import { todayISO } from "../lib/calc";
+import { RESTAURANTS, todayISO } from "../lib/calc";
 
 // M3 Bulk supply (Jeff 2026-10-29): Bert's Bulk is made at Rudd's from Bert's own goods.
 // Bert's sends its Bulk count as a request (par minus on hand); Rudd's makes it in the Monday
@@ -11,6 +11,9 @@ import { todayISO } from "../lib/calc";
 
 const detail = e => { const d = e?.response?.data?.detail; return typeof d === "string" ? d : Array.isArray(d) ? d.map(x => x.msg).join("; ") : e.message || "Request failed"; };
 const decimal = v => /^\d+(?:\.\d+)?$/.test(String(v).trim());
+// Store ids from the server ("rudds") shown as names ("Rudd's"); the server calls Papa Leoni's "papa".
+export const storeName = id => RESTAURANTS.find(r => r.id === id || (id === "papa" && r.id === "papa_leonis"))?.short || id;
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const amount = (v, unit) => v == null ? "—" : `${Number(v)} ${unit}`;
 const STATUS = { requested: "Waiting for the Bulk kitchen", sent: "Sent; waiting for acceptance", accepted: "Accepted", cancelled: "Cancelled" };
 
@@ -32,7 +35,8 @@ function useSubmit(onDone) {
     catch (e) { if ([400, 403, 404, 409, 422].includes(e?.response?.status)) attempt.current = null; setError(detail(e)); }
     finally { setBusy(false); }
   }
-  return { submit, busy, error, setError, pending: () => !!attempt.current, reset: () => { attempt.current = null; } };
+  const label = (retry, ready) => busy ? "Saving…" : attempt.current ? retry : ready;
+  return { submit, busy, error, setError, label, pending: () => !!attempt.current, reset: () => { attempt.current = null; } };
 }
 
 export function RequestForm({ rid, maker, onSent }) {
@@ -54,11 +58,11 @@ export function RequestForm({ rid, maker, onSent }) {
   }
   const lines = review?.result?.review?.lines || [];
   return <section className={`${cardCls} p-4 space-y-3`} aria-label="Send Bulk request">
-    <h3 className="font-semibold">Send Bulk count to {maker}</h3>
-    <p className="text-sm text-slate-400">Uses last night's prep count. Each item's request is its Bulk par minus what you counted. One par covers your Bulk wherever it is kept, so your count includes your Bulk held at {maker} (the "Held at {maker}" zone). Sunday night count is for Monday's run; Wednesday night count is for Thursday's.</p>
+    <h3 className="font-semibold">Send Bulk count to {storeName(maker)}</h3>
+    <p className="text-sm text-slate-400">Uses last night's prep count. Each item's request is its Bulk par minus what you counted. One par covers your Bulk wherever it is kept, so your count includes your Bulk held at {storeName(maker)} (the "Held at {storeName(maker)}" zone). Sunday night count is for Monday's run; Wednesday night count is for Thursday's.</p>
     <div className="grid md:grid-cols-3 gap-3">
       <Field label="Bulk run date"><input aria-label="Bulk run date" type="date" className={inpCls} value={runDate} onChange={e => setRunDate(e.target.value)} /></Field>
-      <Field label="Par group"><select aria-label="Bulk par group" className={inpCls} value={group} onChange={e => { setGroup(e.target.value); setReview(null); }}><option value="weekday">Weekday pars</option><option value="weekend">Weekend pars</option></select></Field>
+      <Field label={`Par group (${DAYS[new Date(`${runDate}T12:00:00Z`).getUTCDay()] || "run"} run)`}><select aria-label="Bulk par group" className={inpCls} value={group} onChange={e => { setGroup(e.target.value); setReview(null); }}><option value="weekday">Weekday pars</option><option value="weekend">Weekend pars</option></select></Field>
       <Field label="Note"><input aria-label="Bulk request note" className={inpCls} value={note} onChange={e => { setNote(e.target.value); setReview(null); }} placeholder="e.g. Sunday close, J. Smith" /></Field>
     </div>
     {counts && !latest && <p role="alert">No prep count from the night before {runDate}. Count Bulk items first.</p>}
@@ -67,7 +71,7 @@ export function RequestForm({ rid, maker, onSent }) {
       <div className="overflow-auto"><table className="ops-table"><thead><tr><th>Item</th><th>Par</th><th>Counted</th><th>Request</th></tr></thead>
         <tbody>{lines.map(l => <tr key={l.ordinal}><td>{l.name}</td><td>{l.target_par} {l.source_unit}</td><td>{amount(l.counted_base_quantity, l.base_unit)}</td><td><strong>{amount(l.requested_base_quantity, l.base_unit)}</strong></td></tr>)}</tbody></table></div>
       <label><input type="checkbox" aria-label="Review Bulk request" checked={checked} onChange={e => setChecked(e.target.checked)} /> I checked the items and amounts.</label>
-      <button className={btnAcc} disabled={s.busy || !checked} onClick={() => s.submit(() => ({ request: review.body, expected_review_hash: review.result.reviewHash, reviewed: true }), (b, k) => api.sendBulkRequest(rid, b, k))}>{s.pending() ? "Retry the same request" : "Send request"}</button>
+      <button className={btnAcc} disabled={s.busy || !checked} onClick={() => s.submit(() => ({ request: review.body, expected_review_hash: review.result.reviewHash, reviewed: true }), (b, k) => api.sendBulkRequest(rid, b, k))}>{s.label("Retry the same request", "Send request")}</button>
     </> : <button className={btnAcc} disabled={!latest} onClick={preview}>Preview request</button>}
   </section>;
 }
@@ -93,7 +97,7 @@ export function SpotForm({ rid, items, onSent }) {
     <div className="flex gap-2"><button className={btnGhost} onClick={() => setRows(x => [...x, { product_id: "", quantity: "", reason: "" }])}>Add item</button></div>
     <Field label="Note"><input aria-label="Spot note" className={inpCls} value={note} onChange={e => setNote(e.target.value)} /></Field>
     {s.error && <p role="alert">{s.error}</p>}
-    <button className={btnAcc} disabled={s.busy || !ready} onClick={send}>{s.pending() ? "Retry the same request" : "Send spot request"}</button>
+    <button className={btnAcc} disabled={s.busy || !ready} onClick={send}>{s.label("Retry the same request", "Send spot request")}</button>
   </section>;
 }
 
@@ -106,7 +110,7 @@ export function StepForm({ rid, request, action, onDone }) {
   const ready = note.trim() && rows.every(r => decimal(r.base_quantity) && (sent || (decimal(r.held) && (Number(r.base_quantity) + Number(r.held) === 0 || r.packaging.trim()))));
   const body = () => ({ action, note: note.trim(), ...(sent ? {} : { handoff }),
     lines: rows.map(r => ({ ordinal: r.ordinal, base_quantity: r.base_quantity.trim(), ...(sent ? {} : { held_base_quantity: r.held.trim(), ...(r.packaging.trim() ? { packaging: r.packaging.trim() } : {}) }) })) });
-  const maker = request.maker_store_id, owner = request.store_id;
+  const maker = storeName(request.maker_store_id), owner = storeName(request.store_id);
   return <div className="space-y-2" aria-label={sent ? "Accept Bulk delivery" : "Sign off Bulk made"}>
     <p className="text-sm">{sent ? "Enter what actually arrived. What is held at the Bulk kitchen still counts toward your par; anything less than requested stays open as a shortfall."
       : `Enter what you made for ${owner}: what you are sending, what stays here held for ${owner} (still ${owner}'s stock, counted in ${owner}'s count), and the packaging (e.g. 3 × 4 qt deli). Enter 0 for anything not made.`}</p>
@@ -119,7 +123,7 @@ export function StepForm({ rid, request, action, onDone }) {
     {!sent && <Field label="Handoff"><select aria-label="Bulk handoff" className={inpCls} value={handoff} onChange={e => { s.reset(); setHandoff(e.target.value); }}><option value="delivery">Delivered</option><option value="pickup">Ready for pickup</option></select></Field>}
     <Field label="Sign-off note"><input aria-label="Bulk sign-off note" className={inpCls} value={note} onChange={e => { s.reset(); setNote(e.target.value); }} placeholder="Your name" /></Field>
     {s.error && <p role="alert">{s.error}</p>}
-    <button className={btnAcc} disabled={s.busy || !ready} onClick={() => s.submit(body, (b, k) => api.signBulkStep(rid, request.id, b, k))}>{s.pending() ? "Retry the same sign-off" : sent ? "Accept delivery" : "Sign off made"}</button>
+    <button className={btnAcc} disabled={s.busy || !ready} onClick={() => s.submit(body, (b, k) => api.signBulkStep(rid, request.id, b, k))}>{s.label("Retry the same sign-off", sent ? "Accept delivery" : "Sign off made")}</button>
   </div>;
 }
 
@@ -133,8 +137,8 @@ export function RequestCard({ rid, store, request, onChange }) {
   const making = request.maker_store_id === store, asking = request.store_id === store;
   const can = making && request.status === "requested" ? "fulfill" : asking && request.status === "sent" ? "accept" : null;
   return <div className="border border-slate-700 rounded-lg p-3 space-y-2" data-testid="bulk-request">
-    <p><strong>{request.kind === "spot" ? "Spot" : "Bulk run"} {request.run_date}</strong> · {making ? `for ${request.store_id}` : `from ${request.maker_store_id}`} · {STATUS[request.status]}{request.events.find(e => e.action === "fulfill") ? ` · ${request.events.find(e => e.action === "fulfill").handoff === "pickup" ? "pickup" : "delivery"}` : ""}</p>
-    <div className="overflow-auto"><table className="ops-table"><thead><tr><th>Item</th><th>Requested</th><th>Sent</th><th>Held at {request.maker_store_id}</th><th>Packaging</th><th>Accepted</th><th>Short</th></tr></thead>
+    <p><strong>{request.kind === "spot" ? "Spot" : "Bulk run"} {request.run_date}</strong> · {making ? `for ${storeName(request.store_id)}` : `from ${storeName(request.maker_store_id)}`} · {STATUS[request.status]}{request.events.find(e => e.action === "fulfill") ? ` · ${request.events.find(e => e.action === "fulfill").handoff === "pickup" ? "pickup" : "delivery"}` : ""}</p>
+    <div className="overflow-auto"><table className="ops-table"><thead><tr><th>Item</th><th>Requested</th><th>Sent</th><th>Held at {storeName(request.maker_store_id)}</th><th>Packaging</th><th>Accepted</th><th>Short</th></tr></thead>
       <tbody>{request.lines.map(l => <tr key={l.ordinal}><td>{l.name}</td><td>{amount(l.requested_base_quantity, l.base_unit)}</td><td>{amount(l.sent_base_quantity, l.base_unit)}</td><td>{amount(l.held_base_quantity, l.base_unit)}</td><td>{l.packaging || "—"}</td><td>{amount(l.accepted_base_quantity, l.base_unit)}</td><td>{l.shortfall_base_quantity != null && Number(l.shortfall_base_quantity) > 0 ? <strong>{amount(l.shortfall_base_quantity, l.base_unit)}</strong> : "—"}</td></tr>)}</tbody></table></div>
     {can && (open ? <StepForm rid={rid} request={request} action={can} onDone={() => { setOpen(false); onChange(); }} /> : <button className={btnAcc} onClick={() => setOpen(true)}>{can === "fulfill" ? "Sign off what was made" : "Accept delivery"}</button>)}
     {asking && request.status === "requested" && <CancelButton rid={rid} request={request} onDone={onChange} />}
@@ -168,15 +172,15 @@ export function BulkSupply({ rid }) {
       <button className={form === "request" ? btnAcc : btnGhost} onClick={() => setForm(form === "request" ? null : "request")}>Send Bulk count</button>
       <button className={form === "spot" ? btnAcc : btnGhost} onClick={() => setForm(form === "spot" ? null : "spot")}>Spot request</button>
     </div>}
-    {data.makes_for.length > 0 && <p className="text-sm text-slate-400">Bulk held here for {data.makes_for.join(", ")} is their stock and counts toward their par: count only your own Bulk in your count.</p>}
+    {data.makes_for.length > 0 && <p className="text-sm text-slate-400">Bulk held here for {data.makes_for.map(storeName).join(", ")} is their stock and counts toward their par: count only your own Bulk in your count.</p>}
     {form === "request" && <RequestForm rid={rid} maker={data.maker_store_id} onSent={reload} />}
     {form === "spot" && <SpotForm rid={rid} items={items} onSent={reload} />}
     {!!data.open_shortfalls.length && <section className={`${cardCls} p-4`} aria-label="Open Bulk shortfalls">
       <h3 className="font-semibold">Still owed</h3>
-      <ul>{data.open_shortfalls.map(s => <li key={`${s.request_id}:${s.product_id}`}>{s.name}: {amount(s.shortfall_base_quantity, s.base_unit)} short from {s.run_date}{s.store_id !== store ? ` (${s.store_id})` : ""}</li>)}</ul>
+      <ul>{data.open_shortfalls.map(s => <li key={`${s.request_id}:${s.product_id}`}>{s.name}: {amount(s.shortfall_base_quantity, s.base_unit)} short from {s.run_date}{s.store_id !== store ? ` (${storeName(s.store_id)})` : ""}</li>)}</ul>
     </section>}
     <section className={`${cardCls} p-4 space-y-3`} aria-label="Bulk requests">
-      <h3 className="font-semibold">{data.makes_for.length ? `Bulk requests from ${data.makes_for.join(", ")}` : "Your Bulk requests"}</h3>
+      <h3 className="font-semibold">{data.makes_for.length ? `Bulk requests from ${data.makes_for.map(storeName).join(", ")}` : "Your Bulk requests"}</h3>
       {!data.requests.length && <p className="text-sm">No requests in the last four weeks.</p>}
       {data.requests.map(r => <RequestCard key={r.id} rid={rid} store={store} request={r} onChange={reload} />)}
     </section>
