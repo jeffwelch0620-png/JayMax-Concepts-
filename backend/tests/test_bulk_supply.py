@@ -61,6 +61,10 @@ class BulkModelTests(unittest.TestCase):
         early_spot = req('s', '2026-10-08', '0', accepted='10', kind='spot') | {'created_at': '2026-10-08T08:00', 'events': [{'action': 'accept', 'created_at': '2026-10-08T16:00'}]}
         run = req('b', '2026-10-08', '10') | {'created_at': '2026-10-08T09:00', 'events': [{'action': 'accept', 'created_at': '2026-10-08T12:00'}]}
         self.assertEqual(owed(early_spot, run), [])
+        # Monday's run signed off late (after Thursday's) cannot bring back Monday's shortage.
+        thursday = req('t', '2026-10-08', '0') | {'events': [{'action': 'accept', 'created_at': '2026-10-08T12:00'}]}
+        monday = req('m', '2026-10-05', '10') | {'events': [{'action': 'accept', 'created_at': '2026-10-08T16:00'}]}
+        self.assertEqual(owed(thursday, monday), [])
         # The next scheduled run is par minus a fresh count, so it replaces what was owed with its own result.
         self.assertEqual(owed(req('a', '2026-10-05', '10'), req('b', '2026-10-08', '2', accepted='0')), [('b', D(2))])
         self.assertEqual(owed(req('a', '2026-10-05', '10'), req('b', '2026-10-08', '0')), [])

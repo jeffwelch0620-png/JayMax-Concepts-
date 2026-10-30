@@ -270,15 +270,27 @@ def open_shortfalls(requests):
     """What is still owed per store and item. A spot request covers what is already owed first:
     its delivery (sent + held) pays down earlier shortfalls, oldest first, and only the part of it
     asked beyond what was owed can add a new shortfall. A later scheduled run is par minus a fresh
-    count, so it replaces what was owed with its own shortfall."""
-    owed = {}
+    count, so it replaces what was owed with its own shortfall; an older run signed off late only
+    pays down what is owed (its count is out of date)."""
+    owed, latest_run = {}, {}
     # In the order deliveries were accepted, not the order requests were opened.
     accepted_at = lambda r: next((e['created_at'] for e in r.get('events', []) if e['action'] == 'accept'), r['created_at'])
     for r in sorted((r for r in requests if r['status'] == 'accepted'), key=lambda r: (accepted_at(r), r['id'])):
         for l in r['lines']:
             key = (r['store_id'], l['product_id'])
             supplied = Decimal(l['accepted_base_quantity'] or 0) + Decimal(l.get('held_base_quantity') or 0)
-            if r.get('kind') == 'spot':
+            newest = r.get('kind') != 'spot' and r['run_date'] >= latest_run.get(key, r['run_date'])
+            if newest:
+                latest_run[key] = r['run_date']
+                owed[key] = []
+                new = Decimal(l['shortfall_base_quantity'] or 0)
+            elif r.get('kind') != 'spot':
+                left = supplied
+                for entry in owed.get(key, []):
+                    paid = min(entry[1], left); entry[1] -= paid; left -= paid
+                owed[key] = [e for e in owed.get(key, []) if e[1] > 0]
+                new = Decimal(0)
+            else:
                 before = sum((e[1] for e in owed.get(key, [])), Decimal(0))
                 left = supplied
                 for entry in owed.get(key, []):
@@ -286,9 +298,6 @@ def open_shortfalls(requests):
                 owed[key] = [e for e in owed.get(key, []) if e[1] > 0]
                 # Outstanding is now max(owed before, asked) - delivered; the old entries hold part of it.
                 new = max(max(before, Decimal(l['requested_base_quantity'])) - supplied, Decimal(0)) - sum((e[1] for e in owed[key]), Decimal(0))
-            else:
-                owed[key] = []
-                new = Decimal(l['shortfall_base_quantity'] or 0)
             if new > 0:
                 owed.setdefault(key, []).append([{'request_id': r['id'], 'run_date': r['run_date'], 'store_id': r['store_id'], 'product_id': l['product_id'],
                     'name': l['name'], 'base_unit': l['base_unit']}, new])
