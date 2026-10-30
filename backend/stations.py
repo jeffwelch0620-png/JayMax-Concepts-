@@ -22,7 +22,7 @@ STORE_ZONE = ZoneInfo('America/New_York')  # all three stores are in Eastern Ten
 
 
 async def installed(conn):
-    return await conn.fetchval("SELECT to_regclass('workforce.station_stints') IS NOT NULL")
+    return await conn.fetchval("SELECT to_regclass('prep_inventory.station_stints') IS NOT NULL")
 
 
 async def ready(conn):
@@ -54,31 +54,31 @@ class ProductStation(mapping.Strict):
 
 
 async def stations(conn, store):
-    return [dict(r) for r in await conn.fetch('SELECT * FROM workforce.stations WHERE store_id=$1 ORDER BY department, name', store)]
+    return [dict(r) for r in await conn.fetch('SELECT * FROM prep_inventory.stations WHERE store_id=$1 ORDER BY department, name', store)]
 
 
 async def open_stints(conn, store):
-    return [dict(r) for r in await conn.fetch('''SELECT * FROM workforce.station_time WHERE store_id=$1 AND ended_at IS NULL
+    return [dict(r) for r in await conn.fetch('''SELECT * FROM prep_inventory.station_time WHERE store_id=$1 AND ended_at IS NULL
         ORDER BY station_name, staff_name''', store)]
 
 
 async def product_stations(conn, store):
     """Each prepared item's current default station."""
     return {str(r['product_id']): r['station_code'] for r in await conn.fetch('''SELECT DISTINCT ON (product_id) product_id, station_code
-        FROM workforce.product_stations WHERE store_id=$1 ORDER BY product_id, revision DESC''', store)}
+        FROM prep_inventory.product_stations WHERE store_id=$1 ORDER BY product_id, revision DESC''', store)}
 
 
 async def member_station(conn, store, member_id):
-    return await conn.fetchval('''SELECT s.station_code FROM workforce.station_stints s WHERE s.store_id=$1 AND s.staff_member_id=$2
-        AND NOT EXISTS (SELECT 1 FROM workforce.stint_ends e WHERE e.stint_id=s.id)''', store, member_id)
+    return await conn.fetchval('''SELECT s.station_code FROM prep_inventory.station_stints s WHERE s.store_id=$1 AND s.staff_member_id=$2
+        AND NOT EXISTS (SELECT 1 FROM prep_inventory.stint_ends e WHERE e.stint_id=s.id)''', store, member_id)
 
 
 async def board(conn, store, day):
     await ready(conn)
     roster = [dict(r) for r in await conn.fetch('''SELECT m.id,m.name,m.role,m.active FROM public.staff_members m WHERE m.store_id=$1 AND (m.active
-        OR EXISTS (SELECT 1 FROM workforce.station_stints s WHERE s.staff_member_id=m.id AND NOT EXISTS (SELECT 1 FROM workforce.stint_ends e WHERE e.stint_id=s.id)))
+        OR EXISTS (SELECT 1 FROM prep_inventory.station_stints s WHERE s.staff_member_id=m.id AND NOT EXISTS (SELECT 1 FROM prep_inventory.stint_ends e WHERE e.stint_id=s.id)))
         ORDER BY m.name''', store)]
-    history = [dict(r) for r in await conn.fetch('''SELECT * FROM workforce.station_time WHERE store_id=$1 AND business_date=$2
+    history = [dict(r) for r in await conn.fetch('''SELECT * FROM prep_inventory.station_time WHERE store_id=$1 AND business_date=$2
         ORDER BY started_at, staff_name''', store, day)]
     names = {str(r['product_id']): r['name'] for r in await conn.fetch('''SELECT DISTINCT ON (product_id) product_id, name
         FROM prep_inventory.product_versions WHERE store_id=$1 ORDER BY product_id, revision DESC''', store)}
@@ -92,8 +92,8 @@ async def move(conn, store, day, actor, body, key, source='board'):
     """End the person's current stint (if any) and start the new one, in one transaction."""
     digest = fingerprint(serial({'store': store, 'day': day, 'actor': actor, 'source': source, 'body': body.model_dump()}))
     await lock_store(conn, store)
-    prior = await conn.fetchrow('''SELECT request_fingerprint FROM workforce.station_stints WHERE request_key=$1
-        UNION ALL SELECT request_fingerprint FROM workforce.stint_ends WHERE request_key=$1''', key)
+    prior = await conn.fetchrow('''SELECT request_fingerprint FROM prep_inventory.station_stints WHERE request_key=$1
+        UNION ALL SELECT request_fingerprint FROM prep_inventory.stint_ends WHERE request_key=$1''', key)
     if prior:
         if prior['request_fingerprint'] != digest: raise HTTPException(409, 'Request key belongs to another station move')
         return {'replayed': True}
@@ -102,19 +102,19 @@ async def move(conn, store, day, actor, body, key, source='board'):
     member = await conn.fetchrow('SELECT active FROM public.staff_members WHERE id=$1 AND store_id=$2', body.staff_member_id, store)
     if not member or (body.station_code and not member['active']):
         raise HTTPException(422, 'Choose active staff at this location')
-    if body.station_code and not await conn.fetchval('SELECT 1 FROM workforce.stations WHERE store_id=$1 AND code=$2 AND active', store, body.station_code):
+    if body.station_code and not await conn.fetchval('SELECT 1 FROM prep_inventory.stations WHERE store_id=$1 AND code=$2 AND active', store, body.station_code):
         raise HTTPException(422, 'Choose an active station at this location')
-    current = await conn.fetchrow('''SELECT s.* FROM workforce.station_stints s WHERE s.staff_member_id=$1
-        AND NOT EXISTS (SELECT 1 FROM workforce.stint_ends e WHERE e.stint_id=s.id)''', body.staff_member_id)
+    current = await conn.fetchrow('''SELECT s.* FROM prep_inventory.station_stints s WHERE s.staff_member_id=$1
+        AND NOT EXISTS (SELECT 1 FROM prep_inventory.stint_ends e WHERE e.stint_id=s.id)''', body.staff_member_id)
     if current and current['station_code'] == body.station_code: raise HTTPException(409, 'Already on that station')
     if not current and not body.station_code: raise HTTPException(409, 'This person is not on a station')
     if current and body.station_code:
-        await conn.execute('INSERT INTO workforce.stint_ends(stint_id,ended_by,reason) VALUES($1,$2,$3)', current['id'], actor, 'moved')
+        await conn.execute('INSERT INTO prep_inventory.stint_ends(stint_id,ended_by,reason) VALUES($1,$2,$3)', current['id'], actor, 'moved')
     elif current:
-        await conn.execute('INSERT INTO workforce.stint_ends(stint_id,ended_by,reason,request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5)',
+        await conn.execute('INSERT INTO prep_inventory.stint_ends(stint_id,ended_by,reason,request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5)',
                            current['id'], actor, body.reason, key, digest)
     if body.station_code:
-        await conn.execute('''INSERT INTO workforce.station_stints(store_id,staff_member_id,station_code,business_date,source,assigned_by,note,
+        await conn.execute('''INSERT INTO prep_inventory.station_stints(store_id,staff_member_id,station_code,business_date,source,assigned_by,note,
             request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)''', store, body.staff_member_id, body.station_code, day,
             source, actor, body.note, key, digest)
     return {'replayed': False}
@@ -124,16 +124,16 @@ async def set_product_station(pool, store, product_id, actor, body, key):
     digest = fingerprint(serial({'store': store, 'product': product_id, 'actor': actor, 'body': body.model_dump()}))
     async with pool.acquire() as conn, conn.transaction():
         await ready(conn); await lock_store(conn, store)
-        prior = await conn.fetchrow('SELECT * FROM workforce.product_stations WHERE request_key=$1', key)
+        prior = await conn.fetchrow('SELECT * FROM prep_inventory.product_stations WHERE request_key=$1', key)
         if prior:
             if prior['request_fingerprint'] != digest: raise HTTPException(409, 'Request key belongs to another station default')
             return serial({'product_station': dict(prior), 'replayed': True})
         if not await conn.fetchval('SELECT 1 FROM prep_inventory.products WHERE id=$1 AND store_id=$2', product_id, store):
             raise HTTPException(404, 'Prepared item is not at this location')
-        if body.station_code and not await conn.fetchval('SELECT 1 FROM workforce.stations WHERE store_id=$1 AND code=$2 AND active', store, body.station_code):
+        if body.station_code and not await conn.fetchval('SELECT 1 FROM prep_inventory.stations WHERE store_id=$1 AND code=$2 AND active', store, body.station_code):
             raise HTTPException(422, 'Choose an active station at this location')
-        revision = (await conn.fetchval('SELECT max(revision) FROM workforce.product_stations WHERE product_id=$1', product_id) or 0) + 1
-        row = await conn.fetchrow('''INSERT INTO workforce.product_stations(store_id,product_id,station_code,revision,note,set_by,request_key,request_fingerprint)
+        revision = (await conn.fetchval('SELECT max(revision) FROM prep_inventory.product_stations WHERE product_id=$1', product_id) or 0) + 1
+        row = await conn.fetchrow('''INSERT INTO prep_inventory.product_stations(store_id,product_id,station_code,revision,note,set_by,request_key,request_fingerprint)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *''', store, product_id, body.station_code, revision, body.note, actor, key, digest)
         return serial({'product_station': dict(row), 'replayed': False})
 

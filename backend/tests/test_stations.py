@@ -76,10 +76,10 @@ class StationDatabaseTests(staff.StaffTaskTests):
         self.assertEqual(done.json()['board']['open'], [])
         # The database allows one open stint per person, even without the app.
         async with self.pool.acquire() as c, c.transaction():
-            await c.execute("INSERT INTO workforce.station_stints(store_id,staff_member_id,station_code,business_date,source,assigned_by,request_key,request_fingerprint) VALUES('berts',$1,'FRY',$2,'board','tester',$3,$4)",
+            await c.execute("INSERT INTO prep_inventory.station_stints(store_id,staff_member_id,station_code,business_date,source,assigned_by,request_key,request_fingerprint) VALUES('berts',$1,'FRY',$2,'board','tester',$3,$4)",
                             self.member, datetime.now(stations.STORE_ZONE).date(), uuid4(), b'\x00' * 32)
             with self.assertRaisesRegex(asyncpg.PostgresError, 'already on a station'):
-                await c.execute("INSERT INTO workforce.station_stints(store_id,staff_member_id,station_code,business_date,source,assigned_by,request_key,request_fingerprint) VALUES('berts',$1,'EXPO',$2,'board','tester',$3,$4)",
+                await c.execute("INSERT INTO prep_inventory.station_stints(store_id,staff_member_id,station_code,business_date,source,assigned_by,request_key,request_fingerprint) VALUES('berts',$1,'EXPO',$2,'board','tester',$3,$4)",
                                 self.member, datetime.now(stations.STORE_ZONE).date(), uuid4(), b'\x00' * 32)
 
     async def test_only_boh_shift_leaders_and_up_run_the_board(self):

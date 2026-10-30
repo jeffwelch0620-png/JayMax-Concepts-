@@ -7,10 +7,9 @@
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 
-CREATE SCHEMA IF NOT EXISTS workforce;
-REVOKE ALL ON SCHEMA workforce FROM PUBLIC;
+-- In the existing prep_inventory schema so the hosted backup and restore profiles cover it.
 
-CREATE TABLE workforce.stations (
+CREATE TABLE prep_inventory.stations (
  store_id text NOT NULL REFERENCES public.stores(id),
  code text NOT NULL CHECK (code ~ '^[A-Z][A-Z-]{1,19}$'),
  name text NOT NULL CHECK (length(btrim(name)) > 0),
@@ -22,7 +21,7 @@ CREATE TABLE workforce.stations (
 );
 
 -- Starting stations from the org hierarchy (Bert's and Rudd's); Papa Leoni's comes later.
-INSERT INTO workforce.stations (store_id, code, name, department, position_code)
+INSERT INTO prep_inventory.stations (store_id, code, name, department, position_code)
 SELECT s.store_id, s.code, s.name, s.department, s.position_code FROM (VALUES
  ('berts', 'GRILL', 'Grill', 'BOH', 'LC-GRL'), ('berts', 'PIZZA', 'Pizza', 'BOH', 'LC-PZA'),
  ('berts', 'EXPO', 'Expo', 'BOH', 'LC-EXP'), ('berts', 'SALAD-PASTA', 'Salad/Pasta', 'BOH', 'LC-SLP'),
@@ -36,7 +35,7 @@ SELECT s.store_id, s.code, s.name, s.department, s.position_code FROM (VALUES
 WHERE EXISTS (SELECT 1 FROM public.stores WHERE id = s.store_id);
 
 -- Which station normally makes each prepared item; the newest revision wins.
-CREATE TABLE workforce.product_stations (
+CREATE TABLE prep_inventory.product_stations (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  store_id text NOT NULL,
  product_id uuid NOT NULL,
@@ -49,11 +48,11 @@ CREATE TABLE workforce.product_stations (
  request_fingerprint bytea NOT NULL CHECK (octet_length(request_fingerprint) = 32),
  UNIQUE (product_id, revision),
  FOREIGN KEY (product_id, store_id) REFERENCES prep_inventory.products(id, store_id),
- FOREIGN KEY (store_id, station_code) REFERENCES workforce.stations(store_id, code)
+ FOREIGN KEY (store_id, station_code) REFERENCES prep_inventory.stations(store_id, code)
 );
 
 -- A stint: one person on one station, from a start time until its end is recorded.
-CREATE TABLE workforce.station_stints (
+CREATE TABLE prep_inventory.station_stints (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  store_id text NOT NULL,
  staff_member_id uuid NOT NULL,
@@ -66,13 +65,13 @@ CREATE TABLE workforce.station_stints (
  request_key uuid NOT NULL UNIQUE,
  request_fingerprint bytea NOT NULL CHECK (octet_length(request_fingerprint) = 32),
  FOREIGN KEY (staff_member_id, store_id) REFERENCES public.staff_members(id, store_id),
- FOREIGN KEY (store_id, station_code) REFERENCES workforce.stations(store_id, code)
+ FOREIGN KEY (store_id, station_code) REFERENCES prep_inventory.stations(store_id, code)
 );
-CREATE INDEX station_stints_day ON workforce.station_stints(store_id, business_date);
-CREATE INDEX station_stints_member ON workforce.station_stints(staff_member_id, started_at);
+CREATE INDEX station_stints_day ON prep_inventory.station_stints(store_id, business_date);
+CREATE INDEX station_stints_member ON prep_inventory.station_stints(staff_member_id, started_at);
 
-CREATE TABLE workforce.stint_ends (
- stint_id uuid PRIMARY KEY REFERENCES workforce.station_stints(id),
+CREATE TABLE prep_inventory.stint_ends (
+ stint_id uuid PRIMARY KEY REFERENCES prep_inventory.station_stints(id),
  ended_at timestamptz NOT NULL DEFAULT now(),
  ended_by text NOT NULL,
  reason text NOT NULL CHECK (reason IN ('moved', 'off_station', 'shift_end')),
@@ -83,56 +82,56 @@ CREATE TABLE workforce.stint_ends (
 );
 
 -- One open stint per person: a move ends the current one first, in the same transaction.
-CREATE FUNCTION workforce.guard_stint() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION prep_inventory.guard_station_stint() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  PERFORM 1 FROM public.staff_members WHERE id = NEW.staff_member_id FOR UPDATE;
  IF NOT (SELECT active FROM public.staff_members WHERE id = NEW.staff_member_id) THEN RAISE EXCEPTION 'Only active staff can work a station'; END IF;
- IF NOT (SELECT active FROM workforce.stations WHERE store_id = NEW.store_id AND code = NEW.station_code) THEN RAISE EXCEPTION 'That station is not active'; END IF;
- IF EXISTS (SELECT 1 FROM workforce.station_stints s WHERE s.staff_member_id = NEW.staff_member_id
-     AND NOT EXISTS (SELECT 1 FROM workforce.stint_ends e WHERE e.stint_id = s.id))
+ IF NOT (SELECT active FROM prep_inventory.stations WHERE store_id = NEW.store_id AND code = NEW.station_code) THEN RAISE EXCEPTION 'That station is not active'; END IF;
+ IF EXISTS (SELECT 1 FROM prep_inventory.station_stints s WHERE s.staff_member_id = NEW.staff_member_id
+     AND NOT EXISTS (SELECT 1 FROM prep_inventory.stint_ends e WHERE e.stint_id = s.id))
  THEN RAISE EXCEPTION 'This person is already on a station; end or move that stint first'; END IF;
  RETURN NEW;
 END $$;
-CREATE TRIGGER guard_stint BEFORE INSERT ON workforce.station_stints FOR EACH ROW EXECUTE FUNCTION workforce.guard_stint();
+CREATE TRIGGER guard_stint BEFORE INSERT ON prep_inventory.station_stints FOR EACH ROW EXECUTE FUNCTION prep_inventory.guard_station_stint();
 
-CREATE FUNCTION workforce.guard_stint_end() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION prep_inventory.guard_station_stint_end() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
- IF NEW.ended_at < (SELECT started_at FROM workforce.station_stints WHERE id = NEW.stint_id) THEN RAISE EXCEPTION 'A stint cannot end before it started'; END IF;
+ IF NEW.ended_at < (SELECT started_at FROM prep_inventory.station_stints WHERE id = NEW.stint_id) THEN RAISE EXCEPTION 'A stint cannot end before it started'; END IF;
  RETURN NEW;
 END $$;
-CREATE TRIGGER guard_stint_end BEFORE INSERT ON workforce.stint_ends FOR EACH ROW EXECUTE FUNCTION workforce.guard_stint_end();
+CREATE TRIGGER guard_stint_end BEFORE INSERT ON prep_inventory.stint_ends FOR EACH ROW EXECUTE FUNCTION prep_inventory.guard_station_stint_end();
 
 -- Station time for metrics: each stint with its end (open stints have no end yet).
-CREATE VIEW workforce.station_time AS
+CREATE VIEW prep_inventory.station_time AS
  SELECT s.id AS stint_id, s.store_id, s.staff_member_id, m.name AS staff_name, s.station_code, st.name AS station_name, st.department,
   s.business_date, s.started_at, e.ended_at, e.reason AS end_reason, s.source,
   CASE WHEN e.ended_at IS NULL THEN NULL ELSE e.ended_at - s.started_at END AS duration
- FROM workforce.station_stints s
+ FROM prep_inventory.station_stints s
  JOIN public.staff_members m ON m.id = s.staff_member_id
- JOIN workforce.stations st ON st.store_id = s.store_id AND st.code = s.station_code
- LEFT JOIN workforce.stint_ends e ON e.stint_id = s.id;
+ JOIN prep_inventory.stations st ON st.store_id = s.store_id AND st.code = s.station_code
+ LEFT JOIN prep_inventory.stint_ends e ON e.stint_id = s.id;
 
 -- Stations may be renamed or switched off, never deleted or re-coded.
-CREATE FUNCTION workforce.guard_station_change() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION prep_inventory.guard_station_change() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Stations are switched off, not deleted'; END IF;
  IF (NEW.store_id, NEW.code, NEW.department, NEW.created_at) IS DISTINCT FROM (OLD.store_id, OLD.code, OLD.department, OLD.created_at)
  THEN RAISE EXCEPTION 'Only a station''s name, position or active flag can change'; END IF;
  RETURN NEW;
 END $$;
-CREATE TRIGGER guard_station_change BEFORE UPDATE OR DELETE ON workforce.stations FOR EACH ROW EXECUTE FUNCTION workforce.guard_station_change();
+CREATE TRIGGER guard_station_change BEFORE UPDATE OR DELETE ON prep_inventory.stations FOR EACH ROW EXECUTE FUNCTION prep_inventory.guard_station_change();
 
 DO $$ DECLARE t text; BEGIN
  FOREACH t IN ARRAY ARRAY['product_stations','station_stints','stint_ends'] LOOP
-  EXECUTE format('CREATE TRIGGER immutable_fact BEFORE UPDATE OR DELETE ON workforce.%I
+  EXECUTE format('CREATE TRIGGER immutable_fact BEFORE UPDATE OR DELETE ON prep_inventory.%I
       FOR EACH ROW EXECUTE FUNCTION purchasing.reject_fact_change()', t);
  END LOOP;
  FOREACH t IN ARRAY ARRAY['stations','product_stations','station_stints','stint_ends'] LOOP
-  EXECUTE format('REVOKE ALL ON workforce.%I FROM PUBLIC', t);
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN EXECUTE format('REVOKE ALL ON workforce.%I FROM anon', t); END IF;
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN EXECUTE format('REVOKE ALL ON workforce.%I FROM authenticated', t); END IF;
+  EXECUTE format('REVOKE ALL ON prep_inventory.%I FROM PUBLIC', t);
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN EXECUTE format('REVOKE ALL ON prep_inventory.%I FROM anon', t); END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN EXECUTE format('REVOKE ALL ON prep_inventory.%I FROM authenticated', t); END IF;
  END LOOP;
 END $$;
-REVOKE ALL ON workforce.station_time FROM PUBLIC;
-REVOKE ALL ON FUNCTION workforce.guard_stint(), workforce.guard_stint_end(), workforce.guard_station_change() FROM PUBLIC;
+REVOKE ALL ON prep_inventory.station_time FROM PUBLIC;
+REVOKE ALL ON FUNCTION prep_inventory.guard_station_stint(), prep_inventory.guard_station_stint_end(), prep_inventory.guard_station_change() FROM PUBLIC;
 COMMIT;
