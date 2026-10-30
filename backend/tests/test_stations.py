@@ -43,11 +43,11 @@ class StationDatabaseTests(staff.StaffTaskTests):
             await c.execute((staff.fixtures.fixtures.fixtures.recovery.counts.native.ROOT / MIGRATION).read_text(encoding='utf-8'))
         self.today = str(datetime.now(stations.STORE_ZONE).date())
 
-    def headers(self, token=None):
-        return {'Authorization': 'Bearer ' + (token or self.owner), 'Idempotency-Key': str(uuid4())}
+    def headers(self, token=None, key=None):
+        return {'Authorization': 'Bearer ' + (token or self.owner), 'Idempotency-Key': key or str(uuid4())}
 
-    async def move(self, member, station, reason='moved', token=None):
-        return await self.portal.post(f'/api/pg/purchases/berts/stations/board/{self.today}/moves', headers=self.headers(token),
+    async def move(self, member, station, reason='moved', token=None, key=None):
+        return await self.portal.post(f'/api/pg/purchases/berts/stations/board/{self.today}/moves', headers=self.headers(token, key),
                                       json={'staff_member_id': str(member), 'station_code': station, 'reason': reason})
 
     async def test_a_cooks_queue_follows_their_station_and_named_assignments_win(self):
@@ -93,3 +93,22 @@ class StationDatabaseTests(staff.StaffTaskTests):
         url = f"/api/pg/purchases/berts/stations/products/{task['product_id']}"
         self.assertEqual((await self.portal.put(url, headers=self.headers(boh), json={'station_code': 'PREP', 'note': 'x'})).status_code, 403)
         self.assertEqual((await self.portal.put(url, headers=self.headers(km), json={'station_code': 'PREP', 'note': 'x'})).status_code, 200)
+
+    async def test_a_retried_end_of_shift_replays_and_never_ends_a_newer_stint(self):
+        self.assertEqual((await self.move(self.member, 'PREP')).status_code, 200)
+        key = str(uuid4())
+        self.assertEqual((await self.move(self.member, None, reason='shift_end', key=key)).status_code, 200)
+        self.assertEqual((await self.move(self.member, 'GRILL')).status_code, 200)   # back on, at Grill
+        retry = await self.move(self.member, None, reason='shift_end', key=key)        # the lost response's retry
+        self.assertEqual((retry.status_code, retry.json()['replayed']), (200, True))
+        self.assertEqual([o['station_code'] for o in retry.json()['board']['open']], ['GRILL'])
+
+    async def test_an_inactive_persons_open_stint_can_still_be_closed(self):
+        self.assertEqual((await self.move(self.member, 'PREP')).status_code, 200)
+        async with self.pool.acquire() as c:
+            await c.execute('UPDATE staff_members SET active=false WHERE id=$1', self.member)
+        board = (await self.portal.get(f'/api/pg/purchases/berts/stations/board/{self.today}', headers={'Authorization': 'Bearer ' + self.owner})).json()
+        self.assertIn(str(self.member), [m['id'] for m in board['roster']])           # still listed so it can be closed
+        self.assertEqual((await self.move(self.member, 'GRILL')).status_code, 422)     # can't start a new stint
+        closed = await self.move(self.member, None, reason='off_station')
+        self.assertEqual((closed.status_code, closed.json()['board']['open']), (200, []))

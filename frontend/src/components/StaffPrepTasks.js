@@ -87,7 +87,9 @@ export function StaffPrepTaskPlan({rid,pin,staffId,track,drafts}){
         ||!["draft","released"].includes(s.status)||!Array.isArray(s.tasks)||new Set(s.tasks.map(t=>t.id)).size!==s.tasks.length
         ||(s.status!=="released"&&s.tasks.length)||s.tasks.some(t=>!uid(t.id)||typeof t.name!=="string"||!/^\d+(\.\d+)?$/.test(t.quantity)||Number(t.quantity)<=0||typeof t.source_unit!=="string"||t.progress?.task_id!==t.id
         ||typeof t.base_unit!=="string"||typeof t.progress.reviewed_base_quantity!=="string"||!/^\d+(\.\d+)?$/.test(t.progress.reviewed_base_quantity)
-        ||!["open","in_progress","complete","needs_review"].includes(t.progress.status)||(member&&t.assigned_member?.id!==member)))throw new Error("Staff prep plan was not confirmed for this date and location.");
+        ||!["open","in_progress","complete","needs_review"].includes(t.progress.status)
+        // Filtered to one cook: named to them, or unassigned and routed by the station they are on.
+        ||(member&&!(t.via==="station"?(!t.assigned_member&&!!s.station&&t.station===s.station):t.assigned_member?.id===member))))throw new Error("Staff prep plan was not confirmed for this date and location.");
       setData(s);
     }catch(e){if(id===epoch.current&&n===seq.current)setError(errorText(e));}
   }
@@ -98,7 +100,7 @@ export function StaffPrepTaskPlan({rid,pin,staffId,track,drafts}){
     {staffId&&<label><input type="checkbox" aria-label="Show my roster assignments" checked={mine} onChange={e=>setMine(e.target.checked)}/> Show assignments for my selected roster name (claimed identity)</label>}
     <button className={btnGhost} onClick={load}>Refresh released prep plan</button>{error&&<p role="alert">{error}</p>}
     {data&&<><p>{data.day} · {data.track} · {data.status}</p>{data.tasks.length===0&&<p>{data.status==="released"?"No included tasks for this selection.":"No released plan for this selected date."}</p>}
-      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||"Unassigned"} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>Task {t.id} · measured reviewed output {t.progress.reviewed_base_quantity} {t.base_unit}.</p></li>)}</ul></>}
+      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||(t.via==="station"?`Your station (${t.station})`:"Unassigned")} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>Task {t.id} · measured reviewed output {t.progress.reviewed_base_quantity} {t.base_unit}.</p></li>)}</ul></>}
     {api.staffPrepProductionEnabled&&staffId&&data&&<StaffProductionSubmission rid={rid} day={day} track={track} staffId={staffId} pin={pin} plan={data} drafts={drafts}/>}
   </section>;
 }

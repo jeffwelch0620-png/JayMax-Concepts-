@@ -60,8 +60,8 @@ export function StationBoard({ rid }) {
       {board.roster.map(m => {
         const current = onStation[m.id];
         return <div key={m.id} className="flex flex-wrap items-end gap-3">
-          <span className="min-w-[160px]">{m.name}</span>
-          <Field label="Station"><select aria-label={`Station for ${m.name}`} className={inpCls} disabled={busy} value={current?.station_code || ""}
+          <span className="min-w-[160px]">{m.name}{m.active ? "" : " (inactive: take off station)"}</span>
+          <Field label="Station"><select aria-label={`Station for ${m.name}`} className={inpCls} disabled={busy || !m.active} value={current?.station_code || ""}
             onChange={e => e.target.value ? move(m.id, e.target.value) : move(m.id, null, "off_station")}>
             <option value="">Not on a station</option>
             {active.map(st => <option key={st.code} value={st.code}>{st.name}</option>)}

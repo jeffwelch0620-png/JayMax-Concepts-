@@ -75,7 +75,9 @@ async def member_station(conn, store, member_id):
 
 async def board(conn, store, day):
     await ready(conn)
-    roster = [dict(r) for r in await conn.fetch('SELECT id,name,role,active FROM public.staff_members WHERE store_id=$1 AND active ORDER BY name', store)]
+    roster = [dict(r) for r in await conn.fetch('''SELECT m.id,m.name,m.role,m.active FROM public.staff_members m WHERE m.store_id=$1 AND (m.active
+        OR EXISTS (SELECT 1 FROM workforce.station_stints s WHERE s.staff_member_id=m.id AND NOT EXISTS (SELECT 1 FROM workforce.stint_ends e WHERE e.stint_id=s.id)))
+        ORDER BY m.name''', store)]
     history = [dict(r) for r in await conn.fetch('''SELECT * FROM workforce.station_time WHERE store_id=$1 AND business_date=$2
         ORDER BY started_at, staff_name''', store, day)]
     names = {str(r['product_id']): r['name'] for r in await conn.fetch('''SELECT DISTINCT ON (product_id) product_id, name
@@ -90,11 +92,15 @@ async def move(conn, store, day, actor, body, key, source='board'):
     """End the person's current stint (if any) and start the new one, in one transaction."""
     digest = fingerprint(serial({'store': store, 'day': day, 'actor': actor, 'source': source, 'body': body.model_dump()}))
     await lock_store(conn, store)
-    prior = await conn.fetchrow('SELECT * FROM workforce.station_stints WHERE request_key=$1', key)
+    prior = await conn.fetchrow('''SELECT request_fingerprint FROM workforce.station_stints WHERE request_key=$1
+        UNION ALL SELECT request_fingerprint FROM workforce.stint_ends WHERE request_key=$1''', key)
     if prior:
         if prior['request_fingerprint'] != digest: raise HTTPException(409, 'Request key belongs to another station move')
         return {'replayed': True}
-    if not await conn.fetchval('SELECT 1 FROM public.staff_members WHERE id=$1 AND store_id=$2 AND active', body.staff_member_id, store):
+    # Starting a stint needs an active person; taking someone off a station never does, so a stint
+    # left open when a person is made inactive can still be closed.
+    member = await conn.fetchrow('SELECT active FROM public.staff_members WHERE id=$1 AND store_id=$2', body.staff_member_id, store)
+    if not member or (body.station_code and not member['active']):
         raise HTTPException(422, 'Choose active staff at this location')
     if body.station_code and not await conn.fetchval('SELECT 1 FROM workforce.stations WHERE store_id=$1 AND code=$2 AND active', store, body.station_code):
         raise HTTPException(422, 'Choose an active station at this location')
@@ -102,9 +108,11 @@ async def move(conn, store, day, actor, body, key, source='board'):
         AND NOT EXISTS (SELECT 1 FROM workforce.stint_ends e WHERE e.stint_id=s.id)''', body.staff_member_id)
     if current and current['station_code'] == body.station_code: raise HTTPException(409, 'Already on that station')
     if not current and not body.station_code: raise HTTPException(409, 'This person is not on a station')
-    if current:
-        await conn.execute('INSERT INTO workforce.stint_ends(stint_id,ended_by,reason) VALUES($1,$2,$3)', current['id'], actor,
-                           body.reason if not body.station_code else 'moved')
+    if current and body.station_code:
+        await conn.execute('INSERT INTO workforce.stint_ends(stint_id,ended_by,reason) VALUES($1,$2,$3)', current['id'], actor, 'moved')
+    elif current:
+        await conn.execute('INSERT INTO workforce.stint_ends(stint_id,ended_by,reason,request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5)',
+                           current['id'], actor, body.reason, key, digest)
     if body.station_code:
         await conn.execute('''INSERT INTO workforce.station_stints(store_id,staff_member_id,station_code,business_date,source,assigned_by,note,
             request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)''', store, body.staff_member_id, body.station_code, day,

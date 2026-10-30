@@ -75,7 +75,11 @@ CREATE TABLE workforce.stint_ends (
  stint_id uuid PRIMARY KEY REFERENCES workforce.station_stints(id),
  ended_at timestamptz NOT NULL DEFAULT now(),
  ended_by text NOT NULL,
- reason text NOT NULL CHECK (reason IN ('moved', 'off_station', 'shift_end'))
+ reason text NOT NULL CHECK (reason IN ('moved', 'off_station', 'shift_end')),
+ -- Set when the end was its own request (off station / end of shift), so a retry replays it.
+ request_key uuid UNIQUE,
+ request_fingerprint bytea CHECK (octet_length(request_fingerprint) = 32),
+ CHECK ((request_key IS NULL) = (request_fingerprint IS NULL))
 );
 
 -- One open stint per person: a move ends the current one first, in the same transaction.

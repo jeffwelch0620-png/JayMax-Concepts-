@@ -30,6 +30,8 @@ DATABASE_CASES = (
  ('stations','StationDatabaseTests','test_a_cooks_queue_follows_their_station_and_named_assignments_win'),
  ('stations','StationDatabaseTests','test_every_stint_is_kept_and_one_station_at_a_time'),
  ('stations','StationDatabaseTests','test_only_boh_shift_leaders_and_up_run_the_board'),
+ ('stations','StationDatabaseTests','test_a_retried_end_of_shift_replays_and_never_ends_a_newer_stint'),
+ ('stations','StationDatabaseTests','test_an_inactive_persons_open_stint_can_still_be_closed'),
  ('login_positions','LoginPositionTests','test_a_position_sets_the_access_class_and_reaches_the_session'),
  ('login_positions','LoginPositionTests','test_database_keeps_position_and_access_class_together'),
  ('store_transfers','StoreTransferDatabaseTests','test_transfer_moves_cost_once_between_store_periods'),
