@@ -109,15 +109,18 @@ async def move(conn, store, day, actor, body, key, source='board'):
         AND NOT EXISTS (SELECT 1 FROM prep_inventory.stint_ends e WHERE e.stint_id=s.id)''', body.staff_member_id)
     if current and current['station_code'] == body.station_code: raise HTTPException(409, 'Already on that station')
     if not current and not body.station_code: raise HTTPException(409, 'This person is not on a station')
+    # One moment for the whole move, taken after the store lock: the end of the old stint and the start
+    # of the new one share it, and it follows any move that committed before this one.
+    at = await conn.fetchval('SELECT clock_timestamp()')
     if current and body.station_code:
-        await conn.execute('INSERT INTO prep_inventory.stint_ends(stint_id,ended_by,reason) VALUES($1,$2,$3)', current['id'], actor, 'moved')
+        await conn.execute('INSERT INTO prep_inventory.stint_ends(stint_id,ended_at,ended_by,reason) VALUES($1,$2,$3,$4)', current['id'], at, actor, 'moved')
     elif current:
-        await conn.execute('INSERT INTO prep_inventory.stint_ends(stint_id,ended_by,reason,request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5)',
-                           current['id'], actor, body.reason, key, digest)
+        await conn.execute('INSERT INTO prep_inventory.stint_ends(stint_id,ended_at,ended_by,reason,request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5,$6)',
+                           current['id'], at, actor, body.reason, key, digest)
     if body.station_code:
-        await conn.execute('''INSERT INTO prep_inventory.station_stints(store_id,staff_member_id,station_code,business_date,source,assigned_by,note,
-            request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)''', store, body.staff_member_id, body.station_code, day,
-            source, actor, body.note, key, digest)
+        await conn.execute('''INSERT INTO prep_inventory.station_stints(store_id,staff_member_id,station_code,business_date,started_at,source,assigned_by,note,
+            request_key,request_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)''', store, body.staff_member_id, body.station_code, day,
+            at, source, actor, body.note, key, digest)
     return {'replayed': False}
 
 
