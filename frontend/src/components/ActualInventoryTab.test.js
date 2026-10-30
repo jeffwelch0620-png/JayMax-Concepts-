@@ -150,7 +150,7 @@ test("physical count entry selects the requested historical item-list version", 
   const newer = { header: { id: "scope-2", revision: 2, note: "Added food" }, items: [...scope.items, { item_code: "new", base_unit: "each", name_snapshot: "New food", location_notes: "Raw storage" }] };
   jest.spyOn(api, "actualSetup").mockResolvedValue({ scope: newer, scopes: [newer.header, scope.header], items: [] });
   jest.spyOn(api, "actualCounts").mockResolvedValue([]); jest.spyOn(api, "actualClosed").mockResolvedValue([]); jest.spyOn(api, "actualHandoffs").mockResolvedValue([]);
-  jest.spyOn(api, "staffCountSheets").mockResolvedValue([]);
+  jest.spyOn(api, "staffCountSheets").mockResolvedValue([]); jest.spyOn(api, "actualTransfers").mockResolvedValue({ store_id: "berts", transfers: [], items: [], stores: [] });
   const fetchScope = jest.spyOn(api, "actualScopeDetails").mockResolvedValue(scope);
   await act(async () => root.render(<ActualInventoryTab restaurantId="berts" view="counts" />));
   expect(container.querySelector('[aria-label="Quantity new"]')).not.toBeNull();

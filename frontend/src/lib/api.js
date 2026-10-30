@@ -172,6 +172,10 @@ export const issueStaffCountSheet = (rid, body, key) => axios.post(`${actualUrl(
 export const decideStaffCountSheet = (rid, id, body, key) => axios.post(`${actualUrl(rid)}/staff-sheets/${id}/decision`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const staffCountDrafts = (rid, pin) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/count-drafts`, { pin }).then(r => r.data);
 export const submitStaffCountDraft = (rid, id, body, key) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/count-drafts/${id}/submit`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const actualTransfers = (rid, since) => axios.get(`${actualUrl(rid)}/transfers`, { params: { since } }).then(r => r.data);
+export const previewActualTransfer = (rid, body) => axios.post(`${actualUrl(rid)}/transfers/preview`, body).then(r => r.data);
+export const sendActualTransfer = (rid, body, key) => axios.post(`${actualUrl(rid)}/transfers`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const stepActualTransfer = (rid, id, body, key) => axios.post(`${actualUrl(rid)}/transfers/${encodeURIComponent(id)}/steps`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const actualReport = (rid, opening, closing) => axios.get(`${actualUrl(rid)}/report`, { params: { opening, closing } }).then(r => r.data);
 export const actualClose = (rid, body, key) => axios.post(`${actualUrl(rid)}/close`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const actualClosed = (rid) => axios.get(`${actualUrl(rid)}/closed-periods`).then(r => r.data);

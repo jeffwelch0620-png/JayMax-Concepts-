@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from purchase_api import ALLOWED_UNITS, serial, enabled as purchases_enabled
 from purchase_parser import fingerprint
+import store_transfers
 
 
 def enabled():
@@ -413,6 +414,8 @@ async def period_report(conn, store_id, opening_id, closing_id):
         JOIN purchasing.mapping_decisions m ON m.id=f.mapping_id
         WHERE f.store_id=$1 AND f.inventory_record_date>=$2 AND f.inventory_record_date<$3 ORDER BY f.line_id,f.mapping_id,to_jsonb(f)->>'fact_id' ''',
         store_id,o['boundary_date'],c['boundary_date'])]
+    # Received store transfers in (+) and out (-) at cost (M3). A report without any keeps its reviewed shape and hash.
+    transfers=await store_transfers.movements(conn,store_id,o['boundary_date'],c['boundary_date'])
     ob={r['item_code']:r for r in opening['lines']};cb={r['item_code']:r for r in closing['lines']}
     members={r['item_code'] for r in scope['items']};errors=[];warnings=[];rows=[]
     if o['status']!='complete' or c['status']!='complete':errors.append('Both physical counts require confirmed quantities and explicit values for every scope item')
@@ -422,18 +425,22 @@ async def period_report(conn, store_id, opening_id, closing_id):
         mapping_balances[r['mapping_id']]=mapping_balances.get(r['mapping_id'],0)+(-1 if r.get('fact_kind')=='reversal' else 1)
     outside=sorted({r['item_code'] for r in purchases if mapping_balances[r['mapping_id']]>0}-members)
     if outside:errors.append('Food purchases outside the selected count scope: '+', '.join(outside))
+    moved=sorted({r['item_code'] for r in transfers}-members)
+    if moved:errors.append('Store transfers outside the selected count scope: '+', '.join(moved))
     with localcontext() as ctx:
         ctx.prec=80;ctx.traps[Inexact]=True
         net_cost=sum((p['inventory_cost_amount'] for p in purchases),Decimal(0))
         for item in scope['items']:
             code=item['item_code'];a=ob.get(code);b=cb.get(code);pp=[p for p in purchases if p['item_code']==code]
-            if any(p['base_unit']!=item['base_unit'] for p in pp):errors.append(f'Inventory unit mismatch for {code}')
+            tt=[t for t in transfers if t['item_code']==code]
+            if any(p['base_unit']!=item['base_unit'] for p in pp+tt):errors.append(f'Inventory unit mismatch for {code}')
             quantity=sum((p['base_quantity'] for p in pp),Decimal(0));cost=sum((p['inventory_cost_amount'] for p in pp),Decimal(0))
+            moved_quantity=sum((t['base_quantity'] for t in tt),Decimal(0));moved_cost=sum((t['cost_amount'] for t in tt),Decimal(0))
             quantities=(a is not None and b is not None and a['confirmed'] and b['confirmed']
                         and a['base_quantity'] is not None and b['base_quantity'] is not None)
             values=quantities and a['confirmed'] and b['confirmed'] and a['inventory_value'] is not None and b['inventory_value'] is not None
-            usage=a['base_quantity']+quantity-b['base_quantity'] if quantities else None
-            food_cost=a['inventory_value']+cost-b['inventory_value'] if values else None
+            usage=a['base_quantity']+quantity+moved_quantity-b['base_quantity'] if quantities else None
+            food_cost=a['inventory_value']+cost+moved_cost-b['inventory_value'] if values else None
             if not values:errors.append(f'Missing confirmed count or explicit value: {code}')
             if usage is not None and usage<0:warnings.append(f'Physical overage for {code}: closing quantity exceeds opening plus purchases')
             if food_cost is not None and food_cost<0:warnings.append(f'Negative actual Food Cost for {code}: review count values and credits')
@@ -441,6 +448,7 @@ async def period_report(conn, store_id, opening_id, closing_id):
                 'openingQuantity':a['base_quantity'] if a else None,'netPurchaseQuantity':quantity,'closingQuantity':b['base_quantity'] if b else None,
                 'actualUsage':usage,'openingValue':a['inventory_value'] if a else None,'netPurchaseCost':cost,
                 'closingValue':b['inventory_value'] if b else None,'actualFoodCost':food_cost,'confirmed':bool(values)})
+            if tt:rows[-1].update(netTransferQuantity=moved_quantity,netTransferCost=moved_cost)
         complete=not errors
         result=serial({'storeId':store_id,'scopeId':o['scope_id'],'scopeKind':'purchased_items_only','valuationMethod':'explicit_count_values',
             'supersedesClosureId':replacement,
@@ -451,6 +459,7 @@ async def period_report(conn, store_id, opening_id, closing_id):
             'netPurchaseCost':net_cost,'openingValue':sum((r['openingValue'] for r in rows),Decimal(0)) if complete else None,
             'closingValue':sum((r['closingValue'] for r in rows),Decimal(0)) if complete else None,
             'actualFoodCost':sum((r['actualFoodCost'] for r in rows),Decimal(0)) if complete else None,'rows':rows,'purchaseLines':purchases})
+        if transfers:result.update(serial({'netTransferCost':sum((t['cost_amount'] for t in transfers),Decimal(0)),'transferLines':transfers}))
     result['reportHash']=fingerprint(result).hex()
     return result
 
@@ -597,6 +606,8 @@ def create_router(pool_factory, store_check, authorize):
             if not await conn.fetchval("SELECT to_regclass('actual_inventory.scope_bridges') IS NOT NULL"):
                 raise HTTPException(503,'Actual inventory setup has not been applied')
         return actor,pool
+
+    store_transfers.install_routes(router,context)
 
     @router.get('/{store_id}/setup')
     async def setup(store_id:str,request:Request):

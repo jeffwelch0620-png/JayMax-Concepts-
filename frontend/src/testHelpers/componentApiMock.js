@@ -7,6 +7,7 @@ const readDefaults = {
   supplierContacts: () => ({ contacts: [], legacy_contacts: [] }),
   nativeUnitSetup: () => ({ items: [], profiles: [], baseUnits: [] }),
   inventoryPars: () => ({store_id:'berts',available:false,items:[]}),
+  actualTransfers: () => ({ store_id: "berts", transfers: [], items: [], stores: [] }),
   bulkSupply: () => ({ store_id: "berts", maker_store_id: null, makes_for: [], requests: [], open_shortfalls: [] }),
 };
 export function resetComponentApiMock(mock) {
