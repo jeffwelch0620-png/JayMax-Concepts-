@@ -789,8 +789,9 @@ async def auth_list_users(request: Request):
     _require_owner(request)
     if USE_PG:
         rows = await db_auxiliary.pool().fetch("SELECT * FROM app_users ORDER BY email")
+        # A position is listed only when set, so logins without one keep the original shape.
         return [{"id": r["id"], "email": r["email"], "role": r["role"], "locations": list(r["locations"] or []),
-                 "position": r["position"] if "position" in r.keys() else None,
+                 **({"position": r["position"]} if "position" in r.keys() and r["position"] else {}),
                  "createdAt": r["created_at"].isoformat() if r["created_at"] else None} for r in rows]
     docs = await db.users.find({}, {"_id": 0, "passwordHash": 0}).sort("email", 1).to_list(1000)
     return [{**_clean_user(d), "createdAt": d.get("createdAt")} for d in docs]
