@@ -42,14 +42,21 @@ class BulkModelTests(unittest.TestCase):
         self.assertEqual(tasks.batch_plan(D(5), D(9), D(0), D(10), D(12))['batches'], D(2))
 
     def test_spot_prep_pays_down_a_shortfall_and_the_next_run_recounts_it(self):
-        def req(i, run, short, accepted='5', kind='scheduled', held='0'):
+        def req(i, run, short, accepted='5', kind='scheduled', held='0', asked=None):
+            asked = asked or str(D(short) + D(accepted) + D(held))
             return {'id': i, 'run_date': run, 'created_at': run, 'store_id': 'berts', 'status': 'accepted', 'kind': kind,
-                    'lines': [{'product_id': 'p', 'name': 'Chili', 'base_unit': 'oz', 'shortfall_base_quantity': short, 'accepted_base_quantity': accepted, 'held_base_quantity': held}]}
+                    'lines': [{'product_id': 'p', 'name': 'Chili', 'base_unit': 'oz', 'requested_base_quantity': asked, 'shortfall_base_quantity': short,
+                               'accepted_base_quantity': accepted, 'held_base_quantity': held}]}
         owed = lambda *rs: [(s['request_id'], D(s['shortfall_base_quantity'])) for s in bulk.open_shortfalls(list(rs))]
         self.assertEqual(owed(req('a', '2026-10-05', '10')), [('a', D(10))])
         # A 3 oz spot delivery (2 sent + 1 held) leaves 7 oz still owed; a second spot of 7 clears it.
         self.assertEqual(owed(req('a', '2026-10-05', '10'), req('s', '2026-10-06', '0', accepted='2', kind='spot', held='1')), [('a', D(7))])
         self.assertEqual(owed(req('a', '2026-10-05', '10'), req('s', '2026-10-06', '0', accepted='3', kind='spot'), req('t', '2026-10-07', '0', accepted='7', kind='spot')), [])
+        # A make-up spot request of 10 with only 3 delivered still leaves 7 owed in total, not 7 twice.
+        self.assertEqual(owed(req('a', '2026-10-05', '10'), req('s', '2026-10-06', '7', accepted='3', kind='spot')), [('a', D(7))])
+        self.assertEqual(owed(req('a', '2026-10-05', '10'), req('s', '2026-10-06', '7', accepted='3', kind='spot'), req('t', '2026-10-07', '0', accepted='7', kind='spot')), [])
+        # Asking for more than was owed adds only the extra: owed 2, asked 5, got 1 -> 4 owed.
+        self.assertEqual(sum(D(s['shortfall_base_quantity']) for s in bulk.open_shortfalls([req('a', '2026-10-05', '2'), req('s', '2026-10-06', '4', accepted='1', kind='spot')])), D(4))
         # The next scheduled run is par minus a fresh count, so it replaces what was owed with its own result.
         self.assertEqual(owed(req('a', '2026-10-05', '10'), req('b', '2026-10-08', '2', accepted='0')), [('b', D(2))])
         self.assertEqual(owed(req('a', '2026-10-05', '10'), req('b', '2026-10-08', '0')), [])

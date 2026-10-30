@@ -266,23 +266,29 @@ async def one(conn, request_id):
 
 
 def open_shortfalls(requests):
-    """What is still owed per store and item. A spot delivery (sent + held) pays down earlier
-    shortfalls, oldest first; a later scheduled run is par minus a fresh count, so it replaces
-    what was owed with its own shortfall."""
+    """What is still owed per store and item. A spot request covers what is already owed first:
+    its delivery (sent + held) pays down earlier shortfalls, oldest first, and only the part of it
+    asked beyond what was owed can add a new shortfall. A later scheduled run is par minus a fresh
+    count, so it replaces what was owed with its own shortfall."""
     owed = {}
     for r in sorted((r for r in requests if r['status'] == 'accepted'), key=lambda r: (r['run_date'], r['created_at'])):
         for l in r['lines']:
             key = (r['store_id'], l['product_id'])
+            supplied = Decimal(l['accepted_base_quantity'] or 0) + Decimal(l.get('held_base_quantity') or 0)
             if r.get('kind') == 'spot':
-                supplied = Decimal(l['accepted_base_quantity'] or 0) + Decimal(l.get('held_base_quantity') or 0)
+                before = sum((e[1] for e in owed.get(key, [])), Decimal(0))
+                left = supplied
                 for entry in owed.get(key, []):
-                    paid = min(entry[1], supplied); entry[1] -= paid; supplied -= paid
+                    paid = min(entry[1], left); entry[1] -= paid; left -= paid
                 owed[key] = [e for e in owed.get(key, []) if e[1] > 0]
+                # Outstanding is now max(owed before, asked) - delivered; the old entries hold part of it.
+                new = max(max(before, Decimal(l['requested_base_quantity'])) - supplied, Decimal(0)) - sum((e[1] for e in owed[key]), Decimal(0))
             else:
                 owed[key] = []
-            if Decimal(l['shortfall_base_quantity'] or 0) > 0:
+                new = Decimal(l['shortfall_base_quantity'] or 0)
+            if new > 0:
                 owed.setdefault(key, []).append([{'request_id': r['id'], 'run_date': r['run_date'], 'store_id': r['store_id'], 'product_id': l['product_id'],
-                    'name': l['name'], 'base_unit': l['base_unit']}, Decimal(l['shortfall_base_quantity'])])
+                    'name': l['name'], 'base_unit': l['base_unit']}, new])
     return [entry | {'shortfall_base_quantity': amount} for entries in owed.values() for entry, amount in entries]
 
 
