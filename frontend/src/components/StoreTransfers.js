@@ -31,7 +31,7 @@ function useSubmit(onDone) {
   return { submit, busy, error, setError, label, pending: () => !!attempt.current, reset: () => { attempt.current = null; } };
 }
 
-export function SendTransferForm({ rid, items, stores, onSent }) {
+export function SendTransferForm({ rid, items, stores, onSent, onPending = () => {} }) {
   const [form, setForm] = useState({ to_store_id: stores[0]?.id || "", item_code: "", sent_base_quantity: "", kind: "lend", sent_date: todayISO(), note: "" });
   const [review, setReview] = useState(null), [checked, setChecked] = useState(false), [previewing, setPreviewing] = useState(false);
   const revision = useRef(0);
@@ -39,6 +39,9 @@ export function SendTransferForm({ rid, items, stores, onSent }) {
   // While a send is unresolved (e.g. its response was lost) the inputs stay frozen, so a retry
   // replays the same request instead of creating a second transfer.
   const frozen = s.busy || s.pending() || previewing;
+  // The form can't be hidden while a send is unresolved, which would drop the retry's request key.
+  const unresolved = s.busy || s.pending();
+  useEffect(() => { onPending(unresolved); }, [unresolved]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k, v) => { if (frozen) return; revision.current += 1; setReview(null); setChecked(false); setForm(f => ({ ...f, [k]: v })); };
   const unit = items.find(i => i.code === form.item_code)?.base_unit || "";
   const ready = form.to_store_id && form.item_code && decimal(form.sent_base_quantity) && Number(form.sent_base_quantity) > 0 && form.note.trim();
@@ -93,7 +96,7 @@ export function TransferCard({ rid, store, transfer: t, onChange }) {
 }
 
 export function StoreTransfers({ rid }) {
-  const [data, setData] = useState(null), [error, setError] = useState(""), [epoch, setEpoch] = useState(0), [sending, setSending] = useState(false);
+  const [data, setData] = useState(null), [error, setError] = useState(""), [epoch, setEpoch] = useState(0), [sending, setSending] = useState(false), [pending, setPending] = useState(false);
   const since = (() => { const d = new Date(`${todayISO()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 28); return d.toISOString().slice(0, 10); })();
   useEffect(() => {
     let active = true; setError("");
@@ -102,13 +105,13 @@ export function StoreTransfers({ rid }) {
   }, [rid, epoch]); // eslint-disable-line react-hooks/exhaustive-deps
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading store transfers…</p>;
-  const reload = () => { setSending(false); setEpoch(n => n + 1); };
+  const reload = () => { setPending(false); setSending(false); setEpoch(n => n + 1); };
   const waiting = data.transfers.filter(t => t.status === "sent" && t.to_store_id === data.store_id);
   return <div className="space-y-4" data-testid="store-transfers">
     <div className="flex gap-2 items-center"><h3 className="font-semibold">Store transfers</h3>
-      <button className={sending ? btnAcc : btnGhost} onClick={() => setSending(!sending)}>Send to another store</button></div>
+      <button className={sending ? btnAcc : btnGhost} disabled={pending} title={pending ? "Finish or retry the send first" : undefined} onClick={() => setSending(!sending)}>Send to another store</button></div>
     {!!waiting.length && <p role="status">{waiting.length} transfer(s) to confirm.</p>}
-    {sending && <SendTransferForm rid={rid} items={data.items} stores={data.stores} onSent={reload} />}
+    {sending && <SendTransferForm rid={rid} items={data.items} stores={data.stores} onSent={reload} onPending={setPending} />}
     {!data.transfers.length && <p className="text-sm">No transfers in the last four weeks.</p>}
     {data.transfers.map(t => <TransferCard key={t.id} rid={rid} store={data.store_id} transfer={t} onChange={reload} />)}
   </div>;

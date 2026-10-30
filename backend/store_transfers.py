@@ -87,10 +87,13 @@ async def preview(conn, store, body):
     await ready(conn)
     if body.to_store_id == store: raise HTTPException(422, 'Choose the other store')
     if not await conn.fetchval('SELECT 1 FROM public.stores WHERE id=$1', body.to_store_id): raise HTTPException(422, 'Unknown receiving store')
-    rows = await conn.fetch('''SELECT si.store_id, i.name, coalesce(ib.base_unit, i.base_unit) AS base_unit FROM public.items i
+    # Each store's counting unit for the item is its own setting (purchasing.item_bases), never the recipe unit.
+    rows = await conn.fetch('''SELECT si.store_id, i.name, ib.base_unit FROM public.items i
         JOIN public.store_items si ON si.item_code=i.code LEFT JOIN purchasing.item_bases ib ON ib.item_code=i.code AND ib.store_id=si.store_id
         WHERE i.code=$1 AND si.store_id IN ($2,$3)''', body.item_code, store, body.to_store_id)
     if len(rows) != 2: raise HTTPException(409, 'Both stores must carry this item')
+    unset = sorted(r['store_id'] for r in rows if r['base_unit'] is None)
+    if unset: raise HTTPException(409, f"Set up the counting unit for this item first at: {', '.join(unset)}")
     if len({r['base_unit'] for r in rows}) != 1: raise HTTPException(409, 'Both stores must count this item in the same base unit')
     base_unit = rows[0]['base_unit']
     cost = await latest_cost(conn, store, body.item_code, base_unit, body.sent_date)
@@ -166,8 +169,8 @@ async def read(conn, store, since):
     ids = [r['id'] for r in await conn.fetch('''SELECT t.id FROM actual_inventory.store_transfers t
         WHERE $1 IN (t.from_store_id, t.to_store_id) AND (t.sent_date>=$2 OR NOT EXISTS(SELECT 1 FROM actual_inventory.store_transfer_events e WHERE e.transfer_id=t.id))
         ORDER BY t.sent_date DESC, t.created_at DESC LIMIT 500''', store, since)]
-    items = await conn.fetch('''SELECT i.code, i.name, coalesce(ib.base_unit, i.base_unit) AS base_unit FROM public.items i
-        JOIN public.store_items si ON si.item_code=i.code AND si.store_id=$1 LEFT JOIN purchasing.item_bases ib ON ib.item_code=i.code AND ib.store_id=si.store_id
+    items = await conn.fetch('''SELECT i.code, i.name, ib.base_unit FROM public.items i
+        JOIN purchasing.item_bases ib ON ib.item_code=i.code AND ib.store_id=$1
         WHERE i.item_type='raw' ORDER BY i.name, i.code''', store)
     stores = await conn.fetch('SELECT id, name FROM public.stores WHERE id<>$1 ORDER BY id', store)
     return serial({'store_id': store, 'transfers': [await one(conn, i) for i in ids], 'items': [dict(r) for r in items], 'stores': [dict(r) for r in stores]})

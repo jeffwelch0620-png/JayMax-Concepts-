@@ -69,6 +69,8 @@ test("inputs are frozen while a preview is pending and after a lost send, so a r
   await click(container.querySelector('[aria-label="Review store transfer"]'));
   await click(button("Send transfer"));
   expect(container.querySelector('[aria-label="Transfer amount"]').closest("fieldset").disabled).toBe(true);
+  expect(button("Send to another store").disabled).toBe(true); // the form can't be hidden and its retry key lost
   await click(button("Retry the same transfer"));
+  expect(button("Send to another store").disabled).toBe(false);
   expect(api.sendActualTransfer.mock.calls[1]).toEqual(api.sendActualTransfer.mock.calls[0]);
 });

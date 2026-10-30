@@ -76,12 +76,15 @@ export function RequestForm({ rid, maker, onSent }) {
   </section>;
 }
 
-export function SpotForm({ rid, items, onSent }) {
+export function SpotForm({ rid, items, onSent, onPending = () => {} }) {
   const [rows, setRows] = useState([{ product_id: "", quantity: "", reason: "" }]), [note, setNote] = useState(""), [runDate, setRunDate] = useState(todayISO());
   const s = useSubmit(r => { setRows([{ product_id: "", quantity: "", reason: "" }]); setNote(""); onSent(r); });
   // Inputs stay frozen while a send is unresolved, so a retry replays it rather than sending twice.
   const edit = (i, patch) => setRows(x => x.map((r, n) => n === i ? { ...r, ...patch } : r));
   const ready = note.trim() && rows.every(r => r.product_id && decimal(r.quantity) && Number(r.quantity) > 0 && r.reason.trim());
+  // The form can't be hidden while a send is unresolved, which would drop the retry's request key.
+  const unresolved = s.busy || s.pending();
+  useEffect(() => { onPending(unresolved); }, [unresolved]); // eslint-disable-line react-hooks/exhaustive-deps
   async function send() {
     const request = { run_date: runDate, kind: "spot", note: note.trim(), lines: rows.map(r => ({ product_id: r.product_id, quantity: r.quantity.trim(), reason: r.reason.trim() })) };
     await s.submit(async () => ({ request, expected_review_hash: (await api.previewBulkRequest(rid, request)).reviewHash, reviewed: true }), (b, k) => api.sendBulkRequest(rid, b, k));
@@ -149,7 +152,7 @@ export function RequestCard({ rid, store, request, onChange }) {
 }
 
 export function BulkSupply({ rid }) {
-  const [data, setData] = useState(null), [items, setItems] = useState([]), [error, setError] = useState(""), [epoch, setEpoch] = useState(0), [form, setForm] = useState(null);
+  const [data, setData] = useState(null), [items, setItems] = useState([]), [error, setError] = useState(""), [epoch, setEpoch] = useState(0), [form, setForm] = useState(null), [pending, setPending] = useState(false);
   const since = (() => { const d = new Date(`${todayISO()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 28); return d.toISOString().slice(0, 10); })();
   useEffect(() => {
     let active = true; setError("");
@@ -168,16 +171,16 @@ export function BulkSupply({ rid }) {
   }, [rid, form]);
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading Bulk supply…</p>;
-  const store = data.store_id, reload = () => { setForm(null); setEpoch(n => n + 1); };
+  const store = data.store_id, reload = () => { setPending(false); setForm(null); setEpoch(n => n + 1); };
   if (!data.maker_store_id && !data.makes_for.length) return null;
   return <div className="space-y-4 mb-6" data-testid="bulk-supply">
     {data.maker_store_id && <div className="flex gap-2">
-      <button className={form === "request" ? btnAcc : btnGhost} onClick={() => setForm(form === "request" ? null : "request")}>Send Bulk count</button>
-      <button className={form === "spot" ? btnAcc : btnGhost} onClick={() => setForm(form === "spot" ? null : "spot")}>Spot request</button>
+      <button className={form === "request" ? btnAcc : btnGhost} disabled={pending} onClick={() => setForm(form === "request" ? null : "request")}>Send Bulk count</button>
+      <button className={form === "spot" ? btnAcc : btnGhost} disabled={pending} title={pending ? "Finish or retry the request first" : undefined} onClick={() => setForm(form === "spot" ? null : "spot")}>Spot request</button>
     </div>}
     {data.makes_for.length > 0 && <p className="text-sm text-slate-400">Bulk held here for {data.makes_for.map(storeName).join(", ")} is their stock and counts toward their par: count only your own Bulk in your count.</p>}
     {form === "request" && <RequestForm rid={rid} maker={data.maker_store_id} onSent={reload} />}
-    {form === "spot" && <SpotForm rid={rid} items={items} onSent={reload} />}
+    {form === "spot" && <SpotForm rid={rid} items={items} onSent={reload} onPending={setPending} />}
     {!!data.open_shortfalls.length && <section className={`${cardCls} p-4`} aria-label="Open Bulk shortfalls">
       <h3 className="font-semibold">Still owed</h3>
       <ul>{data.open_shortfalls.map(s => <li key={`${s.request_id}:${s.product_id}`}>{s.name}: {amount(s.shortfall_base_quantity, s.base_unit)} short from {s.run_date}{s.store_id !== store ? ` (${storeName(s.store_id)})` : ""}</li>)}</ul>

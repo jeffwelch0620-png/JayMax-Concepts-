@@ -54,9 +54,8 @@ CREATE TABLE actual_inventory.store_transfer_events (
 CREATE FUNCTION actual_inventory.guard_store_transfer() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE latest record;
 BEGIN
- IF (SELECT count(*) FROM public.store_items WHERE item_code = NEW.item_code AND store_id IN (NEW.from_store_id, NEW.to_store_id)) <> 2
- THEN RAISE EXCEPTION 'Both stores must carry this item'; END IF;
- IF EXISTS (SELECT 1 FROM purchasing.item_bases WHERE item_code = NEW.item_code AND store_id IN (NEW.from_store_id, NEW.to_store_id) AND base_unit <> NEW.base_unit)
+ IF (SELECT count(*) FROM purchasing.item_bases WHERE item_code = NEW.item_code AND store_id IN (NEW.from_store_id, NEW.to_store_id)
+     AND base_unit = NEW.base_unit) <> 2
  THEN RAISE EXCEPTION 'Both stores must count this item in the same base unit'; END IF;
  SELECT f.mapping_id, f.base_quantity, f.inventory_cost_amount, f.inventory_record_date INTO latest FROM purchasing.current_purchase_facts f
   WHERE f.store_id = NEW.from_store_id AND f.item_code = NEW.item_code AND f.base_unit = NEW.base_unit

@@ -51,6 +51,9 @@ class StoreTransferDatabaseTests(actual.ActualInventoryTests):
         return dict(to_store_id='rudds', item_code='test_food', sent_base_quantity='10', kind='lend', sent_date='2026-10-05', note='Rudd\'s ran out') | changes
 
     async def send(self, store='berts', **changes):
+        async with self.pool.acquire() as c:  # Rudd's counts the item in the same unit as Bert's
+            await c.execute('''INSERT INTO purchasing.item_bases(store_id,item_code,base_unit) SELECT 'rudds',item_code,base_unit FROM purchasing.item_bases
+                WHERE store_id='berts' AND item_code='test_food' ON CONFLICT DO NOTHING''')
         body = self.send_body(**changes)
         p = await self.client.post(f'/api/pg/actual-inventory/{store}/transfers/preview', json=body)
         if p.status_code != 200: return p
