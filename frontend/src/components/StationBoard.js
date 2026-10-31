@@ -14,18 +14,20 @@ const clock = iso => iso ? new Date(iso).toLocaleTimeString([], { hour: "numeric
 export function StationBoard({ rid }) {
   const day = todayISO();
   const [board, setBoard] = useState(null), [error, setError] = useState(""), [busy, setBusy] = useState(false), [epoch, setEpoch] = useState(0);
-  const attempt = useRef(null);
+  const attempt = useRef(null), reads = useRef(0);
   useEffect(() => {
-    let active = true;
-    api.stationBoard(rid, day).then(b => active && setBoard(b)).catch(e => active && setError(detail(e)));
-    return () => { active = false; };
+    // A move bumps `reads`, so a board read still in flight when it starts can't overwrite the move's newer board.
+    const n = ++reads.current;
+    const current = () => reads.current === n;
+    api.stationBoard(rid, day).then(b => current() && setBoard(b)).catch(e => current() && setError(detail(e)));
+    return () => { reads.current++; };
   }, [rid, day, epoch]);
 
   // One move at a time; a retry after a lost response replays the same request.
   async function move(staff_member_id, station_code, reason = "moved") {
     const body = { staff_member_id, station_code, reason };
     if (!attempt.current || JSON.stringify(attempt.current.body) !== JSON.stringify(body)) attempt.current = { key: crypto.randomUUID(), body };
-    setBusy(true); setError("");
+    setBusy(true); setError(""); reads.current++;
     try { const r = await api.moveStation(rid, day, body, attempt.current.key); attempt.current = null; if (r?.board) setBoard(r.board); }
     catch (e) { if ([400, 403, 404, 409, 422].includes(e?.response?.status)) attempt.current = null; setError(detail(e)); }
     finally { setBusy(false); }

@@ -45,3 +45,16 @@ test("a Kitchen Manager sets which station normally makes an item", async () => 
   await choose("Default station for Marinara sauce", "PREP");
   expect(api.setProductStation).toHaveBeenCalledWith("berts", "p-1", { station_code: "PREP", note: "Set on the station board" }, "stable-key");
 });
+
+test("a Refresh still loading when a move lands doesn't overwrite the moved board", async () => {
+  api.stationBoard.mockResolvedValueOnce(board());
+  const onGrill = board({ open: [{ stint_id: "s1", staff_member_id: "m-a", staff_name: "Invented cook A", station_code: "GRILL", started_at: "2026-10-30T15:00:00Z" }] });
+  api.moveStation.mockResolvedValue({ board: onGrill });
+  await render(<StationBoard rid="berts" />);
+  let finishRefresh;
+  api.stationBoard.mockReturnValueOnce(new Promise(r => { finishRefresh = r; }));
+  await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Refresh").click());
+  await choose("Station for Invented cook A", "GRILL");
+  await act(async () => finishRefresh(board()));
+  expect(container.querySelector('[data-testid="station-GRILL"]').textContent).toContain("Invented cook A");
+});
