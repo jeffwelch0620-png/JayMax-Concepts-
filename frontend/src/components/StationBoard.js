@@ -17,10 +17,11 @@ export function StationBoard({ rid }) {
   const attempt = useRef(null), reads = useRef(0);
   useEffect(() => {
     // A move bumps `reads`, so a board read still in flight when it starts can't overwrite the move's newer board.
+    let active = true;
     const n = ++reads.current;
-    const current = () => reads.current === n;
+    const current = () => active && reads.current === n;
     api.stationBoard(rid, day).then(b => current() && setBoard(b)).catch(e => current() && setError(detail(e)));
-    return () => { reads.current++; };
+    return () => { active = false; };
   }, [rid, day, epoch]);
 
   // One move at a time; a retry after a lost response replays the same request.
