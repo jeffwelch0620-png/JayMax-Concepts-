@@ -30,7 +30,7 @@ test("shows today's cycle: count overdue, one order done, one overdue with a dra
 });
 
 test("a late count asks for a reason; a retry reuses its key", async () => {
-  api.orderCalendar.mockResolvedValueOnce(view()).mockResolvedValue(view({ count: { status: "late", needs_reason: false }, notes: [{ kind: "count_late", reason: "Walk-in repair" }] }));
+  api.orderCalendar.mockResolvedValueOnce(view()).mockResolvedValue(view({ count: { status: "late", needs_reason: false }, notes: [{ kind: "count_late", reason: "Walk-in repair" }, { kind: "order_late", vendor_id: "us_foods", reason: "Truck count" }] }));
   api.recordLateCount.mockRejectedValueOnce(new Error("Network Error")).mockResolvedValue({});
   await render();
   await type("Why is the count late", "Walk-in repair");
@@ -39,6 +39,7 @@ test("a late count asks for a reason; a retry reuses its key", async () => {
   expect(api.recordLateCount.mock.calls.map(c => [c[1], c[2]])).toEqual([[{ cycle_date: "2026-11-04", reason: "Walk-in repair" }, "key-1"], [{ cycle_date: "2026-11-04", reason: "Walk-in repair" }, "key-1"]]);
   expect(q("late-count")).toBeNull();
   expect(q("order-calendar").textContent).toContain("Late count: Walk-in repair");
+  expect(q("order-calendar").textContent).toContain("Late US Foods order: Truck count");   // the supplier's name, not its ID
 });
 
 test("on-order list warns when a later count may already include the delivery", async () => {
