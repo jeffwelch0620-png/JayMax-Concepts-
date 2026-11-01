@@ -7,6 +7,7 @@ from uuid import uuid4
 import asyncpg
 from pydantic import ValidationError
 
+import deployment_readiness
 import positions
 import server
 import staff_login
@@ -46,6 +47,22 @@ class StaffLoginModelTests(unittest.TestCase):
         self.assertTrue(server._is_pin_optional('/api/pg/staff/berts/sign-in/names'))
         self.assertFalse(server._is_pin_optional('/api/pg/staff/berts/members/sign-in'))
         self.assertFalse(server._is_pin_optional(f'/api/pg/staff/berts/members/{uuid4()}/pin'))
+
+    def test_a_staff_session_reaches_the_employee_screens_only(self):
+        for path in ('/staff/berts/sign-out', '/staff/berts/tasks', f'/staff/berts/tasks/{uuid4()}/complete', '/staff/berts/prep-task-plan',
+                     '/staff/berts/station', '/staff/berts/prep-production/2026-10-08/submissions', '/staff/berts/push/subscribe'):
+            self.assertTrue(server.PERSONAL_STAFF_ROUTE.fullmatch(path), path)
+        for path in ('/invoices/berts', '/items/berts', '/staff/berts/members', f'/staff/berts/members/{uuid4()}/pin',
+                     '/staff/berts/pin', '/staff/berts/verify', '/purchases/berts/stations/board/2026-10-08'):
+            self.assertFalse(server.PERSONAL_STAFF_ROUTE.fullmatch(path), path)
+
+    def test_readiness_holds_a_backend_only_switch(self):
+        base = {'USE_PG': 'true'}, {'REACT_APP_USE_PG': 'true'}
+        self.assertNotIn('STAFF_PERSONAL_LOGIN', str(deployment_readiness.configuration(*base)['problems']))
+        held = deployment_readiness.configuration(base[0] | {'STAFF_PERSONAL_LOGIN_ENABLED': 'true'}, base[1])
+        self.assertIn('STAFF_PERSONAL_LOGIN', str(held['problems']))
+        both = deployment_readiness.configuration(base[0] | {'STAFF_PERSONAL_LOGIN_ENABLED': 'true'}, base[1] | {'REACT_APP_STAFF_PERSONAL_LOGIN': 'true'})
+        self.assertNotIn('STAFF_PERSONAL_LOGIN', str(both['problems']))
 
 
 import test_staff_prep_tasks as staff
@@ -137,10 +154,14 @@ class StaffLoginDatabaseTests(staff.StaffTaskTests):
         self.assertEqual((await self.issue(self.member, '5096')).status_code, 200)          # a new PIN ends the session
         self.assertEqual((await use(token)).status_code, 401)
         token = (await self.sign_in(self.member, '5096', '6610')).json()['token']
-        async with self.pool.acquire() as c:
-            await c.execute('UPDATE staff_members SET active=false WHERE id=$1', self.member)
+        roster = lambda active: self.portal.put(f'/api/pg/staff/berts/members/{self.member}', headers={'Authorization': 'Bearer ' + self.owner},
+                                                json={'name': 'Invented cook A', 'role': 'cook', 'active': active})
+        self.assertEqual((await roster(False)).status_code, 200)
         self.assertEqual((await use(token)).status_code, 401)
         self.assertEqual((await self.sign_in(self.member, '6610')).status_code, 401)
+        self.assertEqual((await roster(True)).status_code, 200)
+        self.assertEqual((await use(token)).status_code, 401)        # reactivation needs a fresh sign-in
+        self.assertEqual((await self.sign_in(self.member, '6610')).status_code, 200)
 
     async def test_a_session_is_for_one_store_and_never_a_manager(self):
         token = await self.signed_in(self.member)
@@ -148,6 +169,8 @@ class StaffLoginDatabaseTests(staff.StaffTaskTests):
                                        json=dict(pin='', day='2026-10-08', track='daily', staff_member_id=str(self.foreign_member)))
         self.assertEqual(other.status_code, 403)
         self.assertEqual((await self.issue(self.other_member, '4821', token=token)).status_code, 403)
+        for path in ('/api/pg/invoices/berts', '/api/pg/items/berts', '/api/pg/staff/berts/members'):
+            self.assertEqual((await self.portal.get(path, headers={'Authorization': 'Bearer ' + token})).status_code, 403, path)
         self.assertEqual((await self.sign_in(self.foreign_member, '7350')).status_code, 401)   # Rudd's person at Bert's
         # The database keeps PINs and sign-in events as written.
         async with self.pool.acquire() as c, c.transaction():
@@ -158,4 +181,14 @@ class StaffLoginDatabaseTests(staff.StaffTaskTests):
         key = str(uuid4())
         self.assertEqual((await self.issue(self.member, '4821', key=key)).json()['replayed'], False)
         self.assertEqual((await self.issue(self.member, '4821', key=key)).json()['replayed'], True)
+        self.assertEqual((await self.issue(self.member, '9999', key=key)).status_code, 409)       # same key, different PIN
         self.assertEqual((await self.issue(self.other_member, '4821', key=key)).status_code, 409)
+
+    async def test_pins_can_be_issued_before_sign_in_is_switched_on(self):
+        with patch.dict(os.environ, {'STAFF_PERSONAL_LOGIN_ENABLED': 'false'}):
+            self.assertEqual((await self.issue(self.member, '4821')).status_code, 200)
+            listed = await self.portal.get('/api/pg/staff/berts/members/sign-in', headers={'Authorization': 'Bearer ' + self.ops})
+            self.assertEqual((listed.status_code, listed.json()['switched_on']), (200, False))
+            self.assertEqual((await self.sign_in(self.member, '4821', '7350')).status_code, 503)
+            self.assertEqual((await self.staff_plan(member=self.member)).status_code, 200)       # the store PIN still works
+        self.assertEqual((await self.sign_in(self.member, '4821', '7350')).status_code, 200)

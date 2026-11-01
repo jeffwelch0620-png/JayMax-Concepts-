@@ -59,7 +59,7 @@ export function StaffTab({ rid, showToast }) {
     <div className="fade-slide-in" data-testid="staff-tab">
       <PageTitle>Staff</PageTitle>
       {api.currentSession()?.user?.role === "owner" && <LoginsPanel showToast={showToast} />}
-      {api.staffPersonalLoginEnabled && <StaffSignInPanel rid={rid} showToast={showToast} />}
+      {api.isPostgres && <StaffSignInPanel rid={rid} showToast={showToast} rosterKey={members} />}
       <div className="font-display font-bold text-slate-100 mb-1">{api.staffPersonalLoginEnabled ? "Roster" : "PIN Roster"}</div>
       <div className="text-xs text-slate-500 -mt-2 mb-5">
         {api.staffPersonalLoginEnabled

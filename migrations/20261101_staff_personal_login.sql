@@ -48,7 +48,7 @@ CREATE TABLE prep_inventory.staff_sessions (
  expires_at timestamptz NOT NULL,
  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  ended_at timestamptz,
- end_reason text CHECK (end_reason IN ('signed_out', 'pin_reset')),
+ end_reason text CHECK (end_reason IN ('signed_out', 'pin_reset', 'deactivated')),
  CHECK ((ended_at IS NULL) = (end_reason IS NULL)),
  CHECK (expires_at > started_at),
  FOREIGN KEY (staff_member_id, store_id) REFERENCES public.staff_members(id, store_id)

@@ -28,10 +28,6 @@ The full native testing profile below sets both columns to `true` only after eac
 | `STAFF_PREP_TASKS_ENABLED=true` | `REACT_APP_STAFF_PREP_TASKS=true` | PREP_EXECUTION |
 | `STAFF_PREP_PRODUCTION_ENABLED=true` | `REACT_APP_STAFF_PREP_PRODUCTION=true` | STAFF_PREP_TASKS |
 
-## Personal staff sign-in
-
-`STAFF_PERSONAL_LOGIN_ENABLED=false` and `REACT_APP_STAFF_PERSONAL_LOGIN=false` are the defaults, set as a pair. Turning them on (after `migrations/20261101_staff_personal_login.sql`) retires the shared store PIN at **every** store at once (Jeff 2026-10-31): staff sign in with their own name and PIN, so an owner or the Ops Lead must issue every employee a first PIN before the switch. See `backend/staff_login.py`.
-
 Run the existing `backend/deployment_readiness.py` configuration review with private backend and frontend settings. A matching configuration does not prove schema installation or runtime permissions; complete its read-only catalog checks separately. Authentication/PIN redesign remains deferred in build and required before operational use.
 
 ## Separate manager journal capability

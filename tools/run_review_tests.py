@@ -32,6 +32,7 @@ DATABASE_CASES = (
  ('staff_login','StaffLoginDatabaseTests','test_a_session_ends_on_sign_out_idle_new_pin_or_inactive'),
  ('staff_login','StaffLoginDatabaseTests','test_a_session_is_for_one_store_and_never_a_manager'),
  ('staff_login','StaffLoginDatabaseTests','test_a_retried_pin_issue_replays'),
+ ('staff_login','StaffLoginDatabaseTests','test_pins_can_be_issued_before_sign_in_is_switched_on'),
  ('stations','StationDatabaseTests','test_a_cooks_queue_follows_their_station_and_named_assignments_win'),
  ('stations','StationDatabaseTests','test_every_stint_is_kept_and_one_station_at_a_time'),
  ('stations','StationDatabaseTests','test_only_boh_shift_leaders_and_up_run_the_board'),

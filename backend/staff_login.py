@@ -46,9 +46,14 @@ async def installed(conn):
     return await conn.fetchval("SELECT to_regclass('prep_inventory.staff_sessions') IS NOT NULL")
 
 
+async def setup_ready(conn):
+    """PINs can be issued and unlocked once the migration is in, before sign-in is switched on."""
+    if not await installed(conn): raise HTTPException(503, 'Personal staff sign-in migration is awaiting setup')
+
+
 async def ready(conn):
     if not enabled(): raise HTTPException(503, 'Personal staff sign-in is not switched on')
-    if not await installed(conn): raise HTTPException(503, 'Personal staff sign-in migration is awaiting setup')
+    await setup_ready(conn)
 
 
 def _b64(value):
@@ -191,7 +196,7 @@ async def sign_out(pool, user):
 
 async def roster(conn, store):
     """Each active person's sign-in state, for managers."""
-    await ready(conn)
+    await setup_ready(conn)
     rows = await conn.fetch('''SELECT m.id, m.name,
             (SELECT temporary FROM prep_inventory.staff_member_pins p WHERE p.staff_member_id=m.id ORDER BY set_at DESC LIMIT 1) AS temporary,
             (SELECT max(at) FROM prep_inventory.staff_sign_in_events e WHERE e.staff_member_id=m.id AND kind='signed_in') AS last_signed_in_at,
@@ -210,13 +215,16 @@ async def roster(conn, store):
 
 async def issue_pin(pool, store, member_id, actor, body, key):
     """A temporary PIN from an owner or the Ops Lead; it ends the person's sessions and lockout."""
-    # The PIN itself stays out of the fingerprint: a 4-5 digit PIN is too short to keep behind a plain hash.
+    # The PIN itself stays out of the fingerprint: a 4-5 digit PIN is too short to keep behind a plain
+    # hash. A replay is checked against the stored salted hash instead.
     digest = fingerprint(serial({'store': store, 'member': member_id, 'actor': actor}))
     async with pool.acquire() as conn, conn.transaction():
-        await ready(conn)
-        prior = await conn.fetchrow('SELECT request_fingerprint FROM prep_inventory.staff_member_pins WHERE request_key=$1', key)
+        await setup_ready(conn)
+        await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', str(key))   # concurrent retries replay
+        prior = await conn.fetchrow('SELECT request_fingerprint, pin_hash FROM prep_inventory.staff_member_pins WHERE request_key=$1', key)
         if prior:
-            if prior['request_fingerprint'] != digest: raise HTTPException(409, 'Request key belongs to another PIN')
+            if prior['request_fingerprint'] != digest or not await asyncio.to_thread(pin_ok, body.pin, prior['pin_hash']):
+                raise HTTPException(409, 'Request key belongs to another PIN')
             return {'replayed': True}
         if not await conn.fetchval('SELECT 1 FROM public.staff_members WHERE id=$1 AND store_id=$2 AND active FOR UPDATE', member_id, store):
             raise HTTPException(404, 'Choose active staff at this location')
@@ -228,7 +236,7 @@ async def issue_pin(pool, store, member_id, actor, body, key):
 
 async def unlock(pool, store, member_id, actor):
     async with pool.acquire() as conn, conn.transaction():
-        await ready(conn)
+        await setup_ready(conn)
         if not await conn.fetchval('SELECT 1 FROM public.staff_members WHERE id=$1 AND store_id=$2 FOR UPDATE', member_id, store):
             raise HTTPException(404, 'Choose staff at this location')
         if await lock_state(conn, member_id):
@@ -264,7 +272,7 @@ def create_router(pool_factory, store_check, manager_authorize, mint, staff_user
     async def read_roster(store: str, request: Request):
         store_check(store); manager_authorize(request, store, False)
         async with pool_factory().acquire() as conn:
-            return {'staff': await roster(conn, store)}
+            return {'staff': await roster(conn, store), 'switched_on': enabled()}
 
     @router.put(base + '/members/{member_id}/pin')
     async def put_pin(store: str, member_id: UUID, body: IssuePin, request: Request, idempotency_key: UUID = Header(...)):

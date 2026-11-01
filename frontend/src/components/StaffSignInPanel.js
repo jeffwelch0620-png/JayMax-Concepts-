@@ -9,21 +9,27 @@ const when = (iso) => iso ? new Date(iso).toLocaleString([], { month: "short", d
 // Staff sign-in for managers (Jeff 2026-10-31): an owner or the Ops Lead issues each employee's
 // first PIN (and any reset), which the employee replaces at first sign-in; a manager or above
 // unlocks someone after 5 wrong PINs. Shift Leaders see the list but can't unlock.
-export function StaffSignInPanel({ rid, showToast }) {
+export function StaffSignInPanel({ rid, showToast, rosterKey }) {
   const user = api.currentSession()?.user || {};
   const canIssue = user.role === "owner";
   const canUnlock = user.role === "owner" || (user.role === "manager" && !String(user.position || "").startsWith("SL-"));
   const [staff, setStaff] = useState(null);
+  const [switchedOn, setSwitchedOn] = useState(false);
+  const [installed, setInstalled] = useState(true);
   const [issuing, setIssuing] = useState(null);   // { id, pin, key }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   const refresh = useCallback(async () => {
     if (!rid) return;
-    try { setStaff(await api.staffSignInRoster(rid)); setErr(""); }
-    catch (e) { setStaff([]); setErr(e?.response?.data?.detail || "Couldn't load staff sign-in"); }
+    try { const r = await api.staffSignInRoster(rid); setStaff(r.staff); setSwitchedOn(!!r.switched_on); setInstalled(true); setErr(""); }
+    catch (e) {
+      if (e?.response?.status === 503) { setInstalled(false); return; }   // not set up on this server yet
+      setStaff([]); setErr(e?.response?.data?.detail || "Couldn't load staff sign-in");
+    }
   }, [rid]);
-  useEffect(() => { refresh(); }, [refresh]);
+  // The roster below changes who is listed here (added, deactivated, reactivated).
+  useEffect(() => { refresh(); }, [refresh, rosterKey]);
 
   async function issue() {
     if (!PIN.test(issuing.pin)) { setErr("A PIN is 4 or 5 digits"); return; }
@@ -44,12 +50,14 @@ export function StaffSignInPanel({ rid, showToast }) {
     finally { setBusy(false); }
   }
 
+  if (!installed) return null;
   return (
     <div className="mb-8" data-testid="staff-sign-in-panel">
       <div className="font-display font-bold text-slate-100 mb-1">Staff sign-in</div>
       <div className="text-xs text-slate-500 mb-4">
         Each employee signs in with their own name and a 4–5 digit PIN. {canIssue ? "Issue a first PIN and give it to them in person; they replace it the first time they sign in." : "An owner or the Ops Lead issues PINs."}
       </div>
+      {!switchedOn && <div className="text-xs text-amber-300 mb-4" data-testid="staff-sign-in-not-on">Personal sign-in isn't switched on yet: staff still use the store PIN. Issue everyone a PIN first; switching on retires the store PIN at every store at once.</div>}
       {err && <div className="text-red-400 text-xs mb-3" role="alert">{err}</div>}
       {!staff ? null : staff.length === 0 ? <EmptyState text="No active staff yet. Add them to the roster below." /> : (
         <div className="flex flex-col gap-2">
@@ -66,7 +74,7 @@ export function StaffSignInPanel({ rid, showToast }) {
               {canIssue && (issuing?.id === m.staff_member_id ? (
                 <span className="flex items-center gap-2">
                   <input className={`${inpCls} w-24 text-center`} inputMode="numeric" aria-label={`New PIN for ${m.name}`} maxLength={5} value={issuing.pin}
-                    onChange={(e) => setIssuing({ ...issuing, pin: e.target.value.replace(/\D/g, "") })} data-testid={`staff-issue-pin-${m.staff_member_id}`} />
+                    onChange={(e) => setIssuing({ ...issuing, pin: e.target.value.replace(/\D/g, ""), key: crypto.randomUUID() })} data-testid={`staff-issue-pin-${m.staff_member_id}`} />
                   <button className={btnGhost} disabled={busy} onClick={issue} data-testid={`staff-issue-save-${m.staff_member_id}`}>{busy ? "Saving…" : "Issue"}</button>
                   <button className={btnGhost} disabled={busy} onClick={() => setIssuing(null)}>Cancel</button>
                 </span>

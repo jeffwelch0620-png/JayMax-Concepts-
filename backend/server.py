@@ -81,6 +81,10 @@ READ_ONLY_PATHS = ("/owner/summary", "/owner/prep-summary", "/owner/orders",
 STAFF_PATHS = ("/prepcount/", "/preplists/", "/prep/", "/staff/", "/prep-items/")
 OWNER_PATHS = ("/owner/",)
 STAFF_WRITE_PATHS = ("/prepcount/", "/preplists/", "/prep/")
+# A personal staff session (own name + PIN) reaches only the employee screens, for every method.
+PERSONAL_STAFF_ROUTE = re.compile(r'/staff/[^/]+/(?:sign-out|prepsheet(?:/complete)?|counts(?:/save)?|tasks(?:/[^/]+/complete)?'
+    r'|push/(?:public-key|subscribe|unsubscribe)|count-drafts(?:/[^/]+/submit)?|prep-count-drafts(?:/[^/]+/submit)?'
+    r'|prep-task-plan|station|prep-production/\d{4}-\d{2}-\d{2}/(?:setup|preview|submissions))')
 # Mongo-backed /api/... route families whose Postgres twins live under /api/pg/... . With
 # USE_PG on they're refused outright: the frontend never calls them in that mode, and a
 # stale client or direct call would otherwise write to Mongo and silently diverge.
@@ -223,6 +227,9 @@ async def collaboration_security(request: Request, call_next):
     if rid and user.get("role") != "owner" and rid not in allowed:
         return JSONResponse({"detail": "Location access denied"}, status_code=403)
     role = user.get("role")
+    personal = user.get("kind") == "staff"
+    if personal and not PERSONAL_STAFF_ROUTE.fullmatch(route_path):
+        return JSONResponse({"detail": "Signed-in staff can use the employee screens only"}, status_code=403)
     if route_path.startswith(OWNER_PATHS) and role != "owner":
         return JSONResponse({"detail": "Owner role required"}, status_code=403)
     if request.method != "GET":
@@ -231,7 +238,7 @@ async def collaboration_security(request: Request, call_next):
         count_draft_path = bool(re.fullmatch(r'/staff/[^/]+/(?:count-drafts|prep-count-drafts)(?:/[^/]+/submit)?', route_path)
             or re.fullmatch(r'/staff/[^/]+/prep-task-plan', route_path)
             or re.fullmatch(r'/staff/[^/]+/prep-production/\d{4}-\d{2}-\d{2}/(?:setup|preview|submissions)', route_path))
-        if role == "staff" and not (route_path.startswith(STAFF_WRITE_PATHS) or count_draft_path):
+        if role == "staff" and not personal and not (route_path.startswith(STAFF_WRITE_PATHS) or count_draft_path):
             return JSONResponse({"detail": "Staff access is limited to prep workflow"}, status_code=403)
         if route_path.startswith(STAFF_PATHS) and role not in ("owner", "manager", "staff"):
             return JSONResponse({"detail": "Insufficient role"}, status_code=403)
@@ -5462,11 +5469,15 @@ async def pg_update_staff_member(store_id: str, staff_id: uuid.UUID, body: PgSta
     check_store_id(store_id)
     _require_manager(request)
     name = _pg_validate_staff_member(body)
-    row = await db_pg.pool().fetchrow(
-        "UPDATE staff_members SET name=$3, role=$4, active=$5 WHERE id=$1 AND store_id=$2 RETURNING *",
-        staff_id, store_id, name, body.role, body.active)
-    if not row:
-        raise HTTPException(404, "Staff member not found")
+    async with db_pg.pool().acquire() as conn, conn.transaction():
+        row = await conn.fetchrow(
+            "UPDATE staff_members SET name=$3, role=$4, active=$5 WHERE id=$1 AND store_id=$2 RETURNING *",
+            staff_id, store_id, name, body.role, body.active)
+        if not row:
+            raise HTTPException(404, "Staff member not found")
+        # Deactivation ends personal sign-ins for good; reactivating needs a fresh sign-in.
+        if not body.active and await staff_login.installed(conn):
+            await staff_login.end_sessions(conn, staff_id, 'deactivated')
     return _pg_staff_member_to_api(row)
 
 @pg_router.delete("/staff/{store_id}/members/{staff_id}")

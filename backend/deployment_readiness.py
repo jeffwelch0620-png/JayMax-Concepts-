@@ -79,7 +79,13 @@ def configuration(backend,frontend):
         if values[name]:
             for dependency in deps:
                 if not values[dependency]:problems.append({'key':name,'reason':'Requires '+dependency})
+    # Personal staff sign-in is reviewed beside the native features: switched on in the backend alone,
+    # it retires the store PIN while the built screens still ask for it, so nobody could sign in.
+    login=boolean(backend,'STAFF_PERSONAL_LOGIN_ENABLED','false');login_view=boolean(frontend,'REACT_APP_STAFF_PERSONAL_LOGIN','false')
+    if login!=login_view:problems.append({'key':'STAFF_PERSONAL_LOGIN','reason':'Backend and built frontend feature flags differ'})
+    if login and not pg:problems.append({'key':'STAFF_PERSONAL_LOGIN','reason':'Requires PostgreSQL'})
     return {'status':'held' if problems else 'passed','problems':problems,'features':pairs,
+        'staffPersonalLogin':{'backend':login,'frontend':login_view},
         'allNativeFeaturesHeld':not any(values.values()),'secretValuesIncluded':False}
 
 def migration_plan():

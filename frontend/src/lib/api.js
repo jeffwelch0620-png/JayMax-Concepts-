@@ -250,15 +250,26 @@ export const staffSignIn = (rid, body) => axios.post(`${PG_API}/staff/${pgStoreI
 export const staffSignOut = async () => {
   const s = staffSession();
   if (!s) return;
-  try { await axios.post(`${PG_API}/staff/${pgStoreId(s.rid)}/sign-out`); } finally { endStaffSession(); }
+  try { await axios.post(`${PG_API}/staff/${pgStoreId(s.rid)}/sign-out`, {}, { headers: { Authorization: ["Bearer", s.token].join(" ") } }); }
+  finally {
+    // A late reply must not sign out someone who signed in meanwhile.
+    if (staffSession()?.token === s.token) endStaffSession();
+  }
 };
-export const staffSignInRoster = (rid) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/members/sign-in`).then(r => r.data.staff);
+export const staffSignInRoster = (rid) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/members/sign-in`).then(r => r.data);
 export const issueStaffPin = (rid, memberId, pin, key) => axios.put(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/pin`, { pin }, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const unlockStaffSignIn = (rid, memberId) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/unlock`).then(r => r.data);
 
+// Which login a request carries: the signed-in employee's session for employee screens, the
+// manager's login for everything else, and neither for the name + PIN sign-in itself.
+const STAFF_SIGN_IN_URL = /\/pg\/staff\/[^/]+\/sign-in(?:\/names)?$/;
+const EMPLOYEE_URL = /\/pg\/staff\/[^/]+\/(?:sign-out|prepsheet|counts|tasks|push|count-drafts|prep-count-drafts|prep-task-plan|station|prep-production)(?:\/|$)/;
 axios.interceptors.request.use((config) => {
-  // A manager's own login wins on a shared device; otherwise the signed-in employee's session.
-  const token = session()?.token || staffSession()?.token;
+  if (config.headers?.Authorization) return config;
+  const url = String(config.url || "");
+  if (STAFF_SIGN_IN_URL.test(url)) return config;
+  const staffToken = staffSession()?.token;
+  const token = staffToken && EMPLOYEE_URL.test(url) ? staffToken : session()?.token;
   if (token) config.headers.Authorization = ["Bearer", token].join(" ");
   return config;
 });
