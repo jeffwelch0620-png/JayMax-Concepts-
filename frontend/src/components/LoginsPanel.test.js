@@ -67,3 +67,19 @@ test("reset password and remove work in the page, with no browser pop-up", async
   expect(prompt).not.toHaveBeenCalled(); expect(confirm).not.toHaveBeenCalled();
   prompt.mockRestore(); confirm.mockRestore();
 });
+
+test("one password reset at a time: the form locks while it saves", async () => {
+  let finish; api.resetLoginPassword.mockImplementation(() => new Promise(r => { finish = r; }));
+  api.listLogins.mockResolvedValue([{ id: "usr_a", email: "a@example.invalid", role: "manager", locations: ["berts"] }, { id: "usr_b", email: "b@example.invalid", role: "manager", locations: ["berts"] }]);
+  await render(<LoginsPanel />);
+  await click(byTest("login-reset-usr_a"));
+  await input(byTest("login-reset-input-usr_a"), "invented-password-789");
+  await click(byTest("login-reset-save-usr_a"));
+  expect(byTest("login-reset-save-usr_a").disabled).toBe(true);
+  expect(byTest("login-reset-usr_b").disabled).toBe(true);           // can't open another login's form meanwhile
+  await click(byTest("login-reset-save-usr_a"));
+  expect(api.resetLoginPassword).toHaveBeenCalledTimes(1);
+  await act(async () => finish({ ok: true }));
+  expect(byTest("login-reset-form-usr_a")).toBeNull();
+  expect(byTest("login-reset-usr_b").disabled).toBe(false);
+});

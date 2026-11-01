@@ -84,7 +84,7 @@ export function validProductionAck(ack,pending,rid,day,track,manager=false){
   return d.task_complete?uid(f?.id)&&f.id===record.finish_event_id&&f.action==="finish"&&f.store_id===store&&f.task_id===e.task_id&&f.predecessor_id===e.id&&f.revision===e.revision+1
     &&f.actor===record.recorded_by&&f.reason===d.note&&f.request_fingerprint===record.request_fingerprint&&f.review_snapshot?.staff_submission_id===d.submission_id:f===null&&record.finish_event_id===null;
 }
-const blank=()=>({task_id:"",root_id:"",event_id:"",kind:"submit",batch:null,note:"",made:"",cookNote:"",decision:"accepted",task_complete:false,review:null,confirmed:false,pending:null,rejected:false});
+const blank=()=>({task_id:"",root_id:"",event_id:"",kind:"submit",batch:null,note:"",made:"",cookNote:"",details:false,decision:"accepted",task_complete:false,review:null,confirmed:false,pending:null,rejected:false});
 // Simple cook report (step E, Jeff 2026-11-01): the cook says how much they made. Batches come from the recipe
 // yield, ingredients from the recipe amounts (marked as a recipe estimate), and the time and date from the
 // store's clock. The manager still reviews every figure before it counts; "full details" keeps the long form.
@@ -95,13 +95,20 @@ export function storeTime(tz,day,now=new Date()){
   const p=clockParts(tz,now);if(`${p.year}-${p.month}-${p.day}`===day)return `${day}T${p.hour}:${p.minute}:${p.second}${at(p)}`;
   return `${day}T12:00:00${at(clockParts(tz,new Date(`${day}T17:00:00Z`)))}`;   // another day's report: midday that day
 }
-export function simpleBatch(batch,recipe,made,note,day,tz,now){
-  const amount=Number(made),yieldPer=Number(recipe?.entered_yield);
-  if(!(amount>0)||!/^\d+(\.\d+)?$/.test(String(made).trim()))throw new Error("Enter how much you made, as a number.");
+export function simpleBatch(batch,recipe,made,note,day,tz,now,task=null){
+  const text=String(made).trim(),amount=Number(text),yieldPer=Number(recipe?.entered_yield),baseYield=Number(recipe?.usable_base_yield),taskFactor=Number(task?.factor);
+  if(!(amount>0)||!/^\d+(\.\d+)?$/.test(text))throw new Error("Enter how much you made, as a number.");
   if(!(yieldPer>0))throw new Error("This recipe has no yield yet. Use full details, or ask your manager.");
-  const batches=amount/yieldPer,count=decimal(batches,4);if(Number(count)<=0)throw new Error("That amount is too small to record.");
-  return {...batch,planned_batches:count,output_quantity:String(made).trim(),performed_at:storeTime(tz,day,now),business_date:day,timezone_name:tz,
-    calendar_date_confirmed:true,single_output_confirmed:true,note:note||`Cook reported ${String(made).trim()} ${recipe.outputUnit||""}`.trim(),
+  // The cook answers in the task's unit (a task planned in gal may use a recipe that yields qt):
+  // convert through base units, then record the output in the recipe's own output unit.
+  let output=amount,batches=amount/yieldPer;
+  if(task?.source_unit&&task.source_unit!==recipe.outputUnit){
+    if(!(taskFactor>0&&baseYield>0))throw new Error("This task's unit can't be converted yet. Use full details, or ask your manager.");
+    batches=amount*taskFactor/baseYield;output=batches*yieldPer;}
+  const count=decimal(batches,4),outputText=output===amount?text:decimal(output,6);
+  if(Number(count)<=0||Number(outputText)<=0)throw new Error("That amount is too small to record.");
+  return {...batch,planned_batches:count,output_quantity:outputText,performed_at:storeTime(tz,day,now),business_date:day,timezone_name:tz,
+    calendar_date_confirmed:true,single_output_confirmed:true,note:note||`Cook reported ${text} ${task?.source_unit||recipe.outputUnit||""}`.trim(),
     inputs:batch.inputs.map(x=>{const l=recipe.lines.find(l=>l.id===x.recipe_line_id);return {...x,quantity:decimal(Number(l.entered_quantity)*batches,6),
       measurement_basis:"recipe_estimate",included_loss_quantity:null,loss_evidence:null,evidence:`Recipe amount for ${count} batch${count==="1"?"":"es"} (cook report)`};})};
 }
@@ -111,7 +118,7 @@ export function StaffProductionDecisions(props){return <ProductionForm key={`${p
 function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,manager=false}){
   const ownCache=useRef(new Map()),cache=drafts||ownCache.current,key=`${manager?"prep-production-decision":"staff-production-submit"}:${rid}:${day}:${track}:${staffId||"manager"}`;
   const [draft,edit,clear]=useRetainedDraft(key,blank(),cache),[data,setData]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
-  const epoch=useRef(0),seq=useRef(0),frozen=busy||!!draft.pending,[details,setDetails]=useState(false);
+  const epoch=useRef(0),seq=useRef(0),frozen=busy||!!draft.pending;
   async function load(){const id=epoch.current,n=++seq.current;setData(null);setError("");
     try{const s=manager?await api.staffProductionReviewSetup(rid,day,track):await api.staffProductionSetup(rid,day,track,staffId,pin);if(id!==epoch.current||n!==seq.current)return;
       if(!validProductionState(s,rid,day,track,manager?null:staffId)||(!manager&&(s.identity_verified!==verified(staffId)||!Array.isArray(s.setup?.recipes)||!Array.isArray(s.setup?.lots))))throw new Error("Production history was not confirmed for this date and location.");setData(s);
@@ -121,13 +128,15 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
   const update=(key,value)=>{edit(d=>({...d,[key]:value,review:null,confirmed:false}));setMessage("");};
   const roots=data?.submissions||[],selectedRoot=roots.find(h=>h.events.some(e=>e.id===draft.event_id)),selected=selectedRoot?.events.find(e=>e.id===draft.event_id);
   const task=plan?.tasks.find(t=>t.id===draft.task_id),recipe=data?.setup?.recipes.find(r=>r.id===draft.batch?.recipe_version_id);
-  const tz=data?.setup?.policy?.timezone_name||"America/New_York",simple=!manager&&!details&&Number(recipe?.entered_yield)>0&&draft.kind==="submit";
+  const tz=data?.setup?.policy?.timezone_name||"America/New_York",simple=!manager&&!draft.details&&Number(recipe?.entered_yield)>0&&draft.kind==="submit";
   const own=verified(staffId),taskName=id=>plan?.tasks.find(t=>t.id===id)?.name||"Prep task";
   function chooseTask(id){const t=plan.tasks.find(t=>t.id===id),r=data.setup.recipes.find(r=>r.id===t?.recipe_version_id);
     edit({...blank(),task_id:id,root_id:crypto.randomUUID(),batch:r?{recipe_version_id:r.id,planned_batches:"",output_quantity:"",performed_at:"",business_date:day,timezone_name:data.setup.policy?.timezone_name||"",
       calendar_date_confirmed:false,single_output_confirmed:false,note:"",inputs:r.lines.map(l=>({recipe_line_id:l.id,quantity:"",source_unit:l.source_unit,factor:l.factor,measurement_basis:"",source_batch_id:null,included_loss_quantity:null,loss_evidence:null,evidence:""}))}:null});}
+  // A revision prefills the amount only when the task and recipe use the same unit; otherwise the cook re-enters it.
+  const sameUnit=s=>{const t=plan?.tasks.find(t=>t.id===s.task_id),r=data?.setup?.recipes.find(r=>r.id===s.review_snapshot.submission.batch?.recipe_version_id);return !t||!r||t.source_unit===r.outputUnit;};
   function chooseRevision(id){const h=roots.find(h=>h.events.at(-1).id===id),s=h?.events.at(-1);if(!s){edit(blank());return;}
-    edit({...blank(),task_id:s.task_id,root_id:s.root_id,event_id:s.id,batch:s.review_snapshot.submission.batch,made:s.review_snapshot.submission.batch?.output_quantity||"",note:""});}
+    edit({...blank(),task_id:s.task_id,root_id:s.root_id,event_id:s.id,batch:s.review_snapshot.submission.batch,made:sameUnit(s)?s.review_snapshot.submission.batch?.output_quantity||"":"",note:""});}
   function batchField(k,v){update("batch",{...draft.batch,[k]:v});}
   function inputField(i,k,v){batchField("inputs",draft.batch.inputs.map((x,j)=>j===i?{...x,[k]:v}:x));}
   function body(batch=draft.batch){if(manager)return {submission_id:draft.event_id,decision:draft.decision,task_complete:draft.task_complete,note:draft.note.trim()};
@@ -137,7 +146,7 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
       kind:draft.kind,batch:draft.kind==="withdraw"?null:{...batch,note:batch?.note.trim()},note}};
   }
   async function preview(){const id=epoch.current;setBusy(true);setError("");edit(d=>({...d,review:null,confirmed:false}));
-    try{const batch=simple?simpleBatch(draft.batch,recipe,draft.made,draft.cookNote.trim(),day,tz):draft.batch;if(simple)edit(d=>({...d,batch}));
+    try{const batch=simple?simpleBatch(draft.batch,recipe,draft.made,draft.cookNote.trim(),day,tz,undefined,task):draft.batch;if(simple)edit(d=>({...d,batch}));
       const b=body(batch),p=manager?await api.previewStaffProductionDecision(rid,day,track,b):await api.previewStaffProduction(rid,day,track,b,pin);if(id!==epoch.current)return;
       if(!validProductionReview(p,b,rid,day,track,manager,selected))throw new Error("Production review did not match the retained measurements and assignment.");edit(d=>({...d,review:p,confirmed:false}));
     }catch(e){if(id===epoch.current)setError(errorText(e));}finally{if(id===epoch.current)setBusy(false);}
@@ -168,7 +177,7 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
         <label>Assigned production task<select className={inpCls} aria-label="Assigned production task" disabled={!!draft.event_id} value={draft.task_id} onChange={e=>chooseTask(e.target.value)}><option value="">Select assigned task</option>{(plan?.tasks||[]).filter(t=>t.assigned_member?.id===staffId&&!t.roster_changed&&!t.progress.closed&&!t.progress.needs_review).map(t=><option key={t.id} value={t.id}>{t.name} · {t.quantity} {t.source_unit} planned</option>)}</select></label>
         {draft.event_id&&<label>Submission action<select className={inpCls} aria-label="Submission action" value={draft.kind} onChange={e=>update("kind",e.target.value)}><option value="submit">Revise measured submission</option><option value="withdraw">Withdraw pending submission</option></select></label>}
         {draft.batch&&simple&&<>
-          <label>How much did you make? ({recipe.outputUnit||task?.source_unit})<input className={inpCls} inputMode="decimal" aria-label="How much did you make" value={draft.made} onChange={e=>update("made",e.target.value)}/></label>
+          <label>How much did you make? ({task?.source_unit||recipe.outputUnit})<input className={inpCls} inputMode="decimal" aria-label="How much did you make" value={draft.made} onChange={e=>update("made",e.target.value)}/></label>
           {draft.batch.inputs.map((x,i)=>{const l=recipe.lines.find(l=>l.id===x.recipe_line_id);return l?.source_kind==="prepared"&&<label key={x.recipe_line_id}>Which batch of {l.source_snapshot?.recipe?.name||"the prepared ingredient"} did you use?
             <select className={inpCls} aria-label={`Source lot ${i+1}`} value={x.source_batch_id||""} onChange={e=>inputField(i,"source_batch_id",e.target.value||null)}><option value="">Choose a batch</option>{data.setup.lots.filter(v=>v.product_id===l.source_snapshot?.recipe?.product_id).map(v=><option key={v.id} value={v.id}>Made {String(v.performed_at).slice(0,16).replace("T"," ")}</option>)}</select></label>;})}
           <label>Note for your manager (optional)<input className={inpCls} aria-label="Note for your manager" value={draft.cookNote} onChange={e=>update("cookNote",e.target.value)}/></label>
@@ -188,11 +197,11 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
           <label><input type="checkbox" aria-label="Confirm single usable output" checked={draft.batch.single_output_confirmed} onChange={e=>batchField("single_output_confirmed",e.target.checked)}/> One usable output, with no unmapped recoverable byproducts</label>
         </>}
       </>}
-      {!manager&&draft.batch&&draft.kind==="submit"&&Number(recipe?.entered_yield)>0&&<button type="button" className={btnGhost} onClick={()=>{setDetails(v=>!v);edit(d=>({...d,review:null,confirmed:false}));}}>{details?"Use the simple form":"Enter full details instead"}</button>}
+      {!manager&&draft.batch&&draft.kind==="submit"&&Number(recipe?.entered_yield)>0&&<button type="button" className={btnGhost} onClick={()=>edit(d=>({...d,details:!d.details,review:null,confirmed:false}))}>{draft.details?"Use the simple form":"Enter full details instead"}</button>}
       {!simple&&<label>Production review reason<input className={inpCls} aria-label="Production review reason" value={draft.note} onChange={e=>update("note",e.target.value)}/></label>}
       <button className={btnGhost} disabled={manager?!draft.event_id:!draft.root_id} onClick={preview}>{simple?"Check my report":"Review production record"}</button>
     </fieldset></>}
-    {draft.review&&simple&&<article aria-label="Production record review"><p>You made {draft.review.review.submission.batch.output_quantity} {recipe?.outputUnit} of {task?.name||"this task"} (about {draft.review.review.submission.batch.planned_batches} batch{draft.review.review.submission.batch.planned_batches==="1"?"":"es"}). Ingredients are counted from the recipe. Nothing counts until your manager accepts it.</p>
+    {draft.review&&simple&&<article aria-label="Production record review"><p>You made {draft.made} {task?.source_unit||recipe?.outputUnit} of {task?.name||"this task"} (about {draft.review.review.submission.batch.planned_batches} batch{draft.review.review.submission.batch.planned_batches==="1"?"":"es"}). Ingredients are counted from the recipe. Nothing counts until your manager accepts it.</p>
       <button className={btnGhost} disabled={busy} onClick={()=>save(true)}>{draft.pending?"Send again":"Send to manager"}</button></article>}
     {draft.review&&!simple&&<article aria-label="Production record review"><p>{manager?draft.review.review.decision.decision:draft.review.review.submission.kind} · {day} · {track} · {draft.review.review.productionEffect}</p>
       <Measurements batch={manager?draft.review.review.submission.review_snapshot.submission.batch:draft.review.review.submission.batch} unit={draft.review.review.batch?.review.outputUnit}/>

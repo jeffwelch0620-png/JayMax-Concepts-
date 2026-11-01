@@ -94,3 +94,20 @@ test("full details stay available, and the long form still needs its own review 
   expect(container.querySelector('[aria-label="Gross ingredient 1"]')).not.toBeNull();
   await click(button("Use the simple form"));expect(container.querySelector('[aria-label="How much did you make"]')).not.toBeNull();
 });
+test("the cook answers in the task's unit; output is recorded in the recipe's unit",()=>{
+  const quarts={...yielding,outputUnit:"qt",entered_yield:"4",usable_base_yield:"128"};           // a batch makes 4 qt = 128 fl_oz
+  const gal={source_unit:"gal",factor:"128"};
+  const b=simpleBatch(batch,quarts,"2","",day,"America/New_York",new Date("2026-10-08T14:00:00Z"),gal);
+  expect(b).toMatchObject({planned_batches:"2",output_quantity:"8",note:"Cook reported 2 gal"});      // 2 gal = 256 fl_oz = 2 batches = 8 qt
+  expect(b.inputs[0].quantity).toBe("3");
+  expect(()=>simpleBatch(batch,{...quarts,usable_base_yield:undefined},"2","",day,"America/New_York",undefined,gal)).toThrow("can't be converted");
+});
+test("full details is kept with the draft, so a return never switches to the simple send",async()=>{
+  const drafts=new Map();
+  api.staffProductionSetup.mockResolvedValue({...state(true),setup:{recipes:[yielding],lots:[],policy:{timezone_name:"America/New_York"}}});
+  await render({drafts});await input("Assigned production task",task.id);await click(button("Enter full details instead"));
+  await act(async()=>root.render(null));await render({drafts});
+  expect(container.querySelector('[aria-label="Gross ingredient 1"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="How much did you make"]')).toBeNull();
+  expect(button("Send to manager")).toBeUndefined();
+});
