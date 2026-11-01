@@ -39,6 +39,17 @@ class OrderCalendarTests(unittest.TestCase):
         self.assertEqual(cal.LateCount(cycle_date='2026-11-04', reason='  Walk-in repair ').reason, 'Walk-in repair')
         with self.assertRaises(ValueError): cal.LateCount(cycle_date='2026-11-04', reason='   ')
 
+    def test_the_schedule_an_order_was_placed_under(self):
+        at = datetime(2026, 11, 4, 18, tzinfo=timezone.utc)
+        changes = [{'order_weekday': 2, 'day_before': {'order_weekday': 2, 'delivery_weekday': 3, 'vendor_ids': ['pfg']}, 'changed_at': datetime(2026, 11, 5, tzinfo=timezone.utc)},
+                   {'order_weekday': 0, 'day_before': None, 'changed_at': datetime(2026, 11, 6, tzinfo=timezone.utc)}]
+        now = [r for r in ROWS if r['order_weekday'] != 2] + [{**ROWS[0], 'order_weekday': 0, 'delivery_weekday': 1}]
+        then = {r['order_weekday']: r for r in cal.rows_at(now, changes, at)}
+        self.assertEqual(sorted(then), [2, 3, 6])                         # Wednesday back (removed later); Monday not added yet
+        self.assertEqual(then[2]['vendor_ids'], ['pfg'])
+        self.assertEqual(cal.effective(list(then.values()), {}, WED, 1)[WED]['delivery'], THU)
+        self.assertEqual({r['order_weekday'] for r in cal.rows_at(now, changes, datetime(2026, 11, 7, tzinfo=timezone.utc))}, {0, 3, 6})
+
     def test_schedule_change_shapes(self):
         ok = [dict(kind='set_day', order_weekday=0, count_due='11:00', order_due='14:00', delivery_weekday=1, vendor_ids=['pfg'], reason='New Monday order'),
               dict(kind='remove_day', order_weekday=3, reason='US Foods now Wednesday only'),

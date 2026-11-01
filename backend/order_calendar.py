@@ -40,13 +40,14 @@ def status(done_at, due, now, day, today):
     return 'overdue' if now > due else 'due'
 
 
-async def exceptions(conn, store, start, end):
-    """The standing skip or move for each cycle date near [start, end]; a restore cancels one."""
+async def exceptions(conn, store, start, end, as_of=None):
+    """The standing skip or move for each cycle date near [start, end]; a restore cancels one.
+    With `as_of`, only changes made by then (the schedule an order was placed under)."""
     if not await schedule_ready(conn): return {}
     rows = await conn.fetch('''SELECT DISTINCT ON (cycle_date) cycle_date,kind,moved_to,delivery_date,reason,changed_by,changed_at
         FROM purchasing.order_schedule_changes WHERE store_id=$1 AND kind IN ('skip','move','restore')
-        AND (cycle_date BETWEEN $2 AND $3 OR moved_to BETWEEN $2 AND $3) ORDER BY cycle_date,changed_at DESC,id DESC''',
-        store, start - timedelta(days=7), end + timedelta(days=7))
+        AND (cycle_date BETWEEN $2 AND $3 OR moved_to BETWEEN $2 AND $3) AND ($4::timestamptz IS NULL OR changed_at<=$4)
+        ORDER BY cycle_date,changed_at DESC,id DESC''', store, start - timedelta(days=7), end + timedelta(days=7), as_of)
     return {r['cycle_date']: dict(r) for r in rows if r['kind'] != 'restore'}
 
 
@@ -62,6 +63,15 @@ def effective(rows, exc, start, days):
         if e['kind'] == 'move' and start <= e['moved_to'] < end and d.weekday() in by_day:
             out[e['moved_to']] = {'row': by_day[d.weekday()], 'delivery': e['delivery_date'], 'moved_from': d}
     return out
+
+
+def rows_at(rows, day_changes, at):
+    """The weekly days as they stood at `at`: today's days with every later weekly change undone, newest first."""
+    by_day = {r['order_weekday']: dict(r) for r in rows}
+    for c in sorted((c for c in day_changes if c['changed_at'] > at), key=lambda c: c['changed_at'], reverse=True):
+        if c['day_before']: by_day[c['order_weekday']] = dict(c['day_before'])
+        else: by_day.pop(c['order_weekday'], None)
+    return list(by_day.values())
 
 
 def zone(rows):
@@ -110,7 +120,7 @@ async def state(conn, store, now, can_create, can_approve, can_edit=False):
     exc = await exceptions(conn, store, today, today + timedelta(days=AHEAD))
     schedule = await schedule_view(conn, store, rows, today, exc, can_edit)
     cycles = effective(rows, exc, today, AHEAD)
-    if not cycles: return {**base, 'calendar': None, 'on_order': await on_order(conn, store, rows) if rows else [], 'schedule': schedule}
+    if not cycles: return {**base, 'calendar': None, 'on_order': await on_order(conn, store, rows), 'schedule': schedule}
     day = min(cycles)
     entry = cycles[day]; row = entry['row']
     count_due, order_due = datetime.combine(day, row['count_due'], tz), datetime.combine(day, row['order_due'], tz)
@@ -148,11 +158,15 @@ async def on_order(conn, store, rows):
     latest = await conn.fetchrow('''SELECT count_date,timing,boundary_date FROM actual_inventory.count_snapshots s WHERE store_id=$1
         AND status='complete' AND NOT EXISTS(SELECT 1 FROM actual_inventory.count_snapshots c WHERE c.corrects_snapshot_id=s.id)
         ORDER BY count_date DESC,boundary_date DESC,recorded_at DESC,id DESC LIMIT 1''', store)
+    day_changes = await conn.fetch('''SELECT order_weekday,day_before,changed_at FROM purchasing.order_schedule_changes
+        WHERE store_id=$1 AND kind IN ('set_day','remove_day') ORDER BY changed_at,id''', store) if await schedule_ready(conn) else []
     out = []
     for o in await conn.fetch('''SELECT ref,vendor_id,vendor_name,status,submitted_at,approved_at,sent_at FROM public.purchase_orders
             WHERE store_id=$1 AND archived_at IS NULL AND status=ANY($2) ORDER BY submitted_at,ref''', store, list(ON_ORDER)):
         placed = o['submitted_at'].astimezone(tz).date() if o['submitted_at'] else None
-        entry = effective(rows, await exceptions(conn, store, placed, placed), placed, 1).get(placed) if placed else None
+        # The schedule the order was placed under, so later schedule edits don't rewrite its delivery.
+        entry = effective(rows_at(rows, day_changes, o['submitted_at']), await exceptions(conn, store, placed, placed, o['submitted_at']),
+                          placed, 1).get(placed) if placed else None
         due = entry['delivery'] if entry and o['vendor_id'] in entry['row']['vendor_ids'] else None
         out.append({**dict(o), 'expected_delivery': due,
                     'maybe_counted': bool(latest and due and latest['boundary_date'] > due),
@@ -249,6 +263,10 @@ async def change_schedule(pool, store, actor, body, key):
             known = {r['id'] for r in await conn.fetch('SELECT id FROM public.vendors WHERE active AND id=ANY($1)', body.vendor_ids)}
             if known != set(body.vendor_ids): raise HTTPException(422, 'Choose active registered suppliers')
             old = next((r for r in rows if r['order_weekday'] == body.order_weekday), None)
+            if not old:
+                exc = await exceptions(conn, store, today, today + timedelta(days=AHEAD))
+                if any(e['kind'] == 'move' and e['moved_to'] >= today and e['moved_to'].weekday() == body.order_weekday for e in exc.values()):
+                    raise HTTPException(409, 'A moved cycle already falls on that weekday; put it back or move it first')
             before = day_view(old) if old else None
             new = await conn.fetchrow('''INSERT INTO purchasing.order_calendar(store_id,order_weekday,count_due,order_due,delivery_weekday,vendor_ids,timezone_name)
                 VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (store_id,order_weekday) DO UPDATE SET count_due=EXCLUDED.count_due,order_due=EXCLUDED.order_due,
@@ -266,6 +284,8 @@ async def change_schedule(pool, store, actor, body, key):
             exc = await exceptions(conn, store, today, today + timedelta(days=AHEAD))
             current = exc.get(body.cycle_date)
             if body.kind == 'restore' and not current: raise HTTPException(409, 'That cycle is already on its usual day')
+            if body.kind == 'restore' and any(e['kind'] == 'move' and e['moved_to'] == body.cycle_date for d, e in exc.items() if d != body.cycle_date):
+                raise HTTPException(409, 'Another cycle has moved onto that date; move it first')
             if body.kind == 'skip' and current and current['kind'] == 'skip': raise HTTPException(409, 'That cycle is already skipped')
             if body.kind == 'move':
                 if body.moved_to < today: raise HTTPException(422, 'Move a cycle to today or later')

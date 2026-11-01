@@ -271,7 +271,7 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
         flags=(await shift.get('/api/pg/purchases/berts/order-calendar')).json();self.assertFalse(flags['can_create']);self.assertFalse(flags['can_approve'])
         async with self.pool.acquire() as c:await c.execute("DELETE FROM purchasing.order_calendar WHERE store_id='berts'")   # like Papa's: no calendar
         none=await self.catalog.get('/api/pg/purchases/berts/order-calendar');self.assertEqual(none.status_code,200,none.text)
-        self.assertIsNone(none.json()['calendar']);self.assertEqual([o['ref'] for o in none.json()['on_order']],[])
+        self.assertIsNone(none.json()['calendar']);self.assertEqual([o['ref'] for o in none.json()['on_order']],[approved['id']])   # still on order
 
     # Schedule changes need an owner or the Ops Lead: the independent owner login makes them.
     async def change(self,body,client=None,key=None):
@@ -304,6 +304,16 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(moved.status_code,200,moved.text)
         view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
         self.assertEqual((view['schedule']['upcoming'][0]['change'],view['schedule']['upcoming'][0]['moved_to']),('move',moved_to))
+        # Put today back, skip the next cycle, move today onto it: putting that one back would stack two cycles.
+        self.assertEqual((await self.change({'kind':'restore','cycle_date':today,'reason':'Undo move'})).status_code,200)
+        nxt=next((d for d in view['schedule']['upcoming'][1:] if (date.fromisoformat(d['cycle_date'])-start).days<=6),None)
+        if nxt:
+            self.assertEqual((await self.change({'kind':'skip','cycle_date':nxt['cycle_date'],'reason':'Closed'})).status_code,200)
+            onto=await self.change({'kind':'move','cycle_date':today,'moved_to':nxt['cycle_date'],'delivery_date':nxt['cycle_date'],'reason':'Combine'})
+            self.assertEqual(onto.status_code,200,onto.text)
+            stacked=await self.change({'kind':'restore','cycle_date':nxt['cycle_date'],'reason':'Open after all'})
+            self.assertEqual(stacked.status_code,409,stacked.text);self.assertIn('moved onto that date',stacked.text)
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
         clash=[d for d in view['schedule']['upcoming'][1:] if d['change'] is None]
         if clash:
             held=await self.change({'kind':'move','cycle_date':clash[0]['cycle_date'],'moved_to':moved_to,'delivery_date':moved_to,'reason':'Clash'})
@@ -324,3 +334,14 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
             history=await c.fetch("SELECT kind,day_before,day_after FROM purchasing.order_schedule_changes WHERE order_weekday=$1 ORDER BY changed_at",free)
         self.assertEqual([h['kind'] for h in history],['set_day','remove_day'])
         self.assertIsNone(history[0]['day_before']);self.assertIsNotNone(history[1]['day_before'])
+
+    async def test_an_order_keeps_its_delivery_when_the_schedule_changes(self):
+        po=await self.saved(await self.create())
+        pending=await self.saved(await self.command(po,'submit',note='Late: invented'))
+        await self.saved(await self.command(pending,'approve',client=self.other))
+        before=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        due=next(o for o in before['on_order'] if o['ref']==pending['id'])['expected_delivery'];self.assertIsNotNone(due)
+        weekday=next(d['order_weekday'] for d in before['schedule']['days'] if 'synthetic_other' in d['vendor_ids'])
+        self.assertEqual((await self.change({'kind':'remove_day','order_weekday':weekday,'reason':'Supplier dropped this day'})).status_code,200)
+        after=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        self.assertEqual(next(o for o in after['on_order'] if o['ref']==pending['id'])['expected_delivery'],due)

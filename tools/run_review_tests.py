@@ -163,6 +163,7 @@ DATABASE_CASES = (
  ('order_commands','OrderCalendarTests','test_calendar_shows_overdue_count_late_order_and_what_is_on_order'),
  ('order_commands','OrderCalendarTests','test_only_an_owner_or_ops_lead_changes_the_schedule_and_cycles_follow_it'),
  ('order_commands','OrderCalendarTests','test_weekly_days_are_set_and_removed_with_their_history'),
+ ('order_commands','OrderCalendarTests','test_an_order_keeps_its_delivery_when_the_schedule_changes'),
  ('staff_prep_counts','StaffPrepCountsTests','test_review_corrections_count_author_cannot_accept_after_staff_revision'),
  ('staff_prep_production','StaffProductionTests','test_a_signed_in_cook_submits_verified_output_as_themself'),
  ('staff_prep_production','StaffProductionTests','test_shift_leaders_accept_kitchen_managers_send_back_and_reassign'),
