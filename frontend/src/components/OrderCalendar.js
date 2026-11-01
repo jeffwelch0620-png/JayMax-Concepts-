@@ -3,6 +3,7 @@ import { CalendarClock } from "lucide-react";
 import * as api from "../lib/api";
 import { canonicalStoreId } from "../lib/purchaseContract";
 import { cardCls, inpCls, btnAcc, btnGhost } from "./common";
+import { OrderScheduleEditor } from "./OrderScheduleEditor";
 
 // Order calendar (M4, Jeff 2026-11-01): the next order cycle, what is due or overdue, and what is
 // still on order. A reminder only: nothing here blocks a count or an order. A late count asks for a
@@ -45,7 +46,7 @@ export function OrderCalendar({ rid }) {
     <section className={`${cardCls} p-4`} aria-label="Order calendar" data-testid="order-calendar">
       {cal ? <>
         <div className="flex items-center gap-2 mb-2"><CalendarClock size={16} className="text-slate-400" />
-          <span className="font-display font-bold text-slate-100">{cal.cycle_date === cal.today ? "Today's order" : `Next order: ${dayName(cal.cycle_date)}`}</span>
+          <span className="font-display font-bold text-slate-100">{cal.cycle_date === cal.today ? "Today's order" : `Next order: ${dayName(cal.cycle_date)}`}{cal.moved_from ? ` (moved from ${dayName(cal.moved_from)})` : ""}</span>
           <span className="text-xs text-slate-400">count by {cal.count_due_label}, orders by {cal.order_due_label} · delivery {dayName(cal.delivery_date)}</span></div>
         <ul className="text-sm space-y-1" data-testid="order-calendar-steps">
           <li>Count: <span className={TONE[cal.count.status]}>{WORD[cal.count.status]}</span></li>
@@ -64,6 +65,7 @@ export function OrderCalendar({ rid }) {
           {o.maybe_counted && <span className="block text-xs text-amber-300">The count on {dayName(o.latest_count_date)} may already include this delivery. Confirm its receipt so it isn't counted twice.</span>}</li>)}</ul></div>}
       {error && <p className="text-red-400 text-xs mt-2" role="alert">{error}</p>}
       <button className={`${btnGhost} mt-2`} disabled={busy} onClick={load}>Refresh</button>
+      {view.schedule?.can_edit && view.schedule.ready && <OrderScheduleEditor rid={rid} schedule={view.schedule} onChanged={load} />}
     </section>
   );
 }

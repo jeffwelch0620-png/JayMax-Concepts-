@@ -69,6 +69,11 @@ class PositionTests(unittest.TestCase):
         for code in ('KM', 'FOHM', 'BPM', 'SL-BOH'): self.assertFalse(positions.can({'role': 'manager', 'position': code}, 'approve_orders'))
         self.assertTrue(positions.can({'role': 'owner', 'position': 'OPS'}, 'approve_orders'))
         self.assertTrue(positions.can({'role': 'manager'}, 'approve_orders'))   # no position yet: today's rule
+        # Only an owner or the Ops Lead changes the order schedule (Jeff 2026-11-01).
+        self.assertTrue(positions.can({'role': 'owner', 'position': 'OPS'}, 'edit_order_schedule'))
+        self.assertTrue(positions.can({'role': 'owner'}, 'edit_order_schedule'))
+        for code in ('GM', 'KM', 'FOHM', 'BPM', 'SL-BOH'): self.assertFalse(positions.can({'role': 'manager', 'position': code}, 'edit_order_schedule'))
+        self.assertFalse(positions.can({'role': 'manager'}, 'edit_order_schedule'))
 
     def test_staff_work_wages_and_legacy_logins(self):
         self.assertTrue(positions.can({'role': 'manager', 'position': 'SL-BOH'}, 'accept_staff_work'))
