@@ -270,7 +270,8 @@ def create_router(pool_factory, store_check, manager_authorize, mint, staff_user
 
     @router.get(base + '/members/sign-in')
     async def read_roster(store: str, request: Request):
-        store_check(store); manager_authorize(request, store, False)
+        # Managers and owners only: read-only collaborators don't see who is locked out or signed in.
+        store_check(store); manager_authorize(request, store, True)
         async with pool_factory().acquire() as conn:
             return {'staff': await roster(conn, store), 'switched_on': enabled()}
 

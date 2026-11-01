@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { StaffSignIn } from "./StaffSignIn";
 import * as api from "../lib/api";
 
-jest.mock("../lib/api", () => ({ __esModule: true, rememberedStaff: jest.fn(), rememberStaff: jest.fn(), staffSignInNames: jest.fn(), staffSignIn: jest.fn() }));
+jest.mock("../lib/api", () => ({ __esModule: true, rememberedStaff: jest.fn(), rememberStaff: jest.fn(), staffSignInNames: jest.fn(), staffSignIn: jest.fn(), keepStaffSession: jest.fn() }));
 let root, container;
 beforeEach(() => {
   jest.useFakeTimers(); global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -70,4 +70,20 @@ test("a wrong PIN or a lockout shows the server's message, and Not you? forgets 
   await click("staff-not-me");
   expect(api.rememberStaff).toHaveBeenCalledWith("berts", null);
   expect(q("staff-name-entry")).not.toBeNull();
+});
+
+test("a sign-in abandoned with Not you? never keeps or uses its session", async () => {
+  api.rememberedStaff.mockReturnValue({ rid: "berts", id: "m-a", name: "Invented cook A" });
+  let finish;
+  api.staffSignIn.mockReturnValue(new Promise(r => { finish = r; }));
+  const onSignedIn = jest.fn();
+  await render(<StaffSignIn rid="berts" setRid={() => {}} onSignedIn={onSignedIn} />);
+  await type("staff-pin-entry", "7350");
+  await click("staff-sign-in-button");
+  await click("staff-sign-in-button");                                // a second tap while pending is ignored
+  expect(api.staffSignIn).toHaveBeenCalledTimes(1);
+  await click("staff-not-me");
+  await act(async () => finish({ token: "t", staff_member_id: "m-a", name: "Invented cook A", rid: "berts" }));
+  expect(api.keepStaffSession).not.toHaveBeenCalled();
+  expect(onSignedIn).not.toHaveBeenCalled();
 });

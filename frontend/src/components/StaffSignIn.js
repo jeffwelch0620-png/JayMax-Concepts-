@@ -24,8 +24,11 @@ export function StaffSignIn({ rid, setRid, onSignedIn }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const lookups = useRef(0);
+  const attempts = useRef(0);   // a store change, "Not you?" or leaving abandons a pending sign-in
+  useEffect(() => () => { attempts.current += 1; }, []);
 
   useEffect(() => {
+    attempts.current += 1;
     const r = api.rememberedStaff(rid);
     setMember(r ? { id: r.id, name: r.name } : null); setRemember(!!r);
     setQuery(""); setMatches([]); setPin(""); setNewPin(null); setConfirmPin(""); setErr("");
@@ -43,11 +46,13 @@ export function StaffSignIn({ rid, setRid, onSignedIn }) {
   }, [rid, member, query]);
 
   function notMe() {
+    attempts.current += 1; setBusy(false);
     api.rememberStaff(rid, null);
     setMember(null); setRemember(false); setQuery(""); setPin(""); setNewPin(null); setConfirmPin(""); setErr("");
   }
 
   async function signIn() {
+    if (busy) return;
     setErr("");
     if (!rid) { setErr("Pick your restaurant first"); return; }
     if (!member) { setErr("Type your name and pick it from the list"); return; }
@@ -57,17 +62,21 @@ export function StaffSignIn({ rid, setRid, onSignedIn }) {
       if (newPin !== confirmPin) { setErr("The two new PINs don't match"); return; }
     }
     setBusy(true);
+    const attempt = ++attempts.current;
     try {
       const session = await api.staffSignIn(rid, { staff_member_id: member.id, pin, ...(newPin !== null ? { new_pin: newPin } : {}) });
+      if (attempt !== attempts.current) return;   // abandoned: never keep or use this session
+      api.keepStaffSession(session);
       api.rememberStaff(rid, remember ? member : null);
       setPin(""); setNewPin(null); setConfirmPin("");
       onSignedIn(session);
     } catch (e) {
+      if (attempt !== attempts.current) return;
       const status = e?.response?.status;
       if (status === 409 && e?.response?.data?.detail?.code === "pin_change_required") { setNewPin(""); setErr(""); return; }
       setPin("");
       setErr(detail(e, status === 401 ? "Name or PIN not recognised" : "Couldn't sign in. Try again."));
-    } finally { setBusy(false); }
+    } finally { if (attempt === attempts.current) setBusy(false); }
   }
 
   const enter = (e) => { if (e.key === "Enter") signIn(); };

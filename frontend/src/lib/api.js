@@ -243,18 +243,17 @@ export const rememberStaff = (rid, member) => {
   } catch { /* the name just isn't remembered */ }
 };
 export const staffSignInNames = (rid, q) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/sign-in/names`, { params: { q } }).then(r => r.data.names);
-export const staffSignIn = (rid, body) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/sign-in`, body).then(r => {
-  sessionStorage.setItem(STAFF_SESSION_KEY, JSON.stringify({ ...r.data, rid }));
-  return r.data;
-});
+// The screen keeps a session only once it still wants it (see StaffSignIn), so an abandoned
+// attempt never lands on the device.
+export const staffSignIn = (rid, body) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/sign-in`, body).then(r => ({ ...r.data, rid }));
+export const keepStaffSession = (s) => sessionStorage.setItem(STAFF_SESSION_KEY, JSON.stringify(s));
 export const staffSignOut = async () => {
   const s = staffSession();
   if (!s) return;
-  try { await axios.post(`${PG_API}/staff/${pgStoreId(s.rid)}/sign-out`, {}, { headers: { Authorization: ["Bearer", s.token].join(" ") } }); }
-  finally {
-    // A late reply must not sign out someone who signed in meanwhile.
-    if (staffSession()?.token === s.token) endStaffSession();
-  }
+  // Forget it here first, so a stalled request can't leave the next person on this device signed in
+  // as them; then end it on the server with the captured token.
+  endStaffSession();
+  await axios.post(`${PG_API}/staff/${pgStoreId(s.rid)}/sign-out`, {}, { headers: { Authorization: ["Bearer", s.token].join(" ") } });
 };
 export const staffSignInRoster = (rid) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/members/sign-in`).then(r => r.data);
 export const issueStaffPin = (rid, memberId, pin, key) => axios.put(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/pin`, { pin }, { headers: { "Idempotency-Key": key } }).then(r => r.data);

@@ -26,7 +26,7 @@ class StaffLoginModelTests(unittest.TestCase):
     def test_pins_are_stored_salted_and_hashed(self):
         first, second = staff_login.pin_hash('4821'), staff_login.pin_hash('4821')
         self.assertNotEqual(first, second)
-        self.assertNotIn('4821', first)
+        self.assertRegex(first, r'^pbkdf2\$[A-Za-z0-9_-]+\$[0-9a-f]{64}$')
         self.assertTrue(staff_login.pin_ok('4821', first))
         self.assertFalse(staff_login.pin_ok('4822', first))
         self.assertFalse(staff_login.pin_ok('4821', 'not-a-hash'))
@@ -124,7 +124,8 @@ class StaffLoginDatabaseTests(staff.StaffTaskTests):
         self.assertEqual((await self.portal.post('/api/pg/staff/berts/verify', json={'pin': '4826'})).status_code, 410)
         async with self.pool.acquire() as c:
             hashes = await c.fetch('SELECT pin_hash FROM prep_inventory.staff_member_pins')
-        self.assertFalse(any('7350' in h['pin_hash'] or '4821' in h['pin_hash'] for h in hashes))
+        for h in hashes:
+            self.assertRegex(h['pin_hash'], r'^pbkdf2\$[A-Za-z0-9_-]+\$[0-9a-f]{64}$')
 
     async def test_five_wrong_pins_lock_the_person_until_a_manager_unlocks_them(self):
         await self.signed_in(self.member)
@@ -133,6 +134,8 @@ class StaffLoginDatabaseTests(staff.StaffTaskTests):
         self.assertEqual((await self.sign_in(self.member, '1111')).status_code, 423)
         self.assertEqual((await self.sign_in(self.member, '7350')).status_code, 423)          # even the right PIN waits
         self.assertEqual((await self.sign_in(self.other_member, '7350')).status_code, 403)    # others aren't locked (no PIN yet)
+        readonly = server._token({'id': 'invented-readonly', 'email': 'ro@example.invalid', 'role': 'readonly', 'locations': ['berts']})
+        self.assertEqual((await self.portal.get('/api/pg/staff/berts/members/sign-in', headers={'Authorization': 'Bearer ' + readonly})).status_code, 403)
         roster = (await self.portal.get('/api/pg/staff/berts/members/sign-in', headers={'Authorization': 'Bearer ' + self.manager('KM')})).json()['staff']
         self.assertTrue(next(s for s in roster if s['staff_member_id'] == str(self.member))['locked_until'])
         url = f'/api/pg/staff/berts/members/{self.member}/unlock'
