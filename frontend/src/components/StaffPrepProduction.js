@@ -129,7 +129,8 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
   const roots=data?.submissions||[],selectedRoot=roots.find(h=>h.events.some(e=>e.id===draft.event_id)),selected=selectedRoot?.events.find(e=>e.id===draft.event_id);
   const task=plan?.tasks.find(t=>t.id===draft.task_id),recipe=data?.setup?.recipes.find(r=>r.id===draft.batch?.recipe_version_id);
   const tz=data?.setup?.policy?.timezone_name||"America/New_York",simple=!manager&&!draft.details&&Number(recipe?.entered_yield)>0&&draft.kind==="submit";
-  const own=verified(staffId),taskName=id=>plan?.tasks.find(t=>t.id===id)?.name||"Prep task";
+  // A signed-in cook with no task or report chosen yet sees only the pickers.
+  const own=verified(staffId),idle=!manager&&own&&!draft.root_id,taskName=id=>plan?.tasks.find(t=>t.id===id)?.name||"Prep task";
   function chooseTask(id){const t=plan.tasks.find(t=>t.id===id),r=data.setup.recipes.find(r=>r.id===t?.recipe_version_id);
     edit({...blank(),task_id:id,root_id:crypto.randomUUID(),batch:r?{recipe_version_id:r.id,planned_batches:"",output_quantity:"",performed_at:"",business_date:day,timezone_name:data.setup.policy?.timezone_name||"",
       calendar_date_confirmed:false,single_output_confirmed:false,note:"",inputs:r.lines.map(l=>({recipe_line_id:l.id,quantity:"",source_unit:l.source_unit,factor:l.factor,measurement_basis:"",source_batch_id:null,included_loss_quantity:null,loss_evidence:null,evidence:""}))}:null});}
@@ -170,7 +171,7 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
       :own?"Signed in as you. Say how much you made; your manager checks it before it counts."
       :"Selected roster name is claimed identity. Submitting measurements creates no inventory until a manager accepts them."}</p>
     {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}<button className={btnGhost} disabled={frozen} onClick={load}>Refresh production submissions</button>
-    {data&&<><ul>{roots.map(h=><li key={h.root_id}>{own?`${taskName(h.events.at(-1).task_id)} · ${h.events.at(-1).review_snapshot.submission.batch?.output_quantity??""} reported · ${outcome(h)==="awaiting review"?"waiting for a manager":outcome(h)}`
+    {data&&<><ul>{roots.map(h=><li key={h.root_id}>{own?`${taskName(h.events.at(-1).task_id)} · ${[h.events.at(-1).review_snapshot.submission.batch?.output_quantity,h.events.at(-1).review_snapshot.batch?.review?.outputUnit].filter(Boolean).join(" ")} reported · ${outcome(h)==="awaiting review"?"waiting for a manager":outcome(h)}`
       :`Submission ${h.root_id} · revision ${h.events.at(-1).revision} · ${h.events.at(-1).kind} · ${outcome(h)}`}</li>)}</ul>
     <fieldset disabled={frozen}>
       <label>{manager?"Pending production submission":"Revise production submission"}<select className={inpCls} aria-label={manager?"Pending production submission":"Revise production submission"} value={draft.event_id} onChange={e=>manager?update("event_id",e.target.value):chooseRevision(e.target.value)}><option value="">{manager?"Choose submission":"New measured production"}</option>{roots.filter(h=>h.events.at(-1).kind==="submit"&&!h.decisions.some(d=>d.decision==="accepted")&&(manager?!h.decisions.some(d=>d.submission_id===h.events.at(-1).id):true)).map(h=><option key={h.root_id} value={h.events.at(-1).id}>{h.root_id} · revision {h.events.at(-1).revision}</option>)}</select></label>
@@ -180,10 +181,10 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
         <label>Assigned production task<select className={inpCls} aria-label="Assigned production task" disabled={!!draft.event_id} value={draft.task_id} onChange={e=>chooseTask(e.target.value)}><option value="">Select assigned task</option>{(plan?.tasks||[]).filter(t=>t.assigned_member?.id===staffId&&!t.roster_changed&&!t.progress.closed&&!t.progress.needs_review).map(t=><option key={t.id} value={t.id}>{t.name} · {t.quantity} {t.source_unit} planned</option>)}</select></label>
         {draft.event_id&&<label>Submission action<select className={inpCls} aria-label="Submission action" value={draft.kind} onChange={e=>update("kind",e.target.value)}><option value="submit">Revise measured submission</option><option value="withdraw">Withdraw pending submission</option></select></label>}
         {draft.batch&&simple&&<>
-          <label>How much did you make? ({task?.source_unit||recipe.outputUnit})<input className={inpCls} inputMode="decimal" aria-label="How much did you make" value={draft.made} onChange={e=>update("made",e.target.value)}/></label>
-          {draft.batch.inputs.map((x,i)=>{const l=recipe.lines.find(l=>l.id===x.recipe_line_id);return l?.source_kind==="prepared"&&<label key={x.recipe_line_id}>Which batch of {l.source_snapshot?.recipe?.name||"the prepared ingredient"} did you use?
-            <select className={inpCls} aria-label={`Source lot ${i+1}`} value={x.source_batch_id||""} onChange={e=>inputField(i,"source_batch_id",e.target.value||null)}><option value="">Choose a batch</option>{data.setup.lots.filter(v=>v.product_id===l.source_snapshot?.recipe?.product_id).map(v=><option key={v.id} value={v.id}>Made {String(v.performed_at).slice(0,16).replace("T"," ")}</option>)}</select></label>;})}
-          <label>Note for your manager (optional)<input className={inpCls} aria-label="Note for your manager" value={draft.cookNote} onChange={e=>update("cookNote",e.target.value)}/></label>
+          <label className="block mb-2">How much did you make? ({task?.source_unit||recipe.outputUnit})<input className={`${inpCls} block w-full mt-1`} inputMode="decimal" aria-label="How much did you make" value={draft.made} onChange={e=>update("made",e.target.value)}/></label>
+          {draft.batch.inputs.map((x,i)=>{const l=recipe.lines.find(l=>l.id===x.recipe_line_id);return l?.source_kind==="prepared"&&<label className="block mb-2" key={x.recipe_line_id}>Which batch of {l.source_snapshot?.recipe?.name||"the prepared ingredient"} did you use?
+            <select className={`${inpCls} block w-full mt-1`} aria-label={`Source lot ${i+1}`} value={x.source_batch_id||""} onChange={e=>inputField(i,"source_batch_id",e.target.value||null)}><option value="">Choose a batch</option>{data.setup.lots.filter(v=>v.product_id===l.source_snapshot?.recipe?.product_id).map(v=><option key={v.id} value={v.id}>Made {String(v.performed_at).slice(0,16).replace("T"," ")}</option>)}</select></label>;})}
+          <label className="block mb-2">Note for your manager (optional)<input className={`${inpCls} block w-full mt-1`} aria-label="Note for your manager" value={draft.cookNote} onChange={e=>update("cookNote",e.target.value)}/></label>
         </>}
         {draft.batch&&draft.kind==="submit"&&!simple&&<><p>Measured usable output unit: {recipe?.outputUnit||"review required"}. Planned output is not a measurement.</p>
           {[["planned_batches","Recipe batches prepared"],["output_quantity","Measured usable production"],["performed_at","Production time with offset"],["timezone_name","Production timezone"],["note","Production measurement evidence"]].map(([k,label])=><label key={k}>{label}<input className={inpCls} aria-label={label} value={draft.batch[k]} onChange={e=>batchField(k,e.target.value)}/></label>)}
@@ -201,8 +202,8 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
         </>}
       </>}
       {!manager&&draft.batch&&draft.kind==="submit"&&Number(recipe?.entered_yield)>0&&<button type="button" className={btnGhost} onClick={()=>edit(d=>({...d,details:!d.details,review:null,confirmed:false}))}>{draft.details?"Use the simple form":"Enter full details instead"}</button>}
-      {!simple&&<label>Production review reason<input className={inpCls} aria-label="Production review reason" value={draft.note} onChange={e=>update("note",e.target.value)}/></label>}
-      <button className={btnGhost} disabled={manager?!draft.event_id:!draft.root_id} onClick={preview}>{simple?"Check my report":"Review production record"}</button>
+      {!simple&&!idle&&<label>Production review reason<input className={inpCls} aria-label="Production review reason" value={draft.note} onChange={e=>update("note",e.target.value)}/></label>}
+      {!idle&&<button className={btnGhost} disabled={manager?!draft.event_id:!draft.root_id} onClick={preview}>{simple?"Check my report":"Review production record"}</button>}
     </fieldset></>}
     {draft.review&&simple&&<article aria-label="Production record review"><p>You made {draft.made} {task?.source_unit||recipe?.outputUnit} of {task?.name||"this task"} (about {draft.review.review.submission.batch.planned_batches} batch{draft.review.review.submission.batch.planned_batches==="1"?"":"es"}). Ingredients are counted from the recipe. Nothing counts until your manager accepts it.</p>
       <button className={btnGhost} disabled={busy} onClick={()=>save(true)}>{draft.pending?"Send again":"Send to manager"}</button></article>}

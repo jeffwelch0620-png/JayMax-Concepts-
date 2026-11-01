@@ -2,7 +2,7 @@ import React,{act} from "react";
 import {createRoot} from "react-dom/client";
 import {StaffProductionSubmission,StaffProductionDecisions,validProductionAck,validProductionReview,productionSame,simpleBatch,storeTime} from "./StaffPrepProduction";
 import * as api from "../lib/api";
-jest.mock("../lib/api",()=>({staffProductionSetup:jest.fn(),previewStaffProduction:jest.fn(),submitStaffProduction:jest.fn(),staffProductionReviewSetup:jest.fn(),previewStaffProductionDecision:jest.fn(),decideStaffProduction:jest.fn()}));
+jest.mock("../lib/api",()=>({verifiedStaff:jest.fn(()=>false),staffProductionSetup:jest.fn(),previewStaffProduction:jest.fn(),submitStaffProduction:jest.fn(),staffProductionReviewSetup:jest.fn(),previewStaffProductionDecision:jest.fn(),decideStaffProduction:jest.fn()}));
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`,hash="a".repeat(64),day="2026-10-08",track="daily";
 const member={id:id(2),store_id:"berts",name:"Cook A",role:"cook",active:true};
 const progress={task_id:id(1),status:"open",reviewed_base_quantity:"0",closed:false,needs_review:false,links:[]};
@@ -118,4 +118,17 @@ test("revising a saved measured report reopens it in full details with its figur
   expect(container.querySelector('[aria-label="Gross ingredient 1"]').value).toBe("3");
   expect(container.querySelector('[aria-label="Ingredient basis 1"]').value).toBe("measured");
   expect(button("Check my report")).toBeUndefined();
+});
+test("a signed-in cook sees only the pickers until a task is chosen, and reports with their unit",async()=>{
+  api.verifiedStaff.mockReturnValue(true);
+  api.staffProductionSetup.mockResolvedValue({...state(true),identity_verified:true,submissions:[{root_id:stored.root_id,events:[stored],decisions:[]}],setup:{recipes:[yielding],lots:[],policy:{timezone_name:"America/New_York"}}});
+  await render();
+  expect(container.textContent).toContain("Signed in as you");
+  expect(container.textContent).toContain("Sauce · 2 bag reported · waiting for a manager");
+  expect(container.querySelector('[aria-label="Production review reason"]')).toBeNull();
+  expect(button("Review production record")).toBeUndefined();
+  await input("Assigned production task",task.id);
+  expect(container.querySelector('[aria-label="How much did you make"]').closest("label").className).toContain("block");
+  expect(button("Check my report")).toBeTruthy();
+  api.verifiedStaff.mockReturnValue(false);
 });
