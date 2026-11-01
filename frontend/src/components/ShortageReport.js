@@ -12,11 +12,14 @@ const detail = (e, fallback) => (typeof e?.response?.data?.detail === "string" ?
 
 // A shortage note to the Shift Leader (Jeff 2026-11-01): how much short (optional), why, and a
 // note. It changes no counts, pars or production.
-export function ShortageReport({ rid, day, track, task, staffId }) {
+export function ShortageReport({ rid, day, track, task, staffId, drafts }) {
   const [open, setOpen] = useState(false), [form, setForm] = useState({ short_quantity: "", reason: "", note: "" });
   const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [sent, setSent] = useState(false);
-  const attempt = useRef(null);   // a retry after a lost reply reuses its key; an edit is a new report
-  const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); attempt.current = null; };
+  // An unconfirmed report keeps its key in the screen's draft cache, so resending the same report
+  // after a lost reply (even after leaving and coming back) replays it instead of sending a duplicate.
+  const privateDrafts = useRef(new Map()), cache = drafts || privateDrafts.current;
+  const draftKey = `staff-shortage:${rid}:${day}:${track}:${task.id}:${staffId}`;
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function send() {
     if (busy) return;
@@ -25,13 +28,15 @@ export function ShortageReport({ rid, day, track, task, staffId }) {
     if (form.short_quantity !== "" && !(Number(form.short_quantity) > 0)) { setErr("How much short must be more than 0, or leave it blank"); return; }
     const body = { day, track, task_id: task.id, staff_member_id: staffId, reason: form.reason, note: form.note.trim(),
       ...(form.short_quantity !== "" ? { short_quantity: form.short_quantity } : {}) };
-    if (!attempt.current) attempt.current = crypto.randomUUID();
+    const pending = cache.get(draftKey);
+    const key = pending && JSON.stringify(pending.body) === JSON.stringify(body) ? pending.key : crypto.randomUUID();
+    cache.set(draftKey, { body, key });
     setBusy(true); setErr("");
     try {
-      await api.reportShortage(rid, body, attempt.current);
-      attempt.current = null; setSent(true); setOpen(false); setForm({ short_quantity: "", reason: "", note: "" });
+      await api.reportShortage(rid, body, key);
+      cache.delete(draftKey); setSent(true); setOpen(false); setForm({ short_quantity: "", reason: "", note: "" });
     } catch (e) {
-      if ([403, 409, 422].includes(e?.response?.status)) attempt.current = null;
+      if ([403, 409, 422].includes(e?.response?.status)) cache.delete(draftKey);
       setErr(detail(e, "Your report wasn't sent. Try again."));
     } finally { setBusy(false); }
   }

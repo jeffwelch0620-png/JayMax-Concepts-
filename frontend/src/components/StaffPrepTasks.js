@@ -104,7 +104,7 @@ export function StaffPrepTaskPlan({rid,pin,staffId,track,drafts,personal=false})
     {staffId&&!personal&&<label><input type="checkbox" aria-label="Show my roster assignments" checked={mine} onChange={e=>setMine(e.target.checked)}/> Show assignments for my selected roster name (claimed identity)</label>}
     <button className={btnGhost} onClick={load}>Refresh released prep plan</button>{error&&<p role="alert">{error}</p>}
     {data&&<><p>{data.day} · {data.track} · {data.status}</p>{data.tasks.length===0&&<p>{data.status==="released"?"No included tasks for this selection.":"No released plan for this selected date."}</p>}
-      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||(t.via==="station"?`Your station (${t.station})`:"Unassigned")} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>Task {t.id} · measured reviewed output {t.progress.reviewed_base_quantity} {t.base_unit}.</p>{personal&&<ShortageReport rid={rid} day={day} track={track} task={t} staffId={staffId}/>}</li>)}</ul></>}
+      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||(t.via==="station"?`Your station (${t.station})`:"Unassigned")} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>Task {t.id} · measured reviewed output {t.progress.reviewed_base_quantity} {t.base_unit}.</p>{personal&&<ShortageReport rid={rid} day={day} track={track} task={t} staffId={staffId} drafts={drafts}/>}</li>)}</ul></>}
     {api.staffPrepProductionEnabled&&staffId&&data&&<StaffProductionSubmission rid={rid} day={day} track={track} staffId={staffId} pin={pin} plan={data} drafts={drafts}/>}
   </section>;
 }

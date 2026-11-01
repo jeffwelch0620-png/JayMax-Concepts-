@@ -49,3 +49,19 @@ test("a retry after a lost reply reuses its key; editing makes a new report", as
   expect(api.reportShortage.mock.calls.map(c => c[2])).toEqual(["key-1", "key-1", "key-2"]);
   expect(api.reportShortage.mock.calls[0][1].short_quantity).toBeUndefined();   // left blank
 });
+
+test("resending the same report after leaving and coming back replays its key", async () => {
+  const drafts = new Map();
+  api.reportShortage.mockRejectedValueOnce(new Error("Network Error")).mockResolvedValue({});
+  const fill = async () => {
+    await act(async () => root.render(<ShortageReport key={Math.random()} rid="berts" day="2026-11-01" track="daily" task={task} staffId="m-a" drafts={drafts} />));
+    await click('[data-testid="shortage-open-t-1"]');
+    await setValue('select[aria-label="Why are you short?"]', "equipment");
+    await setValue('input[aria-label="Note for the Shift Leader"]', "Invented slicer down");
+    await click('[data-testid="shortage-send-t-1"]');
+  };
+  await fill();   // saved, but the reply was lost
+  await fill();   // the screen was reloaded; the cook sends it again
+  expect(api.reportShortage.mock.calls.map(c => c[2])).toEqual(["key-1", "key-1"]);
+  expect(drafts.size).toBe(0);
+});
