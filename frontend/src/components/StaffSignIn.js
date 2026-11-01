@@ -28,7 +28,7 @@ export function StaffSignIn({ rid, setRid, onSignedIn }) {
   useEffect(() => () => { attempts.current += 1; }, []);
 
   useEffect(() => {
-    attempts.current += 1;
+    attempts.current += 1; setBusy(false);   // a pending sign-in for the old store is abandoned
     const r = api.rememberedStaff(rid);
     setMember(r ? { id: r.id, name: r.name } : null); setRemember(!!r);
     setQuery(""); setMatches([]); setPin(""); setNewPin(null); setConfirmPin(""); setErr("");

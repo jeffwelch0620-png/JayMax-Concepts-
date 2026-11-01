@@ -87,3 +87,18 @@ test("a sign-in abandoned with Not you? never keeps or uses its session", async 
   expect(api.keepStaffSession).not.toHaveBeenCalled();
   expect(onSignedIn).not.toHaveBeenCalled();
 });
+
+test("changing stores while a sign-in is pending lets the employee sign in at the new store", async () => {
+  api.rememberedStaff.mockReturnValue({ rid: "berts", id: "m-a", name: "Invented cook A" });
+  let finish;
+  api.staffSignIn.mockReturnValueOnce(new Promise(r => { finish = r; }));
+  await render(<StaffSignIn rid="berts" setRid={() => {}} onSignedIn={() => {}} />);
+  await type("staff-pin-entry", "7350");
+  await click("staff-sign-in-button");
+  expect(q("staff-sign-in-button").disabled).toBe(true);
+  await render(<StaffSignIn rid="rudds" setRid={() => {}} onSignedIn={() => {}} />);
+  expect(q("staff-sign-in-button").disabled).toBe(false);
+  await act(async () => finish({ token: "t", staff_member_id: "m-a", name: "Invented cook A", rid: "berts" }));
+  expect(q("staff-sign-in-button").disabled).toBe(false);
+  expect(api.keepStaffSession).not.toHaveBeenCalled();
+});
