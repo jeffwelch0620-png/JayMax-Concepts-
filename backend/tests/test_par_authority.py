@@ -61,6 +61,15 @@ class PositionTests(unittest.TestCase):
         for sl in ('SL-BOH', 'SL-FOH'):
             self.assertFalse(positions.can({'role': 'manager', 'position': sl}, 'bulk_request'))
 
+    def test_order_creators_and_approvers(self):
+        # Jeff 2026-11-01 (P4): KM, GM, FOHM, Ops Lead and owners create; only GM, Ops Lead and owners approve.
+        for code in ('KM', 'GM', 'FOHM'): self.assertTrue(positions.can({'role': 'manager', 'position': code}, 'create_orders'))
+        for code in ('SL-BOH', 'SL-FOH', 'BPM'): self.assertFalse(positions.can({'role': 'manager', 'position': code}, 'create_orders'))
+        self.assertTrue(positions.can({'role': 'manager', 'position': 'GM'}, 'approve_orders'))
+        for code in ('KM', 'FOHM', 'BPM', 'SL-BOH'): self.assertFalse(positions.can({'role': 'manager', 'position': code}, 'approve_orders'))
+        self.assertTrue(positions.can({'role': 'owner', 'position': 'OPS'}, 'approve_orders'))
+        self.assertTrue(positions.can({'role': 'manager'}, 'approve_orders'))   # no position yet: today's rule
+
     def test_staff_work_wages_and_legacy_logins(self):
         self.assertTrue(positions.can({'role': 'manager', 'position': 'SL-BOH'}, 'accept_staff_work'))
         self.assertFalse(positions.can({'role': 'manager', 'position': 'SL-FOH'}, 'accept_staff_work'))

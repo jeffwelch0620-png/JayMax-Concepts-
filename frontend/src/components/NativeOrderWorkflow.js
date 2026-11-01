@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
+import { OrderCalendar } from "./OrderCalendar";
 import { NativeOrderReceiving } from "./NativeOrderReceiving";
 import { PageTitle, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 const actions = { draft:["submit","archive"],pending:["approve","reject"],approved:["send"],rejected:["reopen","archive"],sent:[],receiving:[],received:[] };
@@ -42,9 +43,10 @@ export function NativeOrderWorkflow({ rid, showToast, onInventoryChange }) {
   }
   return <section className="space-y-4">
     <PageTitle>Reviewed Purchase Orders</PageTitle>
+    {api.orderWorkflowEnabled&&<OrderCalendar rid={rid} />}
     <p>Review a current order before changing its state. Prices are planning estimates; invoice-linked receiving records purchases independently. Actions use the signed-in reviewer. Archiving retains the draft and its history.</p>
     <button className={btnGhost} disabled={busy || !!pending} onClick={load}>Refresh reviewed orders</button>
-    <label className="block">Review / rejection note<textarea aria-label="Order command note" className={inpCls} value={note} disabled={busy || !!pending} onChange={e=>setNote(e.target.value)} /></label>
+    <label className="block">Note (needed to reject, or to submit an order after its deadline)<textarea aria-label="Order command note" className={inpCls} value={note} disabled={busy || !!pending} onChange={e=>setNote(e.target.value)} /></label>
     {pending && <button className={btnAcc} disabled={busy} onClick={()=>command({id:pending.ref})}>Retry the same order command</button>}
     {pending && <p>Awaiting confirmation. A retry uses the same request and cannot repeat the transition or create another draft.</p>}
     {error && <p role="alert">{error}</p>}

@@ -30,6 +30,9 @@ export const reviewInventoryPar = (rid, code, body, version, key) => axios.put(`
 export const checkInventoryParStatus = (rid, code, body, version, key) => axios.post(`${PG_API}/purchases/${pgStoreId(rid)}/inventory-pars/${encodeURIComponent(code)}/status`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const orderWorkflowEnabled = catalogMappingEnabled && process.env.REACT_APP_ORDER_WORKFLOW === "true";
 export const supplierContactsEnabled = orderWorkflowEnabled && process.env.REACT_APP_SUPPLIER_CONTACTS === "true";
+// Order calendar (M4): next cycle, due/overdue, late reasons, what is on order.
+export const orderCalendar = rid => axios.get(`${PG_API}/purchases/${pgStoreId(rid)}/order-calendar`).then(r => r.data);
+export const recordLateCount = (rid, body, key) => axios.post(`${PG_API}/purchases/${pgStoreId(rid)}/order-calendar/late-count`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const supplierContacts = rid => axios.get(`${PG_API}/purchases/${pgStoreId(rid)}/supplier-contacts`).then(r => r.data);
 export const saveSupplierContact = (rid, vendor, body, version, key) => axios.put(`${PG_API}/purchases/${pgStoreId(rid)}/supplier-contacts/${encodeURIComponent(vendor)}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const createVersionedOrder = (rid, body, key) => axios.post(`${PG_API}/purchases/${pgStoreId(rid)}/order-drafts`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);

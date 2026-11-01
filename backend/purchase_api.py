@@ -532,6 +532,8 @@ def create_router(pool_factory, store_check, authorize):
     install_price_routes(router,context)
     from order_commands import install_routes as install_order_routes
     install_order_routes(router,context)
+    from order_calendar import install_routes as install_order_calendar_routes
+    install_order_calendar_routes(router,context)
     from supplier_contacts import install_routes as install_contact_routes
     install_contact_routes(router,context)
     from prep_planning import install_routes as install_planning_routes

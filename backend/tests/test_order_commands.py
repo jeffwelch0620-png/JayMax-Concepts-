@@ -199,3 +199,75 @@ class OrderCommandTests(unittest.IsolatedAsyncioTestCase):
         old=server.db_pg._pool;server.db_pg._pool=pool
         try:self.assertEqual((await self.catalog.get('/api/orders/berts')).json(),before)
         finally:server.db_pg._pool=old;await pool.close()
+
+
+@unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'),'Disposable PostgreSQL required')
+class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
+    """M4 (Jeff 2026-11-01): who may create and approve orders, late reasons and the calendar view."""
+    payload,put,units,pair,scope,count,report,body,post,target,capture,receipt=(OrderCommandTests.payload,OrderCommandTests.put,OrderCommandTests.units,
+        OrderCommandTests.pair,OrderCommandTests.scope,OrderCommandTests.count,OrderCommandTests.report,OrderCommandTests.body,OrderCommandTests.post,
+        OrderCommandTests.target,OrderCommandTests.capture,OrderCommandTests.receipt)
+    draft,create,command,saved=OrderCommandTests.draft,OrderCommandTests.create,OrderCommandTests.command,OrderCommandTests.saved
+
+    async def asyncSetUp(self):
+        await OrderCommandTests.asyncSetUp(self)
+        async with self.pool.acquire() as c:
+            await c.execute((recovery.counts.native.ROOT/'migrations/20261102_order_calendar.sql').read_text())
+            # Today (store time) is an order day for the invented supplier, already past both deadlines.
+            weekday=await c.fetchval("SELECT (extract(isodow FROM now() AT TIME ZONE 'America/New_York')::int+6)%7")
+            await c.execute('DELETE FROM purchasing.order_calendar WHERE store_id=$1 AND order_weekday=$2','berts',weekday)
+            await c.execute('''INSERT INTO purchasing.order_calendar(store_id,order_weekday,count_due,order_due,delivery_weekday,vendor_ids)
+                VALUES('berts',$1::smallint,'00:00','00:00:01',(($1::int+1)%7)::smallint,ARRAY['synthetic_other'])''',weekday)
+        self.people=[]
+
+    async def asyncTearDown(self):
+        for person in self.people:await person.aclose()
+        await OrderCommandTests.asyncTearDown(self)
+
+    def person(self,position):
+        token=server._token({'id':f'synthetic-{position.lower()}','role':'manager','position':position,'email':f'{position.lower()}@example.invalid','locations':['berts']})
+        client=httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app),base_url='http://test',headers={'Authorization':'Bearer '+token})
+        self.people.append(client);return client
+
+    async def test_positions_gate_order_creation_and_approval(self):
+        shift,km,km2,gm=self.person('SL-BOH'),self.person('KM'),self.person('FOHM'),self.person('GM')
+        held=await self.create(client=shift);self.assertEqual(held.status_code,403,held.text);self.assertIn('Kitchen Manager',held.text)
+        po=await self.saved(await self.create(client=km))
+        pending=await self.saved(await self.command(po,'submit',client=km,note='Late: invented delivery check'))
+        for reviewer in (km2,shift):
+            held=await self.command(pending,'approve',client=reviewer);self.assertEqual(held.status_code,403,held.text)
+        held=await self.command(pending,'reject',client=km2,note='No');self.assertEqual(held.status_code,403,held.text)
+        approved=await self.saved(await self.command(pending,'approve',client=gm))
+        self.assertEqual(approved['approvedBy'],'synthetic-gm')
+
+    async def test_late_submit_needs_a_reason_and_records_it_once(self):
+        po=await self.saved(await self.create())
+        held=await self.command(po,'submit',note='')
+        self.assertEqual(held.status_code,422,held.text);self.assertIn('This order is late',held.text)
+        key=str(uuid4())
+        pending=await self.saved(await self.command(po,'submit',key=key,note='Truck count ran long'))
+        replay=await self.command(po,'submit',key=key,note='Truck count ran long');self.assertEqual(replay.status_code,200,replay.text)
+        async with self.pool.acquire() as c:
+            notes=await c.fetch("SELECT * FROM purchasing.order_cycle_notes WHERE kind='order_late'")
+        self.assertEqual(len(notes),1);self.assertEqual(notes[0]['reason'],'Truck count ran long');self.assertEqual(notes[0]['vendor_id'],'synthetic_other')
+        self.assertEqual(pending['status'],'pending')
+
+    async def test_calendar_shows_overdue_count_late_order_and_what_is_on_order(self):
+        view=(await self.catalog.get('/api/pg/purchases/berts/order-calendar')).json()
+        cal=view['calendar'];self.assertTrue(view['installed']);self.assertTrue(view['can_create']);self.assertTrue(view['can_approve'])
+        self.assertEqual(cal['cycle_date'],cal['today']);self.assertEqual(cal['count']['status'],'overdue');self.assertTrue(cal['count']['needs_reason'])
+        self.assertEqual([v['status'] for v in cal['vendors']],['overdue'])
+        saved=await self.catalog.post('/api/pg/purchases/berts/order-calendar/late-count',json={'cycle_date':cal['cycle_date'],'reason':'Walk-in door repair'},headers={'Idempotency-Key':str(uuid4())})
+        self.assertEqual(saved.status_code,200,saved.text)
+        po=await self.saved(await self.create())
+        pending=await self.saved(await self.command(po,'submit',note='Late: invented'))
+        approved=await self.saved(await self.command(pending,'approve',client=self.other))
+        view=(await self.catalog.get('/api/pg/purchases/berts/order-calendar')).json();cal=view['calendar']
+        self.assertFalse(cal['count']['needs_reason']);self.assertEqual(cal['vendors'][0]['status'],'late')
+        self.assertEqual([n['kind'] for n in cal['notes']],['count_late','order_late'])
+        self.assertEqual([o['ref'] for o in view['on_order']],[approved['id']]);self.assertIsNotNone(view['on_order'][0]['expected_delivery'])
+        shift=self.person('SL-BOH')
+        flags=(await shift.get('/api/pg/purchases/berts/order-calendar')).json();self.assertFalse(flags['can_create']);self.assertFalse(flags['can_approve'])
+        async with self.pool.acquire() as c:await c.execute("DELETE FROM purchasing.order_calendar WHERE store_id='berts'")   # like Papa's: no calendar
+        none=await self.catalog.get('/api/pg/purchases/berts/order-calendar');self.assertEqual(none.status_code,200,none.text)
+        self.assertIsNone(none.json()['calendar']);self.assertEqual([o['ref'] for o in none.json()['on_order']],[])

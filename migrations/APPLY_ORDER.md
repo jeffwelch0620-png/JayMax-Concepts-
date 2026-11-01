@@ -51,6 +51,7 @@ For an existing hosted database, compare recorded migration history and object d
 | 41 | [20261101_staff_personal_login.sql](20261101_staff_personal_login.sql) |
 | 42 | [20261101_staff_shortages.sql](20261101_staff_shortages.sql) |
 | 43 | [20261101_staff_verified_production.sql](20261101_staff_verified_production.sql) |
+| 44 | [20261102_order_calendar.sql](20261102_order_calendar.sql) |
 
 ## Separate manager receiving extension
 

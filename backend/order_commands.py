@@ -166,6 +166,15 @@ async def execute(pool,store,actor,action,body,key,ref=None,expected=None):
                     editors = await conn.fetch("SELECT actor FROM purchasing.order_commands WHERE po_id=$1 AND action IN ('create','edit','reorder')", po_id)
                     require_independent(actor, [po['creator_actor']] + [row['actor'] for row in editors])
                 if action=='reject' and not note:raise HTTPException(422,'Record the reason for rejecting this order')
+                if action=='submit':
+                    # A late order is allowed with a short reason, recorded against the cycle (Jeff 2026-11-01).
+                    import order_calendar
+                    late=await order_calendar.order_late(conn,store,po['vendor_id'],await conn.fetchval('SELECT now()'))
+                    if late:
+                        cycle_date,row=late
+                        if not note:raise HTTPException(422,f"This order is late: {po['vendor_name']} orders were due by {order_calendar.clock(row['order_due'])}. Write why in the note, then submit again.")
+                        await conn.execute('''INSERT INTO purchasing.order_cycle_notes(store_id,cycle_date,kind,vendor_id,po_id,reason,recorded_by,request_key)
+                            VALUES($1,$2,'order_late',$3,$4,$5,$6,$7)''',store,cycle_date,po['vendor_id'],po_id,note,actor,key)
                 await conn.execute('''UPDATE public.purchase_orders SET status=$2,
                     submitted_at=CASE WHEN $3='submit' THEN now() ELSE submitted_at END,
                     approved_at=CASE WHEN $3='approve' THEN now() ELSE approved_at END,
@@ -182,15 +191,16 @@ async def execute(pool,store,actor,action,body,key,ref=None,expected=None):
 def install_routes(router,context):
     @router.post('/{store_id}/order-drafts')
     async def create(store_id:str,body:Draft,request:Request,idempotency_key:UUID=Header(...)):
-        actor,pool=await context(request,store_id,True)
+        actor,pool=await context(request,store_id,True,'create_orders')
         return await execute(pool,store_id,actor,'create',body,idempotency_key)
 
     @router.put('/{store_id}/order-drafts/{ref}')
     async def edit(store_id:str,ref:str,body:Draft,request:Request,idempotency_key:UUID=Header(...)):
-        actor,pool=await context(request,store_id,True)
+        actor,pool=await context(request,store_id,True,'create_orders')
         return await execute(pool,store_id,actor,'edit',body,idempotency_key,ref,version(request))
 
     @router.post('/{store_id}/orders/{ref}/commands')
     async def transition(store_id:str,ref:str,body:Transition,request:Request,idempotency_key:UUID=Header(...)):
-        actor,pool=await context(request,store_id,True)
+        # Approving or rejecting needs the GM, the Ops Lead or an owner; everything else, an order creator (P4).
+        actor,pool=await context(request,store_id,True,'approve_orders' if body.action in ('approve','reject') else 'create_orders')
         return await execute(pool,store_id,actor,body.action,body,idempotency_key,ref,version(request))
