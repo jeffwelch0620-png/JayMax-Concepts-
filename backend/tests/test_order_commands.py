@@ -273,25 +273,28 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
         none=await self.catalog.get('/api/pg/purchases/berts/order-calendar');self.assertEqual(none.status_code,200,none.text)
         self.assertIsNone(none.json()['calendar']);self.assertEqual([o['ref'] for o in none.json()['on_order']],[])
 
+    # Schedule changes need an owner or the Ops Lead: the independent owner login makes them.
     async def change(self,body,client=None,key=None):
-        return await (client or self.catalog).post('/api/pg/purchases/berts/order-calendar/schedule',json=body,headers={'Idempotency-Key':key or str(uuid4())})
+        return await (client or self.other).post('/api/pg/purchases/berts/order-calendar/schedule',json=body,headers={'Idempotency-Key':key or str(uuid4())})
 
     async def test_only_an_owner_or_ops_lead_changes_the_schedule_and_cycles_follow_it(self):
-        view=(await self.catalog.get('/api/pg/purchases/berts/order-calendar')).json();today=view['calendar']['today']
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json();today=view['calendar']['today']
         self.assertTrue(view['schedule']['can_edit']);self.assertEqual(view['schedule']['upcoming'][0]['cycle_date'],today)
         for position in ('GM','KM'):
             held=await self.change({'kind':'skip','cycle_date':today,'reason':'Holiday'},client=self.person(position))
             self.assertEqual(held.status_code,403,held.text);self.assertIn('owner or the Operations',held.text)
         self.assertFalse((await self.person('GM').get('/api/pg/purchases/berts/order-calendar')).json()['schedule']['can_edit'])
+        legacy=await self.change({'kind':'skip','cycle_date':today,'reason':'Holiday'},client=self.catalog)   # a manager with no position yet
+        self.assertEqual(legacy.status_code,403,legacy.text)
         key=str(uuid4())
         skipped=await self.change({'kind':'skip','cycle_date':today,'reason':'Holiday closure'},key=key);self.assertEqual(skipped.status_code,200,skipped.text)
         replay=await self.change({'kind':'skip','cycle_date':today,'reason':'Holiday closure'},key=key);self.assertTrue(replay.json()['replayed'])
-        view=(await self.catalog.get('/api/pg/purchases/berts/order-calendar')).json()
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
         self.assertNotEqual(view['calendar']['cycle_date'],today);self.assertEqual(view['schedule']['upcoming'][0]['change'],'skip')
         po=await self.saved(await self.create())
         on_time=await self.command(po,'submit',note='');self.assertEqual(on_time.status_code,200,on_time.text)   # a skipped day isn't late
         self.assertEqual((await self.change({'kind':'restore','cycle_date':today,'reason':'Open after all'})).status_code,200)
-        self.assertEqual((await self.catalog.get('/api/pg/purchases/berts/order-calendar')).json()['calendar']['cycle_date'],today)
+        self.assertEqual((await self.other.get('/api/pg/purchases/berts/order-calendar')).json()['calendar']['cycle_date'],today)
         again=await self.change({'kind':'restore','cycle_date':today,'reason':'Twice'});self.assertEqual(again.status_code,409,again.text)
         base={d['order_weekday'] for d in view['schedule']['days']}
         from datetime import date,timedelta
@@ -299,7 +302,7 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
         moved_to=(start+timedelta(days=free)).isoformat()
         moved=await self.change({'kind':'move','cycle_date':today,'moved_to':moved_to,'delivery_date':moved_to,'reason':'Supplier changed day'})
         self.assertEqual(moved.status_code,200,moved.text)
-        view=(await self.catalog.get('/api/pg/purchases/berts/order-calendar')).json()
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
         self.assertEqual((view['schedule']['upcoming'][0]['change'],view['schedule']['upcoming'][0]['moved_to']),('move',moved_to))
         clash=[d for d in view['schedule']['upcoming'][1:] if d['change'] is None]
         if clash:
@@ -307,12 +310,12 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(held.status_code,(409,422),held.text)
 
     async def test_weekly_days_are_set_and_removed_with_their_history(self):
-        view=(await self.catalog.get('/api/pg/purchases/berts/order-calendar')).json()
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
         free=next(w for w in range(7) if w not in {d['order_weekday'] for d in view['schedule']['days']})
         day={'kind':'set_day','order_weekday':free,'count_due':'10:00','order_due':'13:30','delivery_weekday':(free+1)%7,'vendor_ids':['synthetic_other'],'reason':'Added a delivery day'}
         bad=await self.change({**day,'vendor_ids':['no_such_supplier']});self.assertEqual(bad.status_code,422,bad.text)
         self.assertEqual((await self.change(day)).status_code,200)
-        days=(await self.catalog.get('/api/pg/purchases/berts/order-calendar')).json()['schedule']['days']
+        days=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()['schedule']['days']
         added=next(d for d in days if d['order_weekday']==free)
         self.assertEqual((added['count_due'],added['order_due_label'],added['vendor_ids']),('10:00','1:30 PM',['synthetic_other']))
         self.assertEqual((await self.change({'kind':'remove_day','order_weekday':free,'reason':'Trial over'})).status_code,200)
