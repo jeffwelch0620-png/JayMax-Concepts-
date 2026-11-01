@@ -6,6 +6,7 @@ import { StaffCountDrafts } from "./StaffCountDrafts";
 import { StaffPrepCountDrafts } from "./StaffPrepCounts";
 import { StaffPrepTaskPlan } from "./StaffPrepTasks";
 import { StaffSignIn } from "./StaffSignIn";
+import { MyShift } from "./MyShift";
 import { enablePushNotifications, disablePushNotifications, pushSupported } from "../lib/push";
 import { inpCls, btnAcc, btnGhost, cardCls, Pill } from "./common";
 import { useCountSheet, CountSheetControls, CountSheetBanner, CountSheetList, SaveAllCountsButton } from "./CountSheet";
@@ -41,7 +42,8 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
   const [err, setErr] = useState("");
   const [unlocked, setUnlocked] = useState(!!resumed);
   const [unlocking, setUnlocking] = useState(false);
-  const [view, setView] = useState("tasks");
+  // A signed-in cook lands on their own shift (Prep); the shared-PIN portal lands on the task inbox.
+  const [view, setView] = useState(resumed && api.staffPrepTasksEnabled ? "prep" : "tasks");
 
   // Roster picker — shown between PIN entry and the main portal when this
   // restaurant has named staff set up (Staff tab); identifies who is tapping
@@ -109,7 +111,7 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
 
   async function signedIn(session) {
     setStaffId(session.staff_member_id); setStaffName(session.name); setTaskName(session.name); setCountsName(session.name);
-    setPin(""); setUnlocked(true); setView("tasks");
+    setPin(""); setUnlocked(true); setView(api.staffPrepTasksEnabled ? "prep" : "tasks");
     await refreshTasks();
   }
 
@@ -286,7 +288,7 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
                   return (
                     <button key={v.id} onClick={() => setView(v.id)} data-testid={`staff-view-${v.id}`}
                       className={v.id === view ? btnAcc : btnGhost}>
-                      <Icon size={14} /> {v.label}
+                      <Icon size={14} /> {personal && v.id === "prep" && api.staffPrepTasksEnabled ? "My shift" : v.label}
                     </button>
                   );
                 })}
@@ -315,7 +317,8 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
             )}
 
             {view === "prep" && (
-              api.staffPrepTasksEnabled ? <><select aria-label="Staff prep track" className={inpCls} value={track} onChange={e=>setTrack(e.target.value)}>{prepTracks(rid).map(t=><option key={t.id} value={t.id}>{t.label}</option>)}</select><StaffPrepTaskPlan key={rid} rid={rid} pin={pin} staffId={staffId} track={track} drafts={prepCountDrafts}/></> : <PrepView restaurant={restaurant} track={track} setTrack={setTrack} sheet={sheet} onRefresh={loadPrep}
+              api.staffPrepTasksEnabled && personal ? <MyShift rid={rid} staffId={staffId} staffName={staffName} track={track} setTrack={setTrack} drafts={prepCountDrafts}/>
+              : api.staffPrepTasksEnabled ? <><select aria-label="Staff prep track" className={inpCls} value={track} onChange={e=>setTrack(e.target.value)}>{prepTracks(rid).map(t=><option key={t.id} value={t.id}>{t.label}</option>)}</select><StaffPrepTaskPlan key={rid} rid={rid} pin={pin} staffId={staffId} track={track} drafts={prepCountDrafts}/></> : <PrepView restaurant={restaurant} track={track} setTrack={setTrack} sheet={sheet} onRefresh={loadPrep}
                 expanded={expanded} setExpanded={setExpanded}
                 onComplete={(t) => { setCompleting(t); setBatches(t.remaining); setName(staffName); setErr(""); }} />
             )}

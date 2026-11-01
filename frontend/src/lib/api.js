@@ -47,6 +47,10 @@ export const staffPrepTasksEnabled = prepExecutionEnabled && process.env.REACT_A
 export const staffPrepTaskSetup = (rid,day,track) => axios.get(`${purchaseUrl(rid)}/staff-prep-tasks/${day}`, {params:{track}}).then(r=>r.data);
 export const previewStaffPrepAssignment = (rid,day,track,body) => axios.post(`${purchaseUrl(rid)}/staff-prep-tasks/${day}/preview`,body,{params:{track}}).then(r=>r.data);
 export const saveStaffPrepAssignment = (rid,day,track,body,key) => axios.post(`${purchaseUrl(rid)}/staff-prep-tasks/${day}/assignments`,body,{params:{track},headers:{"Idempotency-Key":key}}).then(r=>r.data);
+// A signed-in cook's own station for the day and the stations to choose from; confirming moves them there.
+export const staffStation = (rid, day) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/station`, { params: { day } }).then(r => r.data);
+export const confirmStaffStation = (rid, body, key) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/station`, { pin: "", ...body }, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const reportShortage = (rid, body, key) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/shortages`, { pin: "", ...body }, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const staffPrepTaskPlan = (rid,body) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/prep-task-plan`,body).then(r=>r.data);
 export const staffPrepProductionEnabled = staffPrepTasksEnabled && process.env.REACT_APP_STAFF_PREP_PRODUCTION === "true";
 const staffProductionUrl = (rid,day) => `${PG_API}/staff/${pgStoreId(rid)}/prep-production/${day}`;
@@ -226,6 +230,8 @@ const staffSession = () => {
   } catch { return null; }
 };
 export const currentStaffSession = () => staffSession();
+// Whether this device's signed-in employee is the named person: only then is the identity verified.
+export const verifiedStaff = (member) => !!member && staffSession()?.staff_member_id === member;
 export function endStaffSession() {
   try {
     if (!sessionStorage.getItem(STAFF_SESSION_KEY)) return;
@@ -262,7 +268,7 @@ export const unlockStaffSignIn = (rid, memberId, key) => axios.post(`${PG_API}/s
 // Which login a request carries: the signed-in employee's session for employee screens, the
 // manager's login for everything else, and neither for the name + PIN sign-in itself.
 const STAFF_SIGN_IN_URL = /\/pg\/staff\/[^/]+\/sign-in(?:\/names)?$/;
-const EMPLOYEE_URL = /\/pg\/staff\/[^/]+\/(?:sign-out|prepsheet|counts|tasks|push|count-drafts|prep-count-drafts|prep-task-plan|station|prep-production)(?:\/|$)/;
+const EMPLOYEE_URL = /\/pg\/staff\/[^/]+\/(?:sign-out|prepsheet|counts|tasks|push|count-drafts|prep-count-drafts|prep-task-plan|station|shortages|prep-production)(?:\/|$)/;
 axios.interceptors.request.use((config) => {
   if (config.headers?.Authorization) return config;
   const url = String(config.url || "");

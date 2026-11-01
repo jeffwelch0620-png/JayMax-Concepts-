@@ -43,7 +43,9 @@ MIGRATIONS=(
  '20261031_store_transfers.sql',
  '20261031_login_positions.sql',
  '20261031_stations.sql',
- '20261101_staff_personal_login.sql')
+ '20261101_staff_personal_login.sql',
+ '20261101_staff_shortages.sql',
+ '20261101_staff_verified_production.sql')
 # Historical installation receipts and the unapproved runtime candidate retain
 # their reviewed baselines. Later feature DDL never becomes part of those receipts.
 ORIGINAL_NATIVE_MIGRATIONS=MIGRATIONS[:MIGRATIONS.index('20261013_purchase_source_lookup_index.sql')]

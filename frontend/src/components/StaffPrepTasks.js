@@ -4,7 +4,10 @@ import {useRetainedDraft} from "../lib/saveIntegrity";
 import {todayISO} from "../lib/calc";
 import {cardCls,inpCls,btnGhost} from "./common";
 import {StaffProductionSubmission} from "./StaffPrepProduction";
+import {ShortageReport} from "./ShortageReport";
 const storeId=rid=>rid==="papa_leonis"?"papa":rid;
+// A shared PIN or a manager login only claims who did it; the signed-in cook's own session is verified.
+const verified=m=>!!api.verifiedStaff?.(m);
 const uid=v=>typeof v==="string"&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==="object"?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
 const same=(a,b)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
@@ -78,12 +81,13 @@ function AssignmentForm({rid,day,track,drafts}){
     {draft.pending&&draft.rejected&&<button className={btnGhost} disabled={busy} onClick={()=>{edit(d=>({...d,pending:null,review:null,confirmed:false,rejected:false}));refresh();}}>Revise rejected staff assignment</button>}
   </section>;
 }
-export function StaffPrepTaskPlan({rid,pin,staffId,track,drafts}){
-  const [day,setDay]=useState(todayISO()),[mine,setMine]=useState(false),[data,setData]=useState(null),[error,setError]=useState("");
+// `personal`: the signed-in cook's own shift (their tasks only, verified identity); otherwise the shared-PIN view.
+export function StaffPrepTaskPlan({rid,pin,staffId,track,drafts,personal=false}){
+  const [day,setDay]=useState(todayISO()),[mine,setMine]=useState(personal),[data,setData]=useState(null),[error,setError]=useState("");
   const epoch=useRef(0),seq=useRef(0);
   async function load(){const id=epoch.current,n=++seq.current;setData(null);setError("");const member=mine?(staffId||null):null;
     try{const s=await api.staffPrepTaskPlan(rid,{pin,day,track,staff_member_id:member});if(id!==epoch.current||n!==seq.current)return;
-      if(s?.store_id!==storeId(rid)||s.day!==day||s.track!==track||s.selected_member_id!==member||s.identity_verified!==false
+      if(s?.store_id!==storeId(rid)||s.day!==day||s.track!==track||s.selected_member_id!==member||s.identity_verified!==verified(member)
         ||!["draft","released"].includes(s.status)||!Array.isArray(s.tasks)||new Set(s.tasks.map(t=>t.id)).size!==s.tasks.length
         ||(s.status!=="released"&&s.tasks.length)||s.tasks.some(t=>!uid(t.id)||typeof t.name!=="string"||!/^\d+(\.\d+)?$/.test(t.quantity)||Number(t.quantity)<=0||typeof t.source_unit!=="string"||t.progress?.task_id!==t.id
         ||typeof t.base_unit!=="string"||typeof t.progress.reviewed_base_quantity!=="string"||!/^\d+(\.\d+)?$/.test(t.progress.reviewed_base_quantity)
@@ -94,13 +98,13 @@ export function StaffPrepTaskPlan({rid,pin,staffId,track,drafts}){
     }catch(e){if(id===epoch.current&&n===seq.current)setError(errorText(e));}
   }
   useEffect(()=>{++epoch.current;load();return()=>{++epoch.current;++seq.current;};},[rid,day,track,pin,staffId,mine]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <section className={`${cardCls} p-4`} aria-label="Released staff prep plan"><h3>Released prep plan</h3>
-    <p>Choose the location calendar date. Planned quantities are expected output. A manager records measured production and reviews completion.</p>
+  return <section className={`${cardCls} p-4`} aria-label="Released staff prep plan"><h3>{personal?"My prep tasks":"Released prep plan"}</h3>
+    <p>{personal?"Your tasks: assigned to you by name, or made at your station today. Report what you made; a manager accepts it.":"Choose the location calendar date. Planned quantities are expected output. A manager records measured production and reviews completion."}</p>
     <label>Staff prep date<input className={inpCls} type="date" aria-label="Staff prep date" value={day} onChange={e=>setDay(e.target.value)}/></label>
-    {staffId&&<label><input type="checkbox" aria-label="Show my roster assignments" checked={mine} onChange={e=>setMine(e.target.checked)}/> Show assignments for my selected roster name (claimed identity)</label>}
+    {staffId&&!personal&&<label><input type="checkbox" aria-label="Show my roster assignments" checked={mine} onChange={e=>setMine(e.target.checked)}/> Show assignments for my selected roster name (claimed identity)</label>}
     <button className={btnGhost} onClick={load}>Refresh released prep plan</button>{error&&<p role="alert">{error}</p>}
     {data&&<><p>{data.day} · {data.track} · {data.status}</p>{data.tasks.length===0&&<p>{data.status==="released"?"No included tasks for this selection.":"No released plan for this selected date."}</p>}
-      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||(t.via==="station"?`Your station (${t.station})`:"Unassigned")} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>Task {t.id} · measured reviewed output {t.progress.reviewed_base_quantity} {t.base_unit}.</p></li>)}</ul></>}
+      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||(t.via==="station"?`Your station (${t.station})`:"Unassigned")} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>Task {t.id} · measured reviewed output {t.progress.reviewed_base_quantity} {t.base_unit}.</p>{personal&&<ShortageReport rid={rid} day={day} track={track} task={t} staffId={staffId} drafts={drafts}/>}</li>)}</ul></>}
     {api.staffPrepProductionEnabled&&staffId&&data&&<StaffProductionSubmission rid={rid} day={day} track={track} staffId={staffId} pin={pin} plan={data} drafts={drafts}/>}
   </section>;
 }

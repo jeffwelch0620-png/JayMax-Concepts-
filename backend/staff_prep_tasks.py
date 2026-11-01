@@ -10,6 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import Field
 import prep_execution as execution
 import prep_mapping as mapping
+import staff_login
 import stations
 from staff_prep_counts import Reviewed, Credentials
 from staff_response import staff_view
@@ -123,7 +124,7 @@ async def commit(pool, store, day, track, actor, body, key):
         return dict(assignment=serial(dict(saved)), assignment_history=await history(conn,saved['task_id']), current=await state(conn, store, day, track), replayed=False)
 
 
-async def staff_state(conn, store, body, kind):
+async def staff_state(conn, store, body, kind, verified=False):
     s = await state(conn, store, body.day, body.track)
     if body.staff_member_id and not any(m['id'] == str(body.staff_member_id) and m['active'] for m in s['members']):
         raise HTTPException(422, 'Selected roster identity is not active at this location')
@@ -153,7 +154,7 @@ async def staff_state(conn, store, body, kind):
                 raise HTTPException(409, 'Task progress is incomplete; manager must review the current plan')
     return dict(store_id=store,day=str(body.day),track=body.track,status=e['status'],draft_version_id=e['draft_version_id'],
         execution_revision=e['revision'],selected_member_id=str(body.staff_member_id) if body.staff_member_id else None,station=station,
-        credential_kind=kind,identity_verified=False,tasks=tasks,
+        credential_kind=kind,identity_verified=verified,tasks=tasks,
         completionBehavior='Read-only plan. Manager records measured production and reviews task completion.')
 
 
@@ -183,7 +184,7 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
     async def staff_read(store: str, request: Request, body: ReadIn):
         store_check(store)
         async with pool_factory().acquire() as conn, conn.transaction(isolation='repeatable_read',readonly=True):
-            await ready(conn); _,kind=await staff_authorize(request,conn,store,body.pin)
-            return staff_view(await staff_state(conn,store,body,kind))
+            await ready(conn); actor,kind=await staff_authorize(request,conn,store,body.pin)
+            return staff_view(await staff_state(conn,store,body,kind,staff_login.acting_member(actor,body.staff_member_id)))
 
     return router

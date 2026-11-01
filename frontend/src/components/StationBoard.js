@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { Field, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 import { todayISO } from "../lib/calc";
+import { SHORTAGE_REASONS } from "./ShortageReport";
 
 // Station board (Jeff 2026-10-30). The Shift Leader puts each person on a station at shift start
 // and moves them during the shift; every stint is kept for station and per-employee metrics.
@@ -84,6 +85,11 @@ export function StationBoard({ rid }) {
         </select>
       </div>)}
     </section>
+    {!!board.shortages?.length && <section className={`${cardCls} p-4 mb-4`} aria-label="Shortages reported today" data-testid="board-shortages">
+      <h3 className="font-semibold">Shortages reported today</h3>
+      <p className="text-xs text-slate-400">Notes from cooks. They don't change counts, pars or production.</p>
+      <ul className="text-sm">{board.shortages.map(r => <li key={r.id}>{clock(r.reported_at)} · {r.staff_name} · {r.task_snapshot?.name}: {SHORTAGE_REASONS.find(x => x.id === r.reason)?.label || r.reason}{r.short_quantity ? ` (${Number(r.short_quantity)} ${r.task_snapshot?.source_unit || ""} short)` : ""}. {r.note}</li>)}</ul>
+    </section>}
     {!!board.history.length && <section className={`${cardCls} p-4`} aria-label="Station time today">
       <h3 className="font-semibold">Station time today</h3>
       <ul className="text-sm">{board.history.map(h => <li key={h.stint_id}>{h.staff_name}: {h.station_name} {clock(h.started_at)}–{h.ended_at ? clock(h.ended_at) : "now"}</li>)}</ul>

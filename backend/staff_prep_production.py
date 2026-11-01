@@ -10,6 +10,7 @@ import staff_prep_tasks as tasks
 import prep_batches as batches
 import prep_execution as execution
 import catalog_mapping
+import staff_login
 from staff_prep_counts import Reviewed, Credentials
 from native_units import lock_store
 from purchase_api import serial
@@ -118,6 +119,7 @@ async def submission_preview(conn,store,day,track,body,actor,kind):
         if body.kind=='withdraw' and any(d['submission_id']==old['id'] for d in h['decisions']): raise HTTPException(409,'Decided submission cannot be withdrawn')
     member=await conn.fetchrow('SELECT id FROM staff_members WHERE id=$1 AND store_id=$2 AND active',body.staff_member_id,store)
     if not member: raise HTTPException(422,'Select active roster staff at this location')
+    verified=staff_login.acting_member(actor,body.staff_member_id)
     if body.kind=='submit':
         e,t,a,progress=await current_assignment(conn,store,day,track,body)
         if body.batch.recipe_version_id!=UUID(t['recipe_version_id']) or body.batch.business_date!=day: raise HTTPException(422,'Measured production must use the task recipe and selected calendar date')
@@ -127,7 +129,7 @@ async def submission_preview(conn,store,day,track,body,actor,kind):
         if old['assignment_id']!=str(body.assignment_id): raise HTTPException(422,'Withdrawal keeps the original assignment')
         p=None; sources=old['review_snapshot']['sources']
     review=serial(dict(store_id=store,day=day,track=track,submission=body.model_dump(mode='json'),predecessor_id=old['id'] if old else None,
-        submitted_by=actor,credential_kind=kind,identity_verified=False,sources=sources,batch=p,
+        submitted_by=actor,credential_kind=kind,identity_verified=verified,sources=sources,batch=p,
         accountingEffect='none',productionEffect='none'))
     return dict(review=review,reviewHash=fingerprint(review).hex())
 
@@ -243,9 +245,10 @@ def create_router(pool_factory,store_check,manager_authorize,staff_authorize):
         prep_tracks.check(store, track)
         store_check(store)
         async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):
-            await ready(c);_,kind=await staff_authorize(request,c,store,body.pin)
+            await ready(c);actor,kind=await staff_authorize(request,c,store,body.pin)
+            verified=staff_login.acting_member(actor,staff_member_id)
             if not await c.fetchval('SELECT 1 FROM staff_members WHERE id=$1 AND store_id=$2 AND active',staff_member_id,store): raise HTTPException(422,'Select active roster staff at this location')
-            return staff_view(dict(await state(c,store,day,track,staff_member_id),setup=await batches.setup(c,store),credential_kind=kind,identity_verified=False))
+            return staff_view(dict(await state(c,store,day,track,staff_member_id),setup=await batches.setup(c,store),credential_kind=kind,identity_verified=verified))
     @router.post(staff+'/preview')
     async def staff_review(store:str,day:date,request:Request,body:StaffPreview,track:prep_tracks.Track='daily'):
         prep_tracks.check(store, track)

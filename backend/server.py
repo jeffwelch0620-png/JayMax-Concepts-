@@ -84,7 +84,7 @@ STAFF_WRITE_PATHS = ("/prepcount/", "/preplists/", "/prep/")
 # A personal staff session (own name + PIN) reaches only the employee screens, for every method.
 PERSONAL_STAFF_ROUTE = re.compile(r'/staff/[^/]+/(?:sign-out|prepsheet(?:/complete)?|counts(?:/save)?|tasks(?:/[^/]+/complete)?'
     r'|push/(?:public-key|subscribe|unsubscribe)|count-drafts(?:/[^/]+/submit)?|prep-count-drafts(?:/[^/]+/submit)?'
-    r'|prep-task-plan|station|prep-production/\d{4}-\d{2}-\d{2}/(?:setup|preview|submissions))')
+    r'|prep-task-plan|station|shortages|prep-production/\d{4}-\d{2}-\d{2}/(?:setup|preview|submissions))')
 # Mongo-backed /api/... route families whose Postgres twins live under /api/pg/... . With
 # USE_PG on they're refused outright: the frontend never calls them in that mode, and a
 # stale client or direct call would otherwise write to Mongo and silently diverge.
@@ -5971,6 +5971,8 @@ app.include_router(staff_prep_tasks.create_router(db_pg.pool,check_store_id,_pur
 import stations
 app.include_router(stations.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 app.include_router(staff_login.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_token,_staff_user))
+import staff_shortages
+app.include_router(staff_shortages.create_router(db_pg.pool,check_store_id,_staff_count_actor))
 import staff_prep_production
 app.include_router(staff_prep_production.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import prep_containers
