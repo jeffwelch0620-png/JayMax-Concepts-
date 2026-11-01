@@ -63,7 +63,7 @@ export function HistoryTab({ items, purchases, focusControlNumber }) {
                 {(selected.vendorSkus || []).length === 0 ? (
                   <div className="text-[13px] text-slate-500">No vendors set up for this item yet.</div>
                 ) : (
-                  <div className="border border-[#28354A] rounded-lg overflow-hidden">
+                  <div className="border border-jm-line rounded-lg overflow-hidden">
                     <table className="ops-table">
                       <thead><tr><th>Vendor</th><th>SKU</th><th>Most Recent Qty</th><th>Most Recent Price</th><th>Date</th></tr></thead>
                       <tbody>

@@ -136,7 +136,7 @@ function EditRecurringModal({ prepItem, onClose, onSave, showToast }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="edit-recurring-modal">
-      <div className={`${cardCls} w-full max-w-md p-5 m-4 bg-[#161F30]`}>
+      <div className={`${cardCls} w-full max-w-md p-5 m-4 bg-jm-surface`}>
         <div className="flex justify-between items-center mb-4">
           <div className="font-display font-bold text-slate-100">Recurring Schedule — {prepItem.name}</div>
           <button onClick={onClose} className="text-slate-400 hover:text-white" data-testid="close-edit-recurring"><X size={18} /></button>
@@ -215,7 +215,7 @@ function AddPrepItemModal({ rid, track, items, dishes, onClose, onSaved, showToa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="add-prep-item-modal">
-      <div className={`${cardCls} w-full max-w-xl p-5 m-4 bg-[#161F30] max-h-[90vh] overflow-y-auto`}>
+      <div className={`${cardCls} w-full max-w-xl p-5 m-4 bg-jm-surface max-h-[90vh] overflow-y-auto`}>
         <div className="flex justify-between items-center mb-4">
           <div className="font-display font-bold text-slate-100 flex items-center gap-2"><Package size={17} style={{ color: "var(--acc)" }} /> Add Prep Item</div>
           <button onClick={onClose} className="text-slate-400 hover:text-white" data-testid="close-add-prep-item"><X size={18} /></button>
@@ -692,7 +692,7 @@ function PrepListView({ rid, track, items, dishes, prepItems, reloadPrepItems, a
 
       {completing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="task-complete-modal">
-          <div className={`${cardCls} w-full max-w-lg p-5 m-4 bg-[#161F30] max-h-[90vh] overflow-y-auto`}>
+          <div className={`${cardCls} w-full max-w-lg p-5 m-4 bg-jm-surface max-h-[90vh] overflow-y-auto`}>
             <div className="flex justify-between items-center mb-3">
               <div className="font-display font-bold text-slate-100">Mark Prepped — {completing.name}</div>
               <button onClick={() => setCompleting(null)} className="text-slate-400 hover:text-white" data-testid="close-complete-modal"><X size={18} /></button>
@@ -815,7 +815,7 @@ function InventoryLog({ drafts, showError, rid, items, dishes, persistDishes, pr
                   </div>
                   <Pill color={low ? "#F59E0B" : "#10B981"} bg={low ? "rgba(245,158,11,0.12)" : "rgba(16,185,129,0.12)"}>{num(onHand, 1)} {r.yieldUOM}</Pill>
                 </div>
-                <div className="h-1.5 rounded-full bg-[#0F1626] overflow-hidden mb-3">
+                <div className="h-1.5 rounded-full bg-jm-field overflow-hidden mb-3">
                   <div className="h-full rounded-full transition-all" style={{ width: `${par > 0 ? Math.min(100, (onHand / par) * 100) : 0}%`, background: low ? "#F59E0B" : "#10B981" }} />
                 </div>
                 <div className="flex items-center gap-2 mb-2">
@@ -832,7 +832,7 @@ function InventoryLog({ drafts, showError, rid, items, dishes, persistDishes, pr
                     <div className="text-[11px] uppercase tracking-wide text-slate-500 font-bold mb-1.5 flex items-center gap-1"><Layers size={11} /> Service Containers</div>
                     <div className="flex flex-col gap-1.5">
                       {stock.containers.map((c) => (
-                        <div key={c.id} className="flex items-center justify-between text-xs bg-[#0F1626] rounded-md px-2.5 py-1.5 border border-[#28354A]" data-testid={`container-${c.id}`}>
+                        <div key={c.id} className="flex items-center justify-between text-xs bg-jm-field rounded-md px-2.5 py-1.5 border border-jm-line" data-testid={`container-${c.id}`}>
                           <span className="text-slate-300">{c.count}× {c.label} ({num(c.size, 0)} {stock.yieldUOM} each)</span>
                           <button className="text-[11px] font-semibold hover:underline" style={{ color: "var(--acc)" }} data-testid={`use-container-${c.id}`} onClick={() => handleUseContainer(r.id, c.id)}>Send 1 to service</button>
                         </div>
@@ -857,7 +857,7 @@ function InventoryLog({ drafts, showError, rid, items, dishes, persistDishes, pr
                   </div>
                   <Pill color={low ? "#F59E0B" : "#10B981"} bg={low ? "rgba(245,158,11,0.12)" : "rgba(16,185,129,0.12)"}>{num(onHand, 1)} {s.yieldUOM}</Pill>
                 </div>
-                <div className="h-1.5 rounded-full bg-[#0F1626] overflow-hidden">
+                <div className="h-1.5 rounded-full bg-jm-field overflow-hidden">
                   <div className="h-full rounded-full transition-all" style={{ width: `${par > 0 ? Math.min(100, (onHand / par) * 100) : 0}%`, background: low ? "#F59E0B" : "#10B981" }} />
                 </div>
               </div>
@@ -930,7 +930,7 @@ function InventoryLog({ drafts, showError, rid, items, dishes, persistDishes, pr
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-3 text-xs text-slate-400 border-t border-[#28354A]">
+          <div className="px-4 py-3 text-xs text-slate-400 border-t border-jm-line">
             {report.sessions.length} count session{report.sessions.length !== 1 ? "s" : ""} in range · Total raw cost prepped: <b className="num">{fmtMoney(report.totals.producedCost)}</b>
           </div>
         </div>
@@ -1084,9 +1084,9 @@ function Planning({ drafts, showError, rid, dishes, prepItems, prepCapabilities,
           <button className={`${btnAcc} mb-3`} onClick={runAdvisor} disabled={advisorBusy} data-testid="run-par-advisor-button">
             <Sparkles size={14} /> {advisorBusy ? "Analyzing…" : "Analyze & Recommend"}
           </button>
-          {trends && <div className="text-xs text-slate-300 bg-[#0F1626] border border-[#28354A] rounded-lg p-3 mb-3" data-testid="advisor-trends">{trends}</div>}
+          {trends && <div className="text-xs text-slate-300 bg-jm-field border border-jm-line rounded-lg p-3 mb-3" data-testid="advisor-trends">{trends}</div>}
           {recs.map((r) => (
-            <div key={r.id} className="border border-[#28354A] rounded-lg p-3 mb-2 bg-[#0F1626]" data-testid={`par-rec-${r.id}`}>
+            <div key={r.id} className="border border-jm-line rounded-lg p-3 mb-2 bg-jm-field" data-testid={`par-rec-${r.id}`}>
               <div className="flex justify-between items-center gap-2 mb-1">
                 <span className="font-semibold text-sm text-slate-100">{r.recipeName}</span>
                 <span className="num text-xs"><span className="text-slate-400">{num(r.currentPar, 0)}</span> <span style={{ color: "var(--acc)" }}>→ {num(r.recommendedPar, 0)}</span></span>

@@ -216,7 +216,7 @@ export function CostingTab({ items, dishes, revision = 0, loadLatest, persist, s
         {cycleDetected && <div className="p-2.5 bg-red-500/10 text-red-400 rounded-lg mb-3 font-bold border border-red-500/30">Circular recipe reference detected. A prep recipe cannot ultimately contain itself.</div>}
         {!summary.complete && lineDetails.length > 0 && <div role="status" className="text-amber-300 mb-3" data-testid="recipe-cost-incomplete">Planning cost is incomplete: {summary.issues.join("; ")}. Actual Food Cost is calculated separately from received purchases and physical count values.</div>}
         {lineDetails.length > 0 && (
-          <div className="flex gap-7 flex-wrap px-3.5 py-3 bg-[#0F1626] rounded-lg mb-3.5 border border-[#28354A]" data-testid="cost-summary">
+          <div className="flex gap-7 flex-wrap px-3.5 py-3 bg-jm-field rounded-lg mb-3.5 border border-jm-line" data-testid="cost-summary">
             <div><div className="text-[11px] text-slate-500 uppercase">{dish.recipeType === "prep" ? "Planning Batch Cost" : "Estimated Plate Cost"}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(totalCost)}</div></div>
             {dish.recipeType === "prep" ? (
               <div><div className="text-[11px] text-slate-500 uppercase">Cost per {dish.yieldUOM || "Unknown unit"}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(costPerYieldUnit)}</div></div>

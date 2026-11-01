@@ -1,7 +1,7 @@
 import React from "react";
 import { Download, Upload } from "lucide-react";
 
-const buttonClass = "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border border-[#334155] bg-[#161F30] text-slate-300 hover:border-[var(--acc)] transition disabled:opacity-50";
+const buttonClass = "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border border-jm-line-strong bg-jm-surface text-slate-300 hover:border-[var(--acc)] transition disabled:opacity-50";
 
 export function BackupControls({ nativeMode, onBackup, onRestore }) {
   const notice = "Complete inventory backup is awaiting setup. App files omit invoice history, physical counts and closed reports.";

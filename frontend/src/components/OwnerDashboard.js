@@ -80,7 +80,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
           </div>
           <div className="flex flex-col gap-2.5">
             {pending.map((po) => (
-              <div key={po.id} className="flex items-center justify-between gap-3 flex-wrap bg-[#0F1626] border border-[#28354A] rounded-lg px-3.5 py-3" data-testid={`owner-po-${po.id}`}>
+              <div key={po.id} className="flex items-center justify-between gap-3 flex-wrap bg-jm-field border border-jm-line rounded-lg px-3.5 py-3" data-testid={`owner-po-${po.id}`}>
                 <div>
                   <div className="text-sm font-semibold text-slate-100">{po.restaurantName} · {po.vendor}</div>
                   <div className="text-[11px] text-slate-500">{po.lines.length} line{po.lines.length !== 1 ? "s" : ""} · {fmtMoney(po.total)}{po.createdBy ? ` · submitted by ${po.createdBy}` : ""}</div>
@@ -104,7 +104,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
           </div>
           <div className="flex flex-col gap-2.5">
             {disc.map((d) => (
-              <div key={d.orderId} onClick={() => onOpenOrder?.(d.restaurantId, d.orderId)} className="bg-[#0F1626] border border-red-500/20 rounded-lg px-3.5 py-3 cursor-pointer hover:border-red-500/50 transition" data-testid={`disc-${d.orderId}`} title="Open this purchase order">
+              <div key={d.orderId} onClick={() => onOpenOrder?.(d.restaurantId, d.orderId)} className="bg-jm-field border border-red-500/20 rounded-lg px-3.5 py-3 cursor-pointer hover:border-red-500/50 transition" data-testid={`disc-${d.orderId}`} title="Open this purchase order">
                 <div className="flex justify-between items-center gap-2 flex-wrap">
                   <div className="text-sm font-semibold text-slate-100">{d.restaurantName} · {d.vendor} · Invoice {d.invoiceNumber}</div>
                   <div className="flex items-center gap-2">
@@ -162,10 +162,10 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
               <span className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: s.accent }} />
             </div>
             <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Last count value" : "Inventory"}</div><div className="num font-bold text-slate-200">{native ? inventoryMoney(s.inventoryValue) : fmtPlanningCost(s.inventoryValue)}</div></div>
-              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "30d received food" : "30d Purchases"}</div><div className="num font-bold text-slate-200">{fmtPlanningCost(s.spend30)}</div></div>
-              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Estimated recipe cost %" : "Avg Food Cost"}</div><div className="num font-bold" style={{ color: s.avgFoodCost !== null && s.avgFoodCost > 32 ? "#EF4444" : "#10B981" }}>{s.avgFoodCost !== null ? `${num(s.avgFoodCost, 1)}%` : "—"}</div></div>
-              <div className="bg-[#0F1626] rounded-lg px-2.5 py-2 border border-[#28354A]"><div className="text-slate-500 text-[10px] uppercase font-bold">Below Par</div><div className="num font-bold text-slate-200">{native ? "Review on-hand" : `${s.orderAlerts} items`}</div></div>
+              <div className="bg-jm-field rounded-lg px-2.5 py-2 border border-jm-line"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Last count value" : "Inventory"}</div><div className="num font-bold text-slate-200">{native ? inventoryMoney(s.inventoryValue) : fmtPlanningCost(s.inventoryValue)}</div></div>
+              <div className="bg-jm-field rounded-lg px-2.5 py-2 border border-jm-line"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "30d received food" : "30d Purchases"}</div><div className="num font-bold text-slate-200">{fmtPlanningCost(s.spend30)}</div></div>
+              <div className="bg-jm-field rounded-lg px-2.5 py-2 border border-jm-line"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Estimated recipe cost %" : "Avg Food Cost"}</div><div className="num font-bold" style={{ color: s.avgFoodCost !== null && s.avgFoodCost > 32 ? "#EF4444" : "#10B981" }}>{s.avgFoodCost !== null ? `${num(s.avgFoodCost, 1)}%` : "—"}</div></div>
+              <div className="bg-jm-field rounded-lg px-2.5 py-2 border border-jm-line"><div className="text-slate-500 text-[10px] uppercase font-bold">Below Par</div><div className="num font-bold text-slate-200">{native ? "Review on-hand" : `${s.orderAlerts} items`}</div></div>
             </div>
             {s.planningCostsAvailable === false && <p className="text-xs text-amber-300 mb-3">Some planning costs are unavailable. Review catalog pack, portion and price details.</p>}
             {native && <p className="text-xs mb-3" data-testid={`native-count-status-${s.id}`}>Count: {s.nativeInventory?.count?.count_date || "Not available"} · {s.nativeInventory?.countStatus?.replaceAll("_", " ")} · {s.nativeInventory?.count?.timing?.replaceAll("_", " ") || ""}. Received food window: {s.nativeInventory?.receivedFrom} to before {s.nativeInventory?.receivedBefore}. Counts are historical measurements; actual Food Cost is on the location's Actual Inventory dashboard.</p>}

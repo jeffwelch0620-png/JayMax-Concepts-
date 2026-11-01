@@ -196,7 +196,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
     showToast("Storage area added");
   }
 
-  const previewBg = preview.mismatch ? "bg-red-500/10 text-red-400" : previewCost.cost == null ? "bg-amber-500/10 text-amber-400" : "bg-[#0F1626] text-slate-300";
+  const previewBg = preview.mismatch ? "bg-red-500/10 text-red-400" : previewCost.cost == null ? "bg-amber-500/10 text-amber-400" : "bg-jm-field text-slate-300";
 
   return (
     <div className="fade-slide-in" data-testid="setup-tab">
@@ -275,7 +275,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
         <SectionLabel className="mt-4">Vendor SKUs</SectionLabel>
         <div className="flex flex-col gap-2 mb-2.5">
           {form.vendorSkus.map((v, idx) => (
-            <div key={v.id} className="flex gap-2 flex-wrap items-end p-2.5 bg-[#0F1626] rounded-lg border border-[#28354A]" data-testid={`vendor-sku-row-${idx}`}>
+            <div key={v.id} className="flex gap-2 flex-wrap items-end p-2.5 bg-jm-field rounded-lg border border-jm-line" data-testid={`vendor-sku-row-${idx}`}>
               <button type="button" title="Set preferred" data-testid={`vendor-preferred-${idx}`} onClick={() => setPreferred(v.id)} className="pb-2 text-amber-400 hover:scale-110 transition">
                 <Star size={18} fill={v.preferred ? "#EAB308" : "none"} />
               </button>

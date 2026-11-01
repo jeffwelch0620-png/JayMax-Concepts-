@@ -15,6 +15,14 @@ module.exports = {
         sm: 'calc(var(--radius) - 4px)'
       },
       colors: {
+        // JMAX design tokens (src/theme/tokens.css): use these instead of raw hex.
+        jm: {
+          bg: 'var(--jm-bg)', surface: 'var(--jm-surface)', 'surface-2': 'var(--jm-surface-2)', 'surface-3': 'var(--jm-surface-3)',
+          field: 'var(--jm-field)', line: 'var(--jm-line)', 'line-strong': 'var(--jm-line-strong)',
+          'ink-strong': 'var(--jm-ink-strong)', ink: 'var(--jm-ink)', 'ink-2': 'var(--jm-ink-2)', 'ink-3': 'var(--jm-ink-3)',
+          'on-accent': 'var(--jm-on-accent)', accent: 'var(--jm-accent)',
+          ok: 'var(--jm-ok)', warn: 'var(--jm-warn)', bad: 'var(--jm-bad)', info: 'var(--jm-info)'
+        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {

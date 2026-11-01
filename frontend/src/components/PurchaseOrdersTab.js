@@ -131,10 +131,10 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
       <PageTitle right={
         <div className="flex items-center gap-2 flex-wrap">
           <input className={`${inpCls} w-40`} placeholder="Your name" value={person} onChange={(e) => setPerson(e.target.value)} data-testid="po-person-input" />
-          <div className="flex rounded-lg overflow-hidden border border-[#334155]" data-testid="po-role-toggle">
+          <div className="flex rounded-lg overflow-hidden border border-jm-line-strong" data-testid="po-role-toggle">
             {["manager", "owner"].map((r) => (
               <button key={r} onClick={() => setRole(r)} data-testid={`po-role-${r}`}
-                className={`px-3 py-2 text-xs font-bold transition ${role === r ? "text-[#0B0F17]" : "text-slate-400 bg-[#161F30] hover:text-white"}`}
+                className={`px-3 py-2 text-xs font-bold transition ${role === r ? "text-jm-on-accent" : "text-slate-400 bg-jm-surface hover:text-white"}`}
                 style={role === r ? { background: "var(--acc)" } : {}}>
                 {r === "owner" ? <ShieldCheck size={13} className="inline mr-1" /> : <ClipboardList size={13} className="inline mr-1" />}
                 {r === "owner" ? "Owner" : "Manager"}
@@ -164,7 +164,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
       <div className="flex gap-1.5 mb-4 flex-wrap" data-testid="po-filter-bar">
         {FILTERS.map((s) => (
           <button key={s} onClick={() => setFilter(s)} data-testid={`po-filter-${s}`}
-            className={`rounded-full px-3 py-1.5 text-xs font-bold border transition ${filter === s ? "text-[#0B0F17] border-transparent" : "text-slate-400 bg-[#161F30] border-[#28354A] hover:text-white"}`}
+            className={`rounded-full px-3 py-1.5 text-xs font-bold border transition ${filter === s ? "text-jm-on-accent border-transparent" : "text-slate-400 bg-jm-surface border-jm-line hover:text-white"}`}
             style={filter === s ? { background: "var(--acc)" } : {}}>
             {s === "all" ? "All" : STATUS_META[s].label}{s !== "all" && counts[s] ? ` (${counts[s]})` : ""}
           </button>
@@ -282,7 +282,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
                 )}
 
                 {isRejecting && (
-                  <div className="mt-3 flex gap-2 items-center flex-wrap bg-[#0F1626] border border-red-500/30 rounded-lg p-3" data-testid={`po-reject-form-${po.id}`}>
+                  <div className="mt-3 flex gap-2 items-center flex-wrap bg-jm-field border border-red-500/30 rounded-lg p-3" data-testid={`po-reject-form-${po.id}`}>
                     <input className={`${inpCls} flex-1 min-w-[200px]`} placeholder="Reason for rejection" value={rejecting.reason} onChange={(e) => setRejecting((s) => ({ ...s, reason: e.target.value }))} data-testid={`po-reject-input-${po.id}`} />
                     <button className={btnDanger} data-testid={`po-reject-confirm-${po.id}`} onClick={confirmReject}>Confirm Reject</button>
                     <button className={btnGhost} onClick={() => setRejecting(null)}>Cancel</button>
@@ -290,7 +290,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
                 )}
 
                 {isEmailing && (
-                  <div className="mt-3 flex gap-2 items-center flex-wrap bg-[#0F1626] border border-sky-500/30 rounded-lg p-3" data-testid={`po-email-form-${po.id}`}>
+                  <div className="mt-3 flex gap-2 items-center flex-wrap bg-jm-field border border-sky-500/30 rounded-lg p-3" data-testid={`po-email-form-${po.id}`}>
                     <span className="text-xs font-bold text-slate-300">Send to supplier:</span>
                     <input type="email" className={`${inpCls} flex-1 min-w-[220px]`} placeholder="supplier@vendor.com" value={emailing.email} onChange={(e) => setEmailing((s) => ({ ...s, email: e.target.value }))} data-testid={`po-email-input-${po.id}`} />
                     <button className={btnAcc} data-testid={`po-email-send-${po.id}`} onClick={confirmEmail} disabled={!emailing.email.trim()}><Mail size={13} /> Send Email</button>
@@ -300,7 +300,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
 
                 {api.nativePurchasesEnabled && (isReceiving || po.receiptMatch?.native) && <NativeOrderReceiving key={`${po.id}:${po.receiptMatch?.receiptId || "new"}`} restaurantId={rid} orderRef={po.id} onSaved={async result => { setReceiving(null); showToast(result?.reconciliation ? "Order comparison reconciled." : "Delivery linked to recorded purchase."); await refresh(); }} />}
                 {isReceiving && !api.nativePurchasesEnabled && (
-                  <div className="mt-3 bg-[#0F1626] border border-sky-500/30 rounded-lg p-3" data-testid={`po-receive-form-${po.id}`}>
+                  <div className="mt-3 bg-jm-field border border-sky-500/30 rounded-lg p-3" data-testid={`po-receive-form-${po.id}`}>
                     <div className="flex items-center gap-2 flex-wrap mb-3">
                       <span className="text-xs font-bold text-slate-300">Invoice # (optional — matches against Invoice Master):</span>
                       <input className={`${inpCls} w-40`} placeholder="e.g. INV-77001" value={receiving.invoiceNumber} onChange={(e) => setReceiving((s) => ({ ...s, invoiceNumber: e.target.value }))} data-testid={`po-receive-invoice-${po.id}`} />

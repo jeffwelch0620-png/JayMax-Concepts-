@@ -86,7 +86,7 @@ export function StaffSignIn({ rid, setRid, onSignedIn }) {
       <div className="flex gap-2 mb-4 flex-wrap">
         {RESTAURANTS.map((r) => (
           <button key={r.id} onClick={() => setRid(r.id)} data-testid={`staff-store-${r.id}`}
-            className={`rounded-full px-4 py-2 text-sm font-bold border transition ${rid === r.id ? "text-[#0B0F17]" : "text-slate-400 bg-[#161F30] border-[#28354A]"}`}
+            className={`rounded-full px-4 py-2 text-sm font-bold border transition ${rid === r.id ? "text-jm-on-accent" : "text-slate-400 bg-jm-surface border-jm-line"}`}
             style={rid === r.id ? { background: r.accent, borderColor: r.accent } : {}}>
             {r.short}
           </button>

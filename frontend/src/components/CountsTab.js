@@ -76,7 +76,7 @@ export function CountsTab({ rid, items, onCountsApplied, showToast }) {
 
       {historyOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" data-testid="count-history-modal">
-          <div className={`${cardCls} w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5 bg-[#161F30]`}>
+          <div className={`${cardCls} w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5 bg-jm-surface`}>
             <div className="flex justify-between items-center mb-4">
               <div className="font-display font-bold text-slate-100 text-lg">Count History</div>
               <button onClick={() => setHistoryOpen(false)} className="p-1 text-slate-400 hover:text-white transition" data-testid="count-history-close"><X size={20} /></button>
@@ -99,7 +99,7 @@ export function CountsTab({ rid, items, onCountsApplied, showToast }) {
                 {history.map((h) => {
                   const open = expandedSubmission === h.id;
                   return (
-                    <div key={h.id} className="border border-[#28354A] rounded-lg overflow-hidden">
+                    <div key={h.id} className="border border-jm-line rounded-lg overflow-hidden">
                       <button className="w-full flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-white/[0.03] text-left" onClick={() => setExpandedSubmission(open ? null : h.id)} data-testid={`count-history-row-${h.id}`}>
                         <div className="flex items-center gap-2">
                           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
