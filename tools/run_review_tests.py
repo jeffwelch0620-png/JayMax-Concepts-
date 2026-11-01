@@ -160,6 +160,8 @@ DATABASE_CASES = (
  ('order_commands','OrderCommandTests','test_installed_workflow_holds_legacy_and_flag_off_writes_before_side_effects'),
  ('staff_prep_counts','StaffPrepCountsTests','test_review_corrections_count_author_cannot_accept_after_staff_revision'),
  ('staff_prep_production','StaffProductionTests','test_a_signed_in_cook_submits_verified_output_as_themself'),
+ ('staff_prep_production','StaffProductionTests','test_shift_leaders_accept_kitchen_managers_send_back_and_reassign'),
+ ('staff_prep_production','StaffProductionTests','test_shift_leaders_assign_open_tasks_and_kitchen_managers_reassign'),
  ('staff_prep_production','StaffProductionTests','test_review_corrections_production_author_and_claimed_roster_cannot_accept'),
  ('staff_prep_production','StaffProductionTests','test_review_corrections_production_root_collision_across_stores_and_revision_ids'),
  ('staff_prep_production','StaffProductionTests','test_review_corrections_production_cross_module_key_rolls_back_all_effects'),

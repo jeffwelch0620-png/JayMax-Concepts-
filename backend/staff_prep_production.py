@@ -10,6 +10,7 @@ import staff_prep_tasks as tasks
 import prep_batches as batches
 import prep_execution as execution
 import catalog_mapping
+import positions
 import staff_login
 from staff_prep_counts import Reviewed, Credentials
 from native_units import lock_store
@@ -233,12 +234,12 @@ def create_router(pool_factory,store_check,manager_authorize,staff_authorize):
     @router.post(base+'/preview')
     async def review(store:str,day:date,request:Request,body:Decision,track:prep_tracks.Track='daily'):
         prep_tracks.check(store, track)
-        store_check(store);actor=manager_authorize(request,store,True)
+        store_check(store);actor=manager_authorize(request,store,True,positions.decision_permission(body.decision))
         async with pool_factory().acquire() as c,c.transaction(isolation='repeatable_read',readonly=True):return await decision_preview(c,store,day,track,body,actor)
     @router.post(base+'/decisions')
     async def decision(store:str,day:date,request:Request,body:DecisionCommit,idempotency_key:UUID=Header(...),track:prep_tracks.Track='daily'):
         prep_tracks.check(store, track)
-        store_check(store);actor=manager_authorize(request,store,True)
+        store_check(store);actor=manager_authorize(request,store,True,positions.decision_permission(body.decision))
         return await decide(pool_factory(),store,day,track,actor,body,idempotency_key)
     @router.post(staff+'/setup')
     async def staff_setup(store:str,day:date,request:Request,body:Credentials,staff_member_id:UUID,track:prep_tracks.Track='daily'):

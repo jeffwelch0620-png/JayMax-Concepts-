@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import Field, field_validator, model_validator
+import positions
 import prep_mapping as mapping
 import prep_observations as observations
 from native_units import lock_store
@@ -338,8 +339,8 @@ async def outcome(conn, store, ident, decision, replayed):
 def create_router(pool_factory, store_check, manager_authorize, staff_authorize):
     router = APIRouter()
 
-    async def manager(request, store, write=False):
-        store_check(store); actor = manager_authorize(request, store, write); pool = pool_factory()
+    async def manager(request, store, write=False, require=None):
+        store_check(store); actor = manager_authorize(request, store, write, require); pool = pool_factory()
         async with pool.acquire() as conn: await ready(conn)
         return actor, pool
 
@@ -364,13 +365,13 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
 
     @router.post('/api/pg/purchases/{store}/staff-prep-counts/{ident}/decision-preview')
     async def review_decision(store: str, ident: UUID, request: Request, body: Decision):
-        actor, pool = await manager(request, store, True)
+        actor, pool = await manager(request, store, True, positions.decision_permission(body.decision))
         async with pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
             return await decision_preview(conn, store, ident, body, actor)
 
     @router.post('/api/pg/purchases/{store}/staff-prep-counts/{ident}/decision')
     async def record_decision(store: str, ident: UUID, request: Request, body: DecisionIn, idempotency_key: UUID = Header(...)):
-        actor, pool = await manager(request, store, True)
+        actor, pool = await manager(request, store, True, positions.decision_permission(body.decision))
         return await decide(pool, store, ident, actor, body, idempotency_key)
 
     @router.post('/api/pg/staff/{store}/prep-count-drafts')
