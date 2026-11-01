@@ -8,6 +8,7 @@ import { PrepDayDrafts } from "./PrepDayDrafts";
 import { EveningZoneCount } from "./EveningZoneCount";
 import { BulkSupply } from "./BulkSupply";
 import { StationBoard } from "./StationBoard";
+import { AcceptanceQueue } from "./AcceptanceQueue";
 import { validOverviewDay } from "../lib/managerOverview";
 import { HistoricalPrepLists } from "./HistoricalPrepLists";
 import { StaffPrepCountReview } from "./StaffPrepCounts";
@@ -33,6 +34,7 @@ const SUBS = [
   { id: "planning", label: "Planning & AI", icon: Sparkles },
   { id: "history", label: "History", icon: Layers },
   { id: "stations", label: "Stations", icon: ChefHat },
+  { id: "accept", label: "Acceptance queue", icon: Check },
 ];
 
 
@@ -95,7 +97,7 @@ export function PrepTab({ initialContext, drafts, showError = () => {}, rid, ite
           : api.prepPlanningEnabled ? "Bulk prep planning, separate from Daily Prep. Production location and transfers are tracked separately." : "Commissary-kitchen prep — its own standing items, evening count, and daily list, separate from Daily Prep."}
       </div>
       <div className="flex gap-2 mb-5 flex-wrap" data-testid="prep-subtabs">
-        {SUBS.filter(s => (s.id !== "history" || api.isPostgres) && (s.id !== "stations" || (api.prepDayTasksEnabled && ["owner", "manager"].includes(api.currentSession?.()?.user?.role)))).map((s) => {
+        {SUBS.filter(s => (s.id !== "history" || api.isPostgres) && (!["stations", "accept"].includes(s.id) || (api.prepDayTasksEnabled && ["owner", "manager"].includes(api.currentSession?.()?.user?.role)))).map((s) => {
           const Icon = s.icon;
           return (
             <button key={s.id} className={sub === s.id ? btnAcc : btnGhost} onClick={() => setSub(s.id)} data-testid={`prep-subtab-${s.id}`}>
@@ -112,6 +114,7 @@ export function PrepTab({ initialContext, drafts, showError = () => {}, rid, ite
       {sub === "planning" && <Planning drafts={drafts} showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} prepCapabilities={prepCapabilities} persistDishes={persistDishes} showToast={showToast} />}
       {sub === "history" && api.isPostgres && <HistoricalPrepLists key={rid} rid={rid} />}
       {sub === "stations" && api.prepDayTasksEnabled && <StationBoard key={`stations:${rid}`} rid={rid} />}
+      {sub === "accept" && api.prepDayTasksEnabled && <AcceptanceQueue key={`accept:${rid}`} rid={rid} drafts={drafts} />}
     </div>
   );
 }

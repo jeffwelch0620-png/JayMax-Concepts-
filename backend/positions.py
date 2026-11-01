@@ -69,6 +69,18 @@ DENIED = {
 }
 
 
+def decision_permission(decision):
+    """Staff work (Jeff 2026-10-30): a BOH Shift Leader or above accepts it; sending it back needs a
+    Kitchen Manager or above (positions.py accept_staff_work / edit_staff_work)."""
+    return 'accept_staff_work' if decision == 'accepted' else 'edit_staff_work'
+
+
+def assignment_permission(expected_revision):
+    """A Shift Leader can give an unassigned task to someone; changing or removing an assignment
+    (reassigning) needs a Kitchen Manager or above."""
+    return 'accept_staff_work' if expected_revision == 0 else 'edit_staff_work'
+
+
 def role_for(position):
     """The access class a position belongs to."""
     if position not in POSITIONS: raise ValueError('Unknown position')

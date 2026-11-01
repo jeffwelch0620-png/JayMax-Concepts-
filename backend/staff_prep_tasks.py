@@ -10,6 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import Field
 import prep_execution as execution
 import prep_mapping as mapping
+import positions
 import staff_login
 import stations
 from staff_prep_counts import Reviewed, Credentials
@@ -171,13 +172,13 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
     @router.post(base+'/preview')
     async def plan(store: str, day: date, request: Request, body: Assignment, track: prep_tracks.Track='daily'):
         prep_tracks.check(store, track)
-        store_check(store); manager_authorize(request,store,True)
+        store_check(store); manager_authorize(request,store,True,positions.assignment_permission(body.expected_revision))
         async with pool_factory().acquire() as conn, conn.transaction(isolation='repeatable_read',readonly=True): return await preview(conn,store,day,track,body)
 
     @router.post(base+'/assignments')
     async def save(store: str, day: date, request: Request, body: Commit, idempotency_key: UUID=Header(...), track: prep_tracks.Track='daily'):
         prep_tracks.check(store, track)
-        store_check(store); actor=manager_authorize(request,store,True)
+        store_check(store); actor=manager_authorize(request,store,True,positions.assignment_permission(body.assignment.expected_revision))
         return await commit(pool_factory(),store,day,track,actor,body,idempotency_key)
 
     @router.post('/api/pg/staff/{store}/prep-task-plan')
