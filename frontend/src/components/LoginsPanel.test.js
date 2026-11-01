@@ -43,3 +43,27 @@ test("an existing login's position and stores can be changed", async () => {
   expect(api.setLoginAccess).toHaveBeenCalledWith("usr_1", { position: "BPM", locations: ["rudds", "berts"] });
   expect(api.listLogins).toHaveBeenCalledTimes(2);
 });
+
+test("reset password and remove work in the page, with no browser pop-up", async () => {
+  const prompt = jest.spyOn(window, "prompt"), confirm = jest.spyOn(window, "confirm");
+  api.listLogins.mockResolvedValue([{ id: "usr_km", email: "km.berts@example.invalid", role: "manager", position: "KM", locations: ["berts"] }]);
+  api.resetLoginPassword.mockResolvedValue({ ok: true }); api.deleteLogin.mockResolvedValue({});
+  const showToast = jest.fn();
+  await render(<LoginsPanel showToast={showToast} />);
+  await click(byTest("login-reset-usr_km"));
+  await input(byTest("login-reset-input-usr_km"), "short");
+  await click(byTest("login-reset-save-usr_km"));
+  expect(api.resetLoginPassword).not.toHaveBeenCalled();
+  expect(byTest("login-error").textContent).toContain("at least 12");
+  await input(byTest("login-reset-input-usr_km"), "invented-password-456");
+  await click(byTest("login-reset-save-usr_km"));
+  expect(api.resetLoginPassword).toHaveBeenCalledWith("usr_km", "invented-password-456");
+  expect(byTest("login-reset-form-usr_km")).toBeNull();
+  expect(showToast).toHaveBeenCalledWith("Password updated");
+  await click(byTest("login-delete-usr_km"));
+  expect(api.deleteLogin).not.toHaveBeenCalled();     // asks first, in the page
+  await click(byTest("login-delete-yes-usr_km"));
+  expect(api.deleteLogin).toHaveBeenCalledWith("usr_km");
+  expect(prompt).not.toHaveBeenCalled(); expect(confirm).not.toHaveBeenCalled();
+  prompt.mockRestore(); confirm.mockRestore();
+});

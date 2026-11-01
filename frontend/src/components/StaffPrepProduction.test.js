@@ -1,6 +1,6 @@
 import React,{act} from "react";
 import {createRoot} from "react-dom/client";
-import {StaffProductionSubmission,StaffProductionDecisions,validProductionAck,validProductionReview,productionSame} from "./StaffPrepProduction";
+import {StaffProductionSubmission,StaffProductionDecisions,validProductionAck,validProductionReview,productionSame,simpleBatch,storeTime} from "./StaffPrepProduction";
 import * as api from "../lib/api";
 jest.mock("../lib/api",()=>({staffProductionSetup:jest.fn(),previewStaffProduction:jest.fn(),submitStaffProduction:jest.fn(),staffProductionReviewSetup:jest.fn(),previewStaffProductionDecision:jest.fn(),decideStaffProduction:jest.fn()}));
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`,hash="a".repeat(64),day="2026-10-08",track="daily";
@@ -61,3 +61,36 @@ test("stale decision retains reason until explicit revision and fresh review",as
 test("late submission callback cannot mutate another selected date",async()=>{let resolve;const drafts=new Map();api.submitStaffProduction.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));await render({drafts});await fill();await click(button("Save reviewed production record"));const call=api.submitStaffProduction.mock.calls[0];await render({day:"2026-10-09",drafts});await act(async()=>resolve(submitAck(review(call[3]),call[4])));expect(container.querySelector('[role="status"]')).toBeNull();expect([...drafts.values()][0].pending.key).toBe(call[4]);});
 test("cleared logout scope cannot be recreated by a late rejection",async()=>{let reject;const drafts=new Map();api.submitStaffProduction.mockImplementationOnce(()=>new Promise((r,j)=>{reject=j;}));await render({drafts});await fill();await click(button("Save reviewed production record"));drafts.clear();await act(async()=>reject({response:{status:409,data:{detail:"Changed"}}}));expect(drafts.size).toBe(0);});
 test("wrong-scope read is held instead of becoming an empty task history",async()=>{api.staffProductionSetup.mockResolvedValueOnce({...state(true),store_id:"rudds"});await render();expect(container.textContent).toContain("not confirmed");expect(container.querySelector('[aria-label="Assigned production task"]')).toBeNull();});
+
+// Step E (Jeff 2026-11-01): a cook says how much they made; the rest comes from the recipe and the store clock.
+const yielding={...recipe,entered_yield:"2",lines:[{...line,entered_quantity:"1.5"}]};
+test("store time uses the store's own clock and offset, and midday for another day",()=>{
+  expect(storeTime("America/New_York","2026-11-01",new Date("2026-11-01T18:20:05Z"))).toBe("2026-11-01T13:20:05-05:00");
+  expect(storeTime("America/New_York","2026-07-04",new Date("2026-11-01T18:20:05Z"))).toBe("2026-07-04T12:00:00-04:00");
+});
+test("a simple report fills batches and ingredients from the recipe as an estimate",()=>{
+  const b=simpleBatch({...batch,inputs:[{...batch.inputs[0],quantity:"",measurement_basis:"",evidence:""}]},yielding,"4","",day,"America/New_York",new Date("2026-10-08T14:00:00Z"));
+  expect(b).toMatchObject({planned_batches:"2",output_quantity:"4",performed_at:"2026-10-08T10:00:00-04:00",business_date:day,timezone_name:"America/New_York",calendar_date_confirmed:true,single_output_confirmed:true,note:"Cook reported 4 bag"});
+  expect(b.inputs[0]).toMatchObject({quantity:"3",measurement_basis:"recipe_estimate",included_loss_quantity:null,loss_evidence:null,evidence:"Recipe amount for 2 batches (cook report)"});
+  for(const bad of ["","0","-1","two","1e3"])expect(()=>simpleBatch(batch,yielding,bad,"",day,"America/New_York")).toThrow("Enter how much you made");
+  expect(()=>simpleBatch(batch,recipe,"4","",day,"America/New_York")).toThrow("no yield");
+});
+test("a cook reports how much they made, checks a plain summary and sends it",async()=>{
+  api.staffProductionSetup.mockResolvedValue({...state(true),setup:{recipes:[yielding],lots:[],policy:{timezone_name:"America/New_York"}}});
+  await render();await input("Assigned production task",task.id);
+  expect(container.querySelector('[aria-label="Gross ingredient 1"]')).toBeNull();          // no accounting fields for a cook
+  expect(container.querySelector('[aria-label="Production review reason"]')).toBeNull();
+  await input("How much did you make","4");await click(button("Check my report"));
+  const sent=api.previewStaffProduction.mock.calls[0][3].submission;
+  expect(sent.batch).toMatchObject({planned_batches:"2",output_quantity:"4",calendar_date_confirmed:true});expect(sent.batch.inputs[0]).toMatchObject({quantity:"3",measurement_basis:"recipe_estimate"});
+  expect(sent.note).toBe("Reported from My shift");
+  expect(container.textContent).toContain("You made 4 bag of Sauce (about 2 batches)");
+  await click(button("Send to manager"));
+  expect(api.submitStaffProduction).toHaveBeenCalledTimes(1);expect(container.textContent).toContain("Submission saved for manager review");
+});
+test("full details stay available, and the long form still needs its own review tick",async()=>{
+  api.staffProductionSetup.mockResolvedValue({...state(true),setup:{recipes:[yielding],lots:[],policy:{timezone_name:"America/New_York"}}});
+  await render();await input("Assigned production task",task.id);await click(button("Enter full details instead"));
+  expect(container.querySelector('[aria-label="Gross ingredient 1"]')).not.toBeNull();
+  await click(button("Use the simple form"));expect(container.querySelector('[aria-label="How much did you make"]')).not.toBeNull();
+});

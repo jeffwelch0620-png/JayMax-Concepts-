@@ -52,6 +52,7 @@ export function LoginsPanel({ showToast }) {
   const [users, setUsers] = useState(null);
   const [form, setForm] = useState({ email: "", password: "", role: "manager", locations: [], position: null });
   const [editing, setEditing] = useState(null);
+  const [resetting, setResetting] = useState(null), [resetPw, setResetPw] = useState(""), [removing, setRemoving] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -79,17 +80,15 @@ export function LoginsPanel({ showToast }) {
     finally { setBusy(false); }
   }
 
+  // In-page, not window.prompt/confirm: embedded and installed browsers can block pop-ups, which made the buttons look dead.
   async function resetPassword(u) {
-    const pw = window.prompt(`New password for ${u.email} (at least ${MIN_PW} characters):`);
-    if (pw == null) return;
-    if (pw.length < MIN_PW) { setErr(`Password must be at least ${MIN_PW} characters`); return; }
-    try { await api.resetLoginPassword(u.id, pw); showToast?.("Password updated"); }
+    if (resetPw.length < MIN_PW) { setErr(`Password must be at least ${MIN_PW} characters`); return; }
+    try { await api.resetLoginPassword(u.id, resetPw); setResetting(null); setResetPw(""); setErr(""); showToast?.("Password updated"); }
     catch (e) { setErr(e?.response?.data?.detail || "Couldn't update password"); }
   }
 
   async function remove(u) {
-    if (!window.confirm(`Remove login ${u.email}?`)) return;
-    try { await api.deleteLogin(u.id); await refresh(); showToast?.("Login removed"); }
+    try { await api.deleteLogin(u.id); setRemoving(null); await refresh(); showToast?.("Login removed"); }
     catch (e) { setErr(e?.response?.data?.detail || "Couldn't remove login"); }
   }
 
@@ -138,8 +137,18 @@ export function LoginsPanel({ showToast }) {
             <Pill>{u.position ? positionLabel(u.position) : u.role}</Pill>
             <div className="text-xs text-slate-400">{u.role === "owner" ? "All stores" : u.locations.map(storeName).join(", ") || "No stores"}</div>
             <button className={btnGhost} onClick={() => setEditing(editing === u.id ? null : u.id)} data-testid={`login-edit-${u.id}`}>Position &amp; stores</button>
-            <button className={btnGhost} onClick={() => resetPassword(u)} data-testid={`login-reset-${u.id}`}>Reset password</button>
-            <button className={btnDanger} onClick={() => remove(u)} disabled={u.id === me?.id} title={u.id === me?.id ? "You can't remove yourself" : ""} data-testid={`login-delete-${u.id}`}><Trash2 size={12} /></button>
+            <button className={btnGhost} onClick={() => { setResetting(resetting === u.id ? null : u.id); setResetPw(""); }} data-testid={`login-reset-${u.id}`}>Reset password</button>
+            <button className={btnDanger} onClick={() => setRemoving(removing === u.id ? null : u.id)} disabled={u.id === me?.id} title={u.id === me?.id ? "You can't remove yourself" : ""} data-testid={`login-delete-${u.id}`}><Trash2 size={12} /></button>
+            {resetting === u.id && <div className="w-full flex flex-wrap gap-2 items-center" data-testid={`login-reset-form-${u.id}`}>
+              <input className={inpCls} type="password" autoComplete="new-password" aria-label={`New password for ${u.email}`} placeholder={`New password (at least ${MIN_PW} characters)`} value={resetPw} onChange={(e) => setResetPw(e.target.value)} data-testid={`login-reset-input-${u.id}`} />
+              <button className={btnAcc} onClick={() => resetPassword(u)} data-testid={`login-reset-save-${u.id}`}>Save password</button>
+              <button className={btnGhost} onClick={() => { setResetting(null); setResetPw(""); }}>Cancel</button>
+            </div>}
+            {removing === u.id && <div className="w-full flex flex-wrap gap-2 items-center text-sm text-slate-300" data-testid={`login-delete-confirm-${u.id}`}>
+              Remove {u.email}? They can no longer sign in.
+              <button className={btnDanger} onClick={() => remove(u)} data-testid={`login-delete-yes-${u.id}`}>Remove</button>
+              <button className={btnGhost} onClick={() => setRemoving(null)}>Keep</button>
+            </div>}
             {editing === u.id && <AccessEditor user={u} onCancel={() => setEditing(null)} onSaved={async () => { setEditing(null); await refresh(); showToast?.("Position saved; it applies at their next sign-in"); }} />}
           </div>
         ))}

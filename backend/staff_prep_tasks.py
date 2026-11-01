@@ -147,7 +147,7 @@ async def staff_state(conn, store, body, kind, verified=False):
             via = 'name' if named and named == str(body.staff_member_id) else 'station' if not named and station and defaults.get(str(t['product_id'])) == station else None
             if body.staff_member_id and via is None: continue
             tasks.append(dict(id=t['id'],name=t['task_snapshot']['name'],quantity=t['planned_quantity'],
-                source_unit=t['task_snapshot']['source_unit'],base_unit=t['task_snapshot']['base_unit'],product_id=t['product_id'],recipe_version_id=t['recipe_version_id'],
+                source_unit=t['task_snapshot']['source_unit'],base_unit=t['task_snapshot']['base_unit'],factor=t['factor'],product_id=t['product_id'],recipe_version_id=t['recipe_version_id'],
                 assignment=a['current']['id'] if a['current'] else None,assigned_member=a['current_member'],roster_changed=a['roster_changed'],
                 station=defaults.get(str(t['product_id'])),via=via if body.staff_member_id else None,
                 progress=next((p for p in e['task_progress'] if p['task_id']==t['id']), None)))

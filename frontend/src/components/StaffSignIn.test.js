@@ -70,6 +70,7 @@ test("a wrong PIN or a lockout shows the server's message, and Not you? forgets 
   await click("staff-not-me");
   expect(api.rememberStaff).toHaveBeenCalledWith("berts", null);
   expect(q("staff-name-entry")).not.toBeNull();
+  expect(q("staff-pin-entry")).toBeNull();   // no name picked, so no PIN box to mis-tap
 });
 
 test("a sign-in abandoned with Not you? never keeps or uses its session", async () => {

@@ -6,6 +6,12 @@ const storeId=rid=>rid==="papa_leonis"?"papa":rid;
 const stable=value=>JSON.stringify(value&&typeof value==="object"?Array.isArray(value)?value.map(v=>JSON.parse(stable(v))):Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(stable(value[k]))])):value);
 const blank=()=>({action:"release",task_id:"",batch_event_id:"",link_event_id:"",task_outcome:"",reason:"",preview:null,reviewed:false,pending:null});
 
+// Planned, recorded and reviewed amounts in the task's own unit (2 gal), with the base unit (256 fl_oz) after it.
+const unitAmount=(v,f)=>v==null?"unknown":String(Number((Number(v)/f).toFixed(3)));
+export function inTaskUnit(t,p){const f=Number(t?.factor),unit=t?.task_snapshot.source_unit,base=t?.task_snapshot.base_unit;
+  if(!(f>0)||!unit)return `planned ${p.planned_base_quantity??"Unknown"}, current recorded ${p.effective_base_quantity}, reviewed ${p.reviewed_base_quantity} ${base||""}`.trim();
+  return `planned ${unitAmount(p.planned_base_quantity,f)} ${unit}, recorded ${unitAmount(p.effective_base_quantity,f)} ${unit}, reviewed ${unitAmount(p.reviewed_base_quantity,f)} ${unit}`
+    +(unit===base?"":` (base: ${p.planned_base_quantity??"unknown"} ${base} planned)`);}
 export function PrepExecution({rid,day,track,drafts,showToast=()=>{},onChange=()=>{}}){
   const [data,setData]=useState(null),[batches,setBatches]=useState([]),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [draft,setDraft]=useRetainedDraft(`prep-execution:${rid}:${day}:${track}`,blank(),drafts);
@@ -96,7 +102,7 @@ export function PrepExecution({rid,day,track,drafts,showToast=()=>{},onChange=()
     {error&&<p role="alert">{error}</p>}
     {data?<><p>Execution version {data.revision} · {data.status} · saved draft {data.draft?.revision||0}.</p>
       {data.completions.map(c=><p key={c.execution_id}>Production linked: {data.tasks.find(t=>t.id===c.task_id)?.task_snapshot.name||c.task_id} · measured {c.effective_batch.review_snapshot?.usableBaseOutput??"voided"} {c.effective_batch.base_unit}{c.needs_review?" · Batch corrected or voided; manager review required.":""}</p>)}
-      {data.progress_supported&&data.task_progress.map(p=><p key={p.task_id}>{data.tasks.find(t=>t.id===p.task_id)?.task_snapshot.name} · {p.status} · planned {p.planned_base_quantity??"Unknown"}, current recorded {p.effective_base_quantity}, reviewed {p.reviewed_base_quantity} {data.tasks.find(t=>t.id===p.task_id)?.task_snapshot.base_unit}. Production quantity does not automatically finish a task.</p>)}
+      {data.progress_supported&&data.task_progress.map(p=>{const t=data.tasks.find(t=>t.id===p.task_id);return <p key={p.task_id}>{t?.task_snapshot.name} · {p.status} · {inTaskUnit(t,p)}. Production quantity does not automatically finish a task.</p>;})}
       <fieldset disabled={locked||!data.draft_version_id}>
         <label>Command<select aria-label="Prep execution action" className={inpCls} value={draft.action} onChange={e=>change("action",e.target.value)}><option value="release">Release saved draft</option><option value="reopen">Reopen before production linkage</option><option value="complete">Link one batch and finish task</option>{data.progress_supported&&<><option value="link">Add partial production batch</option><option value="finish">Finish reviewed task progress</option><option value="reconcile">Review corrected or voided production</option></>}</select></label>
         {["complete","link","finish","reconcile"].includes(draft.action)&&<><label>Task<select aria-label="Prep execution task" className={inpCls} value={draft.task_id} onChange={e=>{setDraft(p=>({...p,task_id:e.target.value,batch_event_id:"",link_event_id:"",task_outcome:"",preview:null,reviewed:false}));}}><option value="">Select task</option>{tasks.map(t=><option key={t.id} value={t.id}>{t.task_snapshot.name} · planned {t.planned_quantity} {t.task_snapshot.source_unit}</option>)}</select></label>
