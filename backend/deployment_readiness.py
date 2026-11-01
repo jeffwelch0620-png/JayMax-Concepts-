@@ -42,7 +42,8 @@ MIGRATIONS=(
  '20261030_bulk_supply.sql','20261030_bulk_release_coverage.sql',
  '20261031_store_transfers.sql',
  '20261031_login_positions.sql',
- '20261031_stations.sql')
+ '20261031_stations.sql',
+ '20261101_staff_personal_login.sql')
 # Historical installation receipts and the unapproved runtime candidate retain
 # their reviewed baselines. Later feature DDL never becomes part of those receipts.
 ORIGINAL_NATIVE_MIGRATIONS=MIGRATIONS[:MIGRATIONS.index('20261013_purchase_source_lookup_index.sql')]
@@ -78,7 +79,13 @@ def configuration(backend,frontend):
         if values[name]:
             for dependency in deps:
                 if not values[dependency]:problems.append({'key':name,'reason':'Requires '+dependency})
+    # Personal staff sign-in is reviewed beside the native features: switched on in the backend alone,
+    # it retires the store PIN while the built screens still ask for it, so nobody could sign in.
+    login=boolean(backend,'STAFF_PERSONAL_LOGIN_ENABLED','false');login_view=boolean(frontend,'REACT_APP_STAFF_PERSONAL_LOGIN','false')
+    if login!=login_view:problems.append({'key':'STAFF_PERSONAL_LOGIN','reason':'Backend and built frontend feature flags differ'})
+    if login and not pg:problems.append({'key':'STAFF_PERSONAL_LOGIN','reason':'Requires PostgreSQL'})
     return {'status':'held' if problems else 'passed','problems':problems,'features':pairs,
+        'staffPersonalLogin':{'backend':login,'frontend':login_view},
         'allNativeFeaturesHeld':not any(values.values()),'secretValuesIncluded':False}
 
 def migration_plan():

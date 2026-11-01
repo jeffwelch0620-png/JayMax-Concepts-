@@ -81,6 +81,10 @@ READ_ONLY_PATHS = ("/owner/summary", "/owner/prep-summary", "/owner/orders",
 STAFF_PATHS = ("/prepcount/", "/preplists/", "/prep/", "/staff/", "/prep-items/")
 OWNER_PATHS = ("/owner/",)
 STAFF_WRITE_PATHS = ("/prepcount/", "/preplists/", "/prep/")
+# A personal staff session (own name + PIN) reaches only the employee screens, for every method.
+PERSONAL_STAFF_ROUTE = re.compile(r'/staff/[^/]+/(?:sign-out|prepsheet(?:/complete)?|counts(?:/save)?|tasks(?:/[^/]+/complete)?'
+    r'|push/(?:public-key|subscribe|unsubscribe)|count-drafts(?:/[^/]+/submit)?|prep-count-drafts(?:/[^/]+/submit)?'
+    r'|prep-task-plan|station|prep-production/\d{4}-\d{2}-\d{2}/(?:setup|preview|submissions))')
 # Mongo-backed /api/... route families whose Postgres twins live under /api/pg/... . With
 # USE_PG on they're refused outright: the frontend never calls them in that mode, and a
 # stale client or direct call would otherwise write to Mongo and silently diverge.
@@ -119,6 +123,18 @@ def _token(user):
                "exp": int(datetime.now(timezone.utc).timestamp()) + SESSION_TTL}
     if user.get("position"):  # logins without a position keep the original session shape
         payload["position"] = user["position"]
+    return _sign(payload)
+
+def _staff_token(payload):
+    """A personal staff session (staff_login.py); its session row decides whether it is still open."""
+    return _sign({**payload, "locations": [PG_STORE_TO_RESTAURANT[payload["store"]]]})
+
+def _staff_user(request):
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token) if token else None
+    return user if user and user.get("kind") == "staff" else None
+
+def _sign(payload):
     raw = _b64(json.dumps(payload, separators=(",", ":")).encode())
     key = AUTH_SECRET
     if not key:
@@ -195,6 +211,8 @@ async def collaboration_security(request: Request, call_next):
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
     if not user:
         return await call_next(request)
+    if user.get("kind") == "staff" and not await staff_login.check_session(db_pg.pool(), user):
+        return JSONResponse({"detail": "Your sign-in has ended. Sign in again with your name and PIN."}, status_code=401)
     if path.startswith(("/api/ai/chat", "/api/orders/")):
         now = time.monotonic()
         key = (request.client.host if request.client else "unknown", path.split("/")[3] if path.startswith("/api/") else path)
@@ -209,6 +227,9 @@ async def collaboration_security(request: Request, call_next):
     if rid and user.get("role") != "owner" and rid not in allowed:
         return JSONResponse({"detail": "Location access denied"}, status_code=403)
     role = user.get("role")
+    personal = user.get("kind") == "staff"
+    if personal and not PERSONAL_STAFF_ROUTE.fullmatch(route_path):
+        return JSONResponse({"detail": "Signed-in staff can use the employee screens only"}, status_code=403)
     if route_path.startswith(OWNER_PATHS) and role != "owner":
         return JSONResponse({"detail": "Owner role required"}, status_code=403)
     if request.method != "GET":
@@ -217,7 +238,7 @@ async def collaboration_security(request: Request, call_next):
         count_draft_path = bool(re.fullmatch(r'/staff/[^/]+/(?:count-drafts|prep-count-drafts)(?:/[^/]+/submit)?', route_path)
             or re.fullmatch(r'/staff/[^/]+/prep-task-plan', route_path)
             or re.fullmatch(r'/staff/[^/]+/prep-production/\d{4}-\d{2}-\d{2}/(?:setup|preview|submissions)', route_path))
-        if role == "staff" and not (route_path.startswith(STAFF_WRITE_PATHS) or count_draft_path):
+        if role == "staff" and not personal and not (route_path.startswith(STAFF_WRITE_PATHS) or count_draft_path):
             return JSONResponse({"detail": "Staff access is limited to prep workflow"}, status_code=403)
         if route_path.startswith(STAFF_PATHS) and role not in ("owner", "manager", "staff"):
             return JSONResponse({"detail": "Insufficient role"}, status_code=403)
@@ -1697,13 +1718,21 @@ async def put_projection(rid: str, body: ProjectionIn, request: Request):
 
 # ---------------- Staff PIN & prep sheet ----------------
 import staff_pin_security
+import staff_login
+
+def _hold_retired_store_pin():
+    if staff_login.enabled():
+        raise HTTPException(410, staff_login.RETIRED)
+
 
 async def _verify_legacy_staff_pin(request, rid, supplied):
+    if staff_login.enabled(): raise HTTPException(403, staff_login.RETIRED)
     return await staff_pin_security.verify(request, RESTAURANT_TO_PG_STORE.get(rid, rid), supplied,
                                            lambda: _get_pin(rid))
 
 
 async def _verify_pg_staff_pin(request, conn, store_id, supplied):
+    if staff_login.enabled(): raise HTTPException(403, staff_login.RETIRED)
     return await staff_pin_security.verify(request, store_id, supplied,
                                            lambda: _pg_get_staff_pin(conn, store_id))
 
@@ -5379,6 +5408,7 @@ async def _pg_get_staff_pin(conn, store_id):
 @pg_router.get("/staff/{store_id}/pin")
 async def pg_get_staff_pin(store_id: str, request: Request):
     check_store_id(store_id)
+    _hold_retired_store_pin()
     _require_manager(request)
     row = await db_pg.pool().fetchrow("SELECT pin FROM staff_pins WHERE store_id=$1", store_id)
     pin = staff_pin_security.configured_pin(row["pin"] if row else None)
@@ -5390,6 +5420,7 @@ class PgStaffPinIn(BaseModel):
 @pg_router.post("/staff/{store_id}/pin")
 async def pg_set_staff_pin(store_id: str, body: PgStaffPinIn, request: Request):
     check_store_id(store_id)
+    _hold_retired_store_pin()
     _require_manager(request)
     pin = body.staffPin.strip()
     if staff_pin_security.configured_pin(pin) is None:
@@ -5438,11 +5469,15 @@ async def pg_update_staff_member(store_id: str, staff_id: uuid.UUID, body: PgSta
     check_store_id(store_id)
     _require_manager(request)
     name = _pg_validate_staff_member(body)
-    row = await db_pg.pool().fetchrow(
-        "UPDATE staff_members SET name=$3, role=$4, active=$5 WHERE id=$1 AND store_id=$2 RETURNING *",
-        staff_id, store_id, name, body.role, body.active)
-    if not row:
-        raise HTTPException(404, "Staff member not found")
+    async with db_pg.pool().acquire() as conn, conn.transaction():
+        row = await conn.fetchrow(
+            "UPDATE staff_members SET name=$3, role=$4, active=$5 WHERE id=$1 AND store_id=$2 RETURNING *",
+            staff_id, store_id, name, body.role, body.active)
+        if not row:
+            raise HTTPException(404, "Staff member not found")
+        # Deactivation ends personal sign-ins for good; reactivating needs a fresh sign-in.
+        if not body.active and await staff_login.installed(conn):
+            await staff_login.end_sessions(conn, staff_id, 'deactivated')
     return _pg_staff_member_to_api(row)
 
 @pg_router.delete("/staff/{store_id}/members/{staff_id}")
@@ -5466,6 +5501,7 @@ class PgPinBodyIn(BaseModel):
 @pg_router.post("/staff/{store_id}/verify")
 async def pg_verify_pin(store_id: str, body: PgPinBodyIn, request: Request):
     check_store_id(store_id)
+    _hold_retired_store_pin()  # the employee picker goes with the store PIN
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
     rid = PG_STORE_TO_RESTAURANT[store_id]
@@ -5488,6 +5524,7 @@ async def pg_verify_pin(store_id: str, body: PgPinBodyIn, request: Request):
 @pg_router.post("/staff/{store_id}/identify")
 async def pg_staff_identify(store_id: str, body: dict, request: Request):
     check_store_id(store_id)
+    _hold_retired_store_pin()
     try:
         staff_uuid = uuid.UUID(str(body.get("staffId", "")))
     except (ValueError, AttributeError, TypeError):
@@ -5933,6 +5970,7 @@ import staff_prep_tasks
 app.include_router(staff_prep_tasks.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import stations
 app.include_router(stations.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
+app.include_router(staff_login.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_token,_staff_user))
 import staff_prep_production
 app.include_router(staff_prep_production.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import prep_containers

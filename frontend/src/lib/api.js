@@ -211,14 +211,73 @@ export function endSession() {
   localStorage.removeItem(TOKEN_KEY);
   window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
 }
+// Personal staff sign-in (own name + PIN; Jeff 2026-10-30). The session lives only for this tab's
+// shift (12 h, 30 min idle, enforced by the server); "Remember me" keeps just the name on the
+// device, never the PIN or the session.
+export const staffPersonalLoginEnabled = USE_PG && process.env.REACT_APP_STAFF_PERSONAL_LOGIN === "true";
+const STAFF_SESSION_KEY = "jaymax_staff_session";
+const STAFF_REMEMBER_KEY = "jaymax_staff_remembered";
+export const STAFF_SIGNED_OUT_EVENT = "jaymax:staff-signed-out";
+const staffSession = () => {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(STAFF_SESSION_KEY) || "null");
+    if (s?.token && tokenExpired(s.token)) { endStaffSession(); return null; }
+    return s;
+  } catch { return null; }
+};
+export const currentStaffSession = () => staffSession();
+export function endStaffSession() {
+  try {
+    if (!sessionStorage.getItem(STAFF_SESSION_KEY)) return;
+    sessionStorage.removeItem(STAFF_SESSION_KEY);
+  } catch { return; }
+  window.dispatchEvent(new Event(STAFF_SIGNED_OUT_EVENT));
+}
+export const rememberedStaff = (rid) => {
+  try { const r = JSON.parse(localStorage.getItem(STAFF_REMEMBER_KEY) || "null"); return r?.rid === rid ? r : null; } catch { return null; }
+};
+export const rememberStaff = (rid, member) => {
+  try {
+    if (member) localStorage.setItem(STAFF_REMEMBER_KEY, JSON.stringify({ rid, id: member.id, name: member.name }));
+    else localStorage.removeItem(STAFF_REMEMBER_KEY);
+  } catch { /* the name just isn't remembered */ }
+};
+export const staffSignInNames = (rid, q) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/sign-in/names`, { params: { q } }).then(r => r.data.names);
+// The screen keeps a session only once it still wants it (see StaffSignIn), so an abandoned
+// attempt never lands on the device.
+export const staffSignIn = (rid, body) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/sign-in`, body).then(r => ({ ...r.data, rid }));
+export const keepStaffSession = (s) => sessionStorage.setItem(STAFF_SESSION_KEY, JSON.stringify(s));
+export const staffSignOut = async () => {
+  const s = staffSession();
+  if (!s) return;
+  // Forget it here first, so a stalled request can't leave the next person on this device signed in
+  // as them; then end it on the server with the captured token.
+  endStaffSession();
+  await axios.post(`${PG_API}/staff/${pgStoreId(s.rid)}/sign-out`, {}, { headers: { Authorization: ["Bearer", s.token].join(" ") } });
+};
+export const staffSignInRoster = (rid) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/members/sign-in`).then(r => r.data);
+export const issueStaffPin = (rid, memberId, pin, key) => axios.put(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/pin`, { pin }, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const unlockStaffSignIn = (rid, memberId, key) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/unlock`, {}, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+
+// Which login a request carries: the signed-in employee's session for employee screens, the
+// manager's login for everything else, and neither for the name + PIN sign-in itself.
+const STAFF_SIGN_IN_URL = /\/pg\/staff\/[^/]+\/sign-in(?:\/names)?$/;
+const EMPLOYEE_URL = /\/pg\/staff\/[^/]+\/(?:sign-out|prepsheet|counts|tasks|push|count-drafts|prep-count-drafts|prep-task-plan|station|prep-production)(?:\/|$)/;
 axios.interceptors.request.use((config) => {
-  const token = session()?.token;
+  if (config.headers?.Authorization) return config;
+  const url = String(config.url || "");
+  if (STAFF_SIGN_IN_URL.test(url)) return config;
+  const staffToken = staffSession()?.token;
+  const token = staffToken && EMPLOYEE_URL.test(url) ? staffToken : session()?.token;
   if (token) config.headers.Authorization = ["Bearer", token].join(" ");
   return config;
 });
 axios.interceptors.response.use(undefined, (error) => {
-  const sentToken = String(error?.config?.headers?.Authorization || "").startsWith("Bearer ");
-  if (error?.response?.status === 401 && sentToken) endSession();
+  const sent = String(error?.config?.headers?.Authorization || "");
+  if (error?.response?.status === 401 && sent.startsWith("Bearer ")) {
+    if (session()?.token && sent.endsWith(session().token)) endSession();
+    else if (staffSession()?.token && sent.endsWith(staffSession().token)) endStaffSession();
+  }
   return Promise.reject(error);
 });
 

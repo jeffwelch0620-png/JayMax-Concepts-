@@ -3,6 +3,7 @@ import { Users, Plus, Trash2 } from "lucide-react";
 import { PageTitle, cardCls, inpCls, btnAcc, btnGhost, btnDanger, Pill, EmptyState } from "./common";
 import * as api from "../lib/api";
 import { LoginsPanel } from "./LoginsPanel";
+import { StaffSignInPanel } from "./StaffSignInPanel";
 
 const ROLES = [
   { id: "cook", label: "Cook" },
@@ -58,10 +59,12 @@ export function StaffTab({ rid, showToast }) {
     <div className="fade-slide-in" data-testid="staff-tab">
       <PageTitle>Staff</PageTitle>
       {api.currentSession()?.user?.role === "owner" && <LoginsPanel showToast={showToast} />}
-      <div className="font-display font-bold text-slate-100 mb-1">PIN Roster</div>
+      {api.isPostgres && <StaffSignInPanel rid={rid} showToast={showToast} rosterKey={members} />}
+      <div className="font-display font-bold text-slate-100 mb-1">{api.staffPersonalLoginEnabled ? "Roster" : "PIN Roster"}</div>
       <div className="text-xs text-slate-500 -mt-2 mb-5">
-        Anyone who enters the shared PIN can claim a name from this list for Prep/Counts/Tasks.
-        Roster roles do not grant manager or owner access. Use a personal email/password login for management.
+        {api.staffPersonalLoginEnabled
+          ? "Everyone who signs in to the employee screens. Deactivating someone ends their sign-in. Roster roles do not grant manager or owner access."
+          : "Anyone who enters the shared PIN can claim a name from this list for Prep/Counts/Tasks. Roster roles do not grant manager or owner access. Use a personal email/password login for management."}
       </div>
 
       <div className={`${cardCls} p-5 mb-6`} data-testid="add-staff-panel">
