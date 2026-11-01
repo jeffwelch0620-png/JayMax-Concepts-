@@ -55,7 +55,7 @@ export function OrderCalendar({ rid }) {
         {cal.count.needs_reason && <div className="flex gap-2 items-center flex-wrap mt-2" data-testid="late-count">
           <input className={inpCls} aria-label="Why is the count late" placeholder="Why is the count late?" value={reason} disabled={busy} onChange={e => setReason(e.target.value)} />
           <button className={btnAcc} disabled={busy || !reason.trim()} onClick={saveReason}>{busy ? "Saving…" : "Save reason"}</button></div>}
-        {cal.notes.length > 0 && <ul className="text-xs text-slate-400 mt-2">{cal.notes.map((n, i) => <li key={i}>{n.kind === "count_late" ? "Late count" : `Late ${n.vendor_id} order`}: {n.reason}</li>)}</ul>}
+        {cal.notes.length > 0 && <ul className="text-xs text-slate-400 mt-2">{cal.notes.map((n, i) => <li key={i}>{n.kind === "count_late" ? "Late count" : `Late ${cal.vendors.find(v => v.vendor_id === n.vendor_id)?.name || n.vendor_id} order`}: {n.reason}</li>)}</ul>}
         {cal.vendors.some(v => v.status === "overdue") && view.can_create === false && <p className="text-xs text-slate-400 mt-2">A Kitchen Manager, FOH Manager or General Manager places the orders.</p>}
       </> : <p className="text-sm text-slate-400">No order calendar is set for this location.</p>}
       {view.on_order.length > 0 && <div className="mt-3" data-testid="on-order">
