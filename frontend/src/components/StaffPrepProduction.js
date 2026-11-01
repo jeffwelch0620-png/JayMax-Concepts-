@@ -135,8 +135,11 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
       calendar_date_confirmed:false,single_output_confirmed:false,note:"",inputs:r.lines.map(l=>({recipe_line_id:l.id,quantity:"",source_unit:l.source_unit,factor:l.factor,measurement_basis:"",source_batch_id:null,included_loss_quantity:null,loss_evidence:null,evidence:""}))}:null});}
   // A revision prefills the amount only when the task and recipe use the same unit; otherwise the cook re-enters it.
   const sameUnit=s=>{const t=plan?.tasks.find(t=>t.id===s.task_id),r=data?.setup?.recipes.find(r=>r.id===s.review_snapshot.submission.batch?.recipe_version_id);return !t||!r||t.source_unit===r.outputUnit;};
+  // A saved report reopens in the form it was made with: anything but a simple cook report (measured
+  // inputs, losses, own evidence) opens in full details, so revising it never swaps in recipe estimates.
+  const cookReport=b=>!!b&&b.inputs.every(x=>x.measurement_basis==="recipe_estimate"&&x.included_loss_quantity==null&&/\(cook report\)$/.test(x.evidence||""));
   function chooseRevision(id){const h=roots.find(h=>h.events.at(-1).id===id),s=h?.events.at(-1);if(!s){edit(blank());return;}
-    edit({...blank(),task_id:s.task_id,root_id:s.root_id,event_id:s.id,batch:s.review_snapshot.submission.batch,made:sameUnit(s)?s.review_snapshot.submission.batch?.output_quantity||"":"",note:""});}
+    edit({...blank(),task_id:s.task_id,root_id:s.root_id,event_id:s.id,batch:s.review_snapshot.submission.batch,made:sameUnit(s)?s.review_snapshot.submission.batch?.output_quantity||"":"",details:!cookReport(s.review_snapshot.submission.batch),note:""});}
   function batchField(k,v){update("batch",{...draft.batch,[k]:v});}
   function inputField(i,k,v){batchField("inputs",draft.batch.inputs.map((x,j)=>j===i?{...x,[k]:v}:x));}
   function body(batch=draft.batch){if(manager)return {submission_id:draft.event_id,decision:draft.decision,task_complete:draft.task_complete,note:draft.note.trim()};

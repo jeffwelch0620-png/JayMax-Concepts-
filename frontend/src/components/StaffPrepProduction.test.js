@@ -111,3 +111,11 @@ test("full details is kept with the draft, so a return never switches to the sim
   expect(container.querySelector('[aria-label="How much did you make"]')).toBeNull();
   expect(button("Send to manager")).toBeUndefined();
 });
+test("revising a saved measured report reopens it in full details with its figures",async()=>{
+  api.staffProductionSetup.mockResolvedValue({...state(true),submissions:[{root_id:stored.root_id,events:[stored],decisions:[]}],setup:{recipes:[yielding],lots:[],policy:{timezone_name:"America/New_York"}}});
+  await render();await input("Revise production submission",stored.id);
+  expect(container.querySelector('[aria-label="How much did you make"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Gross ingredient 1"]').value).toBe("3");
+  expect(container.querySelector('[aria-label="Ingredient basis 1"]').value).toBe("measured");
+  expect(button("Check my report")).toBeUndefined();
+});
