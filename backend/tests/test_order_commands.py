@@ -268,4 +268,6 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([o['ref'] for o in view['on_order']],[approved['id']]);self.assertIsNotNone(view['on_order'][0]['expected_delivery'])
         shift=self.person('SL-BOH')
         flags=(await shift.get('/api/pg/purchases/berts/order-calendar')).json();self.assertFalse(flags['can_create']);self.assertFalse(flags['can_approve'])
-        papa=(await self.catalog.get('/api/pg/purchases/papa/order-calendar')).json();self.assertIsNone(papa['calendar'])
+        async with self.pool.acquire() as c:await c.execute("DELETE FROM purchasing.order_calendar WHERE store_id='berts'")   # like Papa's: no calendar
+        none=await self.catalog.get('/api/pg/purchases/berts/order-calendar');self.assertEqual(none.status_code,200,none.text)
+        self.assertIsNone(none.json()['calendar']);self.assertEqual([o['ref'] for o in none.json()['on_order']],[])
