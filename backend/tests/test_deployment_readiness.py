@@ -166,7 +166,7 @@ class DeploymentReadinessTests(fixtures.NativeBackupTests):
             await conn.execute((readiness.ROOT/'migrations/20261007_native_private_access.sql').read_text())
         report=await self.probe();self.assertEqual(report['status'],'passed',report['issues'])
         self.assertTrue(report['readOnly']);self.assertFalse(report['operationalReleaseApproved'])
-        self.assertEqual(len(report['migrations']),43)
+        self.assertEqual(len(report['migrations']),44)
         # The inspector itself cannot write, and captures no operational row data.
         async with self.pool.acquire() as conn:
             before=await conn.fetchval('SELECT count(*) FROM purchasing.posting_batches')

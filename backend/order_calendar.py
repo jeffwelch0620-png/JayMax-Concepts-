@@ -56,8 +56,11 @@ async def state(conn, store, now, can_create, can_approve):
     if not rows: return {**base, 'calendar': None, 'on_order': []}
     day, row, tz, today = cycle(rows, now)
     count_due, order_due = datetime.combine(day, row['count_due'], tz), datetime.combine(day, row['order_due'], tz)
-    count = await conn.fetchrow('''SELECT recorded_at FROM actual_inventory.count_snapshots WHERE store_id=$1 AND count_date=$2
-        AND status='complete' AND corrects_snapshot_id IS NULL ORDER BY recorded_at LIMIT 1''', store, day)
+    # The day's current count (after any recount or correction) decides: done only if it is complete.
+    count = await conn.fetchrow('''SELECT status,recorded_at FROM actual_inventory.count_snapshots s WHERE store_id=$1 AND count_date=$2
+        AND NOT EXISTS(SELECT 1 FROM actual_inventory.count_snapshots c WHERE c.corrects_snapshot_id=s.id)
+        ORDER BY recorded_at DESC,id DESC LIMIT 1''', store, day)
+    if count and count['status'] != 'complete': count = None
     names = {r['id']: r['name'] for r in await conn.fetch('SELECT id,name FROM public.vendors WHERE id=ANY($1)', row['vendor_ids'])}
     orders = await conn.fetch('''SELECT ref,vendor_id,status,submitted_at FROM public.purchase_orders WHERE store_id=$1 AND vendor_id=ANY($2)
         AND archived_at IS NULL AND (status='draft' OR (status<>'rejected' AND (submitted_at AT TIME ZONE $3)::date=$4))''',

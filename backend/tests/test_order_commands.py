@@ -217,7 +217,7 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
             weekday=await c.fetchval("SELECT (extract(isodow FROM now() AT TIME ZONE 'America/New_York')::int+6)%7")
             await c.execute('DELETE FROM purchasing.order_calendar WHERE store_id=$1 AND order_weekday=$2','berts',weekday)
             await c.execute('''INSERT INTO purchasing.order_calendar(store_id,order_weekday,count_due,order_due,delivery_weekday,vendor_ids)
-                VALUES('berts',$1,'00:00','00:00:01',($1+1)%7,ARRAY['synthetic_other'])''',weekday)
+                VALUES('berts',$1::smallint,'00:00','00:00:01',(($1::int+1)%7)::smallint,ARRAY['synthetic_other'])''',weekday)
         self.people=[]
 
     async def asyncTearDown(self):
