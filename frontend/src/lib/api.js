@@ -211,14 +211,63 @@ export function endSession() {
   localStorage.removeItem(TOKEN_KEY);
   window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
 }
+// Personal staff sign-in (own name + PIN; Jeff 2026-10-30). The session lives only for this tab's
+// shift (12 h, 30 min idle, enforced by the server); "Remember me" keeps just the name on the
+// device, never the PIN or the session.
+export const staffPersonalLoginEnabled = USE_PG && process.env.REACT_APP_STAFF_PERSONAL_LOGIN === "true";
+const STAFF_SESSION_KEY = "jaymax_staff_session";
+const STAFF_REMEMBER_KEY = "jaymax_staff_remembered";
+export const STAFF_SIGNED_OUT_EVENT = "jaymax:staff-signed-out";
+const staffSession = () => {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(STAFF_SESSION_KEY) || "null");
+    if (s?.token && tokenExpired(s.token)) { endStaffSession(); return null; }
+    return s;
+  } catch { return null; }
+};
+export const currentStaffSession = () => staffSession();
+export function endStaffSession() {
+  try {
+    if (!sessionStorage.getItem(STAFF_SESSION_KEY)) return;
+    sessionStorage.removeItem(STAFF_SESSION_KEY);
+  } catch { return; }
+  window.dispatchEvent(new Event(STAFF_SIGNED_OUT_EVENT));
+}
+export const rememberedStaff = (rid) => {
+  try { const r = JSON.parse(localStorage.getItem(STAFF_REMEMBER_KEY) || "null"); return r?.rid === rid ? r : null; } catch { return null; }
+};
+export const rememberStaff = (rid, member) => {
+  try {
+    if (member) localStorage.setItem(STAFF_REMEMBER_KEY, JSON.stringify({ rid, id: member.id, name: member.name }));
+    else localStorage.removeItem(STAFF_REMEMBER_KEY);
+  } catch { /* the name just isn't remembered */ }
+};
+export const staffSignInNames = (rid, q) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/sign-in/names`, { params: { q } }).then(r => r.data.names);
+export const staffSignIn = (rid, body) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/sign-in`, body).then(r => {
+  sessionStorage.setItem(STAFF_SESSION_KEY, JSON.stringify({ ...r.data, rid }));
+  return r.data;
+});
+export const staffSignOut = async () => {
+  const s = staffSession();
+  if (!s) return;
+  try { await axios.post(`${PG_API}/staff/${pgStoreId(s.rid)}/sign-out`); } finally { endStaffSession(); }
+};
+export const staffSignInRoster = (rid) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/members/sign-in`).then(r => r.data.staff);
+export const issueStaffPin = (rid, memberId, pin, key) => axios.put(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/pin`, { pin }, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const unlockStaffSignIn = (rid, memberId) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/unlock`).then(r => r.data);
+
 axios.interceptors.request.use((config) => {
-  const token = session()?.token;
+  // A manager's own login wins on a shared device; otherwise the signed-in employee's session.
+  const token = session()?.token || staffSession()?.token;
   if (token) config.headers.Authorization = ["Bearer", token].join(" ");
   return config;
 });
 axios.interceptors.response.use(undefined, (error) => {
-  const sentToken = String(error?.config?.headers?.Authorization || "").startsWith("Bearer ");
-  if (error?.response?.status === 401 && sentToken) endSession();
+  const sent = String(error?.config?.headers?.Authorization || "");
+  if (error?.response?.status === 401 && sent.startsWith("Bearer ")) {
+    if (session()?.token && sent.endsWith(session().token)) endSession();
+    else if (staffSession()?.token && sent.endsWith(staffSession().token)) endStaffSession();
+  }
   return Promise.reject(error);
 });
 

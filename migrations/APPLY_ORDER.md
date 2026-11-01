@@ -48,6 +48,7 @@ For an existing hosted database, compare recorded migration history and object d
 | 38 | [20261031_store_transfers.sql](20261031_store_transfers.sql) |
 | 39 | [20261031_login_positions.sql](20261031_login_positions.sql) |
 | 40 | [20261031_stations.sql](20261031_stations.sql) |
+| 41 | [20261101_staff_personal_login.sql](20261101_staff_personal_login.sql) |
 
 ## Separate manager receiving extension
 

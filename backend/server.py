@@ -119,6 +119,18 @@ def _token(user):
                "exp": int(datetime.now(timezone.utc).timestamp()) + SESSION_TTL}
     if user.get("position"):  # logins without a position keep the original session shape
         payload["position"] = user["position"]
+    return _sign(payload)
+
+def _staff_token(payload):
+    """A personal staff session (staff_login.py); its session row decides whether it is still open."""
+    return _sign({**payload, "locations": [PG_STORE_TO_RESTAURANT[payload["store"]]]})
+
+def _staff_user(request):
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    user = _decode_token(token) if token else None
+    return user if user and user.get("kind") == "staff" else None
+
+def _sign(payload):
     raw = _b64(json.dumps(payload, separators=(",", ":")).encode())
     key = AUTH_SECRET
     if not key:
@@ -195,6 +207,8 @@ async def collaboration_security(request: Request, call_next):
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
     if not user:
         return await call_next(request)
+    if user.get("kind") == "staff" and not await staff_login.check_session(db_pg.pool(), user):
+        return JSONResponse({"detail": "Your sign-in has ended. Sign in again with your name and PIN."}, status_code=401)
     if path.startswith(("/api/ai/chat", "/api/orders/")):
         now = time.monotonic()
         key = (request.client.host if request.client else "unknown", path.split("/")[3] if path.startswith("/api/") else path)
@@ -1697,13 +1711,21 @@ async def put_projection(rid: str, body: ProjectionIn, request: Request):
 
 # ---------------- Staff PIN & prep sheet ----------------
 import staff_pin_security
+import staff_login
+
+def _hold_retired_store_pin():
+    if staff_login.enabled():
+        raise HTTPException(410, staff_login.RETIRED)
+
 
 async def _verify_legacy_staff_pin(request, rid, supplied):
+    if staff_login.enabled(): raise HTTPException(403, staff_login.RETIRED)
     return await staff_pin_security.verify(request, RESTAURANT_TO_PG_STORE.get(rid, rid), supplied,
                                            lambda: _get_pin(rid))
 
 
 async def _verify_pg_staff_pin(request, conn, store_id, supplied):
+    if staff_login.enabled(): raise HTTPException(403, staff_login.RETIRED)
     return await staff_pin_security.verify(request, store_id, supplied,
                                            lambda: _pg_get_staff_pin(conn, store_id))
 
@@ -5379,6 +5401,7 @@ async def _pg_get_staff_pin(conn, store_id):
 @pg_router.get("/staff/{store_id}/pin")
 async def pg_get_staff_pin(store_id: str, request: Request):
     check_store_id(store_id)
+    _hold_retired_store_pin()
     _require_manager(request)
     row = await db_pg.pool().fetchrow("SELECT pin FROM staff_pins WHERE store_id=$1", store_id)
     pin = staff_pin_security.configured_pin(row["pin"] if row else None)
@@ -5390,6 +5413,7 @@ class PgStaffPinIn(BaseModel):
 @pg_router.post("/staff/{store_id}/pin")
 async def pg_set_staff_pin(store_id: str, body: PgStaffPinIn, request: Request):
     check_store_id(store_id)
+    _hold_retired_store_pin()
     _require_manager(request)
     pin = body.staffPin.strip()
     if staff_pin_security.configured_pin(pin) is None:
@@ -5466,6 +5490,7 @@ class PgPinBodyIn(BaseModel):
 @pg_router.post("/staff/{store_id}/verify")
 async def pg_verify_pin(store_id: str, body: PgPinBodyIn, request: Request):
     check_store_id(store_id)
+    _hold_retired_store_pin()  # the employee picker goes with the store PIN
     token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
     user = _decode_token(token)
     rid = PG_STORE_TO_RESTAURANT[store_id]
@@ -5488,6 +5513,7 @@ async def pg_verify_pin(store_id: str, body: PgPinBodyIn, request: Request):
 @pg_router.post("/staff/{store_id}/identify")
 async def pg_staff_identify(store_id: str, body: dict, request: Request):
     check_store_id(store_id)
+    _hold_retired_store_pin()
     try:
         staff_uuid = uuid.UUID(str(body.get("staffId", "")))
     except (ValueError, AttributeError, TypeError):
@@ -5933,6 +5959,7 @@ import staff_prep_tasks
 app.include_router(staff_prep_tasks.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import stations
 app.include_router(stations.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
+app.include_router(staff_login.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_token,_staff_user))
 import staff_prep_production
 app.include_router(staff_prep_production.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import prep_containers

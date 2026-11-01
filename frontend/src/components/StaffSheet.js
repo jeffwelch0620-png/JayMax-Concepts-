@@ -5,6 +5,7 @@ import * as api from "../lib/api";
 import { StaffCountDrafts } from "./StaffCountDrafts";
 import { StaffPrepCountDrafts } from "./StaffPrepCounts";
 import { StaffPrepTaskPlan } from "./StaffPrepTasks";
+import { StaffSignIn } from "./StaffSignIn";
 import { enablePushNotifications, disablePushNotifications, pushSupported } from "../lib/push";
 import { inpCls, btnAcc, btnGhost, cardCls, Pill } from "./common";
 import { useCountSheet, CountSheetControls, CountSheetBanner, CountSheetList, SaveAllCountsButton } from "./CountSheet";
@@ -29,13 +30,16 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
   const taskRequests = useRef(0);
   useEffect(() => () => { taskRequests.current += 1; }, []);
   const prepCountDrafts = drafts || privatePrepCountDrafts.current;
-  const [rid, setRid] = useState("");
+  const personal = api.staffPersonalLoginEnabled;
+  // A personal session survives a reload in the same tab, never beyond it.
+  const resumed = personal ? api.currentStaffSession() : null;
+  const [rid, setRid] = useState(resumed?.rid || "");
   const [chosenTrack, setTrack] = useState("daily");
   // Salad Bar is a native-only track at Bert's; anywhere else fall back to Daily.
   const track = validPrepTrack(rid, chosenTrack) && (chosenTrack !== "salad" || api.staffPrepTasksEnabled) ? chosenTrack : "daily";
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
+  const [unlocked, setUnlocked] = useState(!!resumed);
   const [unlocking, setUnlocking] = useState(false);
   const [view, setView] = useState("tasks");
 
@@ -44,8 +48,8 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
   // in for claimed task/count attribution; it never grants manager authority.
   const [roster, setRoster] = useState(null);
   const [identifying, setIdentifying] = useState(false);
-  const [staffName, setStaffName] = useState("");
-  const [staffId, setStaffId] = useState(null);
+  const [staffName, setStaffName] = useState(resumed?.name || "");
+  const [staffId, setStaffId] = useState(resumed?.staff_member_id || null);
 
   // Prep view state
   const [sheet, setSheet] = useState(null);
@@ -58,12 +62,12 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
   // Task inbox state
   const [tasks, setTasks] = useState(null);
   const [completingTask, setCompletingTask] = useState(null);
-  const [taskName, setTaskName] = useState("");
+  const [taskName, setTaskName] = useState(resumed?.name || "");
   const [taskBusy, setTaskBusy] = useState(false);
 
   // Counts view state
   const [counts, setCounts] = useState(null);
-  const [countsName, setCountsName] = useState("");
+  const [countsName, setCountsName] = useState(resumed?.name || "");
 
   // Push notifications
   const [pushOn, setPushOn] = useState(false);
@@ -94,6 +98,21 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
     finally { setUnlocking(false); }
   }
 
+  // The server ends a session after 12 h, 30 min idle, a new PIN or deactivation.
+  useEffect(() => {
+    if (!personal) return undefined;
+    const ended = () => { if (!unlocked) return; lock(); setErr("Your sign-in has ended. Sign in again with your name and PIN."); };
+    window.addEventListener(api.STAFF_SIGNED_OUT_EVENT, ended);
+    return () => window.removeEventListener(api.STAFF_SIGNED_OUT_EVENT, ended);
+  });
+  useEffect(() => { if (resumed) refreshTasks(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function signedIn(session) {
+    setStaffId(session.staff_member_id); setStaffName(session.name); setTaskName(session.name); setCountsName(session.name);
+    setPin(""); setUnlocked(true); setView("tasks");
+    await refreshTasks();
+  }
+
   async function identify(staffId) {
     setErr("");
     setIdentifying(true);
@@ -117,6 +136,7 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
   }
 
   function lock() {
+    if (personal) api.staffSignOut().catch(() => {});
     taskRequests.current += 1;
     setCompletingTask(null);
     for (const key of prepCountDrafts.keys()) if (key.startsWith("staff-prep-submit:")||key.startsWith("staff-production-submit:")) prepCountDrafts.delete(key);
@@ -220,8 +240,10 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
 
         {onPersonalLogin && <button type="button" className={`${btnGhost} mb-4`} data-testid="staff-personal-login"
           onClick={() => { lock(); onPersonalLogin(); }}>Manager / owner sign in</button>}
-        <p className="text-xs text-slate-400 mb-4">Choosing a roster name labels staff work. Manager and owner access requires personal sign-in.</p>
-        {!unlocked && roster ? (
+        <p className="text-xs text-slate-400 mb-4">{personal ? "Sign in with your own name and PIN. Manager and owner access requires a manager login." : "Choosing a roster name labels staff work. Manager and owner access requires personal sign-in."}</p>
+        {!unlocked && personal ? (
+          <StaffSignIn rid={rid} setRid={setRid} onSignedIn={signedIn} />
+        ) : !unlocked && roster ? (
           <div className={`${cardCls} p-6`} data-testid="staff-roster-picker">
             <div className="flex items-center gap-2 mb-4"><Lock size={16} style={{ color: "#F97316" }} /><span className="font-display font-bold text-slate-100">Who are you?</span></div>
             <div className="flex flex-col gap-2">
@@ -270,13 +292,13 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
                 })}
               </div>
               <div className="flex gap-2">
-                {staffName && <span className="text-xs text-slate-500 self-center" data-testid="staff-identified-as">{api.staffPrepTasksEnabled ? "Selected roster name: " : "Signed in as "}{staffName}</span>}
+                {staffName && <span className="text-xs text-slate-500 self-center" data-testid="staff-identified-as">{api.staffPrepTasksEnabled && !personal ? "Selected roster name: " : "Signed in as "}{staffName}</span>}
                 {pushSupported() && (
                   <button className={btnGhost} onClick={togglePush} disabled={pushBusy} data-testid="staff-push-toggle">
                     {pushOn ? <Bell size={13} /> : <BellOff size={13} />} {pushOn ? "Notifications On" : "Enable Notifications"}
                   </button>
                 )}
-                <button className={btnGhost} onClick={lock} data-testid="staff-lock-button"><Lock size={13} /> Lock</button>
+                <button className={btnGhost} onClick={lock} data-testid="staff-lock-button"><Lock size={13} /> {personal ? "Sign out" : "Lock"}</button>
               </div>
             </div>
 

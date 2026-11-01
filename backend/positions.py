@@ -43,13 +43,16 @@ PERMISSIONS = {
     'edit_staff_work': {'OWN', 'OPS', 'GM', 'KM', 'BPM'},              # review, edit or reassign
     'bulk_fulfill': {'OWN', 'OPS', 'BPM'},               # sign off what the Bulk kitchen made and holds
     'bulk_request': {'OWN', 'OPS', 'GM', 'KM'},          # send and accept a store's Bulk requests
+    'issue_pins': {'OWN', 'OPS'},                        # an employee's first PIN and any reset (Jeff 2026-10-31)
+    'unlock_pins': {'OWN', 'OPS', 'GM', 'KM', 'FOHM', 'BPM'},  # unlock after 5 wrong PINs
 }
 
 # Before positions: owners could do everything; managers could request and sign off Bulk and
-# accept staff work, but not set pars or sign off par exceptions.
+# accept staff work, but not set pars or sign off par exceptions. Unlocking staff sign-in is new
+# with personal PINs and goes to every manager.
 LEGACY = {
     'owner': set(PERMISSIONS),
-    'manager': {'bulk_fulfill', 'bulk_request', 'accept_staff_work', 'edit_staff_work'},
+    'manager': {'bulk_fulfill', 'bulk_request', 'accept_staff_work', 'edit_staff_work', 'unlock_pins'},
 }
 
 DENIED = {
@@ -61,6 +64,8 @@ DENIED = {
     'edit_staff_work': 'Editing or reassigning staff work needs a Kitchen Manager or above',
     'bulk_fulfill': 'Only the Bulk Prep Manager, the Operations & Integration Lead or an owner signs off Bulk prep made',
     'bulk_request': "Only the store's Kitchen Manager or General Manager, the Operations & Integration Lead or an owner sends or accepts Bulk requests",
+    'issue_pins': 'Only an owner or the Operations & Integration Lead issues staff PINs',
+    'unlock_pins': 'Unlocking staff sign-in needs a manager or above',
 }
 
 

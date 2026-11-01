@@ -16,7 +16,7 @@ OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activat
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('stations::StationModelTests store_transfers::TransferModelTests bulk_supply::BulkModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('staff_login::StaffLoginModelTests stations::StationModelTests store_transfers::TransferModelTests bulk_supply::BulkModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
@@ -27,6 +27,11 @@ OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_insta
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
                     'batched_fingerprints::BatchedFingerprintGuards']
 DATABASE_CASES = (
+ ('staff_login','StaffLoginDatabaseTests','test_an_owner_issues_the_first_pin_and_the_employee_replaces_it'),
+ ('staff_login','StaffLoginDatabaseTests','test_five_wrong_pins_lock_the_person_until_a_manager_unlocks_them'),
+ ('staff_login','StaffLoginDatabaseTests','test_a_session_ends_on_sign_out_idle_new_pin_or_inactive'),
+ ('staff_login','StaffLoginDatabaseTests','test_a_session_is_for_one_store_and_never_a_manager'),
+ ('staff_login','StaffLoginDatabaseTests','test_a_retried_pin_issue_replays'),
  ('stations','StationDatabaseTests','test_a_cooks_queue_follows_their_station_and_named_assignments_win'),
  ('stations','StationDatabaseTests','test_every_stint_is_kept_and_one_station_at_a_time'),
  ('stations','StationDatabaseTests','test_only_boh_shift_leaders_and_up_run_the_board'),

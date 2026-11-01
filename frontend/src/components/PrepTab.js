@@ -951,7 +951,7 @@ function Planning({ drafts, showError, rid, dishes, prepItems, prepCapabilities,
 
   useEffect(() => {
     if (!overridesHeld) api.listOverrides(rid).then(setOvrList).catch(() => {});
-    api.getStaffPin(rid).then((p) => { setPinInfo(p); setPin(p.staffPin || ""); }).catch(() => {});
+    if (!api.staffPersonalLoginEnabled) api.getStaffPin(rid).then((p) => { setPinInfo(p); setPin(p.staffPin || ""); }).catch(() => {});
     if (!advisorHeld) api.getParRecs(rid).then(setRecs).catch(() => {});
   }, [rid, overridesHeld, advisorHeld]);
 
@@ -1058,7 +1058,10 @@ function Planning({ drafts, showError, rid, dishes, prepItems, prepCapabilities,
         </div>
 
         }
-        <div className={`${cardCls} p-5`} data-testid="staff-pin-card">
+        {api.staffPersonalLoginEnabled ? <div className={`${cardCls} p-5`} data-testid="staff-pin-retired">
+          <SectionLabel>Staff sign-in</SectionLabel>
+          <div className="text-xs text-slate-400">The shared store PIN is retired. Staff sign in with their own name and PIN; issue and unlock PINs on the Staff tab.</div>
+        </div> : <div className={`${cardCls} p-5`} data-testid="staff-pin-card">
           <SectionLabel>Staff Prep Sheet PIN</SectionLabel>
           <div className="text-xs text-slate-400 mb-3">
             Staff open the <b>Prep Sheet</b> (button in the header) on a shared kitchen phone or tablet and enter this PIN. They see only today's prep tasks — no costs, no inventory levels, no editing.
@@ -1068,7 +1071,7 @@ function Planning({ drafts, showError, rid, dishes, prepItems, prepCapabilities,
             <Field label="PIN"><input className={`${inpCls} w-28`} data-testid="staff-pin-input" value={pin} onChange={(e) => setPin(e.target.value)} maxLength={8} /></Field>
             <button className={btnGhost} onClick={savePin} data-testid="staff-pin-save-button">Save PIN</button>
           </div>
-        </div>
+        </div>}
 
         {advisorHeld ? <p data-testid="prep-advisor-unavailable">Historical par advice is unavailable for current planning. Use reviewed prep observations and planning settings.</p> : <div className={`${cardCls} p-5`} data-testid="par-advisor-card">
           <SectionLabel>AI Par Advisor</SectionLabel>
