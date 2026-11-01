@@ -48,6 +48,24 @@ class StaffProductionTests(fixtures.StaffTaskTests):
             p=await self.decision_preview(body,token);self.assertEqual(p.status_code,200,p.text);payload=body|dict(expected_review_hash=p.json()['reviewHash'],reviewed=True)
         return await self.portal.post(self.production_url+'/decisions',json=payload,headers={'Authorization':'Bearer '+(token or self.owner),'Idempotency-Key':key or str(uuid4())})
 
+    async def test_a_signed_in_cook_submits_verified_output_as_themself(self):
+        root=fixtures.fixtures.fixtures.fixtures.recovery.counts.native.ROOT
+        async with self.pool.acquire() as c:
+            for m in ('migrations/20261101_staff_personal_login.sql','migrations/20261101_staff_verified_production.sql'):await c.execute((root/m).read_text())
+        flag=patch.dict(os.environ,{'STAFF_PERSONAL_LOGIN_ENABLED':'true'});flag.start();self.addCleanup(flag.stop)
+        ops=server._token(dict(id='invented-ops',email='ops@example.invalid',role='owner',position='OPS'))
+        issued=await self.portal.put(f'/api/pg/staff/berts/members/{self.member}/pin',json={'pin':'4821'},headers={'Authorization':'Bearer '+ops,'Idempotency-Key':str(uuid4())})
+        self.assertEqual(issued.status_code,200,issued.text)
+        signed=await self.portal.post('/api/pg/staff/berts/sign-in',json={'staff_member_id':str(self.member),'pin':'4821','new_pin':'7350'})
+        self.assertEqual(signed.status_code,200,signed.text);token=signed.json()['token']
+        body=await self.submission()
+        self.assertEqual((await self.staff_preview(body|{'staff_member_id':str(self.other_member)},token)).status_code,403)
+        preview=await self.staff_preview(body,token);self.assertEqual(preview.status_code,200,preview.text)
+        self.assertTrue(preview.json()['review']['identity_verified'])
+        saved=await self.submit(body,token=token)   # the database guard accepts the verified identity
+        self.assertEqual(saved.status_code,200,saved.text)
+        self.assertTrue(saved.json()['submission']['review_snapshot']['identity_verified'])
+
     async def test_review_corrections_production_author_and_claimed_roster_cannot_accept(self):
         body = await self.submission()
         first = await self.submit(body, token=self.owner)

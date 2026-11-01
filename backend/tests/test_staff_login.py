@@ -226,6 +226,34 @@ class StaffLoginDatabaseTests(staff.StaffTaskTests):
         # Managers and the shared PIN don't have a "my station".
         self.assertEqual((await self.portal.get('/api/pg/staff/berts/station', params={'day': today}, headers={'Authorization': 'Bearer ' + self.owner})).status_code, 403)
 
+    async def test_a_cook_reports_a_shortage_to_the_shift_leader(self):
+        async with self.pool.acquire() as c:
+            for m in ('migrations/20261031_stations.sql', 'migrations/20261101_staff_shortages.sql'):
+                await c.execute((staff.fixtures.fixtures.fixtures.recovery.counts.native.ROOT / m).read_text(encoding='utf-8'))
+        _, task = await self.start()
+        self.assertEqual((await self.assign(self.assignment_body(task))).status_code, 200)
+        token = await self.signed_in(self.member)
+        body = dict(pin='', day='2026-10-08', track='daily', task_id=task['id'], staff_member_id=str(self.member),
+                    short_quantity='2', reason='out_of_ingredient', note='Out of invented basil')
+        post = lambda b, key=None, t=token: self.portal.post('/api/pg/staff/berts/shortages', json=b,
+                                                            headers={'Authorization': 'Bearer ' + t, 'Idempotency-Key': key or str(uuid4())})
+        key = str(uuid4())
+        first = await post(body, key)
+        self.assertEqual((first.status_code, first.json()['replayed'], first.json()['report']['identity_verified']), (200, False, True), first.text)
+        self.assertEqual((await post(body, key)).json()['replayed'], True)                       # a lost reply's retry
+        self.assertEqual((await post(body | {'note': 'Different'}, key)).status_code, 409)
+        self.assertEqual((await post(body | {'staff_member_id': str(self.other_member)})).status_code, 403)
+        other = await self.signed_in(self.other_member, temporary='4822', own='7351')
+        self.assertEqual((await post(body | {'staff_member_id': str(self.other_member)}, t=other)).status_code, 422)  # not their task
+        # The Shift Leader sees it on the station board; nothing else changes.
+        board = await self.portal.get('/api/pg/purchases/berts/stations/board/2026-10-08', headers={'Authorization': 'Bearer ' + self.owner})
+        self.assertEqual([(r['staff_name'], r['reason'], r['note']) for r in board.json()['shortages']],
+                         [('Invented cook A', 'out_of_ingredient', 'Out of invented basil')])
+        # The shared store PIN can't send one: the Shift Leader needs to know who.
+        with patch.dict(os.environ, {'STAFF_PERSONAL_LOGIN_ENABLED': 'false'}):
+            shared = await self.portal.post('/api/pg/staff/berts/shortages', json=body | {'pin': '4826'}, headers={'Idempotency-Key': str(uuid4())})
+            self.assertEqual(shared.status_code, 403)
+
     async def test_a_retried_pin_issue_replays(self):
         key = str(uuid4())
         self.assertEqual((await self.issue(self.member, '4821', key=key)).json()['replayed'], False)

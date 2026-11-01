@@ -85,8 +85,9 @@ async def board(conn, store, day):
     names = {str(r['product_id']): r['name'] for r in await conn.fetch('''SELECT DISTINCT ON (product_id) product_id, name
         FROM prep_inventory.product_versions WHERE store_id=$1 ORDER BY product_id, revision DESC''', store)}
     defaults = await product_stations(conn, store)
+    import staff_shortages  # here, not at the top: it builds on the staff task plan, which imports this module
     return serial({'store_id': store, 'business_date': day, 'stations': await stations(conn, store), 'roster': roster,
-        'open': await open_stints(conn, store), 'history': history,
+        'open': await open_stints(conn, store), 'history': history, 'shortages': await staff_shortages.for_day(conn, store, day),
         'products': [{'product_id': p, 'name': n, 'station_code': defaults.get(p)} for p, n in sorted(names.items(), key=lambda x: x[1].casefold())]})
 
 

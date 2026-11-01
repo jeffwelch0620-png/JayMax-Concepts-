@@ -4,6 +4,7 @@ import {useRetainedDraft} from "../lib/saveIntegrity";
 import {todayISO} from "../lib/calc";
 import {cardCls,inpCls,btnGhost} from "./common";
 import {StaffProductionSubmission} from "./StaffPrepProduction";
+import {ShortageReport} from "./ShortageReport";
 const storeId=rid=>rid==="papa_leonis"?"papa":rid;
 // A shared PIN or a manager login only claims who did it; the signed-in cook's own session is verified.
 const verified=m=>!!api.verifiedStaff?.(m);
@@ -103,7 +104,7 @@ export function StaffPrepTaskPlan({rid,pin,staffId,track,drafts,personal=false})
     {staffId&&!personal&&<label><input type="checkbox" aria-label="Show my roster assignments" checked={mine} onChange={e=>setMine(e.target.checked)}/> Show assignments for my selected roster name (claimed identity)</label>}
     <button className={btnGhost} onClick={load}>Refresh released prep plan</button>{error&&<p role="alert">{error}</p>}
     {data&&<><p>{data.day} · {data.track} · {data.status}</p>{data.tasks.length===0&&<p>{data.status==="released"?"No included tasks for this selection.":"No released plan for this selected date."}</p>}
-      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||(t.via==="station"?`Your station (${t.station})`:"Unassigned")} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>Task {t.id} · measured reviewed output {t.progress.reviewed_base_quantity} {t.base_unit}.</p></li>)}</ul></>}
+      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||(t.via==="station"?`Your station (${t.station})`:"Unassigned")} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>Task {t.id} · measured reviewed output {t.progress.reviewed_base_quantity} {t.base_unit}.</p>{personal&&<ShortageReport rid={rid} day={day} track={track} task={t} staffId={staffId}/>}</li>)}</ul></>}
     {api.staffPrepProductionEnabled&&staffId&&data&&<StaffProductionSubmission rid={rid} day={day} track={track} staffId={staffId} pin={pin} plan={data} drafts={drafts}/>}
   </section>;
 }
