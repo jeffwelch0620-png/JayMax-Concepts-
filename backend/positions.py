@@ -45,14 +45,17 @@ PERMISSIONS = {
     'bulk_request': {'OWN', 'OPS', 'GM', 'KM'},          # send and accept a store's Bulk requests
     'issue_pins': {'OWN', 'OPS'},                        # an employee's first PIN and any reset (Jeff 2026-10-31)
     'unlock_pins': {'OWN', 'OPS', 'GM', 'KM', 'FOHM', 'BPM'},  # unlock after 5 wrong PINs
+    'create_orders': {'OWN', 'OPS', 'GM', 'KM', 'FOHM'},  # create, edit, submit and send supplier orders (Jeff 2026-11-01)
+    'approve_orders': {'OWN', 'OPS', 'GM'},              # approve or reject someone else's order (P4, Jeff 2026-11-01)
 }
 
 # Before positions: owners could do everything; managers could request and sign off Bulk and
 # accept staff work, but not set pars or sign off par exceptions. Unlocking staff sign-in is new
-# with personal PINs and goes to every manager.
+# with personal PINs and goes to every manager. Managers could already create and approve
+# others' orders, so a manager without a position keeps that.
 LEGACY = {
     'owner': set(PERMISSIONS),
-    'manager': {'bulk_fulfill', 'bulk_request', 'accept_staff_work', 'edit_staff_work', 'unlock_pins'},
+    'manager': {'bulk_fulfill', 'bulk_request', 'accept_staff_work', 'edit_staff_work', 'unlock_pins', 'create_orders', 'approve_orders'},
 }
 
 DENIED = {
@@ -66,6 +69,8 @@ DENIED = {
     'bulk_request': "Only the store's Kitchen Manager or General Manager, the Operations & Integration Lead or an owner sends or accepts Bulk requests",
     'issue_pins': 'Only an owner or the Operations & Integration Lead issues staff PINs',
     'unlock_pins': 'Unlocking staff sign-in needs a manager or above',
+    'create_orders': 'Creating or submitting supplier orders needs a Kitchen Manager, FOH Manager, General Manager or above',
+    'approve_orders': "Approving an order needs the General Manager, the Operations & Integration Lead or an owner",
 }
 
 

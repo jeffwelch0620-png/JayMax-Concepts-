@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
+import { OrderCalendar } from "./OrderCalendar";
 import { isOrderEnabled, fmtMoney } from "../lib/calc";
 import { PageTitle, cardCls, inpCls, btnAcc } from "./common";
 import { NativeInventoryPosition } from "./NativeInventoryPosition";
@@ -52,6 +53,7 @@ export function NativeOrderPlanner({ items, rid, showToast, onCreatedPO }) {
   }
   return <section className="space-y-4" data-testid="native-order-planner">
     <PageTitle>Reviewed Order Planning</PageTitle>
+    {api.orderWorkflowEnabled&&<OrderCalendar rid={rid} />}
     <NativeInventoryPosition restaurantId={rid} />
     <p>Enter the quantity you intend to order in the selected supplier's purchase unit. Pars and catalog prices are planning references. No shortfall or order quantity is inferred from old stock, recipe portions or a dated count.</p>
     <button type="button" className={btnAcc} disabled={pars.reading} onClick={pars.refresh}>Refresh par references</button>

@@ -16,7 +16,7 @@ OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activat
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('staff_login::StaffLoginModelTests stations::StationModelTests store_transfers::TransferModelTests bulk_supply::BulkModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('staff_login::StaffLoginModelTests stations::StationModelTests store_transfers::TransferModelTests bulk_supply::BulkModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests order_calendar::OrderCalendarTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
@@ -158,6 +158,9 @@ DATABASE_CASES = (
  ('menu_contract','MenuContractTests','test_definition_changes_leave_actual_report_and_purchase_facts_unchanged'),
  ('order_commands','OrderCommandTests','test_order_editor_cannot_approve_even_after_another_editor_changes_content'),
  ('order_commands','OrderCommandTests','test_installed_workflow_holds_legacy_and_flag_off_writes_before_side_effects'),
+ ('order_commands','OrderCalendarTests','test_positions_gate_order_creation_and_approval'),
+ ('order_commands','OrderCalendarTests','test_late_submit_needs_a_reason_and_records_it_once'),
+ ('order_commands','OrderCalendarTests','test_calendar_shows_overdue_count_late_order_and_what_is_on_order'),
  ('staff_prep_counts','StaffPrepCountsTests','test_review_corrections_count_author_cannot_accept_after_staff_revision'),
  ('staff_prep_production','StaffProductionTests','test_a_signed_in_cook_submits_verified_output_as_themself'),
  ('staff_prep_production','StaffProductionTests','test_shift_leaders_accept_kitchen_managers_send_back_and_reassign'),
