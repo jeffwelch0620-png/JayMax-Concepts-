@@ -84,7 +84,34 @@ export function validProductionAck(ack,pending,rid,day,track,manager=false){
   return d.task_complete?uid(f?.id)&&f.id===record.finish_event_id&&f.action==="finish"&&f.store_id===store&&f.task_id===e.task_id&&f.predecessor_id===e.id&&f.revision===e.revision+1
     &&f.actor===record.recorded_by&&f.reason===d.note&&f.request_fingerprint===record.request_fingerprint&&f.review_snapshot?.staff_submission_id===d.submission_id:f===null&&record.finish_event_id===null;
 }
-const blank=()=>({task_id:"",root_id:"",event_id:"",kind:"submit",batch:null,note:"",decision:"accepted",task_complete:false,review:null,confirmed:false,pending:null,rejected:false});
+const blank=()=>({task_id:"",root_id:"",event_id:"",kind:"submit",batch:null,note:"",made:"",cookNote:"",details:false,decision:"accepted",task_complete:false,review:null,confirmed:false,pending:null,rejected:false});
+// Simple cook report (step E, Jeff 2026-11-01): the cook says how much they made. Batches come from the recipe
+// yield, ingredients from the recipe amounts (marked as a recipe estimate), and the time and date from the
+// store's clock. The manager still reviews every figure before it counts; "full details" keeps the long form.
+const decimal=(n,places)=>n.toFixed(places).replace(/\.?0+$/,"");
+const clockParts=(tz,date)=>Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23",timeZoneName:"longOffset"}).formatToParts(date).map(p=>[p.type,p.value]));
+export function storeTime(tz,day,now=new Date()){
+  const at=p=>{const m=/GMT(?:([+-]\d{2}):?(\d{2})?)?/.exec(p.timeZoneName||"");return m?.[1]?`${m[1]}:${m[2]||"00"}`:"+00:00";};
+  const p=clockParts(tz,now);if(`${p.year}-${p.month}-${p.day}`===day)return `${day}T${p.hour}:${p.minute}:${p.second}${at(p)}`;
+  return `${day}T12:00:00${at(clockParts(tz,new Date(`${day}T17:00:00Z`)))}`;   // another day's report: midday that day
+}
+export function simpleBatch(batch,recipe,made,note,day,tz,now,task=null){
+  const text=String(made).trim(),amount=Number(text),yieldPer=Number(recipe?.entered_yield),baseYield=Number(recipe?.usable_base_yield),taskFactor=Number(task?.factor);
+  if(!(amount>0)||!/^\d+(\.\d+)?$/.test(text))throw new Error("Enter how much you made, as a number.");
+  if(!(yieldPer>0))throw new Error("This recipe has no yield yet. Use full details, or ask your manager.");
+  // The cook answers in the task's unit (a task planned in gal may use a recipe that yields qt):
+  // convert through base units, then record the output in the recipe's own output unit.
+  let output=amount,batches=amount/yieldPer;
+  if(task?.source_unit&&task.source_unit!==recipe.outputUnit){
+    if(!(taskFactor>0&&baseYield>0))throw new Error("This task's unit can't be converted yet. Use full details, or ask your manager.");
+    batches=amount*taskFactor/baseYield;output=batches*yieldPer;}
+  const count=decimal(batches,4),outputText=output===amount?text:decimal(output,6);
+  if(Number(count)<=0||Number(outputText)<=0)throw new Error("That amount is too small to record.");
+  return {...batch,planned_batches:count,output_quantity:outputText,performed_at:storeTime(tz,day,now),business_date:day,timezone_name:tz,
+    calendar_date_confirmed:true,single_output_confirmed:true,note:note||`Cook reported ${text} ${task?.source_unit||recipe.outputUnit||""}`.trim(),
+    inputs:batch.inputs.map(x=>{const l=recipe.lines.find(l=>l.id===x.recipe_line_id);return {...x,quantity:decimal(Number(l.entered_quantity)*batches,6),
+      measurement_basis:"recipe_estimate",included_loss_quantity:null,loss_evidence:null,evidence:`Recipe amount for ${count} batch${count==="1"?"":"es"} (cook report)`};})};
+}
 const errorText=e=>typeof e?.response?.data?.detail==="string"?e.response.data.detail:e.message||"Production save was not confirmed.";
 export function StaffProductionSubmission(props){return <ProductionForm key={`${props.rid}:${props.day}:${props.track}:${props.staffId}`} {...props}/>;}
 export function StaffProductionDecisions(props){return <ProductionForm key={`${props.rid}:${props.day}:${props.track}:manager`} {...props} manager/>;}
@@ -101,24 +128,34 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
   const update=(key,value)=>{edit(d=>({...d,[key]:value,review:null,confirmed:false}));setMessage("");};
   const roots=data?.submissions||[],selectedRoot=roots.find(h=>h.events.some(e=>e.id===draft.event_id)),selected=selectedRoot?.events.find(e=>e.id===draft.event_id);
   const task=plan?.tasks.find(t=>t.id===draft.task_id),recipe=data?.setup?.recipes.find(r=>r.id===draft.batch?.recipe_version_id);
+  const tz=data?.setup?.policy?.timezone_name||"America/New_York",simple=!manager&&!draft.details&&Number(recipe?.entered_yield)>0&&draft.kind==="submit";
+  const own=verified(staffId),taskName=id=>plan?.tasks.find(t=>t.id===id)?.name||"Prep task";
   function chooseTask(id){const t=plan.tasks.find(t=>t.id===id),r=data.setup.recipes.find(r=>r.id===t?.recipe_version_id);
     edit({...blank(),task_id:id,root_id:crypto.randomUUID(),batch:r?{recipe_version_id:r.id,planned_batches:"",output_quantity:"",performed_at:"",business_date:day,timezone_name:data.setup.policy?.timezone_name||"",
       calendar_date_confirmed:false,single_output_confirmed:false,note:"",inputs:r.lines.map(l=>({recipe_line_id:l.id,quantity:"",source_unit:l.source_unit,factor:l.factor,measurement_basis:"",source_batch_id:null,included_loss_quantity:null,loss_evidence:null,evidence:""}))}:null});}
+  // A revision prefills the amount only when the task and recipe use the same unit; otherwise the cook re-enters it.
+  const sameUnit=s=>{const t=plan?.tasks.find(t=>t.id===s.task_id),r=data?.setup?.recipes.find(r=>r.id===s.review_snapshot.submission.batch?.recipe_version_id);return !t||!r||t.source_unit===r.outputUnit;};
+  // A saved report reopens in the form it was made with: anything but a simple cook report (measured
+  // inputs, losses, own evidence) opens in full details, so revising it never swaps in recipe estimates.
+  const cookReport=b=>!!b&&b.inputs.every(x=>x.measurement_basis==="recipe_estimate"&&x.included_loss_quantity==null&&/\(cook report\)$/.test(x.evidence||""));
   function chooseRevision(id){const h=roots.find(h=>h.events.at(-1).id===id),s=h?.events.at(-1);if(!s){edit(blank());return;}
-    edit({...blank(),task_id:s.task_id,root_id:s.root_id,event_id:s.id,batch:s.review_snapshot.submission.batch,note:""});}
+    edit({...blank(),task_id:s.task_id,root_id:s.root_id,event_id:s.id,batch:s.review_snapshot.submission.batch,made:sameUnit(s)?s.review_snapshot.submission.batch?.output_quantity||"":"",details:!cookReport(s.review_snapshot.submission.batch),note:""});}
   function batchField(k,v){update("batch",{...draft.batch,[k]:v});}
   function inputField(i,k,v){batchField("inputs",draft.batch.inputs.map((x,j)=>j===i?{...x,[k]:v}:x));}
-  function body(){if(manager)return {submission_id:draft.event_id,decision:draft.decision,task_complete:draft.task_complete,note:draft.note.trim()};
+  function body(batch=draft.batch){if(manager)return {submission_id:draft.event_id,decision:draft.decision,task_complete:draft.task_complete,note:draft.note.trim()};
     const previous=selectedRoot?.events.at(-1),assignment=draft.kind==="withdraw"?previous?.assignment_id:task?.assignment;
+    const note=simple?(draft.cookNote.trim()||"Reported from My shift"):draft.note.trim();
     return {submission:{root_id:draft.root_id,expected_revision:previous?.revision||0,task_id:draft.task_id,staff_member_id:staffId,assignment_id:assignment,
-      kind:draft.kind,batch:draft.kind==="withdraw"?null:{...draft.batch,note:draft.batch?.note.trim()},note:draft.note.trim()}};
+      kind:draft.kind,batch:draft.kind==="withdraw"?null:{...batch,note:batch?.note.trim()},note}};
   }
   async function preview(){const id=epoch.current;setBusy(true);setError("");edit(d=>({...d,review:null,confirmed:false}));
-    try{const b=body(),p=manager?await api.previewStaffProductionDecision(rid,day,track,b):await api.previewStaffProduction(rid,day,track,b,pin);if(id!==epoch.current)return;
+    try{const batch=simple?simpleBatch(draft.batch,recipe,draft.made,draft.cookNote.trim(),day,tz,undefined,task):draft.batch;if(simple)edit(d=>({...d,batch}));
+      const b=body(batch),p=manager?await api.previewStaffProductionDecision(rid,day,track,b):await api.previewStaffProduction(rid,day,track,b,pin);if(id!==epoch.current)return;
       if(!validProductionReview(p,b,rid,day,track,manager,selected))throw new Error("Production review did not match the retained measurements and assignment.");edit(d=>({...d,review:p,confirmed:false}));
     }catch(e){if(id===epoch.current)setError(errorText(e));}finally{if(id===epoch.current)setBusy(false);}
   }
-  async function save(){if(!draft.pending&&(!draft.review||!draft.confirmed))return;const id=epoch.current;
+  // `confirmedNow`: the cook's "Send to manager" after reading the plain summary counts as the review.
+  async function save(confirmedNow=false){if(!draft.pending&&(!draft.review||!(draft.confirmed||confirmedNow)))return;const id=epoch.current;
     const p=draft.pending||{key:crypto.randomUUID(),review:draft.review,body:{...(manager?draft.review.review.decision:{submission:draft.review.review.submission}),reviewed:true,expected_review_hash:draft.review.reviewHash}};
     const submitted={...draft,pending:p,rejected:false};edit(submitted);setBusy(true);setError("");
     try{const ack=manager?await api.decideStaffProduction(rid,day,track,p.body,p.key):await api.submitStaffProduction(rid,day,track,p.body,p.key,pin);if(id!==epoch.current||!cache.has(key))return;
@@ -127,40 +164,53 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
     }catch(e){if(id===epoch.current&&cache.has(key)){setError(errorText(e));if([409,422].includes(e?.response?.status))edit(d=>({...d,rejected:true}));}}
     finally{if(id===epoch.current)setBusy(false);}
   }
-  return <section className={`${cardCls} p-3`} aria-label={manager?"Staff production decisions":"Staff measured production"}><h3>{manager?"Review staff production":"Submit measured production"}</h3>
-    <p>{manager?"Inspect measured output and gross inputs before accepting. Choose explicitly whether the task is finished.":"Selected roster name is claimed identity. Submitting measurements creates no inventory until a manager accepts them."}</p>
+  const outcome=h=>h.events.at(-1).kind==="withdraw"?"withdrawn":h.decisions.find(d=>d.submission_id===h.events.at(-1).id)?.decision||"awaiting review";
+  return <section className={`${cardCls} p-3`} aria-label={manager?"Staff production decisions":"Staff measured production"}><h3>{manager?"Review staff production":own?"Report what you made":"Submit measured production"}</h3>
+    <p>{manager?"Inspect measured output and gross inputs before accepting. Choose explicitly whether the task is finished."
+      :own?"Signed in as you. Say how much you made; your manager checks it before it counts."
+      :"Selected roster name is claimed identity. Submitting measurements creates no inventory until a manager accepts them."}</p>
     {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}<button className={btnGhost} disabled={frozen} onClick={load}>Refresh production submissions</button>
-    {data&&<><ul>{roots.map(h=><li key={h.root_id}>Submission {h.root_id} · revision {h.events.at(-1).revision} · {h.events.at(-1).kind} · {h.events.at(-1).kind==="withdraw"?"withdrawn":h.decisions.find(d=>d.submission_id===h.events.at(-1).id)?.decision||"awaiting review"}</li>)}</ul>
+    {data&&<><ul>{roots.map(h=><li key={h.root_id}>{own?`${taskName(h.events.at(-1).task_id)} · ${h.events.at(-1).review_snapshot.submission.batch?.output_quantity??""} reported · ${outcome(h)==="awaiting review"?"waiting for a manager":outcome(h)}`
+      :`Submission ${h.root_id} · revision ${h.events.at(-1).revision} · ${h.events.at(-1).kind} · ${outcome(h)}`}</li>)}</ul>
     <fieldset disabled={frozen}>
       <label>{manager?"Pending production submission":"Revise production submission"}<select className={inpCls} aria-label={manager?"Pending production submission":"Revise production submission"} value={draft.event_id} onChange={e=>manager?update("event_id",e.target.value):chooseRevision(e.target.value)}><option value="">{manager?"Choose submission":"New measured production"}</option>{roots.filter(h=>h.events.at(-1).kind==="submit"&&!h.decisions.some(d=>d.decision==="accepted")&&(manager?!h.decisions.some(d=>d.submission_id===h.events.at(-1).id):true)).map(h=><option key={h.root_id} value={h.events.at(-1).id}>{h.root_id} · revision {h.events.at(-1).revision}</option>)}</select></label>
       {manager?<><label>Production decision<select className={inpCls} aria-label="Production decision" value={draft.decision} onChange={e=>{update("decision",e.target.value);update("task_complete",false);}}><option value="accepted">Accept measured production</option><option value="rejected">Reject submission</option></select></label>
         <label><input type="checkbox" aria-label="Finish task on acceptance" disabled={draft.decision!=="accepted"} checked={draft.task_complete} onChange={e=>update("task_complete",e.target.checked)}/> Finish this task after accepting this measured batch</label>
         {selected&&<Measurements batch={selected.review_snapshot.submission.batch} unit={selected.review_snapshot.batch?.review.outputUnit}/>}</>:<>
         <label>Assigned production task<select className={inpCls} aria-label="Assigned production task" disabled={!!draft.event_id} value={draft.task_id} onChange={e=>chooseTask(e.target.value)}><option value="">Select assigned task</option>{(plan?.tasks||[]).filter(t=>t.assigned_member?.id===staffId&&!t.roster_changed&&!t.progress.closed&&!t.progress.needs_review).map(t=><option key={t.id} value={t.id}>{t.name} · {t.quantity} {t.source_unit} planned</option>)}</select></label>
-        {draft.event_id&&<label>Submission action<select aria-label="Submission action" value={draft.kind} onChange={e=>update("kind",e.target.value)}><option value="submit">Revise measured submission</option><option value="withdraw">Withdraw pending submission</option></select></label>}
-        {draft.batch&&draft.kind==="submit"&&<><p>Measured usable output unit: {recipe?.outputUnit||"review required"}. Planned output is not a measurement.</p>
+        {draft.event_id&&<label>Submission action<select className={inpCls} aria-label="Submission action" value={draft.kind} onChange={e=>update("kind",e.target.value)}><option value="submit">Revise measured submission</option><option value="withdraw">Withdraw pending submission</option></select></label>}
+        {draft.batch&&simple&&<>
+          <label>How much did you make? ({task?.source_unit||recipe.outputUnit})<input className={inpCls} inputMode="decimal" aria-label="How much did you make" value={draft.made} onChange={e=>update("made",e.target.value)}/></label>
+          {draft.batch.inputs.map((x,i)=>{const l=recipe.lines.find(l=>l.id===x.recipe_line_id);return l?.source_kind==="prepared"&&<label key={x.recipe_line_id}>Which batch of {l.source_snapshot?.recipe?.name||"the prepared ingredient"} did you use?
+            <select className={inpCls} aria-label={`Source lot ${i+1}`} value={x.source_batch_id||""} onChange={e=>inputField(i,"source_batch_id",e.target.value||null)}><option value="">Choose a batch</option>{data.setup.lots.filter(v=>v.product_id===l.source_snapshot?.recipe?.product_id).map(v=><option key={v.id} value={v.id}>Made {String(v.performed_at).slice(0,16).replace("T"," ")}</option>)}</select></label>;})}
+          <label>Note for your manager (optional)<input className={inpCls} aria-label="Note for your manager" value={draft.cookNote} onChange={e=>update("cookNote",e.target.value)}/></label>
+        </>}
+        {draft.batch&&draft.kind==="submit"&&!simple&&<><p>Measured usable output unit: {recipe?.outputUnit||"review required"}. Planned output is not a measurement.</p>
           {[["planned_batches","Recipe batches prepared"],["output_quantity","Measured usable production"],["performed_at","Production time with offset"],["timezone_name","Production timezone"],["note","Production measurement evidence"]].map(([k,label])=><label key={k}>{label}<input className={inpCls} aria-label={label} value={draft.batch[k]} onChange={e=>batchField(k,e.target.value)}/></label>)}
           <p>Physical calendar date: {day}</p>
           {draft.batch.inputs.map((x,i)=>{const l=recipe?.lines.find(l=>l.id===x.recipe_line_id);return <fieldset key={x.recipe_line_id}><legend>Ingredient {i+1} · {l?.raw_item_code||"prepared ingredient"} · {x.source_unit}</legend>
-            <label>Gross ingredient {i+1}<input aria-label={`Gross ingredient ${i+1}`} value={x.quantity} onChange={e=>inputField(i,"quantity",e.target.value)}/></label>
-            <label>Ingredient basis {i+1}<select aria-label={`Ingredient basis ${i+1}`} value={x.measurement_basis} onChange={e=>inputField(i,"measurement_basis",e.target.value)}><option value="">Select basis</option><option value="measured">Measured</option><option value="recipe_estimate">Recipe estimate</option></select></label>
-            <label>Ingredient evidence {i+1}<input aria-label={`Ingredient evidence ${i+1}`} value={x.evidence} onChange={e=>inputField(i,"evidence",e.target.value)}/></label>
-            {l?.source_kind==="prepared"&&<label>Source lot {i+1}<select aria-label={`Source lot ${i+1}`} value={x.source_batch_id||""} onChange={e=>inputField(i,"source_batch_id",e.target.value||null)}><option value="">Select measured lot</option>{data.setup.lots.filter(v=>v.product_id===l.source_snapshot?.recipe?.product_id).map(v=><option key={v.id} value={v.id}>{v.id} · {v.remainingRecordedQuantity} {v.base_unit} unallocated</option>)}</select></label>}
-            <label>Included loss {i+1}<input aria-label={`Included loss ${i+1}`} value={x.included_loss_quantity??""} onChange={e=>inputField(i,"included_loss_quantity",e.target.value||null)}/></label>
-            <label>Included loss evidence {i+1}<input aria-label={`Included loss evidence ${i+1}`} value={x.loss_evidence||""} onChange={e=>inputField(i,"loss_evidence",e.target.value||null)}/></label>
+            <label>Gross ingredient {i+1}<input className={inpCls} aria-label={`Gross ingredient ${i+1}`} value={x.quantity} onChange={e=>inputField(i,"quantity",e.target.value)}/></label>
+            <label>Ingredient basis {i+1}<select className={inpCls} aria-label={`Ingredient basis ${i+1}`} value={x.measurement_basis} onChange={e=>inputField(i,"measurement_basis",e.target.value)}><option value="">Select basis</option><option value="measured">Measured</option><option value="recipe_estimate">Recipe estimate</option></select></label>
+            <label>Ingredient evidence {i+1}<input className={inpCls} aria-label={`Ingredient evidence ${i+1}`} value={x.evidence} onChange={e=>inputField(i,"evidence",e.target.value)}/></label>
+            {l?.source_kind==="prepared"&&<label>Source lot {i+1}<select className={inpCls} aria-label={`Source lot ${i+1}`} value={x.source_batch_id||""} onChange={e=>inputField(i,"source_batch_id",e.target.value||null)}><option value="">Select measured lot</option>{data.setup.lots.filter(v=>v.product_id===l.source_snapshot?.recipe?.product_id).map(v=><option key={v.id} value={v.id}>{v.id} · {v.remainingRecordedQuantity} {v.base_unit} unallocated</option>)}</select></label>}
+            <label>Included loss {i+1}<input className={inpCls} aria-label={`Included loss ${i+1}`} value={x.included_loss_quantity??""} onChange={e=>inputField(i,"included_loss_quantity",e.target.value||null)}/></label>
+            <label>Included loss evidence {i+1}<input className={inpCls} aria-label={`Included loss evidence ${i+1}`} value={x.loss_evidence||""} onChange={e=>inputField(i,"loss_evidence",e.target.value||null)}/></label>
           </fieldset>;})}
           <label><input type="checkbox" aria-label="Confirm production calendar date" checked={draft.batch.calendar_date_confirmed} onChange={e=>batchField("calendar_date_confirmed",e.target.checked)}/> Confirm this location calendar date and timezone</label>
           <label><input type="checkbox" aria-label="Confirm single usable output" checked={draft.batch.single_output_confirmed} onChange={e=>batchField("single_output_confirmed",e.target.checked)}/> One usable output, with no unmapped recoverable byproducts</label>
         </>}
       </>}
-      <label>Production review reason<input className={inpCls} aria-label="Production review reason" value={draft.note} onChange={e=>update("note",e.target.value)}/></label>
-      <button className={btnGhost} disabled={manager?!draft.event_id:!draft.root_id} onClick={preview}>Review production record</button>
+      {!manager&&draft.batch&&draft.kind==="submit"&&Number(recipe?.entered_yield)>0&&<button type="button" className={btnGhost} onClick={()=>edit(d=>({...d,details:!d.details,review:null,confirmed:false}))}>{draft.details?"Use the simple form":"Enter full details instead"}</button>}
+      {!simple&&<label>Production review reason<input className={inpCls} aria-label="Production review reason" value={draft.note} onChange={e=>update("note",e.target.value)}/></label>}
+      <button className={btnGhost} disabled={manager?!draft.event_id:!draft.root_id} onClick={preview}>{simple?"Check my report":"Review production record"}</button>
     </fieldset></>}
-    {draft.review&&<article aria-label="Production record review"><p>{manager?draft.review.review.decision.decision:draft.review.review.submission.kind} · {day} · {track} · {draft.review.review.productionEffect}</p>
+    {draft.review&&simple&&<article aria-label="Production record review"><p>You made {draft.made} {task?.source_unit||recipe?.outputUnit} of {task?.name||"this task"} (about {draft.review.review.submission.batch.planned_batches} batch{draft.review.review.submission.batch.planned_batches==="1"?"":"es"}). Ingredients are counted from the recipe. Nothing counts until your manager accepts it.</p>
+      <button className={btnGhost} disabled={busy} onClick={()=>save(true)}>{draft.pending?"Send again":"Send to manager"}</button></article>}
+    {draft.review&&!simple&&<article aria-label="Production record review"><p>{manager?draft.review.review.decision.decision:draft.review.review.submission.kind} · {day} · {track} · {draft.review.review.productionEffect}</p>
       <Measurements batch={manager?draft.review.review.submission.review_snapshot.submission.batch:draft.review.review.submission.batch} unit={draft.review.review.batch?.review.outputUnit}/>
       {manager&&draft.review.review.decision.decision==="accepted"&&<p>{draft.review.review.decision.task_complete?"Accept this batch and finish the task.":"Accept this partial batch; task remains open."}</p>}
       <label><input type="checkbox" aria-label="Confirm production review" disabled={frozen} checked={draft.confirmed} onChange={e=>edit(d=>({...d,confirmed:e.target.checked}))}/> I reviewed the measured quantities, source lots and history.</label>
-      <button className={btnGhost} disabled={busy||(!draft.pending&&!draft.confirmed)} onClick={save}>{draft.pending?"Retry same production record":"Save reviewed production record"}</button>
+      <button className={btnGhost} disabled={busy||(!draft.pending&&!draft.confirmed)} onClick={()=>save()}>{draft.pending?"Retry same production record":"Save reviewed production record"}</button>
     </article>}
     {draft.pending&&draft.rejected&&<button className={btnGhost} disabled={busy} onClick={()=>{edit(d=>({...d,pending:null,review:null,confirmed:false,rejected:false}));load();}}>Revise rejected production record</button>}
   </section>;

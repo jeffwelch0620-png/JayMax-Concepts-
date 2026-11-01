@@ -24,7 +24,7 @@ export function StaffSignIn({ rid, setRid, onSignedIn }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const lookups = useRef(0);
-  const attempts = useRef(0);   // a store change, "Not you?" or leaving abandons a pending sign-in
+  const attempts = useRef(0), pinBox = useRef(null);   // a store change, "Not you?" or leaving abandons a pending sign-in
   useEffect(() => () => { attempts.current += 1; }, []);
 
   useEffect(() => {
@@ -103,15 +103,16 @@ export function StaffSignIn({ rid, setRid, onSignedIn }) {
             value={query} onChange={(e) => setQuery(e.target.value)} disabled={!rid} data-testid="staff-name-entry" />
           {matches.length > 0 && <div className="flex flex-col gap-1 mt-2" data-testid="staff-name-matches">
             {matches.map((m) => (
-              <button key={m.id} className={`${cardCls} p-2 text-left font-bold text-slate-100`} onClick={() => { setMember(m); setMatches([]); }}
+              <button key={m.id} className={`${cardCls} p-2 text-left font-bold text-slate-100`} onClick={() => { setMember(m); setMatches([]); setTimeout(() => pinBox.current?.focus(), 0); }}
                 data-testid={`staff-name-${m.id}`}>{m.name}</button>
             ))}
           </div>}
         </div>
       )}
-      <input type="password" inputMode="numeric" autoComplete="off" aria-label={newPin === null ? "Your PIN" : "PIN you were given"}
-        className={`${inpCls} w-full text-center text-xl tracking-[0.4em] mb-3`} placeholder="••••" maxLength={5}
-        value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} onKeyDown={newPin === null ? enter : undefined} data-testid="staff-pin-entry" />
+      {/* The PIN box appears once a name is picked, with the cursor in it, so nothing moves under a tap (step E). */}
+      {member && <input type="password" inputMode="numeric" autoComplete="off" aria-label={newPin === null ? "Your PIN" : "PIN you were given"}
+        className={`${inpCls} w-full text-center text-xl tracking-[0.4em] mb-3`} placeholder="••••" maxLength={5} ref={pinBox}
+        value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} onKeyDown={newPin === null ? enter : undefined} data-testid="staff-pin-entry" />}
       {newPin !== null && <div className="flex flex-col gap-2 mb-3" data-testid="staff-new-pin">
         <p className="text-sm text-slate-300">Choose your own PIN (4 or 5 digits). It can match your Toast clock-in code.</p>
         <input type="password" inputMode="numeric" autoComplete="off" aria-label="New PIN" className={`${inpCls} text-center text-xl tracking-[0.4em]`}

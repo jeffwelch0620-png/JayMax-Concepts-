@@ -13,6 +13,10 @@ const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==="object"?Object.f
 const same=(a,b)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
 const errorText=e=>typeof e?.response?.data?.detail==="string"?e.response.data.detail:e.message||"Prep task read or save was not confirmed.";
 const blank=()=>({task_id:"",staff_member_id:"",note:"",review:null,confirmed:false,pending:null,rejected:false});
+// A cook reads what has been accepted so far in the task's own unit (gal, not fl_oz), with no IDs.
+const trim=n=>String(Number(n.toFixed(3)));
+export function madeSoFar(t){const base=Number(t.progress.reviewed_base_quantity),f=Number(t.factor);
+  if(!base)return "Nothing accepted yet.";return f>0?`Accepted so far: ${trim(base/f)} ${t.source_unit}.`:`Accepted so far: ${trim(base)} ${t.base_unit}.`;}
 const validHistory=(rows,task,store)=>Array.isArray(rows)&&rows.every((h,i)=>uid(h.id)&&h.store_id===store&&h.task_id===task&&h.revision===i+1&&h.predecessor_id===(i?rows[i-1].id:null));
 export function validAssignmentState(s,rid,day,track){
   const store=storeId(rid),e=s?.execution;
@@ -104,7 +108,7 @@ export function StaffPrepTaskPlan({rid,pin,staffId,track,drafts,personal=false})
     {staffId&&!personal&&<label><input type="checkbox" aria-label="Show my roster assignments" checked={mine} onChange={e=>setMine(e.target.checked)}/> Show assignments for my selected roster name (claimed identity)</label>}
     <button className={btnGhost} onClick={load}>Refresh released prep plan</button>{error&&<p role="alert">{error}</p>}
     {data&&<><p>{data.day} · {data.track} · {data.status}</p>{data.tasks.length===0&&<p>{data.status==="released"?"No included tasks for this selection.":"No released plan for this selected date."}</p>}
-      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||(t.via==="station"?`Your station (${t.station})`:"Unassigned")} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>Task {t.id} · measured reviewed output {t.progress.reviewed_base_quantity} {t.base_unit}.</p>{personal&&<ShortageReport rid={rid} day={day} track={track} task={t} staffId={staffId} drafts={drafts}/>}</li>)}</ul></>}
+      <ul>{data.tasks.map(t=><li key={t.id}>{t.name}: {t.quantity} {t.source_unit} planned · {t.assigned_member?.name||(t.via==="station"?`Your station (${t.station})`:"Unassigned")} · {t.progress.status}{t.roster_changed?" · assignment needs roster review":""}<p>{personal?madeSoFar(t):`Task ${t.id} · measured reviewed output ${t.progress.reviewed_base_quantity} ${t.base_unit}.`}</p>{personal&&<ShortageReport rid={rid} day={day} track={track} task={t} staffId={staffId} drafts={drafts}/>}</li>)}</ul></>}
     {api.staffPrepProductionEnabled&&staffId&&data&&<StaffProductionSubmission rid={rid} day={day} track={track} staffId={staffId} pin={pin} plan={data} drafts={drafts}/>}
   </section>;
 }
