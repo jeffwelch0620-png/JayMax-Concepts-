@@ -293,7 +293,7 @@ function LegacyInvoicesTab({ items, persistItems, purchases, persistPurchases, s
           <div className="text-[13px] text-slate-400 mb-3">
             Drop in a PFG "CustomerFirstInvoiceExport" file (one file, multiple invoices) and/or US Foods "InvoiceDetails" files (one invoice per file — select as many as you like at once). Format is auto-detected and columns are mapped automatically.
           </div>
-          <input ref={autoFileRef} type="file" accept=".csv,text/csv" multiple onChange={onAutoFiles} className="mb-3.5 text-sm text-slate-400 file:mr-3 file:rounded-lg file:border file:border-[#334155] file:bg-[#1E293B] file:px-3 file:py-1.5 file:text-slate-200 file:text-xs file:font-semibold" data-testid="invoice-file-input" />
+          <input ref={autoFileRef} type="file" accept=".csv,text/csv" multiple onChange={onAutoFiles} className="mb-3.5 text-sm text-slate-400 file:mr-3 file:rounded-lg file:border file:border-jm-line-strong file:bg-jm-surface-3 file:px-3 file:py-1.5 file:text-slate-200 file:text-xs file:font-semibold" data-testid="invoice-file-input" />
           {skippedFiles.length > 0 && (
             <div className="text-xs text-red-400 mb-3">Couldn't recognize the format of: {skippedFiles.join(", ")}. Use "Other Vendor" to map its columns manually.</div>
           )}
@@ -308,8 +308,8 @@ function LegacyInvoicesTab({ items, persistItems, purchases, persistPurchases, s
               {autoGroups.map((g) => {
                 const total = g.rows.reduce((s, r) => s + (r.extendedCost || r.qty * r.unitCost), 0);
                 return (
-                  <div key={`${g.vendor}|${g.invoiceNumber}`} className="mb-4 border border-[#28354A] rounded-lg overflow-hidden">
-                    <div className="bg-[#1A2438] px-3 py-2 text-[13px] font-bold flex justify-between" style={{ color: "var(--acc)" }}>
+                  <div key={`${g.vendor}|${g.invoiceNumber}`} className="mb-4 border border-jm-line rounded-lg overflow-hidden">
+                    <div className="bg-jm-surface-2 px-3 py-2 text-[13px] font-bold flex justify-between" style={{ color: "var(--acc)" }}>
                       <span>{g.vendor} — Invoice {g.invoiceNumber} — {fmtDate(g.invoiceDate)} {duplicateAutoGroups.has(`${g.vendor}|${g.invoiceNumber}`) && <Pill color="#EF4444" bg="rgba(239,68,68,0.12)">Already imported — skipped</Pill>}</span>
                       <span className="num">{fmtMoney(total)}</span>
                     </div>
@@ -399,7 +399,7 @@ function LegacyInvoicesTab({ items, persistItems, purchases, persistPurchases, s
             <Field label="Vendor"><select className={inpCls} value={header.vendor} onChange={(e) => setHeader((h) => ({ ...h, vendor: e.target.value }))}>{VENDORS.map((v) => <option key={v} value={v}>{v}</option>)}</select></Field>
           </div>
           <SectionLabel>Upload CSV</SectionLabel>
-          <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onOtherFile} className="mb-3.5 text-sm text-slate-400 file:mr-3 file:rounded-lg file:border file:border-[#334155] file:bg-[#1E293B] file:px-3 file:py-1.5 file:text-slate-200 file:text-xs file:font-semibold" data-testid="invoice-other-file" />
+          <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onOtherFile} className="mb-3.5 text-sm text-slate-400 file:mr-3 file:rounded-lg file:border file:border-jm-line-strong file:bg-jm-surface-3 file:px-3 file:py-1.5 file:text-slate-200 file:text-xs file:font-semibold" data-testid="invoice-other-file" />
           {csvHeaders.length > 0 && (
             <>
               <div className="grid gap-3 mb-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>

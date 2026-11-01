@@ -183,14 +183,14 @@ export default function App() {
       : <Login onLogin={(sess) => { setLoginNotice(""); setSession(sess); }} onOpenStaff={() => setStaffOpen(true)} notice={loginNotice} />;
   }
   return (
-    <div className="min-h-screen bg-[#0B0F17] text-slate-100" style={{ "--acc": current.accent }}>
+    <div className="min-h-screen bg-jm-bg text-slate-100" style={{ "--acc": current.accent, "--jm-accent": current.accent }}>
       <Toaster position="bottom-center" theme="dark" toastOptions={{ style: { background: "#161F30", border: "1px solid #28354A", color: "#F8FAFC" } }} />
 
-      <header className="sticky top-0 z-40 bg-[#0B0F17]/90 backdrop-blur-md border-b border-[#28354A]" data-testid="app-header">
+      <header className="sticky top-0 z-40 bg-[#0B0F17]/90 backdrop-blur-md border-b border-jm-line" data-testid="app-header">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6 pt-4">
           <div className="flex justify-between items-center flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-extrabold text-lg text-[#0B0F17]" style={{ background: current.accent }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-extrabold text-lg text-jm-on-accent" style={{ background: current.accent }}>
                 {isOwner ? <Building2 size={20} /> : current.short[0]}
               </div>
               <div>
@@ -219,14 +219,14 @@ export default function App() {
               )}
               <button
                 onClick={() => setStaffOpen(true)}
-                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold border border-[#334155] bg-[#161F30] text-slate-300 hover:border-[var(--acc)] hover:text-white transition"
+                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold border border-jm-line-strong bg-jm-surface text-slate-300 hover:border-[var(--acc)] hover:text-white transition"
                 data-testid="open-staff-sheet"
               >
                 <ClipboardCheck size={13} /> Prep Sheet
               </button>
               <button
                 onClick={() => setAiOpen(true)}
-                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-[#0B0F17] hover:brightness-110 transition"
+                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-jm-on-accent hover:brightness-110 transition"
                 style={{ background: current.accent }}
                 data-testid="open-ai-assistant"
               >
@@ -241,7 +241,7 @@ export default function App() {
                 key={r.id}
                 onClick={() => setLoc(r.id)}
                 data-testid={`location-tab-${r.id}`}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-bold border transition ${loc === r.id ? "text-[#0B0F17]" : "text-slate-400 bg-[#161F30] border-[#28354A] hover:text-white"}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-bold border transition ${loc === r.id ? "text-jm-on-accent" : "text-slate-400 bg-jm-surface border-jm-line hover:text-white"}`}
                 style={loc === r.id ? { background: r.accent, borderColor: r.accent } : {}}
               >
                 {r.id === "owner" && <Building2 size={12} />}

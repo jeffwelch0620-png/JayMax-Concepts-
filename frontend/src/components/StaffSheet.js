@@ -227,11 +227,11 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-[#0B0F17] overflow-y-auto" data-testid="staff-sheet">
+    <div className="fixed inset-0 z-[60] bg-jm-bg overflow-y-auto" data-testid="staff-sheet">
       <div className="max-w-[640px] mx-auto px-4 py-6 pb-24">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F97316]"><ChefHat size={18} className="text-[#0B0F17]" /></span>
+            <span className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F97316]"><ChefHat size={18} className="text-jm-on-accent" /></span>
             <div>
               <div className="font-display font-bold text-slate-100">Employee Tasks</div>
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-bold">Staff View — Tasks Only</div>
@@ -265,7 +265,7 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
             <div className="flex gap-2 mb-4 flex-wrap">
               {RESTAURANTS.map((r) => (
                 <button key={r.id} onClick={() => setRid(r.id)} data-testid={`staff-store-${r.id}`}
-                  className={`rounded-full px-4 py-2 text-sm font-bold border transition ${rid === r.id ? "text-[#0B0F17]" : "text-slate-400 bg-[#161F30] border-[#28354A]"}`}
+                  className={`rounded-full px-4 py-2 text-sm font-bold border transition ${rid === r.id ? "text-jm-on-accent" : "text-slate-400 bg-jm-surface border-jm-line"}`}
                   style={rid === r.id ? { background: r.accent, borderColor: r.accent } : {}}>
                   {r.short}
                 </button>
@@ -335,7 +335,7 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
 
       {completing && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="staff-complete-modal">
-          <div className={`${cardCls} w-full max-w-sm p-5 m-4 bg-[#161F30]`}>
+          <div className={`${cardCls} w-full max-w-sm p-5 m-4 bg-jm-surface`}>
             <div className="font-display font-bold text-slate-100 mb-3">Mark Prepped — {completing.name}</div>
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1 text-xs text-slate-400 font-semibold">Your Name
@@ -355,7 +355,7 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
 
       {completingTask && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="staff-task-complete-modal">
-          <div className={`${cardCls} w-full max-w-sm p-5 m-4 bg-[#161F30]`}>
+          <div className={`${cardCls} w-full max-w-sm p-5 m-4 bg-jm-surface`}>
             <div className="font-display font-bold text-slate-100 mb-3">Mark Done — {completingTask.title}</div>
             <label className="flex flex-col gap-1 text-xs text-slate-400 font-semibold">Your Name
               <input className={inpCls} data-testid="staff-task-name-input" placeholder="e.g. Maria" value={taskName} onChange={(e) => setTaskName(e.target.value)} />
@@ -391,7 +391,7 @@ function TasksView({ restaurant, tasks, onRefresh, onOpenPrep, onOpenCounts, onC
       ) : tasks.unavailable ? (
         <div role="alert">Tasks could not be loaded. Refresh to try again.</div>
       ) : tasks.tasks.length === 0 ? (
-        <div className="text-center py-14 px-5 rounded-xl border border-dashed border-[#334155] bg-[#161F30] text-sm text-slate-500" data-testid="staff-tasks-empty">
+        <div className="text-center py-14 px-5 rounded-xl border border-dashed border-jm-line-strong bg-jm-surface text-sm text-slate-500" data-testid="staff-tasks-empty">
           No tasks assigned for today. Check with your manager, or use Prep / Counts above.
         </div>
       ) : (
@@ -442,7 +442,7 @@ function PrepView({ restaurant, track, setTrack, sheet, onRefresh, expanded, set
           </div>
 
           {sheet.tasks.length === 0 ? (
-            <div className="text-center py-14 px-5 rounded-xl border border-dashed border-[#334155] bg-[#161F30] text-sm text-slate-500" data-testid="staff-empty">
+            <div className="text-center py-14 px-5 rounded-xl border border-dashed border-jm-line-strong bg-jm-surface text-sm text-slate-500" data-testid="staff-empty">
               No prep list has been released for today yet. Check with your manager.
             </div>
           ) : (
@@ -473,7 +473,7 @@ function PrepView({ restaurant, track, setTrack, sheet, onRefresh, expanded, set
                           {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Recipe Card
                         </button>
                         {open && (
-                          <div className="mt-2 text-xs text-slate-300 bg-[#0F1626] border border-[#28354A] rounded-lg p-3 space-y-1.5" data-testid={`staff-card-${t.id}`}>
+                          <div className="mt-2 text-xs text-slate-300 bg-jm-field border border-jm-line rounded-lg p-3 space-y-1.5" data-testid={`staff-card-${t.id}`}>
                             {t.card.equipment && <div><b>Equipment:</b> {t.card.equipment}</div>}
                             {t.card.shelfLife && <div><b>Shelf life:</b> {t.card.shelfLife}</div>}
                             {t.card.procedure && <div className="whitespace-pre-wrap"><b>Procedure:</b>{"\n"}{t.card.procedure}</div>}
@@ -520,7 +520,7 @@ function CountsView({ restaurant, counts, onRefresh, name, setName, onSave, setE
       <div className="mb-3"><CountSheetControls sheet={sheet} name={name} setName={setName} nameTestId="staff-counts-name" /></div>
       <CountSheetBanner sheet={sheet} />
       {items.length === 0 ? (
-        <div className="text-center py-14 px-5 rounded-xl border border-dashed border-[#334155] bg-[#161F30] text-sm text-slate-500" data-testid="staff-counts-empty">
+        <div className="text-center py-14 px-5 rounded-xl border border-dashed border-jm-line-strong bg-jm-surface text-sm text-slate-500" data-testid="staff-counts-empty">
           No items are set up for the count yet. Check with your manager.
         </div>
       ) : (

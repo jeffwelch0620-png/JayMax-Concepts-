@@ -1,0 +1,31 @@
+/*
+ * JMAX design tokens, phase 1 (JMAX UI Library build spec, 2026-11-01).
+ * Every value here is today's colour, so nothing on screen changes. Screens use these tokens
+ * (Tailwind `jm-*` colours) instead of raw hex; phase 4 swaps the values for the Option B theme
+ * in one place. @jmax/ui ships the same --jm-* names.
+ */
+:root {
+  --jm-bg: #0B0F17;
+  --jm-surface: #161F30;
+  --jm-surface-2: #1A2438;
+  --jm-surface-3: #1E293B;      /* secondary controls today; Option B uses --jm-surface + --jm-line-strong */
+  --jm-field: #0F1626;
+  --jm-line: #28354A;
+  --jm-line-strong: #334155;
+  --jm-ink-strong: #F8FAFC;     /* slate-50 */
+  --jm-ink: #F1F5F9;            /* slate-100 */
+  --jm-ink-2: #CBD5E1;          /* slate-300 */
+  --jm-ink-3: #64748B;          /* slate-500 */
+  --jm-on-accent: #0B0F17;      /* text on an accent fill */
+  --jm-ok: #10B981;
+  --jm-warn: #F59E0B;
+  --jm-bad: #EF4444;
+  --jm-info: #38BDF8;
+  /* The store accent follows the selected store (App.js sets it beside --acc). */
+  --jm-accent: #F97316;
+  /* Each store's mark colour, so owner pages can show all of them. */
+  --jm-store-berts: #F97316;
+  --jm-store-rudds: #EAB308;
+  --jm-store-papa: #E11D48;
+  --jm-store-owner: #06B6D4;
+}

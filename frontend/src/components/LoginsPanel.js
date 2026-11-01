@@ -132,7 +132,7 @@ export function LoginsPanel({ showToast }) {
 
       <div className="mt-5 flex flex-col gap-2" data-testid="login-list">
         {!users ? null : users.length === 0 ? <EmptyState text="No logins yet." /> : users.map((u) => (
-          <div key={u.id} className="bg-[#0F1626] border border-[#28354A] rounded-lg p-3 flex flex-wrap items-center gap-3" data-testid={`login-${u.id}`}>
+          <div key={u.id} className="bg-jm-field border border-jm-line rounded-lg p-3 flex flex-wrap items-center gap-3" data-testid={`login-${u.id}`}>
             <KeyRound size={14} className="text-slate-500" />
             <div className="font-bold text-slate-100 text-sm flex-1 min-w-[160px] break-all">{u.email}</div>
             <Pill>{u.position ? positionLabel(u.position) : u.role}</Pill>

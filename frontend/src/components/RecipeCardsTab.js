@@ -48,18 +48,18 @@ export function RecipeCardsTab({ items, dishes }) {
         <div className={`${cardCls} overflow-hidden recipe-print-card`}>
           <div className="px-6 py-4 flex justify-between gap-4 flex-wrap print-muted" style={{ background: "var(--acc)" }}>
             <div>
-              <div className="font-display text-2xl font-bold text-[#0B0F17]">{selected.name}</div>
+              <div className="font-display text-2xl font-bold text-jm-on-accent">{selected.name}</div>
               <div className="text-xs mt-1 text-[#0B0F17]/70 font-semibold">{selected.recipeType === "prep" ? "PREP / PRODUCTION RECIPE" : `MENU RECIPE${selected.menuCode ? ` • ${selected.menuCode}` : ""}`}</div>
             </div>
-            <div className="text-right"><div className="text-[11px] text-[#0B0F17]/70 font-bold">BATCH SCALE</div><div className="text-[22px] font-extrabold num text-[#0B0F17]">{num(safeScale, 2)}×</div></div>
+            <div className="text-right"><div className="text-[11px] text-[#0B0F17]/70 font-bold">BATCH SCALE</div><div className="text-[22px] font-extrabold num text-jm-on-accent">{num(safeScale, 2)}×</div></div>
           </div>
           <div className="p-6">
             {!summary.complete && <div role="status" className="text-amber-300 mb-3">Planning cost is incomplete: {summary.issues.join("; ")}</div>}
             <div className="grid gap-2.5 mb-4" style={{ gridTemplateColumns: "repeat(4,minmax(0,1fr))" }}>
-              <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Yield</span><strong className="text-sm text-slate-200 num">{selected.recipeType === "prep" ? `${num(scaledYield, 2)} ${selected.yieldUOM}` : `${num(safeScale, 2)} serving${safeScale === 1 ? "" : "s"}`}</strong></div>
-              <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Planning Batch Cost</span><strong className="text-sm text-slate-200 num">{fmtPlanningCost(scaledCost)}</strong></div>
-              <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">{selected.recipeType === "prep" ? `Cost / ${selected.yieldUOM}` : "Estimated Food Cost"}</span><strong className="text-sm text-slate-200 num">{selected.recipeType === "prep" ? fmtPlanningCost(summary.costPerYieldUnit) : (summary.complete && Number(selected.price) > 0 ? `${num((summary.totalCost / Number(selected.price)) * 100, 1)}%` : "Unknown")}</strong></div>
-              <div className="border border-[#28354A] rounded-lg p-2.5 bg-[#0F1626] print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">{selected.recipeType === "prep" ? "Shelf Life / Hold" : "Portion / Plate"}</span><strong className="text-sm text-slate-200">{selected.recipeType === "prep" ? (selected.shelfLife || "—") : (selected.portionNote || "—")}</strong></div>
+              <div className="border border-jm-line rounded-lg p-2.5 bg-jm-field print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Yield</span><strong className="text-sm text-slate-200 num">{selected.recipeType === "prep" ? `${num(scaledYield, 2)} ${selected.yieldUOM}` : `${num(safeScale, 2)} serving${safeScale === 1 ? "" : "s"}`}</strong></div>
+              <div className="border border-jm-line rounded-lg p-2.5 bg-jm-field print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Planning Batch Cost</span><strong className="text-sm text-slate-200 num">{fmtPlanningCost(scaledCost)}</strong></div>
+              <div className="border border-jm-line rounded-lg p-2.5 bg-jm-field print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">{selected.recipeType === "prep" ? `Cost / ${selected.yieldUOM}` : "Estimated Food Cost"}</span><strong className="text-sm text-slate-200 num">{selected.recipeType === "prep" ? fmtPlanningCost(summary.costPerYieldUnit) : (summary.complete && Number(selected.price) > 0 ? `${num((summary.totalCost / Number(selected.price)) * 100, 1)}%` : "Unknown")}</strong></div>
+              <div className="border border-jm-line rounded-lg p-2.5 bg-jm-field print-muted"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">{selected.recipeType === "prep" ? "Shelf Life / Hold" : "Portion / Plate"}</span><strong className="text-sm text-slate-200">{selected.recipeType === "prep" ? (selected.shelfLife || "—") : (selected.portionNote || "—")}</strong></div>
             </div>
             {selected.equipment && <div className="mb-3.5 text-[13px] text-slate-300"><strong>Equipment / Station:</strong> {selected.equipment}</div>}
             <SectionLabel>Ingredients</SectionLabel>
@@ -75,10 +75,10 @@ export function RecipeCardsTab({ items, dishes }) {
             </div>
             <div className="mt-5">
               <SectionLabel>Procedure / Method</SectionLabel>
-              <div className="whitespace-pre-wrap min-h-[90px] leading-relaxed px-3.5 py-3 bg-[#0F1626] border border-[#28354A] rounded-lg text-sm text-slate-300 print-muted">{selected.procedure || "No procedure entered yet. Add the kitchen method in Menu Costing."}</div>
+              <div className="whitespace-pre-wrap min-h-[90px] leading-relaxed px-3.5 py-3 bg-jm-field border border-jm-line rounded-lg text-sm text-slate-300 print-muted">{selected.procedure || "No procedure entered yet. Add the kitchen method in Menu Costing."}</div>
             </div>
             {selected.description && <div className="mt-3.5 text-xs text-slate-500"><strong>Description:</strong> {selected.description}</div>}
-            <div className="grid grid-cols-3 gap-4 mt-7 pt-4 border-t border-[#28354A] text-xs text-slate-400">
+            <div className="grid grid-cols-3 gap-4 mt-7 pt-4 border-t border-jm-line text-xs text-slate-400">
               <div>Prepared by: __________________</div><div>Date: __________</div><div>Verified by: __________________</div>
             </div>
           </div>
