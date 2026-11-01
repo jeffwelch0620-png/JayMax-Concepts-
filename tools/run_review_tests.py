@@ -31,6 +31,7 @@ DATABASE_CASES = (
  ('staff_login','StaffLoginDatabaseTests','test_five_wrong_pins_lock_the_person_until_a_manager_unlocks_them'),
  ('staff_login','StaffLoginDatabaseTests','test_a_session_ends_on_sign_out_idle_new_pin_or_inactive'),
  ('staff_login','StaffLoginDatabaseTests','test_a_session_is_for_one_store_and_never_a_manager'),
+ ('staff_login','StaffLoginDatabaseTests','test_a_cook_sees_their_own_tasks_and_confirms_their_own_station'),
  ('staff_login','StaffLoginDatabaseTests','test_a_retried_pin_issue_replays'),
  ('staff_login','StaffLoginDatabaseTests','test_pins_can_be_issued_before_sign_in_is_switched_on'),
  ('staff_login','StaffLoginDatabaseTests','test_a_retried_first_pin_change_signs_in_instead_of_counting_as_wrong'),

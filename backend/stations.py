@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import Field
 import prep_mapping as mapping
+import staff_login
 from native_units import lock_store
 from purchase_api import serial
 from purchase_parser import fingerprint
@@ -173,8 +174,20 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
         store_check(store); check_day(body.business_date)
         async with pool_factory().acquire() as conn, conn.transaction():
             await ready(conn); actor, _ = await staff_authorize(request, conn, store, body.pin)
+            staff_login.acting_member(actor, body.staff_member_id)
             await move(conn, store, body.business_date, f'self:{actor}', Move(staff_member_id=body.staff_member_id, station_code=body.station_code),
                        idempotency_key, source='self')
             return {'station_code': await member_station(conn, store, body.staff_member_id, body.business_date)}
+
+    @router.get('/api/pg/staff/{store}/station')
+    async def my_station(store: str, day: date, request: Request):
+        # A signed-in cook's own station for the day, and the stations they can choose.
+        store_check(store); check_day(day)
+        async with pool_factory().acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
+            await ready(conn); actor, _ = await staff_authorize(request, conn, store, '')
+            if not str(actor).startswith('member:'): raise HTTPException(403, 'Sign in with your own name and PIN to choose a station')
+            member = UUID(str(actor).removeprefix('member:'))
+            return serial({'staff_member_id': member, 'business_date': day, 'station_code': await member_station(conn, store, member, day),
+                           'stations': [s for s in await stations(conn, store) if s['active']]})
 
     return router

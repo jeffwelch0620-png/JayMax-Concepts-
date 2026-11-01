@@ -74,6 +74,15 @@ def pin_ok(pin, stored):
         return False
 
 
+def acting_member(actor, member_id):
+    """A personal session acts only as its own person (Jeff 2026-10-30). Returns whether the named
+    person is verified: true for their own session, false for a shared PIN or a manager login."""
+    if not str(actor).startswith('member:'): return False
+    if member_id is not None and str(member_id) != str(actor).removeprefix('member:'):
+        raise HTTPException(403, 'Signed-in staff can only act as themselves')
+    return member_id is not None
+
+
 class SignIn(mapping.Strict):
     staff_member_id: UUID
     pin: str = Field(pattern=PIN)

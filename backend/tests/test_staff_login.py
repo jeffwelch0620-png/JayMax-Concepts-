@@ -56,6 +56,15 @@ class StaffLoginModelTests(unittest.TestCase):
                      '/staff/berts/pin', '/staff/berts/verify', '/purchases/berts/stations/board/2026-10-08'):
             self.assertFalse(server.PERSONAL_STAFF_ROUTE.fullmatch(path), path)
 
+    def test_a_staff_session_acts_only_as_its_own_person(self):
+        me, other = uuid4(), uuid4()
+        self.assertTrue(staff_login.acting_member(f'member:{me}', me))
+        self.assertFalse(staff_login.acting_member(f'member:{me}', None))           # the whole released plan
+        with self.assertRaises(server.HTTPException) as e: staff_login.acting_member(f'member:{me}', other)
+        self.assertEqual(e.exception.status_code, 403)
+        for actor in ('shared-pin', 'manager-sub', 'owner@example.invalid'):          # claimed, never verified
+            self.assertFalse(staff_login.acting_member(actor, other))
+
     def test_readiness_holds_a_backend_only_switch(self):
         base = {'USE_PG': 'true'}, {'REACT_APP_USE_PG': 'true'}
         self.assertNotIn('STAFF_PERSONAL_LOGIN', str(deployment_readiness.configuration(*base)['problems']))
@@ -194,6 +203,28 @@ class StaffLoginDatabaseTests(staff.StaffTaskTests):
         async with self.pool.acquire() as c, c.transaction():
             with self.assertRaises(asyncpg.PostgresError):
                 await c.execute('UPDATE prep_inventory.staff_member_pins SET temporary=false')
+
+    async def test_a_cook_sees_their_own_tasks_and_confirms_their_own_station(self):
+        async with self.pool.acquire() as c:
+            await c.execute((staff.fixtures.fixtures.fixtures.recovery.counts.native.ROOT / 'migrations/20261031_stations.sql').read_text(encoding='utf-8'))
+        token = await self.signed_in(self.member)
+        mine = await self.staff_plan(member=self.member, pin='', token=token)
+        self.assertEqual((mine.status_code, mine.json()['identity_verified']), (200, True))
+        self.assertEqual((await self.staff_plan(member=self.other_member, pin='', token=token)).status_code, 403)
+        self.assertFalse((await self.staff_plan(pin='', token=token)).json()['identity_verified'])     # whole plan, no one named
+        auth = {'Authorization': 'Bearer ' + token}
+        today = str(server.datetime.now(staff_login.STORE_ZONE).date())
+        station = await self.portal.get('/api/pg/staff/berts/station', params={'day': today}, headers=auth)
+        self.assertEqual(station.status_code, 200, station.text)
+        self.assertIsNone(station.json()['station_code'])
+        self.assertIn('PREP', [s['code'] for s in station.json()['stations']])
+        move = lambda member: self.portal.post('/api/pg/staff/berts/station', headers=auth | {'Idempotency-Key': str(uuid4())},
+                                               json={'pin': '', 'staff_member_id': str(member), 'station_code': 'PREP', 'business_date': today})
+        self.assertEqual((await move(self.other_member)).status_code, 403)                # can't move someone else
+        self.assertEqual((await move(self.member)).status_code, 200)
+        self.assertEqual((await self.portal.get('/api/pg/staff/berts/station', params={'day': today}, headers=auth)).json()['station_code'], 'PREP')
+        # Managers and the shared PIN don't have a "my station".
+        self.assertEqual((await self.portal.get('/api/pg/staff/berts/station', params={'day': today}, headers={'Authorization': 'Bearer ' + self.owner})).status_code, 403)
 
     async def test_a_retried_pin_issue_replays(self):
         key = str(uuid4())

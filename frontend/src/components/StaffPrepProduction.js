@@ -4,6 +4,8 @@ import {useRetainedDraft} from "../lib/saveIntegrity";
 import {validAssignmentState} from "./StaffPrepTasks";
 import {cardCls,inpCls,btnGhost} from "./common";
 const storeId=rid=>rid==="papa_leonis"?"papa":rid;
+// A shared PIN or a manager login only claims who did it; the signed-in cook's own session is verified.
+const verified=m=>!!api.verifiedStaff?.(m);
 const uid=v=>typeof v==="string"&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 const hash=v=>typeof v==="string"&&/^[a-f0-9]{64}$/.test(v);
 const numeric=new Set(["quantity","factor","planned_batches","output_quantity","included_loss_quantity","base_quantity","usableBaseOutput"]);
@@ -20,7 +22,7 @@ export function validProductionHistory(h,store){
   return uid(h?.root_id)&&Array.isArray(h.events)&&h.events.length>0&&new Set(h.events.map(e=>e.id)).size===h.events.length
     &&h.events.every((e,i)=>uid(e.id)&&e.store_id===store&&e.root_id===h.root_id&&e.revision===i+1&&e.predecessor_id===(i?h.events[i-1].id:null)
       &&(i!==0||e.id===h.root_id)&&["submit","withdraw"].includes(e.kind)&&uid(e.task_id)&&uid(e.staff_member_id)&&uid(e.assignment_id)
-      &&hash(e.review_hash)&&uid(e.request_key)&&e.review_snapshot?.identity_verified===false&&e.review_snapshot.productionEffect==="none"
+      &&hash(e.review_hash)&&uid(e.request_key)&&typeof e.review_snapshot?.identity_verified==="boolean"&&e.review_snapshot.productionEffect==="none"
       &&e.review_snapshot.submission?.root_id===e.root_id&&e.review_snapshot.submission.expected_revision===i
       &&e.review_snapshot.submission.kind===e.kind&&e.review_snapshot.submission.task_id===e.task_id&&e.review_snapshot.submission.staff_member_id===e.staff_member_id)
     &&Array.isArray(h.decisions)&&new Set(h.decisions.map(d=>d.submission_id)).size===h.decisions.length
@@ -45,7 +47,7 @@ export function validProductionState(s,rid,day,track,staffId=null){return s?.sto
   &&s.submissions.every(h=>validProductionHistory(h,storeId(rid))&&h.events.every(e=>e.review_snapshot.day===day&&e.review_snapshot.track===track&&(!staffId||e.staff_member_id===staffId)));}
 export function validProductionReview(p,body,rid,day,track,manager=false,selected=null){
   const r=p?.review;if(!hash(p?.reviewHash)||r?.store_id!==storeId(rid)||r.day!==day||r.track!==track||r.accountingEffect!=="none")return false;
-  if(!manager)return productionSame(r.submission,body.submission)&&r.identity_verified===false&&r.productionEffect==="none"
+  if(!manager)return productionSame(r.submission,body.submission)&&r.identity_verified===verified(body.submission.staff_member_id)&&r.productionEffect==="none"
     &&(body.submission.kind==="withdraw"?r.batch===null:r.sources?.assignment?.id===body.submission.assignment_id&&r.sources.assignment.staff_member_id===body.submission.staff_member_id
       &&r.sources.task?.id===body.submission.task_id&&validBatchReview(r.batch,body.submission.batch));
   return productionSame(r.decision,body)&&selected&&productionSame(r.submission,selected)
@@ -92,7 +94,7 @@ function ProductionForm({rid,day,track,staffId=null,pin="",plan=null,drafts,mana
   const epoch=useRef(0),seq=useRef(0),frozen=busy||!!draft.pending;
   async function load(){const id=epoch.current,n=++seq.current;setData(null);setError("");
     try{const s=manager?await api.staffProductionReviewSetup(rid,day,track):await api.staffProductionSetup(rid,day,track,staffId,pin);if(id!==epoch.current||n!==seq.current)return;
-      if(!validProductionState(s,rid,day,track,manager?null:staffId)||(!manager&&(s.identity_verified!==false||!Array.isArray(s.setup?.recipes)||!Array.isArray(s.setup?.lots))))throw new Error("Production history was not confirmed for this date and location.");setData(s);
+      if(!validProductionState(s,rid,day,track,manager?null:staffId)||(!manager&&(s.identity_verified!==verified(staffId)||!Array.isArray(s.setup?.recipes)||!Array.isArray(s.setup?.lots))))throw new Error("Production history was not confirmed for this date and location.");setData(s);
     }catch(e){if(id===epoch.current&&n===seq.current)setError(errorText(e));}
   }
   useEffect(()=>{++epoch.current;load();return()=>{++epoch.current;++seq.current;};},[pin]); // eslint-disable-line react-hooks/exhaustive-deps
