@@ -5973,6 +5973,8 @@ app.include_router(stations.create_router(db_pg.pool,check_store_id,_purchase_ac
 app.include_router(staff_login.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_token,_staff_user))
 import staff_shortages
 app.include_router(staff_shortages.create_router(db_pg.pool,check_store_id,_staff_count_actor))
+import acceptance_queue
+app.include_router(acceptance_queue.create_router(db_pg.pool,check_store_id,_purchase_actor,_token_user))
 import staff_prep_production
 app.include_router(staff_prep_production.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import prep_containers

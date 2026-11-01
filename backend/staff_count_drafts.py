@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import Field, field_validator
+import positions
 import actual_inventory_api as actual
 from native_units import profiles
 from purchase_api import serial
@@ -265,8 +266,8 @@ async def outcome(conn, store, sheet_id):
 def create_router(pool_factory, store_check, manager_authorize, staff_authorize):
     router = APIRouter()
 
-    async def manager(request,store,write=False):
-        store_check(store); actor=manager_authorize(request,store,write); pool=pool_factory()
+    async def manager(request,store,write=False,require=None):
+        store_check(store); actor=manager_authorize(request,store,write,require); pool=pool_factory()
         async with pool.acquire() as conn: await ready(conn)
         return actor,pool
 
@@ -284,7 +285,8 @@ def create_router(pool_factory, store_check, manager_authorize, staff_authorize)
 
     @router.post('/api/pg/actual-inventory/{store}/staff-sheets/{sheet_id}/decision')
     async def decision(store:str,sheet_id:UUID,request:Request,body:DecisionInput,idempotency_key:UUID=Header(...)):
-        actor,pool=await manager(request,store,True)
+        # A BOH Shift Leader or above accepts a nightly count; sending it back needs a KM or above.
+        actor,pool=await manager(request,store,True,positions.decision_permission(body.decision))
         return await decide(pool,store,sheet_id,actor,body,idempotency_key)
 
     @router.post('/api/pg/staff/{store}/count-drafts')

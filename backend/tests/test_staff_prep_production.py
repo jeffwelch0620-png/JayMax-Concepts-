@@ -48,6 +48,34 @@ class StaffProductionTests(fixtures.StaffTaskTests):
             p=await self.decision_preview(body,token);self.assertEqual(p.status_code,200,p.text);payload=body|dict(expected_review_hash=p.json()['reviewHash'],reviewed=True)
         return await self.portal.post(self.production_url+'/decisions',json=payload,headers={'Authorization':'Bearer '+(token or self.owner),'Idempotency-Key':key or str(uuid4())})
 
+    def manager(self,position):
+        return server._token(dict(id=f'invented-{position}',email=f'{position}@example.invalid',role='manager',position=position,locations=['berts']))
+
+    async def test_shift_leaders_accept_kitchen_managers_send_back_and_reassign(self):
+        sl,km=self.manager('SL-BOH'),self.manager('KM')
+        body=await self.submission()
+        first=await self.submit(body);self.assertEqual(first.status_code,200,first.text)
+        event=first.json()['submission']
+        queue=await self.portal.get('/api/pg/purchases/berts/acceptance-queue/2026-10-08',headers={'Authorization':'Bearer '+sl})
+        self.assertEqual(queue.status_code,200,queue.text)
+        q=queue.json();self.assertEqual((q['waiting']['output'],q['can_accept'],q['can_send_back']),(1,True,False))
+        self.assertEqual([o['id'] for o in q['output']],[event['id']])
+        # A Shift Leader can't send it back; a Kitchen Manager can preview that.
+        self.assertEqual((await self.decision_preview(self.decision(event,accept=False),sl)).status_code,403)
+        self.assertEqual((await self.decision_preview(self.decision(event,accept=False),km)).status_code,200)
+        # A Shift Leader accepts it, and it leaves the queue.
+        accepted=await self.decide(self.decision(event),token=sl);self.assertEqual(accepted.status_code,200,accepted.text)
+        self.assertEqual((await self.portal.get('/api/pg/purchases/berts/acceptance-queue/2026-10-08',headers={'Authorization':'Bearer '+sl})).json()['waiting']['output'],0)
+        # FOH Shift Leaders don't accept kitchen work.
+        self.assertEqual((await self.decision_preview(self.decision(event),self.manager('SL-FOH'))).status_code,403)
+
+    async def test_shift_leaders_assign_open_tasks_and_kitchen_managers_reassign(self):
+        sl,km=self.manager('SL-BOH'),self.manager('KM')
+        _,t=await self.start()
+        first=await self.assign(self.assignment_body(t),token=sl);self.assertEqual(first.status_code,200,first.text)
+        self.assertEqual((await self.assignment_preview(self.assignment_body(t,1,self.other_member),token=sl)).status_code,403)
+        moved=await self.assign(self.assignment_body(t,1,self.other_member),token=km);self.assertEqual(moved.status_code,200,moved.text)
+
     async def test_a_signed_in_cook_submits_verified_output_as_themself(self):
         root=fixtures.fixtures.fixtures.fixtures.recovery.counts.native.ROOT
         async with self.pool.acquire() as c:

@@ -65,6 +65,13 @@ class StaffLoginModelTests(unittest.TestCase):
         for actor in ('shared-pin', 'manager-sub', 'owner@example.invalid'):          # claimed, never verified
             self.assertFalse(staff_login.acting_member(actor, other))
 
+    def test_shift_leaders_accept_and_kitchen_managers_send_back(self):
+        self.assertEqual((positions.decision_permission('accepted'), positions.decision_permission('rejected')), ('accept_staff_work', 'edit_staff_work'))
+        self.assertEqual((positions.assignment_permission(0), positions.assignment_permission(2)), ('accept_staff_work', 'edit_staff_work'))
+        sl, km = {'role': 'manager', 'position': 'SL-BOH'}, {'role': 'manager', 'position': 'KM'}
+        self.assertEqual([positions.can(sl, p) for p in ('accept_staff_work', 'edit_staff_work')], [True, False])
+        self.assertEqual([positions.can(km, p) for p in ('accept_staff_work', 'edit_staff_work')], [True, True])
+
     def test_readiness_holds_a_backend_only_switch(self):
         base = {'USE_PG': 'true'}, {'REACT_APP_USE_PG': 'true'}
         self.assertNotIn('STAFF_PERSONAL_LOGIN', str(deployment_readiness.configuration(*base)['problems']))
