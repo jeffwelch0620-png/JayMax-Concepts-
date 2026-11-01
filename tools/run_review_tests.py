@@ -16,7 +16,7 @@ OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activat
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('store_transfers::TransferModelTests bulk_supply::BulkModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('stations::StationModelTests store_transfers::TransferModelTests bulk_supply::BulkModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
@@ -27,6 +27,11 @@ OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_insta
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
                     'batched_fingerprints::BatchedFingerprintGuards']
 DATABASE_CASES = (
+ ('stations','StationDatabaseTests','test_a_cooks_queue_follows_their_station_and_named_assignments_win'),
+ ('stations','StationDatabaseTests','test_every_stint_is_kept_and_one_station_at_a_time'),
+ ('stations','StationDatabaseTests','test_only_boh_shift_leaders_and_up_run_the_board'),
+ ('stations','StationDatabaseTests','test_a_retried_end_of_shift_replays_and_never_ends_a_newer_stint'),
+ ('stations','StationDatabaseTests','test_an_inactive_persons_open_stint_can_still_be_closed'),
  ('login_positions','LoginPositionTests','test_a_position_sets_the_access_class_and_reaches_the_session'),
  ('login_positions','LoginPositionTests','test_database_keeps_position_and_access_class_together'),
  ('store_transfers','StoreTransferDatabaseTests','test_transfer_moves_cost_once_between_store_periods'),

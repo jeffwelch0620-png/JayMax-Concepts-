@@ -7,6 +7,7 @@ import * as api from "../lib/api";
 import { PrepDayDrafts } from "./PrepDayDrafts";
 import { EveningZoneCount } from "./EveningZoneCount";
 import { BulkSupply } from "./BulkSupply";
+import { StationBoard } from "./StationBoard";
 import { validOverviewDay } from "../lib/managerOverview";
 import { HistoricalPrepLists } from "./HistoricalPrepLists";
 import { StaffPrepCountReview } from "./StaffPrepCounts";
@@ -31,6 +32,7 @@ const SUBS = [
   { id: "inventory", label: "Inventory & Log", icon: Layers },
   { id: "planning", label: "Planning & AI", icon: Sparkles },
   { id: "history", label: "History", icon: Layers },
+  { id: "stations", label: "Stations", icon: ChefHat },
 ];
 
 
@@ -93,7 +95,7 @@ export function PrepTab({ initialContext, drafts, showError = () => {}, rid, ite
           : api.prepPlanningEnabled ? "Bulk prep planning, separate from Daily Prep. Production location and transfers are tracked separately." : "Commissary-kitchen prep — its own standing items, evening count, and daily list, separate from Daily Prep."}
       </div>
       <div className="flex gap-2 mb-5 flex-wrap" data-testid="prep-subtabs">
-        {SUBS.filter(s => s.id !== "history" || api.isPostgres).map((s) => {
+        {SUBS.filter(s => (s.id !== "history" || api.isPostgres) && (s.id !== "stations" || (api.prepDayTasksEnabled && ["owner", "manager"].includes(api.currentSession?.()?.user?.role)))).map((s) => {
           const Icon = s.icon;
           return (
             <button key={s.id} className={sub === s.id ? btnAcc : btnGhost} onClick={() => setSub(s.id)} data-testid={`prep-subtab-${s.id}`}>
@@ -109,6 +111,7 @@ export function PrepTab({ initialContext, drafts, showError = () => {}, rid, ite
       {sub === "inventory" && (api.prepContainersEnabled ? <PrepContainers key={rid} rid={rid} drafts={drafts} /> : prepReadStatus?.available === false ? <p data-testid="prep-inventory-unavailable">{prepReadStatus.message || "Prep balances are unavailable here. Use reviewed prep counts, production and period reports."}</p> : <InventoryLog drafts={drafts} showError={showError} rid={rid} items={items} dishes={dishes} persistDishes={persistDishes} prepItems={prepItems} prepStock={prepStock} prepLogs={prepLogs} applyPrepResult={applyPrepResult} salesPeriod={salesPeriod} showToast={showToast} />)}
       {sub === "planning" && <Planning drafts={drafts} showError={showError} rid={rid} dishes={dishes} prepItems={prepItems} prepCapabilities={prepCapabilities} persistDishes={persistDishes} showToast={showToast} />}
       {sub === "history" && api.isPostgres && <HistoricalPrepLists key={rid} rid={rid} />}
+      {sub === "stations" && api.prepDayTasksEnabled && <StationBoard key={`stations:${rid}`} rid={rid} />}
     </div>
   );
 }

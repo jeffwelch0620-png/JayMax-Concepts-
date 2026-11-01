@@ -5931,6 +5931,8 @@ import staff_prep_counts
 app.include_router(staff_prep_counts.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import staff_prep_tasks
 app.include_router(staff_prep_tasks.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
+import stations
+app.include_router(stations.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import staff_prep_production
 app.include_router(staff_prep_production.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import prep_containers

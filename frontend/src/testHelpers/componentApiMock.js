@@ -9,6 +9,7 @@ const readDefaults = {
   inventoryPars: () => ({store_id:'berts',available:false,items:[]}),
   actualTransfers: () => ({ store_id: "berts", transfers: [], items: [], stores: [] }),
   bulkSupply: () => ({ store_id: "berts", maker_store_id: null, makes_for: [], requests: [], open_shortfalls: [] }),
+  stationBoard: () => ({ store_id: "berts", stations: [], roster: [], open: [], history: [], products: [] }),
 };
 export function resetComponentApiMock(mock) {
   for (const [name, value] of Object.entries(mock)) {

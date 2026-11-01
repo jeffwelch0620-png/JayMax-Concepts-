@@ -10,6 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import Field
 import prep_execution as execution
 import prep_mapping as mapping
+import stations
 from staff_prep_counts import Reviewed, Credentials
 from staff_response import staff_view
 from native_units import lock_store
@@ -128,21 +129,30 @@ async def staff_state(conn, store, body, kind):
         raise HTTPException(422, 'Selected roster identity is not active at this location')
     e = s['execution']
     tasks = []
+    # A cook's queue: tasks assigned to them by name, plus unassigned tasks for the station they are on
+    # (Jeff 2026-10-30). Tasks for a station nobody is on stay with the Shift Leader.
+    station, defaults = None, {}
+    if body.staff_member_id and await stations.installed(conn):
+        station = await stations.member_station(conn, store, body.staff_member_id, body.day)  # only that date's shift
+        defaults = await stations.product_stations(conn, store)
     if e['status'] == 'released':
         for t in e['tasks']:
             if not t['included'] or t['planned_quantity'] is None or Decimal(t['planned_quantity']) <= 0: continue
             a = next((a for a in s['assignments'] if a['task_id'] == t['id']), None)
             if a is None:
                 raise HTTPException(409, 'Task assignment state is incomplete; manager must review the current plan')
-            if body.staff_member_id and (not a['current'] or a['current']['staff_member_id'] != str(body.staff_member_id)): continue
+            named = a['current'] and a['current']['staff_member_id']
+            via = 'name' if named and named == str(body.staff_member_id) else 'station' if not named and station and defaults.get(str(t['product_id'])) == station else None
+            if body.staff_member_id and via is None: continue
             tasks.append(dict(id=t['id'],name=t['task_snapshot']['name'],quantity=t['planned_quantity'],
                 source_unit=t['task_snapshot']['source_unit'],base_unit=t['task_snapshot']['base_unit'],product_id=t['product_id'],recipe_version_id=t['recipe_version_id'],
                 assignment=a['current']['id'] if a['current'] else None,assigned_member=a['current_member'],roster_changed=a['roster_changed'],
+                station=defaults.get(str(t['product_id'])),via=via if body.staff_member_id else None,
                 progress=next((p for p in e['task_progress'] if p['task_id']==t['id']), None)))
             if tasks[-1]['progress'] is None:
                 raise HTTPException(409, 'Task progress is incomplete; manager must review the current plan')
     return dict(store_id=store,day=str(body.day),track=body.track,status=e['status'],draft_version_id=e['draft_version_id'],
-        execution_revision=e['revision'],selected_member_id=str(body.staff_member_id) if body.staff_member_id else None,
+        execution_revision=e['revision'],selected_member_id=str(body.staff_member_id) if body.staff_member_id else None,station=station,
         credential_kind=kind,identity_verified=False,tasks=tasks,
         completionBehavior='Read-only plan. Manager records measured production and reviews task completion.')
 
