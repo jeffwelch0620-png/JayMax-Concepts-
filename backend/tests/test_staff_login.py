@@ -138,10 +138,25 @@ class StaffLoginDatabaseTests(staff.StaffTaskTests):
         self.assertEqual((await self.portal.get('/api/pg/staff/berts/members/sign-in', headers={'Authorization': 'Bearer ' + readonly})).status_code, 403)
         roster = (await self.portal.get('/api/pg/staff/berts/members/sign-in', headers={'Authorization': 'Bearer ' + self.manager('KM')})).json()['staff']
         self.assertTrue(next(s for s in roster if s['staff_member_id'] == str(self.member))['locked_until'])
-        url = f'/api/pg/staff/berts/members/{self.member}/unlock'
-        self.assertEqual((await self.portal.post(url, headers={'Authorization': 'Bearer ' + self.manager('SL-BOH')})).status_code, 403)
-        self.assertEqual((await self.portal.post(url, headers={'Authorization': 'Bearer ' + self.manager('KM')})).status_code, 200)
+        self.assertEqual((await self.unlock(self.manager('SL-BOH'))).status_code, 403)
+        key = str(uuid4())
+        self.assertEqual((await self.unlock(self.manager('KM'), key)).json()['replayed'], False)
         self.assertEqual((await self.sign_in(self.member, '7350')).status_code, 200)
+        # Locked again later: a retry of that earlier unlock replays and doesn't clear the new lockout.
+        for _ in range(5): await self.sign_in(self.member, '1111')
+        self.assertEqual((await self.unlock(self.manager('KM'), key)).json()['replayed'], True)
+        self.assertEqual((await self.sign_in(self.member, '7350')).status_code, 423)
+
+    async def unlock(self, token, key=None):
+        return await self.portal.post(f'/api/pg/staff/berts/members/{self.member}/unlock',
+                                      headers={'Authorization': 'Bearer ' + token, 'Idempotency-Key': key or str(uuid4())})
+
+    async def test_a_retried_first_pin_change_signs_in_instead_of_counting_as_wrong(self):
+        self.assertEqual((await self.issue(self.member, '4821')).status_code, 200)
+        self.assertEqual((await self.sign_in(self.member, '4821', '7350')).status_code, 200)   # reply lost
+        for _ in range(6):                                                                       # the device retries
+            self.assertEqual((await self.sign_in(self.member, '4821', '7350')).status_code, 200)
+        self.assertEqual((await self.sign_in(self.member, '4821', '9999')).status_code, 401)    # not a retry
 
     async def test_a_session_ends_on_sign_out_idle_new_pin_or_inactive(self):
         token = await self.signed_in(self.member)

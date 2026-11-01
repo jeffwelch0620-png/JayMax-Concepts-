@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { KeyRound, Unlock } from "lucide-react";
 import { cardCls, inpCls, btnGhost, Pill, EmptyState } from "./common";
 import * as api from "../lib/api";
@@ -19,6 +19,7 @@ export function StaffSignInPanel({ rid, showToast, rosterKey }) {
   const [issuing, setIssuing] = useState(null);   // { id, pin, key }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const unlockKeys = useRef(new Map());   // a retry after a lost reply reuses its key
 
   const refresh = useCallback(async () => {
     if (!rid) return;
@@ -45,7 +46,13 @@ export function StaffSignInPanel({ rid, showToast, rosterKey }) {
 
   async function unlock(member) {
     setBusy(true); setErr("");
-    try { await api.unlockStaffSignIn(rid, member.staff_member_id); showToast?.(`${member.name} can sign in again`); await refresh(); }
+    const keys = unlockKeys.current;
+    if (!keys.has(member.staff_member_id)) keys.set(member.staff_member_id, crypto.randomUUID());
+    try {
+      await api.unlockStaffSignIn(rid, member.staff_member_id, keys.get(member.staff_member_id));
+      keys.delete(member.staff_member_id);
+      showToast?.(`${member.name} can sign in again`); await refresh();
+    }
     catch (e) { setErr(e?.response?.data?.detail || "Couldn't unlock"); }
     finally { setBusy(false); }
   }

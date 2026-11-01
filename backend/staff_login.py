@@ -96,6 +96,17 @@ async def lock_state(conn, member_id):
     return until if until > await conn.fetchval('SELECT clock_timestamp()') else None
 
 
+async def replaced_first_pin(conn, member_id, current, body):
+    """A retry of the first-PIN change whose reply was lost: the first PIN was already replaced by this
+    new PIN, so it signs in instead of counting as a wrong PIN."""
+    if not body.new_pin or current['temporary'] or current['set_by'] != f'member:{member_id}': return False
+    previous = await conn.fetchrow('''SELECT * FROM prep_inventory.staff_member_pins WHERE staff_member_id=$1 AND set_at < $2
+        ORDER BY set_at DESC LIMIT 1''', member_id, current['set_at'])
+    return bool(previous and previous['temporary']
+                and await asyncio.to_thread(pin_ok, body.new_pin, current['pin_hash'])
+                and await asyncio.to_thread(pin_ok, body.pin, previous['pin_hash']))
+
+
 async def current_pin(conn, member_id):
     return await conn.fetchrow('SELECT * FROM prep_inventory.staff_member_pins WHERE staff_member_id=$1 ORDER BY set_at DESC LIMIT 1', member_id)
 
@@ -153,6 +164,8 @@ async def _check(pool, store, body):
         if until: raise locked(until)
         current = await current_pin(conn, member['id'])
         if not current: raise HTTPException(403, 'You have no PIN yet. Ask an owner or the Ops Lead to issue one.')
+        if await replaced_first_pin(conn, member['id'], current, body):
+            current, body = dict(current) | {'temporary': False}, body.model_copy(update={'pin': body.new_pin, 'new_pin': None})
         if not await asyncio.to_thread(pin_ok, body.pin, current['pin_hash']):
             await conn.execute("INSERT INTO prep_inventory.staff_sign_in_events(store_id,staff_member_id,kind,actor) VALUES($1,$2,'failed','sign-in')",
                                store, member['id'])
@@ -234,15 +247,21 @@ async def issue_pin(pool, store, member_id, actor, body, key):
         return {'replayed': False}
 
 
-async def unlock(pool, store, member_id, actor):
+async def unlock(pool, store, member_id, actor, key):
+    """Clears the lockout as it stands now; a retry of the same request replays and never clears a later one."""
+    digest = fingerprint(serial({'store': store, 'member': member_id, 'actor': actor, 'action': 'unlock'}))
     async with pool.acquire() as conn, conn.transaction():
         await setup_ready(conn)
+        await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', str(key))
+        prior = await conn.fetchrow('SELECT request_fingerprint FROM prep_inventory.staff_sign_in_events WHERE request_key=$1', key)
+        if prior:
+            if prior['request_fingerprint'] != digest: raise HTTPException(409, 'Request key belongs to another unlock')
+            return {'replayed': True}
         if not await conn.fetchval('SELECT 1 FROM public.staff_members WHERE id=$1 AND store_id=$2 FOR UPDATE', member_id, store):
             raise HTTPException(404, 'Choose staff at this location')
-        if await lock_state(conn, member_id):
-            await conn.execute("INSERT INTO prep_inventory.staff_sign_in_events(store_id,staff_member_id,kind,actor) VALUES($1,$2,'unlocked',$3)",
-                               store, member_id, actor)
-        return {'locked_until': None}
+        await conn.execute('''INSERT INTO prep_inventory.staff_sign_in_events(store_id,staff_member_id,kind,actor,request_key,request_fingerprint)
+            VALUES($1,$2,'unlocked',$3,$4,$5)''', store, member_id, actor, key, digest)
+        return {'replayed': False}
 
 
 def create_router(pool_factory, store_check, manager_authorize, mint, staff_user):
@@ -281,8 +300,8 @@ def create_router(pool_factory, store_check, manager_authorize, mint, staff_user
         return await issue_pin(pool_factory(), store, member_id, actor, body, idempotency_key)
 
     @router.post(base + '/members/{member_id}/unlock')
-    async def post_unlock(store: str, member_id: UUID, request: Request):
+    async def post_unlock(store: str, member_id: UUID, request: Request, idempotency_key: UUID = Header(...)):
         store_check(store); actor = manager_authorize(request, store, True, 'unlock_pins')
-        return await unlock(pool_factory(), store, member_id, actor)
+        return await unlock(pool_factory(), store, member_id, actor, idempotency_key)
 
     return router

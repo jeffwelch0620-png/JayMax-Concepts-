@@ -257,7 +257,7 @@ export const staffSignOut = async () => {
 };
 export const staffSignInRoster = (rid) => axios.get(`${PG_API}/staff/${pgStoreId(rid)}/members/sign-in`).then(r => r.data);
 export const issueStaffPin = (rid, memberId, pin, key) => axios.put(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/pin`, { pin }, { headers: { "Idempotency-Key": key } }).then(r => r.data);
-export const unlockStaffSignIn = (rid, memberId) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/unlock`).then(r => r.data);
+export const unlockStaffSignIn = (rid, memberId, key) => axios.post(`${PG_API}/staff/${pgStoreId(rid)}/members/${memberId}/unlock`, {}, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 
 // Which login a request carries: the signed-in employee's session for employee screens, the
 // manager's login for everything else, and neither for the name + PIN sign-in itself.

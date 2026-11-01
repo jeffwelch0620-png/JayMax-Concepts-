@@ -36,6 +36,10 @@ CREATE TABLE prep_inventory.staff_sign_in_events (
  kind text NOT NULL CHECK (kind IN ('failed', 'signed_in', 'unlocked')),
  at timestamptz NOT NULL DEFAULT clock_timestamp(),
  actor text NOT NULL CHECK (length(btrim(actor)) > 0),
+ request_key uuid UNIQUE,                 -- a manager's unlock, so a retry replays instead of clearing a later lockout
+ request_fingerprint bytea CHECK (octet_length(request_fingerprint) = 32),
+ CHECK ((request_key IS NULL) = (request_fingerprint IS NULL)),
+ CHECK ((kind = 'unlocked') = (request_key IS NOT NULL)),
  FOREIGN KEY (staff_member_id, store_id) REFERENCES public.staff_members(id, store_id)
 );
 CREATE INDEX staff_sign_in_events_member ON prep_inventory.staff_sign_in_events(staff_member_id, at);
