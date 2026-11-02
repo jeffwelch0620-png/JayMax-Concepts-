@@ -360,3 +360,7 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(held.status_code,409,held.text)
         far=(date.fromisoformat(view['calendar']['today'])+timedelta(days=200));far=far+timedelta(days=(next(iter(base))-far.weekday())%7)
         held=await self.change({'kind':'skip','cycle_date':far.isoformat(),'reason':'Too far'});self.assertEqual(held.status_code,422,held.text)
+        if (b-free).days<=6:   # a's weekday can't be removed while its cycle is moved; after putting it back it can
+            held=await self.change({'kind':'remove_day','order_weekday':a.weekday(),'reason':'Drop day'});self.assertEqual(held.status_code,409,held.text)
+            self.assertEqual((await self.change({'kind':'restore','cycle_date':a.isoformat(),'reason':'Undo'})).status_code,200)
+            self.assertEqual((await self.change({'kind':'remove_day','order_weekday':a.weekday(),'reason':'Drop day'})).status_code,200)

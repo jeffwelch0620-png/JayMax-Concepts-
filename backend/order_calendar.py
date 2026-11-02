@@ -277,6 +277,10 @@ async def change_schedule(pool, store, actor, body, key):
         elif body.kind == 'remove_day':
             old = next((r for r in rows if r['order_weekday'] == body.order_weekday), None)
             if not old: raise HTTPException(404, 'That is not an order day here')
+            # A moved cycle hangs off its usual weekday: put those back before removing the day.
+            exc = await exceptions(conn, store, today, today + timedelta(days=HORIZON + 7))
+            if any(e['kind'] == 'move' and d >= today and d.weekday() == body.order_weekday for d, e in exc.items()):
+                raise HTTPException(409, 'A cycle from that day is moved to another date; put it back first')
             before = day_view(old)
             await conn.execute('DELETE FROM purchasing.order_calendar WHERE store_id=$1 AND order_weekday=$2', store, body.order_weekday)
         else:
