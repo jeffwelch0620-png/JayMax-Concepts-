@@ -213,6 +213,7 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
         await OrderCommandTests.asyncSetUp(self)
         async with self.pool.acquire() as c:
             await c.execute((recovery.counts.native.ROOT/'migrations/20261102_order_calendar.sql').read_text())
+            await c.execute((recovery.counts.native.ROOT/'migrations/20261102_order_schedule_changes.sql').read_text())
             # Today (store time) is an order day for the invented supplier, already past both deadlines.
             weekday=await c.fetchval("SELECT (extract(isodow FROM now() AT TIME ZONE 'America/New_York')::int+6)%7")
             await c.execute('DELETE FROM purchasing.order_calendar WHERE store_id=$1 AND order_weekday=$2','berts',weekday)
@@ -270,4 +271,96 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
         flags=(await shift.get('/api/pg/purchases/berts/order-calendar')).json();self.assertFalse(flags['can_create']);self.assertFalse(flags['can_approve'])
         async with self.pool.acquire() as c:await c.execute("DELETE FROM purchasing.order_calendar WHERE store_id='berts'")   # like Papa's: no calendar
         none=await self.catalog.get('/api/pg/purchases/berts/order-calendar');self.assertEqual(none.status_code,200,none.text)
-        self.assertIsNone(none.json()['calendar']);self.assertEqual([o['ref'] for o in none.json()['on_order']],[])
+        self.assertIsNone(none.json()['calendar']);self.assertEqual([o['ref'] for o in none.json()['on_order']],[approved['id']])   # still on order
+
+    # Schedule changes need an owner or the Ops Lead: the independent owner login makes them.
+    async def change(self,body,client=None,key=None):
+        return await (client or self.other).post('/api/pg/purchases/berts/order-calendar/schedule',json=body,headers={'Idempotency-Key':key or str(uuid4())})
+
+    async def test_only_an_owner_or_ops_lead_changes_the_schedule_and_cycles_follow_it(self):
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json();today=view['calendar']['today']
+        self.assertTrue(view['schedule']['can_edit']);self.assertEqual(view['schedule']['upcoming'][0]['cycle_date'],today)
+        for position in ('GM','KM'):
+            held=await self.change({'kind':'skip','cycle_date':today,'reason':'Holiday'},client=self.person(position))
+            self.assertEqual(held.status_code,403,held.text);self.assertIn('owner or the Operations',held.text)
+        self.assertFalse((await self.person('GM').get('/api/pg/purchases/berts/order-calendar')).json()['schedule']['can_edit'])
+        legacy=await self.change({'kind':'skip','cycle_date':today,'reason':'Holiday'},client=self.catalog)   # a manager with no position yet
+        self.assertEqual(legacy.status_code,403,legacy.text)
+        key=str(uuid4())
+        skipped=await self.change({'kind':'skip','cycle_date':today,'reason':'Holiday closure'},key=key);self.assertEqual(skipped.status_code,200,skipped.text)
+        replay=await self.change({'kind':'skip','cycle_date':today,'reason':'Holiday closure'},key=key);self.assertTrue(replay.json()['replayed'])
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        self.assertNotEqual(view['calendar']['cycle_date'],today);self.assertEqual(view['schedule']['upcoming'][0]['change'],'skip')
+        po=await self.saved(await self.create())
+        on_time=await self.command(po,'submit',note='');self.assertEqual(on_time.status_code,200,on_time.text)   # a skipped day isn't late
+        self.assertEqual((await self.change({'kind':'restore','cycle_date':today,'reason':'Open after all'})).status_code,200)
+        self.assertEqual((await self.other.get('/api/pg/purchases/berts/order-calendar')).json()['calendar']['cycle_date'],today)
+        again=await self.change({'kind':'restore','cycle_date':today,'reason':'Twice'});self.assertEqual(again.status_code,409,again.text)
+        base={d['order_weekday'] for d in view['schedule']['days']}
+        from datetime import date,timedelta
+        start=date.fromisoformat(today);free=next(n for n in range(1,7) if (start+timedelta(days=n)).weekday() not in base)
+        moved_to=(start+timedelta(days=free)).isoformat()
+        moved=await self.change({'kind':'move','cycle_date':today,'moved_to':moved_to,'delivery_date':moved_to,'reason':'Supplier changed day'})
+        self.assertEqual(moved.status_code,200,moved.text)
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        self.assertEqual((view['schedule']['upcoming'][0]['change'],view['schedule']['upcoming'][0]['moved_to']),('move',moved_to))
+        # Put today back, skip the next cycle, move today onto it: putting that one back would stack two cycles.
+        self.assertEqual((await self.change({'kind':'restore','cycle_date':today,'reason':'Undo move'})).status_code,200)
+        nxt=next((d for d in view['schedule']['upcoming'][1:] if (date.fromisoformat(d['cycle_date'])-start).days<=6),None)
+        if nxt:
+            self.assertEqual((await self.change({'kind':'skip','cycle_date':nxt['cycle_date'],'reason':'Closed'})).status_code,200)
+            onto=await self.change({'kind':'move','cycle_date':today,'moved_to':nxt['cycle_date'],'delivery_date':nxt['cycle_date'],'reason':'Combine'})
+            self.assertEqual(onto.status_code,200,onto.text)
+            stacked=await self.change({'kind':'restore','cycle_date':nxt['cycle_date'],'reason':'Open after all'})
+            self.assertEqual(stacked.status_code,409,stacked.text);self.assertIn('moved onto that date',stacked.text)
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        clash=[d for d in view['schedule']['upcoming'][1:] if d['change'] is None]
+        if clash and nxt:
+            target=nxt['cycle_date']   # the date that now holds today's moved cycle
+            held=await self.change({'kind':'move','cycle_date':clash[0]['cycle_date'],'moved_to':target,'delivery_date':target,'reason':'Clash'})
+            self.assertIn(held.status_code,(409,422),held.text)
+
+    async def test_weekly_days_are_set_and_removed_with_their_history(self):
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        free=next(w for w in range(7) if w not in {d['order_weekday'] for d in view['schedule']['days']})
+        day={'kind':'set_day','order_weekday':free,'count_due':'10:00','order_due':'13:30','delivery_weekday':(free+1)%7,'vendor_ids':['synthetic_other'],'reason':'Added a delivery day'}
+        bad=await self.change({**day,'vendor_ids':['no_such_supplier']});self.assertEqual(bad.status_code,422,bad.text)
+        self.assertEqual((await self.change(day)).status_code,200)
+        days=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()['schedule']['days']
+        added=next(d for d in days if d['order_weekday']==free)
+        self.assertEqual((added['count_due'],added['order_due_label'],added['vendor_ids']),('10:00','1:30 PM',['synthetic_other']))
+        self.assertEqual((await self.change({'kind':'remove_day','order_weekday':free,'reason':'Trial over'})).status_code,200)
+        gone=await self.change({'kind':'remove_day','order_weekday':free,'reason':'Again'});self.assertEqual(gone.status_code,404,gone.text)
+        async with self.pool.acquire() as c:
+            history=await c.fetch("SELECT kind,day_before,day_after FROM purchasing.order_schedule_changes WHERE order_weekday=$1 ORDER BY changed_at",free)
+        self.assertEqual([h['kind'] for h in history],['set_day','remove_day'])
+        self.assertIsNone(history[0]['day_before']);self.assertIsNotNone(history[1]['day_before'])
+
+    async def test_an_order_keeps_its_delivery_when_the_schedule_changes(self):
+        po=await self.saved(await self.create())
+        pending=await self.saved(await self.command(po,'submit',note='Late: invented'))
+        await self.saved(await self.command(pending,'approve',client=self.other))
+        before=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        due=next(o for o in before['on_order'] if o['ref']==pending['id'])['expected_delivery'];self.assertIsNotNone(due)
+        weekday=next(d['order_weekday'] for d in before['schedule']['days'] if 'synthetic_other' in d['vendor_ids'])
+        self.assertEqual((await self.change({'kind':'remove_day','order_weekday':weekday,'reason':'Supplier dropped this day'})).status_code,200)
+        after=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        self.assertEqual(next(o for o in after['on_order'] if o['ref']==pending['id'])['expected_delivery'],due)
+
+    async def test_far_ahead_moves_cannot_stack_and_have_a_limit(self):
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        from datetime import date,timedelta
+        base={d['order_weekday'] for d in view['schedule']['days']};start=date.fromisoformat(view['calendar']['today'])+timedelta(days=60)
+        cycles=[start+timedelta(days=n) for n in range(14) if (start+timedelta(days=n)).weekday() in base]
+        a,b=next((x,y) for x in cycles for y in cycles if 0<(y-x).days<=3)
+        free=next(x+timedelta(days=n) for n in (-1,-2,-3) for x in [a] if (x+timedelta(days=n)).weekday() not in base)
+        if (b-free).days<=6:
+            self.assertEqual((await self.change({'kind':'move','cycle_date':a.isoformat(),'moved_to':free.isoformat(),'delivery_date':a.isoformat(),'reason':'Far ahead'})).status_code,200)
+            held=await self.change({'kind':'move','cycle_date':b.isoformat(),'moved_to':free.isoformat(),'delivery_date':b.isoformat(),'reason':'Stack'})
+            self.assertEqual(held.status_code,409,held.text)
+        far=(date.fromisoformat(view['calendar']['today'])+timedelta(days=200));far=far+timedelta(days=(next(iter(base))-far.weekday())%7)
+        held=await self.change({'kind':'skip','cycle_date':far.isoformat(),'reason':'Too far'});self.assertEqual(held.status_code,422,held.text)
+        if (b-free).days<=6:   # a's weekday can't be removed while its cycle is moved; after putting it back it can
+            held=await self.change({'kind':'remove_day','order_weekday':a.weekday(),'reason':'Drop day'});self.assertEqual(held.status_code,409,held.text)
+            self.assertEqual((await self.change({'kind':'restore','cycle_date':a.isoformat(),'reason':'Undo'})).status_code,200)
+            self.assertEqual((await self.change({'kind':'remove_day','order_weekday':a.weekday(),'reason':'Drop day'})).status_code,200)

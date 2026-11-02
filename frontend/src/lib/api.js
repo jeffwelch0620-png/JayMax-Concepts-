@@ -32,6 +32,7 @@ export const orderWorkflowEnabled = catalogMappingEnabled && process.env.REACT_A
 export const supplierContactsEnabled = orderWorkflowEnabled && process.env.REACT_APP_SUPPLIER_CONTACTS === "true";
 // Order calendar (M4): next cycle, due/overdue, late reasons, what is on order.
 export const orderCalendar = rid => axios.get(`${PG_API}/purchases/${pgStoreId(rid)}/order-calendar`).then(r => r.data);
+export const changeOrderSchedule = (rid, body, key) => axios.post(`${PG_API}/purchases/${pgStoreId(rid)}/order-calendar/schedule`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const recordLateCount = (rid, body, key) => axios.post(`${PG_API}/purchases/${pgStoreId(rid)}/order-calendar/late-count`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const supplierContacts = rid => axios.get(`${PG_API}/purchases/${pgStoreId(rid)}/supplier-contacts`).then(r => r.data);
 export const saveSupplierContact = (rid, vendor, body, version, key) => axios.put(`${PG_API}/purchases/${pgStoreId(rid)}/supplier-contacts/${encodeURIComponent(vendor)}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);

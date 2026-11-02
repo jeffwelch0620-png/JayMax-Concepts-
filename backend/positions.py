@@ -47,6 +47,7 @@ PERMISSIONS = {
     'unlock_pins': {'OWN', 'OPS', 'GM', 'KM', 'FOHM', 'BPM'},  # unlock after 5 wrong PINs
     'create_orders': {'OWN', 'OPS', 'GM', 'KM', 'FOHM'},  # create, edit, submit and send supplier orders (Jeff 2026-11-01)
     'approve_orders': {'OWN', 'OPS', 'GM'},              # approve or reject someone else's order (P4, Jeff 2026-11-01)
+    'edit_order_schedule': {'OWN', 'OPS'},               # order days, deadlines, suppliers; skip or move a cycle (Jeff 2026-11-01)
 }
 
 # Before positions: owners could do everything; managers could request and sign off Bulk and
@@ -71,6 +72,7 @@ DENIED = {
     'unlock_pins': 'Unlocking staff sign-in needs a manager or above',
     'create_orders': 'Creating or submitting supplier orders needs a Kitchen Manager, FOH Manager, General Manager or above',
     'approve_orders': "Approving an order needs the General Manager, the Operations & Integration Lead or an owner",
+    'edit_order_schedule': 'Only an owner or the Operations & Integration Lead changes the order schedule',
 }
 
 
