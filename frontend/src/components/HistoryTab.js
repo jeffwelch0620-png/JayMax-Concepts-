@@ -39,8 +39,8 @@ export function HistoryTab({ items, purchases, focusControlNumber }) {
             {filteredItems.map((it) => (
               <div key={it.controlNumber} onClick={() => setSelectedCN(it.controlNumber)} data-testid={`history-item-${it.controlNumber}`}
                 className="px-3 py-2.5 cursor-pointer text-[13px] border-l-[3px] transition-colors"
-                style={{ background: selectedCN === it.controlNumber ? "#1A2438" : "transparent", borderLeftColor: selectedCN === it.controlNumber ? "var(--acc)" : "transparent" }}>
-                <div className="font-bold text-[11.5px]" style={{ color: "var(--acc)" }}>{it.controlNumber}</div>
+                style={{ background: selectedCN === it.controlNumber ? "#1A2438" : "transparent", borderLeftColor: selectedCN === it.controlNumber ? "var(--jm-accent)" : "transparent" }}>
+                <div className="font-bold text-[11.5px]" style={{ color: "var(--jm-accent)" }}>{it.controlNumber}</div>
                 <div className="text-slate-300">{it.name}</div>
               </div>
             ))}
@@ -55,7 +55,7 @@ export function HistoryTab({ items, purchases, focusControlNumber }) {
                   <div className="font-bold text-base text-slate-100">{selected.name}</div>
                   <div className="text-xs text-slate-500">{selected.controlNumber}</div>
                 </div>
-                <div className="text-xl font-bold num" style={{ color: "var(--acc)" }} data-testid="history-current-price">{fmtMoney(currentPrice)}</div>
+                <div className="text-xl font-bold num" style={{ color: "var(--jm-accent)" }} data-testid="history-current-price">{fmtMoney(currentPrice)}</div>
               </div>
 
               <div className="mb-4">

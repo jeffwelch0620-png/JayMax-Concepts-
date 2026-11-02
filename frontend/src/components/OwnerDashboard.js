@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { storeMark } from "../theme/storeMark";
 import { ArrowRight, AlertTriangle, TrendingDown, RefreshCw, Check, X, ClipboardCheck, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import * as api from "../lib/api";
@@ -115,7 +116,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
                 <div className="mt-1.5 flex flex-col gap-0.5">
                   {d.lines.map((l) => (
                     <div key={l.controlNumber} className="text-[11px] text-slate-400 flex justify-between gap-3">
-                      <span><span style={{ color: "var(--acc)" }} className="font-bold">{l.controlNumber}</span> {l.name}</span>
+                      <span><span style={{ color: "var(--jm-accent)" }} className="font-bold">{l.controlNumber}</span> {l.name}</span>
                       <span className="text-amber-400 whitespace-nowrap">{!l.onInvoice ? "not on invoice" : [l.qtyDiff ? `qty ${l.qtyDiff > 0 ? "+" : ""}${num(l.qtyDiff, 1)}` : "", l.priceDiff ? `price ${l.priceDiff > 0 ? "+" : ""}${fmtMoney(l.priceDiff)}` : ""].filter(Boolean).join(", ")}</span>
                     </div>
                   ))}
@@ -159,7 +160,7 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
                 <div className="font-display font-bold text-slate-100">{s.name}</div>
                 <div className="text-[11px] text-slate-500 mt-0.5">{s.itemCount} inventory items · {s.dishCount} menu items</div>
               </div>
-              <span className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: s.accent }} />
+              <span className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: storeMark(s.id) }} />
             </div>
             <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
               <div className="bg-jm-field rounded-lg px-2.5 py-2 border border-jm-line"><div className="text-slate-500 text-[10px] uppercase font-bold">{native ? "Last count value" : "Inventory"}</div><div className="num font-bold text-slate-200">{native ? inventoryMoney(s.inventoryValue) : fmtPlanningCost(s.inventoryValue)}</div></div>

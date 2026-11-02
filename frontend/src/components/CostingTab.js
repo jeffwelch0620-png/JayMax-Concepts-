@@ -217,13 +217,13 @@ export function CostingTab({ items, dishes, revision = 0, loadLatest, persist, s
         {!summary.complete && lineDetails.length > 0 && <div role="status" className="text-amber-300 mb-3" data-testid="recipe-cost-incomplete">Planning cost is incomplete: {summary.issues.join("; ")}. Actual Food Cost is calculated separately from received purchases and physical count values.</div>}
         {lineDetails.length > 0 && (
           <div className="flex gap-7 flex-wrap px-3.5 py-3 bg-jm-field rounded-lg mb-3.5 border border-jm-line" data-testid="cost-summary">
-            <div><div className="text-[11px] text-slate-500 uppercase">{dish.recipeType === "prep" ? "Planning Batch Cost" : "Estimated Plate Cost"}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(totalCost)}</div></div>
+            <div><div className="text-[11px] text-slate-500 uppercase">{dish.recipeType === "prep" ? "Planning Batch Cost" : "Estimated Plate Cost"}</div><div className="text-lg font-bold num" style={{ color: "var(--jm-accent)" }}>{fmtPlanningCost(totalCost)}</div></div>
             {dish.recipeType === "prep" ? (
-              <div><div className="text-[11px] text-slate-500 uppercase">Cost per {dish.yieldUOM || "Unknown unit"}</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(costPerYieldUnit)}</div></div>
+              <div><div className="text-[11px] text-slate-500 uppercase">Cost per {dish.yieldUOM || "Unknown unit"}</div><div className="text-lg font-bold num" style={{ color: "var(--jm-accent)" }}>{fmtPlanningCost(costPerYieldUnit)}</div></div>
             ) : (
               <>
-                <div><div className="text-[11px] text-slate-500 uppercase">Estimated Food Cost %</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{summary.complete && Number(dish.price) > 0 ? num((totalCost / Number(dish.price)) * 100, 1) + "%" : "Unknown"}</div></div>
-                <div><div className="text-[11px] text-slate-500 uppercase">Suggested Price ({targetPct || 0}% FC)</div><div className="text-lg font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(suggestedPrice)}</div></div>
+                <div><div className="text-[11px] text-slate-500 uppercase">Estimated Food Cost %</div><div className="text-lg font-bold num" style={{ color: "var(--jm-accent)" }}>{summary.complete && Number(dish.price) > 0 ? num((totalCost / Number(dish.price)) * 100, 1) + "%" : "Unknown"}</div></div>
+                <div><div className="text-[11px] text-slate-500 uppercase">Suggested Price ({targetPct || 0}% FC)</div><div className="text-lg font-bold num" style={{ color: "var(--jm-accent)" }}>{fmtPlanningCost(suggestedPrice)}</div></div>
               </>
             )}
           </div>

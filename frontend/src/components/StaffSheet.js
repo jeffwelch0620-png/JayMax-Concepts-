@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { storeMark } from "../theme/storeMark";
 import { Lock, X, Check, ChevronDown, ChevronUp, ChefHat, ClipboardList, Inbox, Bell, BellOff, Save } from "lucide-react";
 import { RESTAURANTS, num, fmtDate, isCountActive, todayISO } from "../lib/calc";
 import * as api from "../lib/api";
@@ -251,7 +252,7 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
             <div className="flex flex-col gap-2">
               {roster.map((m) => (
                 <button key={m.id} onClick={() => identify(m.id)} disabled={identifying} data-testid={`staff-roster-pick-${m.id}`}
-                  className={`${cardCls} p-3 text-left font-bold text-slate-100 hover:border-[var(--acc,#F97316)] transition`}>
+                  className={`${cardCls} p-3 text-left font-bold text-slate-100 hover:border-jm-accent transition`}>
                   {m.name}
                 </button>
               ))}
@@ -266,7 +267,7 @@ export function StaffSheet({ onClose, onPersonalLogin, drafts }) {
               {RESTAURANTS.map((r) => (
                 <button key={r.id} onClick={() => setRid(r.id)} data-testid={`staff-store-${r.id}`}
                   className={`rounded-full px-4 py-2 text-sm font-bold border transition ${rid === r.id ? "text-jm-on-accent" : "text-slate-400 bg-jm-surface border-jm-line"}`}
-                  style={rid === r.id ? { background: r.accent, borderColor: r.accent } : {}}>
+                  style={rid === r.id ? { background: storeMark(r.id), borderColor: storeMark(r.id) } : {}}>
                   {r.short}
                 </button>
               ))}
@@ -468,7 +469,7 @@ function PrepView({ restaurant, track, setTrack, sheet, onRefresh, expanded, set
                     </div>
                     {(t.card.procedure || t.card.equipment || t.card.shelfLife) && (
                       <div className="mt-2">
-                        <button className="text-xs font-semibold flex items-center gap-1 hover:underline" style={{ color: "var(--acc, #F97316)" }}
+                        <button className="text-xs font-semibold flex items-center gap-1 hover:underline" style={{ color: "var(--jm-accent)" }}
                           onClick={() => setExpanded((x) => ({ ...x, [t.id]: !open }))} data-testid={`staff-card-toggle-${t.id}`}>
                           {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Recipe Card
                         </button>

@@ -135,7 +135,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
             {["manager", "owner"].map((r) => (
               <button key={r} onClick={() => setRole(r)} data-testid={`po-role-${r}`}
                 className={`px-3 py-2 text-xs font-bold transition ${role === r ? "text-jm-on-accent" : "text-slate-400 bg-jm-surface hover:text-white"}`}
-                style={role === r ? { background: "var(--acc)" } : {}}>
+                style={role === r ? { background: "var(--jm-accent)" } : {}}>
                 {r === "owner" ? <ShieldCheck size={13} className="inline mr-1" /> : <ClipboardList size={13} className="inline mr-1" />}
                 {r === "owner" ? "Owner" : "Manager"}
               </button>
@@ -165,7 +165,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
         {FILTERS.map((s) => (
           <button key={s} onClick={() => setFilter(s)} data-testid={`po-filter-${s}`}
             className={`rounded-full px-3 py-1.5 text-xs font-bold border transition ${filter === s ? "text-jm-on-accent border-transparent" : "text-slate-400 bg-jm-surface border-jm-line hover:text-white"}`}
-            style={filter === s ? { background: "var(--acc)" } : {}}>
+            style={filter === s ? { background: "var(--jm-accent)" } : {}}>
             {s === "all" ? "All" : STATUS_META[s].label}{s !== "all" && counts[s] ? ` (${counts[s]})` : ""}
           </button>
         ))}
@@ -184,7 +184,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
             const isEmailing = emailing?.oid === po.id;
             const rm = po.receiptMatch?.native ? null : po.receiptMatch;
             return (
-              <div key={po.id} className={`${cardCls} p-4 transition ${highlightId === po.id ? "ring-2 ring-[var(--acc)]" : ""}`} data-testid={`po-card-${po.id}`}>
+              <div key={po.id} className={`${cardCls} p-4 transition ${highlightId === po.id ? "ring-2 ring-[var(--jm-accent)]" : ""}`} data-testid={`po-card-${po.id}`}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -235,7 +235,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
                     <tbody>
                       {po.lines.map((l) => (
                         <tr key={l.controlNumber}>
-                          <td className="text-slate-200"><span className="font-bold" style={{ color: "var(--acc)" }}>{l.controlNumber}</span> {l.name}</td>
+                          <td className="text-slate-200"><span className="font-bold" style={{ color: "var(--jm-accent)" }}>{l.controlNumber}</span> {l.name}</td>
                           <td className="text-slate-400">{l.vendorSku || "—"}</td>
                           <td className="num">{num(l.qty, 1)} {l.purchaseUnit}</td>
                           <td className="num">{fmtMoney(l.unitCost)}</td>
@@ -264,7 +264,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
                           <tbody>
                             {rm.lines.map((l) => (
                               <tr key={l.controlNumber} style={l.flagged ? { background: "rgba(245,158,11,0.06)" } : {}}>
-                                <td className="text-slate-200"><span className="font-bold" style={{ color: "var(--acc)" }}>{l.controlNumber}</span> {l.name}</td>
+                                <td className="text-slate-200"><span className="font-bold" style={{ color: "var(--jm-accent)" }}>{l.controlNumber}</span> {l.name}</td>
                                 <td className="num">{num(l.receivedQty, 1)}</td>
                                 <td className="num">{l.onInvoice ? num(l.invoiceQty, 1) : "—"}</td>
                                 <td className="num">{fmtMoney(l.poUnitCost)}</td>
@@ -309,7 +309,7 @@ export function PurchaseOrdersTab({ rid, showToast, onInventoryChange, focusOrde
                     <div className="flex flex-col gap-2 mb-3">
                       {po.lines.map((l) => (
                         <div key={l.controlNumber} className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm text-slate-300 flex-1 min-w-[160px]"><span className="font-bold" style={{ color: "var(--acc)" }}>{l.controlNumber}</span> {l.name}</span>
+                          <span className="text-sm text-slate-300 flex-1 min-w-[160px]"><span className="font-bold" style={{ color: "var(--jm-accent)" }}>{l.controlNumber}</span> {l.name}</span>
                           <span className="text-xs text-slate-500">ordered {num(l.qty, 1)}</span>
                           <input type="number" step="0.1" min="0" className={`${inpCls} w-24`} value={receiving.lines[l.controlNumber]} onChange={(e) => setReceiving((s) => ({ ...s, lines: { ...s.lines, [l.controlNumber]: e.target.value } }))} data-testid={`po-receive-qty-${po.id}-${l.controlNumber}`} />
                           <span className="text-xs text-slate-500">{l.purchaseUnit}</span>

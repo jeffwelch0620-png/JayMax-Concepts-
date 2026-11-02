@@ -1,9 +1,9 @@
 import React from "react";
 
 export const cardCls = "bg-jm-surface border border-jm-line rounded-xl";
-export const inpCls = "bg-jm-field border border-jm-line-strong rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-[var(--acc)] placeholder:text-slate-600 transition-colors";
-export const btnAcc = "inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold bg-[var(--acc)] text-jm-on-accent hover:brightness-110 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed";
-export const btnGhost = "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold bg-jm-surface-3 text-slate-300 border border-jm-line-strong hover:border-[var(--acc)] hover:text-white active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed";
+export const inpCls = "bg-jm-field border border-jm-line-strong rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-[var(--jm-accent)] placeholder:text-slate-600 transition-colors";
+export const btnAcc = "inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold bg-jm-accent text-jm-on-accent hover:brightness-110 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed";
+export const btnGhost = "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold bg-jm-surface-3 text-slate-300 border border-jm-line-strong hover:border-[var(--jm-accent)] hover:text-white active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed";
 export const btnDanger = "inline-flex items-center justify-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition disabled:opacity-40";
 
 export function Field({ label, children, className = "" }) {
@@ -49,7 +49,7 @@ export function PageTitle({ children, right }) {
   return (
     <div className="flex items-end justify-between gap-3 flex-wrap pb-3 mb-5 border-b border-jm-line">
       <div className="flex items-center gap-3">
-        <span className="w-1.5 h-6 rounded-full" style={{ background: "var(--acc)" }} />
+        <span className="w-1.5 h-6 rounded-full" style={{ background: "var(--jm-accent)" }} />
         <h2 className="font-display text-xl font-bold text-slate-100 tracking-tight">{children}</h2>
       </div>
       {right}
@@ -59,7 +59,7 @@ export function PageTitle({ children, right }) {
 
 export function Banner({ title, right }) {
   return (
-    <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-2.5 rounded-lg mb-2 border-l-4 bg-jm-surface-2 border border-jm-line" style={{ borderLeftColor: "var(--acc)" }}>
+    <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-2.5 rounded-lg mb-2 border-l-4 bg-jm-surface-2 border border-jm-line" style={{ borderLeftColor: "var(--jm-accent)" }}>
       <div className="font-display text-sm font-bold text-slate-100">{title}</div>
       <div className="flex items-center gap-2">{right}</div>
     </div>

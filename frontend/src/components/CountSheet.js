@@ -136,7 +136,7 @@ export function CountSheetList({ sheet, onSaveOne, showPar }) {
             {newArea && <div className="text-[11px] uppercase tracking-[0.08em] text-slate-500 font-bold mt-2 first:mt-0">{areaName}</div>}
             <div className={`${cardCls} p-3 flex items-center gap-3 flex-wrap sm:flex-nowrap`} data-testid={`count-row-${it.controlNumber}`}>
               <div className="flex-1 min-w-[160px]">
-                <div className="text-xs font-bold" style={{ color: "var(--acc)" }}>{it.controlNumber}</div>
+                <div className="text-xs font-bold" style={{ color: "var(--jm-accent)" }}>{it.controlNumber}</div>
                 <div className="font-semibold text-slate-100 text-sm leading-snug break-words">{it.name}</div>
                 <div className="text-xs text-slate-500">
                   {showPar ? `Par ${num(it.par)} ${it.unit || ""}` : it.lastCountedBy ? `Last by ${it.lastCountedBy}` : ""}

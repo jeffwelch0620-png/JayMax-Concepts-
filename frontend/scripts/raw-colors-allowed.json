@@ -18,7 +18,7 @@
   "components/SalesTrackingTab.js": 4,
   "components/SchedulingTab.js": 8,
   "components/SetupTab.js": 9,
-  "components/StaffSheet.js": 8,
+  "components/StaffSheet.js": 6,
   "components/StaffSignIn.js": 1,
   "components/StaffSignInPanel.js": 5,
   "components/StaffTab.js": 1,

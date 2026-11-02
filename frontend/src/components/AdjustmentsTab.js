@@ -66,9 +66,9 @@ function EditableAdjustmentsTab({ rid, drafts, items, adjustments, persist, show
       <PageTitle>Waste / Inventory Adjustments</PageTitle>
       {error && <p role="alert">{error}</p>}
       <div className="grid gap-3 mb-5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))" }}>
-        <div className={`${cardCls} p-4`}><div className="text-[11px] text-slate-500 uppercase font-bold">Adjustment Records</div><div className="text-2xl font-bold num" style={{ color: "var(--acc)" }}>{adjustments.length}</div></div>
+        <div className={`${cardCls} p-4`}><div className="text-[11px] text-slate-500 uppercase font-bold">Adjustment Records</div><div className="text-2xl font-bold num" style={{ color: "var(--jm-accent)" }}>{adjustments.length}</div></div>
         <div className={`${cardCls} p-4`}><div className="text-[11px] text-slate-500 uppercase font-bold">Removal Value — Last 30 Days</div><div className="text-2xl font-bold num text-red-400">{fmtPlanningCost(last30Value)}</div></div>
-        <div className={`${cardCls} p-4`}><div className="text-[11px] text-slate-500 uppercase font-bold">Removal Value — All Logged</div><div className="text-2xl font-bold num" style={{ color: "var(--acc)" }}>{fmtPlanningCost(totalWasteValue)}</div></div>
+        <div className={`${cardCls} p-4`}><div className="text-[11px] text-slate-500 uppercase font-bold">Removal Value — All Logged</div><div className="text-2xl font-bold num" style={{ color: "var(--jm-accent)" }}>{fmtPlanningCost(totalWasteValue)}</div></div>
       </div>
 
       <div className={`${cardCls} p-5 mb-5`}>

@@ -217,7 +217,7 @@ function AddPrepItemModal({ rid, track, items, dishes, onClose, onSaved, showToa
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="add-prep-item-modal">
       <div className={`${cardCls} w-full max-w-xl p-5 m-4 bg-jm-surface max-h-[90vh] overflow-y-auto`}>
         <div className="flex justify-between items-center mb-4">
-          <div className="font-display font-bold text-slate-100 flex items-center gap-2"><Package size={17} style={{ color: "var(--acc)" }} /> Add Prep Item</div>
+          <div className="font-display font-bold text-slate-100 flex items-center gap-2"><Package size={17} style={{ color: "var(--jm-accent)" }} /> Add Prep Item</div>
           <button onClick={onClose} className="text-slate-400 hover:text-white" data-testid="close-add-prep-item"><X size={18} /></button>
         </div>
 
@@ -365,7 +365,7 @@ function EveningCount({ rid, track, showToast }) {
     return (
       <tr key={key} data-testid={`count-row-${key}`}>
         <td>
-          <div className="font-semibold text-slate-200 flex items-center gap-1.5"><ChefHat size={14} style={{ color: "var(--acc)" }} /> {name}</div>
+          <div className="font-semibold text-slate-200 flex items-center gap-1.5"><ChefHat size={14} style={{ color: "var(--jm-accent)" }} /> {name}</div>
           {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
         </td>
         <td>
@@ -834,7 +834,7 @@ function InventoryLog({ drafts, showError, rid, items, dishes, persistDishes, pr
                       {stock.containers.map((c) => (
                         <div key={c.id} className="flex items-center justify-between text-xs bg-jm-field rounded-md px-2.5 py-1.5 border border-jm-line" data-testid={`container-${c.id}`}>
                           <span className="text-slate-300">{c.count}× {c.label} ({num(c.size, 0)} {stock.yieldUOM} each)</span>
-                          <button className="text-[11px] font-semibold hover:underline" style={{ color: "var(--acc)" }} data-testid={`use-container-${c.id}`} onClick={() => handleUseContainer(r.id, c.id)}>Send 1 to service</button>
+                          <button className="text-[11px] font-semibold hover:underline" style={{ color: "var(--jm-accent)" }} data-testid={`use-container-${c.id}`} onClick={() => handleUseContainer(r.id, c.id)}>Send 1 to service</button>
                         </div>
                       ))}
                     </div>
@@ -1089,7 +1089,7 @@ function Planning({ drafts, showError, rid, dishes, prepItems, prepCapabilities,
             <div key={r.id} className="border border-jm-line rounded-lg p-3 mb-2 bg-jm-field" data-testid={`par-rec-${r.id}`}>
               <div className="flex justify-between items-center gap-2 mb-1">
                 <span className="font-semibold text-sm text-slate-100">{r.recipeName}</span>
-                <span className="num text-xs"><span className="text-slate-400">{num(r.currentPar, 0)}</span> <span style={{ color: "var(--acc)" }}>→ {num(r.recommendedPar, 0)}</span></span>
+                <span className="num text-xs"><span className="text-slate-400">{num(r.currentPar, 0)}</span> <span style={{ color: "var(--jm-accent)" }}>→ {num(r.recommendedPar, 0)}</span></span>
               </div>
               <div className="text-xs text-slate-400 mb-2">{r.reasoning}</div>
               <div className="flex gap-2">
