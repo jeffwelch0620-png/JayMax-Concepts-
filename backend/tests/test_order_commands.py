@@ -315,8 +315,9 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(stacked.status_code,409,stacked.text);self.assertIn('moved onto that date',stacked.text)
         view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
         clash=[d for d in view['schedule']['upcoming'][1:] if d['change'] is None]
-        if clash:
-            held=await self.change({'kind':'move','cycle_date':clash[0]['cycle_date'],'moved_to':moved_to,'delivery_date':moved_to,'reason':'Clash'})
+        if clash and nxt:
+            target=nxt['cycle_date']   # the date that now holds today's moved cycle
+            held=await self.change({'kind':'move','cycle_date':clash[0]['cycle_date'],'moved_to':target,'delivery_date':target,'reason':'Clash'})
             self.assertIn(held.status_code,(409,422),held.text)
 
     async def test_weekly_days_are_set_and_removed_with_their_history(self):
@@ -345,3 +346,17 @@ class OrderCalendarTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.change({'kind':'remove_day','order_weekday':weekday,'reason':'Supplier dropped this day'})).status_code,200)
         after=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
         self.assertEqual(next(o for o in after['on_order'] if o['ref']==pending['id'])['expected_delivery'],due)
+
+    async def test_far_ahead_moves_cannot_stack_and_have_a_limit(self):
+        view=(await self.other.get('/api/pg/purchases/berts/order-calendar')).json()
+        from datetime import date,timedelta
+        base={d['order_weekday'] for d in view['schedule']['days']};start=date.fromisoformat(view['calendar']['today'])+timedelta(days=60)
+        cycles=[start+timedelta(days=n) for n in range(14) if (start+timedelta(days=n)).weekday() in base]
+        a,b=next((x,y) for x in cycles for y in cycles if 0<(y-x).days<=3)
+        free=next(x+timedelta(days=n) for n in (-1,-2,-3) for x in [a] if (x+timedelta(days=n)).weekday() not in base)
+        if (b-free).days<=6:
+            self.assertEqual((await self.change({'kind':'move','cycle_date':a.isoformat(),'moved_to':free.isoformat(),'delivery_date':a.isoformat(),'reason':'Far ahead'})).status_code,200)
+            held=await self.change({'kind':'move','cycle_date':b.isoformat(),'moved_to':free.isoformat(),'delivery_date':b.isoformat(),'reason':'Stack'})
+            self.assertEqual(held.status_code,409,held.text)
+        far=(date.fromisoformat(view['calendar']['today'])+timedelta(days=200));far=far+timedelta(days=(next(iter(base))-far.weekday())%7)
+        held=await self.change({'kind':'skip','cycle_date':far.isoformat(),'reason':'Too far'});self.assertEqual(held.status_code,422,held.text)

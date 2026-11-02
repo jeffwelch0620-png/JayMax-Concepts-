@@ -16,6 +16,7 @@ from purchase_parser import fingerprint
 ON_ORDER = ('approved', 'sent', 'receiving')
 DEFAULT_ZONE = 'America/New_York'
 AHEAD = 21                       # days of cycles worked out ahead
+HORIZON = 120                    # one cycle can be skipped or moved up to this many days ahead
 
 
 async def installed(conn):
@@ -264,7 +265,7 @@ async def change_schedule(pool, store, actor, body, key):
             if known != set(body.vendor_ids): raise HTTPException(422, 'Choose active registered suppliers')
             old = next((r for r in rows if r['order_weekday'] == body.order_weekday), None)
             if not old:
-                exc = await exceptions(conn, store, today, today + timedelta(days=AHEAD))
+                exc = await exceptions(conn, store, today, today + timedelta(days=HORIZON + 7))
                 if any(e['kind'] == 'move' and e['moved_to'] >= today and e['moved_to'].weekday() == body.order_weekday for e in exc.values()):
                     raise HTTPException(409, 'A moved cycle already falls on that weekday; put it back or move it first')
             before = day_view(old) if old else None
@@ -281,7 +282,10 @@ async def change_schedule(pool, store, actor, body, key):
         else:
             if body.cycle_date.weekday() not in {r['order_weekday'] for r in rows}: raise HTTPException(422, 'That date is not a weekly order day here')
             if body.cycle_date < today: raise HTTPException(422, 'A past cycle cannot be changed')
-            exc = await exceptions(conn, store, today, today + timedelta(days=AHEAD))
+            if body.cycle_date > today + timedelta(days=HORIZON): raise HTTPException(422, f'Change a cycle up to {HORIZON} days ahead')
+            # Every skip or move near the cycle and its new date (exceptions() looks a week either side).
+            span = [body.cycle_date] + ([body.moved_to] if body.moved_to else [])
+            exc = await exceptions(conn, store, min(span), max(span))
             current = exc.get(body.cycle_date)
             if body.kind == 'restore' and not current: raise HTTPException(409, 'That cycle is already on its usual day')
             if body.kind == 'restore' and any(e['kind'] == 'move' and e['moved_to'] == body.cycle_date for d, e in exc.items() if d != body.cycle_date):
