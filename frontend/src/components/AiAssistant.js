@@ -99,7 +99,7 @@ export function AiAssistant({ rid, setRid, open, onClose }) {
     <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[420px] bg-jm-field border-l border-jm-line shadow-2xl flex flex-col fade-slide-in" data-testid="ai-assistant-drawer">
       <div className="flex items-center justify-between px-4 py-3 border-b border-jm-line bg-jm-surface">
         <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "var(--acc)" }}>
+          <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "var(--jm-accent)" }}>
             <Sparkles size={15} className="text-jm-on-accent" />
           </span>
           <div>
@@ -126,7 +126,7 @@ export function AiAssistant({ rid, setRid, open, onClose }) {
             <div className="text-xs text-slate-500 mb-3">Ask about inventory, food costs, prep, or margins — I can see this location's live data. Try one of these:</div>
             <div className="flex flex-col gap-2">
               {SUGGESTIONS.map((s) => (
-                <button key={s} onClick={() => send(s)} className="text-left text-xs px-3 py-2.5 rounded-lg bg-jm-surface border border-jm-line text-slate-300 hover:border-[var(--acc)] hover:text-white transition" data-testid="ai-suggestion-chip">
+                <button key={s} onClick={() => send(s)} className="text-left text-xs px-3 py-2.5 rounded-lg bg-jm-surface border border-jm-line text-slate-300 hover:border-[var(--jm-accent)] hover:text-white transition" data-testid="ai-suggestion-chip">
                   {s}
                 </button>
               ))}
@@ -135,7 +135,7 @@ export function AiAssistant({ rid, setRid, open, onClose }) {
         )}
         {messages?.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`} data-testid={`ai-message-${i}`}>
-            <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap ${m.role === "user" ? "bg-[var(--acc)] text-jm-on-accent font-medium" : "bg-jm-surface border border-jm-line text-slate-200"}`}>
+            <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap ${m.role === "user" ? "bg-jm-accent text-jm-on-accent font-medium" : "bg-jm-surface border border-jm-line text-slate-200"}`}>
               {m.content}
               {m.pending && !m.content && <span className="inline-block w-2 h-2 rounded-full bg-slate-400 pulse-dot" />}
             </div>

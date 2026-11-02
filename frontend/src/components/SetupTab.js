@@ -217,7 +217,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
         {sharedProduct && <p>This product is shared across locations. Product and pack changes require shared catalog review; location flags, pars and supplier prices remain editable.</p>}
         <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
           <SectionLabel className="mb-0">{editingCN ? `Editing ${editingCN}` : "New Item"}</SectionLabel>
-          <Pill testId="control-number-preview" color="var(--acc)" bg="rgba(249,115,22,0.12)">Control #: {previewCN || "—"}</Pill>
+          <Pill testId="control-number-preview" color="var(--jm-accent)" bg="rgba(249,115,22,0.12)">Control #: {previewCN || "—"}</Pill>
         </div>
         <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
           <Field label="Item Name"><input data-testid="item-name-input" className={inpCls} disabled={sharedProduct} value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="e.g. Ground Beef 80/20" /></Field>
@@ -355,7 +355,7 @@ export function SetupTab({ items, revision = 0, persistItems, areas, persistArea
                   const planningCost = itemPlanningCost(it);
                   return (
                     <tr key={it.controlNumber} data-testid={`setup-item-row-${it.controlNumber}`}>
-                      <td className="font-bold" style={{ color: "var(--acc)" }}>{it.controlNumber}</td>
+                      <td className="font-bold" style={{ color: "var(--jm-accent)" }}>{it.controlNumber}</td>
                       <td className="font-semibold text-slate-200">
                         {it.name} {it.needsReview && <Pill testId={`review-pill-${it.controlNumber}`} color="#F59E0B" bg="rgba(245,158,11,0.12)">REVIEW</Pill>}
                       </td>

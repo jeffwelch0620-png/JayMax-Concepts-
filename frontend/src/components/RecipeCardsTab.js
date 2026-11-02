@@ -46,7 +46,7 @@ export function RecipeCardsTab({ items, dishes }) {
 
       {selected && (
         <div className={`${cardCls} overflow-hidden recipe-print-card`}>
-          <div className="px-6 py-4 flex justify-between gap-4 flex-wrap print-muted" style={{ background: "var(--acc)" }}>
+          <div className="px-6 py-4 flex justify-between gap-4 flex-wrap print-muted" style={{ background: "var(--jm-accent)" }}>
             <div>
               <div className="font-display text-2xl font-bold text-jm-on-accent">{selected.name}</div>
               <div className="text-xs mt-1 text-[#0B0F17]/70 font-semibold">{selected.recipeType === "prep" ? "PREP / PRODUCTION RECIPE" : `MENU RECIPE${selected.menuCode ? ` • ${selected.menuCode}` : ""}`}</div>
@@ -68,7 +68,7 @@ export function RecipeCardsTab({ items, dishes }) {
                 <thead><tr><th>Control #</th><th>Ingredient</th><th>Scaled Qty</th><th>Unit</th><th className="recipe-cost-col">Cost</th></tr></thead>
                 <tbody>
                   {ingredientRows.map((r) => (
-                    <tr key={r.key}><td className="font-bold" style={{ color: "var(--acc)" }}>{r.code}</td><td className="font-semibold text-slate-200">{r.name}</td><td className="num">{num(r.qty, 2)}</td><td>{r.uom}</td><td className="num recipe-cost-col">{fmtPlanningCost(r.cost)}</td></tr>
+                    <tr key={r.key}><td className="font-bold" style={{ color: "var(--jm-accent)" }}>{r.code}</td><td className="font-semibold text-slate-200">{r.name}</td><td className="num">{num(r.qty, 2)}</td><td>{r.uom}</td><td className="num recipe-cost-col">{fmtPlanningCost(r.cost)}</td></tr>
                   ))}
                 </tbody>
               </table>

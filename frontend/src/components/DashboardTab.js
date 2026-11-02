@@ -112,7 +112,7 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
             <table className="ops-table"><thead><tr><th>Item</th><th>Portions</th><th>$ Impact</th></tr></thead>
               <tbody>{topVariance.map((r) => (
                 <tr key={r.item.controlNumber}>
-                  <td><button onClick={() => onOpenHistory(r.item.controlNumber)} className="font-bold hover:underline" style={{ color: "var(--acc)" }}>{r.item.controlNumber}</button> — {r.item.name}</td>
+                  <td><button onClick={() => onOpenHistory(r.item.controlNumber)} className="font-bold hover:underline" style={{ color: "var(--jm-accent)" }}>{r.item.controlNumber}</button> — {r.item.name}</td>
                   <td className="num">{num(r.unexplainedPortions, 1)}</td>
                   <td className="num font-bold" style={{ color: (r.unexplainedCost || 0) > 0 ? "#EF4444" : "#10B981" }}>{fmtMoney(r.unexplainedCost)}</td>
                 </tr>))}
@@ -191,7 +191,7 @@ export function DashboardTab({ rid, items, purchases, dishes, adjustments, sales
                 return (
                   <tr key={it.controlNumber} style={{ opacity: isCountActive(it) ? 1 : 0.5 }} data-testid={`inventory-row-${it.controlNumber}`}>
                     <td><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: isOrderEnabled(it) ? st.color : "#475569" }} title={st.label} /></td>
-                    <td><button onClick={() => onOpenHistory(it.controlNumber)} className="font-bold hover:underline" style={{ color: "var(--acc)" }}>{it.controlNumber}</button></td>
+                    <td><button onClick={() => onOpenHistory(it.controlNumber)} className="font-bold hover:underline" style={{ color: "var(--jm-accent)" }}>{it.controlNumber}</button></td>
                     <td className="font-semibold text-slate-200">{it.name}</td>
                     <td>{it.storageArea}</td>
                     <td>{pref?.vendor || "—"}</td>

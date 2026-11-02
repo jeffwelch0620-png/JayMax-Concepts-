@@ -21,9 +21,10 @@
   --jm-warn: #F59E0B;
   --jm-bad: #EF4444;
   --jm-info: #38BDF8;
-  /* The store accent follows the selected store (App.js sets it beside --acc). */
+  /* Actions and selected states: follows the selected store (App.js sets it from that store's mark;
+     --acc is kept as an alias for older code). */
   --jm-accent: #F97316;
-  /* Each store's mark colour, so owner pages can show all of them. */
+  /* Each store's mark colour (theme/storeMark.js), so owner pages can show all of them. */
   --jm-store-berts: #F97316;
   --jm-store-rudds: #EAB308;
   --jm-store-papa: #E11D48;

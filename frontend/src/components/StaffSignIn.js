@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { storeMark } from "../theme/storeMark";
 import { Lock } from "lucide-react";
 import { RESTAURANTS } from "../lib/calc";
 import * as api from "../lib/api";
@@ -87,7 +88,7 @@ export function StaffSignIn({ rid, setRid, onSignedIn }) {
         {RESTAURANTS.map((r) => (
           <button key={r.id} onClick={() => setRid(r.id)} data-testid={`staff-store-${r.id}`}
             className={`rounded-full px-4 py-2 text-sm font-bold border transition ${rid === r.id ? "text-jm-on-accent" : "text-slate-400 bg-jm-surface border-jm-line"}`}
-            style={rid === r.id ? { background: r.accent, borderColor: r.accent } : {}}>
+            style={rid === r.id ? { background: storeMark(r.id), borderColor: storeMark(r.id) } : {}}>
             {r.short}
           </button>
         ))}

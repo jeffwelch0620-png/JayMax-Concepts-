@@ -309,7 +309,7 @@ function LegacyInvoicesTab({ items, persistItems, purchases, persistPurchases, s
                 const total = g.rows.reduce((s, r) => s + (r.extendedCost || r.qty * r.unitCost), 0);
                 return (
                   <div key={`${g.vendor}|${g.invoiceNumber}`} className="mb-4 border border-jm-line rounded-lg overflow-hidden">
-                    <div className="bg-jm-surface-2 px-3 py-2 text-[13px] font-bold flex justify-between" style={{ color: "var(--acc)" }}>
+                    <div className="bg-jm-surface-2 px-3 py-2 text-[13px] font-bold flex justify-between" style={{ color: "var(--jm-accent)" }}>
                       <span>{g.vendor} — Invoice {g.invoiceNumber} — {fmtDate(g.invoiceDate)} {duplicateAutoGroups.has(`${g.vendor}|${g.invoiceNumber}`) && <Pill color="#EF4444" bg="rgba(239,68,68,0.12)">Already imported — skipped</Pill>}</span>
                       <span className="num">{fmtMoney(total)}</span>
                     </div>

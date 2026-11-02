@@ -23,15 +23,15 @@ export function MenuTab({ dishes, onAddNew, onOpenDish }) {
         if (!list.length) return null;
         return (
           <div key={cat.code} className="mb-6">
-            <Banner title={cat.name} right={<Pill color="var(--acc)" bg="#1E293B">{list.length}</Pill>} />
+            <Banner title={cat.name} right={<Pill color="var(--jm-accent)" bg="#1E293B">{list.length}</Pill>} />
             <div className={`${cardCls} overflow-hidden`}>
               <table className="ops-table">
                 <thead><tr><th>Code</th><th>Item</th><th>Description</th><th>Price</th></tr></thead>
                 <tbody>
                   {list.map((d) => (
                     <tr key={d.id} data-testid={`menu-row-${d.menuCode || d.id}`}>
-                      <td className="font-bold" style={{ color: "var(--acc)" }}>{d.menuCode || "—"}</td>
-                      <td><button onClick={() => onOpenDish(d.id)} className="font-bold hover:underline text-left" style={{ color: "var(--acc)" }} data-testid={`menu-open-${d.id}`}>{d.name}</button></td>
+                      <td className="font-bold" style={{ color: "var(--jm-accent)" }}>{d.menuCode || "—"}</td>
+                      <td><button onClick={() => onOpenDish(d.id)} className="font-bold hover:underline text-left" style={{ color: "var(--jm-accent)" }} data-testid={`menu-open-${d.id}`}>{d.name}</button></td>
                       <td className="text-slate-400">{d.description || "—"}</td>
                       <td className="num">{fmtMoney(d.price)}</td>
                     </tr>

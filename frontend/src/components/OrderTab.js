@@ -107,8 +107,8 @@ function LegacyOrderTab({ items, showToast, restaurantName, rid, onCreatedPO }) 
       <div className="text-xs text-slate-500 -mt-3 mb-4">Shortfalls are measured in count units, then converted to whole vendor purchase packs.</div>
 
       <div className="grid gap-2.5 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))" }}>
-        <div className={`${cardCls} p-3`}><div className="text-[11px] text-slate-500 uppercase font-bold">Items to order</div><div className="text-2xl font-extrabold num" style={{ color: "var(--acc)" }}>{rows.length}</div></div>
-        <div className={`${cardCls} p-3`}><div className="text-[11px] text-slate-500 uppercase font-bold">Estimated order</div><div className="text-2xl font-extrabold num" style={{ color: "var(--acc)" }}>{fmtMoney(grandTotal)}</div></div>
+        <div className={`${cardCls} p-3`}><div className="text-[11px] text-slate-500 uppercase font-bold">Items to order</div><div className="text-2xl font-extrabold num" style={{ color: "var(--jm-accent)" }}>{rows.length}</div></div>
+        <div className={`${cardCls} p-3`}><div className="text-[11px] text-slate-500 uppercase font-bold">Estimated order</div><div className="text-2xl font-extrabold num" style={{ color: "var(--jm-accent)" }}>{fmtMoney(grandTotal)}</div></div>
         <div className={`${cardCls} p-3`}><div className="text-[11px] text-slate-500 uppercase font-bold">Needs price</div><div className="text-2xl font-extrabold num" style={{ color: unpriced ? "#EF4444" : "#10B981" }}>{unpriced}</div></div>
         <div className={`${cardCls} p-3`}><div className="text-[11px] text-slate-500 uppercase font-bold">Pack conversion review</div><div className="text-2xl font-extrabold num" style={{ color: unknownConversions ? "#EF4444" : "#10B981" }}>{unknownConversions}</div></div>
       </div>
@@ -131,7 +131,7 @@ function LegacyOrderTab({ items, showToast, restaurantName, rid, onCreatedPO }) 
                 <tbody>
                   {vendorRows.map((r) => (
                     <tr key={r.item.controlNumber} data-testid={`order-row-${r.item.controlNumber}`}>
-                      <td className="font-bold" style={{ color: "var(--acc)" }}>{r.item.controlNumber}</td>
+                      <td className="font-bold" style={{ color: "var(--jm-accent)" }}>{r.item.controlNumber}</td>
                       <td className="font-semibold text-slate-200">
                         {r.item.name}
                         {!r.conversionKnown && r.selected && <div className="text-[11px] text-red-400 mt-0.5">Pack conversion incomplete — using 1:1 fallback</div>}
