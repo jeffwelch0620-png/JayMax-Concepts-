@@ -119,8 +119,17 @@ class QuickCountDatabaseTests(daily_pars.BulkDailyParDatabaseTests):
         self.assertEqual(sent.status_code, 200, sent.text)
         line = (await self.read(store='rudds'))['check'][0]
         self.assertEqual((D(line['incoming_base_quantity']), D(line['short_base_quantity'])), (factor, 19 * factor - 12 * factor))
+        # Accepted after the count, the delivery still adds to what was counted.
+        got = await self.step('rudds', spot.json()['request']['id'], dict(action='accept', note='Arrived', lines=[dict(ordinal=1, base_quantity=str(factor))]))
+        self.assertEqual(got.status_code, 200, got.text)
+        self.assertEqual(D((await self.read(store='rudds'))['check'][0]['incoming_base_quantity']), factor)
+        # A spot request needed after the next run cannot cover the days before it.
+        later = await self.request(dict(run_date='2026-10-13', kind='spot', note='Next week',
+                                        lines=[dict(product_id=str(self.requester['product']), quantity='5', reason='Tuesday event')]))
+        self.assertEqual(later.status_code, 200, later.text)
+        self.assertEqual(D((await self.read(store='rudds'))['check'][0]['incoming_base_quantity']), factor)
         # Only active to-par Bulk items of this store can be counted here.
-        self.assertEqual((await self.quick('1', store='rudds', product=self.p['product_id'])).status_code, 422)
+        self.assertEqual((await self.quick('1', store='rudds', product=self.p['product_id'], version=1)).status_code, 422)
 
     async def test_database_refuses_incomplete_or_changed_quick_counts(self):
         async def insert(c, revision=1, predecessor=None, lines=1, factor=None):

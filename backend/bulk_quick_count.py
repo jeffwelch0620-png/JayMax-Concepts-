@@ -99,17 +99,23 @@ async def items(conn, store):
     return setup['bulk_par_mode'], sorted(found, key=lambda i: i['name'].casefold())
 
 
-async def incoming(conn, store):
-    """Base amounts per item on their way from this store's spot requests not yet accepted or cancelled:
-    the amount asked until the maker signs off, then what it actually sent (held at the maker is
-    already in this store's count)."""
+async def incoming(conn, store, counted_at, next_run):
+    """Base amounts per item that this store's spot requests add after the count: requests needed before
+    the next run and not cancelled; the amount asked until the maker signs off, then what it actually
+    sent; once accepted, what arrived, but only if it was accepted after the count (earlier deliveries
+    are already in the count)."""
     if bulk.MAKERS.get(store) is None or not await bulk.installed(conn): return {}
-    rows = await conn.fetch('''SELECT l.product_id::text AS product_id, sum(coalesce(f.base_quantity, l.requested_base_quantity)) AS amount
+    rows = await conn.fetch('''SELECT l.product_id::text AS product_id,
+        sum(CASE WHEN ae.id IS NOT NULL THEN CASE WHEN ae.created_at>$2 THEN a.base_quantity ELSE 0 END
+            ELSE coalesce(f.base_quantity, l.requested_base_quantity) END) AS amount
         FROM prep_inventory.bulk_request_lines l JOIN prep_inventory.bulk_requests r ON r.id=l.request_id
         LEFT JOIN (prep_inventory.bulk_event_lines f JOIN prep_inventory.bulk_events fe ON fe.id=f.event_id AND fe.action='fulfill')
          ON f.request_id=l.request_id AND f.ordinal=l.ordinal
-        WHERE r.store_id=$1 AND r.kind='spot'
-        AND NOT EXISTS(SELECT 1 FROM prep_inventory.bulk_events e WHERE e.request_id=r.id AND e.action IN ('accept','cancel')) GROUP BY l.product_id''', store)
+        LEFT JOIN (prep_inventory.bulk_event_lines a JOIN prep_inventory.bulk_events ae ON ae.id=a.event_id AND ae.action='accept')
+         ON a.request_id=l.request_id AND a.ordinal=l.ordinal
+        WHERE r.store_id=$1 AND r.kind='spot' AND r.run_date<$3
+        AND NOT EXISTS(SELECT 1 FROM prep_inventory.bulk_events e WHERE e.request_id=r.id AND e.action='cancel') GROUP BY l.product_id''',
+        store, counted_at, next_run)
     return {r['product_id']: r['amount'] for r in rows}
 
 
@@ -130,7 +136,7 @@ async def read(conn, store, night):
     check = None
     if latest and mode == 'daily':
         counted = {str(l['product_id']): l['base_quantity'] for l in latest['lines']}
-        on_way = await incoming(conn, store)
+        on_way = await incoming(conn, store, latest['performed_at'], days_before_next_run(night)[1])
         check = []
         for i in found:
             if i['product_id'] not in counted:

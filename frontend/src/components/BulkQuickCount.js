@@ -79,7 +79,7 @@ export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
       {data.revision > 0 && data.par_mode !== "daily" && <p className="text-sm">The spot-prep check uses daily pars. This store uses weekday / weekend pars, so the count is kept without a check.</p>}
       {data.check && <div aria-label="Spot prep check">
         <p className="text-sm">{data.days_before_next_run.length ? `Days left before the ${weekday(data.next_run)} ${data.next_run} run: ${data.days_before_next_run.map(d => DAYS[d]).join(", ")}.` : `The ${weekday(data.next_run)} ${data.next_run} run covers tomorrow, so no spot prep is needed.`}</p>
-        <div className="overflow-auto"><table className="ops-table"><thead><tr><th>Item</th><th>Needed until the run</th><th>Counted</th><th>Spot requests on the way</th><th>Short</th></tr></thead>
+        <div className="overflow-auto"><table className="ops-table"><thead><tr><th>Item</th><th>Needed until the run</th><th>Counted</th><th>Spot prep since the count</th><th>Short</th></tr></thead>
           <tbody>{data.check.map(c => <tr key={c.product_id}><td>{c.name}</td><td>{amount(c.need_base_quantity, c.base_unit)}</td><td>{c.counted === false ? <strong>Not counted</strong> : amount(c.counted_base_quantity, c.base_unit)}</td><td>{amount(c.incoming_base_quantity, c.base_unit)}</td>
             <td>{Number(c.short_base_quantity) > 0 ? <strong>{amount(c.short_base_quantity, c.base_unit)}</strong> : "—"}</td></tr>)}</tbody></table></div>
         {!!uncounted.length && <p role="alert">Not in this count: {uncounted.map(c => c.name).join(", ")}. Save a corrected count with every item before relying on this check.</p>}
