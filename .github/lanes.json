@@ -1,0 +1,12 @@
+{
+  "_about": "Lane rules for this repo, checked on every pull request by tools/lanes/lane_guard.py (rules: jmax-workspace docs/handoffs/jay-rudd/RULES.md §3b). Jay's and Rudd's code lane is screens only (Jeff 2026-11-04); the server, database, migrations, automation and theme tokens stay with the main build. Only branches matching side_prefix are limited.",
+  "never_merge": "^archive/",
+  "side_prefix": "^side-(jay|rudd)-",
+  "side_branch": "^side-(?P<person>jay|rudd)-(?P<issue>[0-9]+)-[a-z0-9][a-z0-9-]*$",
+  "side_may_change": [
+    "frontend/src/**"
+  ],
+  "side_may_not_change": [
+    "frontend/src/theme/**"
+  ]
+}
