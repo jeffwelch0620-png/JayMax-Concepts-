@@ -55,6 +55,7 @@ For an existing hosted database, compare recorded migration history and object d
 | 45 | [20261102_order_schedule_changes.sql](20261102_order_schedule_changes.sql) |
 | 46 | [20261104_bulk_run_days.sql](20261104_bulk_run_days.sql) |
 | 47 | [20261105_bulk_daily_pars.sql](20261105_bulk_daily_pars.sql) |
+| 48 | [20261105_bulk_quick_counts.sql](20261105_bulk_quick_counts.sql) |
 
 ## Separate manager receiving extension
 
