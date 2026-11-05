@@ -2,10 +2,11 @@ import React,{act} from "react";
 import {createRoot} from "react-dom/client";
 import {PrepPlanning} from "./PrepPlanning";
 import * as api from "../lib/api";
-jest.mock("../lib/api",()=>({prepPlanning:jest.fn(),savePrepPlan:jest.fn()}));
-const body={action:"save",recipe_version_id:"recipe",unit_profile_id:"unit",track:"bulk",schedule:"daily",weekday_par:"2.123456789012",weekend_par:"7",recur_days:[],fixed_quantity:null,note:"Reviewed values",verified:true};
+jest.mock("../lib/api",()=>({prepPlanning:jest.fn(),savePrepPlan:jest.fn(),bulkParMode:jest.fn(),saveBulkParMode:jest.fn()}));
+const body={action:"save",recipe_version_id:"recipe",unit_profile_id:"unit",track:"bulk",schedule:"daily",weekday_par:"2.123456789012",weekend_par:"7",recur_days:[],fixed_quantity:null,daily_pars:null,note:"Reviewed values",verified:true};
 const saved=(revision=1,changes={})=>({...body,id:`plan-${revision}`,product_id:"product",store_id:"berts",revision,active:true,...changes});
 const data={store_id:"berts",products:[{product_id:"product",name:"Invented prep"}],recipes:[{id:"recipe",product_id:"product",product_version_id:"definition",revision:1,reviewNeeded:false}],unitProfiles:[{id:"unit",product_version_id:"definition",source_unit:"lb",base_units_per_source_unit:"1"}],plans:[],legacy_sources:[]};
+const mode=(m="window",missing=[])=>({store_id:"berts",mode:m,revision:m==="daily"?1:0,history:[],missing_daily_pars:missing});
 const ack=(p=saved(),current=p)=>({request_key:"key",plan:p,current_plan:current,replayed:current!==p});
 let root,container,drafts,toast;
 const button=text=>[...container.querySelectorAll("button")].find(b=>b.textContent===text);
@@ -16,7 +17,7 @@ const render=async(rid="berts",key=rid)=>act(async()=>root.render(<PrepPlanning 
 async function prepare(){await set("Planning product","product");await set("Planning recipe","recipe");await set("Planning unit","unit");await set("Planning track","bulk");await set("Planning weekday par","2.123456789012");await set("Planning weekend par","7");await set("Planning edit reason","Reviewed values");await click(input("Verify planning values"));}
 beforeEach(async()=>{
   jest.clearAllMocks();global.IS_REACT_ACT_ENVIRONMENT=true;Object.defineProperty(window,"crypto",{value:{randomUUID:()=>"key"},configurable:true});
-  api.prepPlanning.mockResolvedValue(data);api.savePrepPlan.mockResolvedValue(ack());drafts=new Map();toast=jest.fn();container=document.createElement("div");document.body.appendChild(container);root=createRoot(container);await render();await prepare();
+  api.prepPlanning.mockResolvedValue(data);api.bulkParMode.mockResolvedValue(mode());api.savePrepPlan.mockResolvedValue(ack());drafts=new Map();toast=jest.fn();container=document.createElement("div");document.body.appendChild(container);root=createRoot(container);await render();await prepare();
 });
 afterEach(async()=>{await act(async()=>root.unmount());container.remove();});
 test("save preserves separate exact pars, identities and the observed version",async()=>{
@@ -53,4 +54,25 @@ test("plain decimal spellings match the confirmed quantity without floating poin
 });
 test("an invalid quantity remains in the draft without creating a request",async()=>{
   await set("Planning weekend par","NaN");await click(input("Verify planning values"));await click(button("Save reviewed plan"));expect(api.savePrepPlan).not.toHaveBeenCalled();expect(input("Planning weekend par").value).toBe("NaN");expect(toast).not.toHaveBeenCalled();
+});
+test("seven daily pars save exactly, Monday first, and show each run's total",async()=>{
+  const days=["1","2.5","3","4","0","6.25","7"];for(const [n,d] of ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].entries())await set(`Planning daily par ${d}`,days[n]);
+  expect(input("Planning daily pars").textContent).toContain("Monday run (Mon to Wed): 6.5; Thursday run (Thu to Sun): 17.25");
+  await click(input("Verify planning values"));api.savePrepPlan.mockResolvedValue(ack(saved(1,{daily_pars:["1","2.5","3","4","0","6.25","7"]})));await click(button("Save reviewed plan"));
+  expect(api.savePrepPlan.mock.calls[0][2].daily_pars).toEqual(days);expect(toast).toHaveBeenCalledWith("Prep planning saved.");expect(container.textContent).toContain("Saved daily pars (Mon to Sun): 1, 2.5, 3, 4, 0, 6.25, 7");
+});
+test("daily pars are all seven or none, and only on a to-par Bulk item",async()=>{
+  await set("Planning daily par Mon","1");await click(input("Verify planning values"));await click(button("Save reviewed plan"));
+  expect(api.savePrepPlan).not.toHaveBeenCalled();expect(container.textContent).toContain("Enter all seven daily pars");
+  await set("Planning track","daily");expect(input("Planning daily pars")).toBeNull();await click(input("Verify planning values"));
+  api.savePrepPlan.mockResolvedValue(ack(saved(1,{track:"daily"})));await click(button("Save reviewed plan"));expect(api.savePrepPlan.mock.calls[0][2]).toMatchObject({track:"daily",daily_pars:null});
+});
+test("a store on daily pars requires all seven before saving a to-par Bulk item",async()=>{
+  api.bulkParMode.mockResolvedValue(mode("daily"));await render("berts","daily");await prepare();await click(button("Save reviewed plan"));
+  expect(api.savePrepPlan).not.toHaveBeenCalled();expect(container.textContent).toContain("This store uses daily Bulk pars; enter a par for each day");
+});
+test("a mismatched daily par acknowledgement is not treated as saved",async()=>{
+  for(const d of ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])await set(`Planning daily par ${d}`,"2");await click(input("Verify planning values"));
+  api.savePrepPlan.mockResolvedValue(ack(saved(1,{daily_pars:["2","2","2","2","2","2","3"]})));await click(button("Save reviewed plan"));
+  expect(toast).not.toHaveBeenCalled();expect(button("Retry the same planning save")).toBeDefined();
 });
