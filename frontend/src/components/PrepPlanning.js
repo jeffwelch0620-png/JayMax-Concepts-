@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from "react";
 import * as api from "../lib/api";
-import {useRetainedDraft} from "../lib/saveIntegrity";
+import {saveErrorText,useRetainedDraft} from "../lib/saveIntegrity";
 import {cardCls,inpCls,btnGhost,SectionLabel} from "./common";
 import {BulkParMode} from "./BulkParMode";
 
@@ -48,7 +48,7 @@ function PlanningForm({rid,drafts,showToast=()=>{}}){
       if(rebase)setDraft(previous=>({...previous,version:result.plans.find(p=>p.product_id===previous.product)?.revision||0}));
       setError(rebase?"Version refreshed. Compare your retained entries with the saved plan and verify them before saving.":"");
       if(rebase)setDraft(previous=>({...previous,verified:false}));
-    }catch(e){if(epoch.current===id&&sequence===readSequence.current)setError(e?.response?.data?.detail||e.message||"Prep planning read failed.");}
+    }catch(e){if(epoch.current===id&&sequence===readSequence.current)setError(saveErrorText(e,"Prep planning read failed."));}
     finally{if(epoch.current===id&&sequence===readSequence.current)setReading(false);}
   }
   function choose(product){
@@ -79,7 +79,7 @@ function PlanningForm({rid,drafts,showToast=()=>{}}){
       setData(previous=>({...previous,plans:[...previous.plans.filter(p=>p.product_id!==current.product_id),current]}));
       setDraft(previous=>previous.pending?.key===submitted.key?{...editing(current,submitted.product),entries:previous.entries}:previous);
       showToast(response.replayed?"Prep planning save confirmed; current saved plan displayed.":"Prep planning saved.");
-    }catch(e){if(epoch.current!==id)return;setError(e?.response?.data?.detail||e.message||"Prep planning save was not confirmed.");if([400,403,404,409,422,428].includes(e?.response?.status))setDraft(previous=>({...previous,pending:null,verified:false}));}
+    }catch(e){if(epoch.current!==id)return;setError(saveErrorText(e,"Prep planning save was not confirmed."));if([400,403,404,409,422,428].includes(e?.response?.status))setDraft(previous=>({...previous,pending:null,verified:false}));}
     finally{if(epoch.current===id)setBusy(false);}
   }
   const locked=busy||reading||!!draft.pending,plan=data?.plans.find(p=>p.product_id===draft.product),recipe=data?.recipes.find(r=>r.id===draft.recipe_version_id);

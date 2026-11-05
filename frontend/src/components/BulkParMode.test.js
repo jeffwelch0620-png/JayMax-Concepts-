@@ -52,4 +52,17 @@ test("a replay is confirmed by its own history entry even after the store was sw
 test("a replay whose history entry is another switch is not confirmed",async()=>{
   await render();await note("Invented switch");api.saveBulkParMode.mockResolvedValue(ack("daily",[entry(1,"daily","Someone else's switch")],true));await click(button("Switch to daily pars"));
   expect(toast).not.toHaveBeenCalled();expect(button("Retry the same Bulk par switch")).toBeDefined();
+});test("a stale-version refusal reloads the current setting so the next try uses its version",async()=>{
+  await render();await note("Invented switch");api.bulkParMode.mockResolvedValue(state("daily",[],[entry(1,"daily","Another owner")]));
+  api.saveBulkParMode.mockRejectedValueOnce({response:{status:409,data:{detail:"Bulk par mode changed. Refresh before switching."}}});await click(button("Switch to daily pars"));
+  expect(container.textContent).toContain("Refresh before switching");expect(button("Switch back to weekday / weekend pars")).toBeDefined();
+  await note("Back again");api.saveBulkParMode.mockResolvedValue(ack("window",[entry(1,"daily","Another owner"),entry(2,"window","Back again")]));await click(button("Switch back to weekday / weekend pars"));
+  expect(api.saveBulkParMode.mock.calls[1].slice(1,3)).toEqual([{mode:"window",note:"Back again"},1]);expect(toast).toHaveBeenCalledWith("Bulk par mode switched.");
+});
+test("structured validation errors are shown as text, and refresh rereads the mode",async()=>{
+  await render();await note("Invented switch");
+  api.saveBulkParMode.mockRejectedValueOnce({response:{status:422,data:{detail:[{loc:["body","note"],msg:"String should have at most 2000 characters"}]}}});await click(button("Switch to daily pars"));
+  expect(container.textContent).toContain("note: String should have at most 2000 characters");
+  await note("x".repeat(2001));await click(button("Switch to daily pars"));expect(api.saveBulkParMode).toHaveBeenCalledTimes(1);expect(container.textContent).toContain("2,000 characters or fewer");
+  api.bulkParMode.mockResolvedValue(state("daily",[],[entry(1,"daily")]));await click(button("Refresh Bulk par mode"));expect(onMode).toHaveBeenLastCalledWith("daily");
 });

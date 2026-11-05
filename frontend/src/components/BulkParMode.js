@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from "react";
 import * as api from "../lib/api";
-import {useRetainedDraft} from "../lib/saveIntegrity";
+import {saveErrorText,useRetainedDraft} from "../lib/saveIntegrity";
 import {inpCls,btnGhost} from "./common";
 
 // M2 Bulk daily pars (Jeff 2026-11-04): each store chooses window pars (Monday run = weekday par,
@@ -19,20 +19,22 @@ function ModePanel({rid,drafts,plans="",onMode=()=>{},showToast=()=>{}}){
   const epoch=useRef(0),readSequence=useRef(0);
   useEffect(()=>{epoch.current++;return()=>{epoch.current++;};},[]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{load(epoch.current);},[plans]); // eslint-disable-line react-hooks/exhaustive-deps
-  async function load(id){
+  // keepError: a refused switch reloads the current setting but keeps its explanation on screen.
+  async function load(id,keepError=false){
     const sequence=++readSequence.current;
     try{
       const result=await api.bulkParMode(rid);
       if(epoch.current!==id||sequence!==readSequence.current)return;
       if(result?.store_id!==storeId(rid)||!["window","daily"].includes(result.mode)||!Number.isSafeInteger(result.revision)||!Array.isArray(result.history)||!Array.isArray(result.missing_daily_pars))throw new Error("Bulk par mode read was not confirmed.");
-      setData(result);onMode(result.mode);setError("");
-    }catch(e){if(epoch.current===id&&sequence===readSequence.current)setError(e?.response?.data?.detail||e.message||"Bulk par mode read failed.");}
+      setData(result);onMode(result.mode);if(!keepError)setError("");
+    }catch(e){if(epoch.current===id&&sequence===readSequence.current)setError(saveErrorText(e,"Bulk par mode read failed."));}
   }
   async function change(){
     if(busy||!data)return;
     const id=epoch.current;let submitted=draft.pending;
     if(!submitted){
       if(!draft.note.trim()){setError("Record the reason for switching Bulk pars.");return;}
+      if(draft.note.trim().length>2000){setError("Keep the reason to 2,000 characters or fewer.");return;}
       submitted={key:window.crypto.randomUUID(),version:data.revision,body:{mode:data.mode==="daily"?"window":"daily",note:draft.note.trim()}};
       setDraft(previous=>({...previous,pending:submitted}));
     }
@@ -46,7 +48,13 @@ function ModePanel({rid,drafts,plans="",onMode=()=>{},showToast=()=>{}}){
       setDraft(previous=>previous.pending?.key===submitted.key?blank:previous);
       showToast(response.replayed?(response.mode===submitted.body.mode?"Bulk par mode switch confirmed.":"Your switch was saved, but the store has been switched again since; the current mode is shown."):"Bulk par mode switched.");
       await load(id);
-    }catch(e){if(epoch.current!==id)return;setError(e?.response?.data?.detail||e.message||"Bulk par mode switch was not confirmed.");if([400,403,404,409,422,428].includes(e?.response?.status))setDraft(previous=>({...previous,pending:null}));}
+    }catch(e){
+      if(epoch.current!==id)return;
+      setError(saveErrorText(e,"Bulk par mode switch was not confirmed."));
+      if([400,403,404,409,422,428].includes(e?.response?.status))setDraft(previous=>({...previous,pending:null}));
+      // Someone else switched first: show the current setting and version so the next try uses them.
+      if(e?.response?.status===409)await load(id,true);
+    }
     finally{if(epoch.current===id)setBusy(false);}
   }
   if(!data)return <div aria-label="Bulk par mode"><p>{error||"Bulk par mode awaiting a confirmed read."}</p></div>;
@@ -57,6 +65,7 @@ function ModePanel({rid,drafts,plans="",onMode=()=>{},showToast=()=>{}}){
     {toDaily&&data.missing_daily_pars.length>0&&<p>Before switching to daily pars, enter daily pars for: {data.missing_daily_pars.join(", ")}.</p>}
     <label>Reason for switching<textarea aria-label="Bulk par mode reason" className={inpCls} value={draft.note} disabled={busy||!!draft.pending} onChange={e=>setDraft(previous=>({...previous,note:e.target.value}))}/></label>
     <button className={btnGhost} disabled={busy||blocked} onClick={change}>{draft.pending?"Retry the same Bulk par switch":toDaily?"Switch to daily pars":"Switch back to weekday / weekend pars"}</button>
+    <button className={btnGhost} disabled={busy} onClick={()=>load(epoch.current)}>Refresh Bulk par mode</button>
     <p>Only an owner or admin can switch. Saved Bulk drafts for upcoming runs are flagged for review after a switch.</p>
     {!!data.history.length&&<details><summary>Switch history ({data.history.length})</summary><ul>{[...data.history].reverse().map(h=><li key={h.id}>Version {h.revision}: {h.mode==="daily"?"daily pars":"weekday / weekend pars"}, {h.recorded_at} by {h.actor}. {h.note}</li>)}</ul></details>}
   </div>;
