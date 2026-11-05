@@ -57,6 +57,8 @@ class BulkDailyParDatabaseTests(run_days.BulkRunDayDatabaseTests):
         await super().asyncSetUp()
         async with self.pool.acquire() as c:
             await c.execute((run_days.supply.day.recovery.counts.native.ROOT / MIGRATION).read_text(encoding='utf-8'))
+        # The migration adds planning columns after setup already queried them; drop cached plans.
+        await self.pool.expire_connections()
 
     async def switch(self, mode, version, store='berts'):
         return await self.owner_client.put(f'/api/pg/purchases/{store}/bulk-par-mode', json=dict(mode=mode, note=f'Invented switch to {mode} pars'),

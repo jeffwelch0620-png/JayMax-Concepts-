@@ -106,9 +106,10 @@ async def bulk_par_mode(conn,store):
 
 async def missing_daily_pars(conn,store):
     """Names of active to-par Bulk items at the store that have no daily pars yet."""
-    return [r['name'] for r in await conn.fetch('''SELECT p.name FROM prep_inventory.products p
+    return [r['name'] for r in await conn.fetch('''SELECT n.name FROM prep_inventory.products p
         JOIN LATERAL(SELECT * FROM prep_inventory.planning_versions v WHERE v.product_id=p.id ORDER BY v.revision DESC LIMIT 1) v ON true
-        WHERE p.store_id=$1 AND v.active AND v.track='bulk' AND v.schedule='daily' AND v.daily_pars IS NULL ORDER BY p.name''',store)]
+        JOIN LATERAL(SELECT name FROM prep_inventory.product_versions n WHERE n.product_id=p.id ORDER BY n.revision DESC LIMIT 1) n ON true
+        WHERE p.store_id=$1 AND v.active AND v.track='bulk' AND v.schedule='daily' AND v.daily_pars IS NULL ORDER BY n.name''',store)]
 
 
 async def setup(conn,store):
