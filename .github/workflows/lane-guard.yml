@@ -2,8 +2,9 @@ name: Lane guard
 
 # Keeps Jay's and Rudd's code-lane pull requests (side-jay-*, side-rudd-*) inside their lane
 # (jmax-workspace docs/handoffs/jay-rudd/RULES.md §3b): branch named side-<name>-<issue>-<short-name>,
-# only lane files changed (.github/lanes.json), one open pull request per person. Main-build
-# branches pass. Claims live on the private JMAX Build board, which this public repo's token
+# only lane files changed (.github/lanes.json). Main-build branches pass. Each result depends
+# only on the pull request itself, so it never goes stale; "one open pull request per person" is a
+# warning from the overlap check instead. Claims live on the private JMAX Build board, which this public repo's token
 # can't read, so the issue number is checked for format here and against the board in review.
 # pull_request_target runs this file as it is on main, so a pull request can't edit the check
 # away; it only reads the pull request through the API and never checks out or runs its code.
@@ -34,8 +35,6 @@ jobs:
           # into the lane still counts as changing it.
           gh api --paginate "repos/$REPO/pulls/$PR/files" \
             --jq '.[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/files.txt"
-          gh pr list --repo "$REPO" --state open --limit 100 --json number,headRefName \
-            --jq ".[] | select(.number != $PR) | .headRefName" > "$RUNNER_TEMP/open.txt"
       - name: Check the lane rules
         env:
           HEAD: ${{ github.head_ref }}
@@ -43,5 +42,5 @@ jobs:
         run: |
           if [ ! -f tools/lanes/lane_guard.py ]; then echo "Lane guard isn't on main yet; skipping."; exit 0; fi
           python3 tools/lanes/lane_guard.py check --config .github/lanes.json --branch "$HEAD" \
-            --files "$RUNNER_TEMP/files.txt" --open-branches "$RUNNER_TEMP/open.txt" | tee "$RUNNER_TEMP/result.md"
+            --files "$RUNNER_TEMP/files.txt" | tee "$RUNNER_TEMP/result.md"
           exit "${PIPESTATUS[0]}"

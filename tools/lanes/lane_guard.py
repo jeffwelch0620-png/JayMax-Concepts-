@@ -1,9 +1,10 @@
-"""Lane checks for pull requests (docs/handoffs/jay-rudd/RULES.md).
+"""Lane checks for pull requests (jmax-workspace docs/handoffs/jay-rudd/RULES.md).
 
-check    Fails a Jay or Rudd PR (side-jay-*, side-rudd-*) that is misnamed, changes files outside
-         its lane, or is a second open PR for the same person. Main-build and side-agent
-         (side-<lane>-*) branches pass.
-overlap  Lists other open PRs that change the same files as this one (a warning, never a failure).
+check    Fails a Jay or Rudd PR (side-jay-*, side-rudd-*) that is misnamed or changes files outside
+         its lane, and any PR from an archive/* branch. Depends only on the PR itself, so the
+         result never goes stale. Main-build and side-agent (side-<lane>-*) branches pass.
+overlap  Lists other open PRs that change the same files as this one, and warns when the same
+         person already has another open PR (a warning, never a failure).
 
 Inputs are plain files written by the workflow from `gh`, so the checks can be tested offline.
 """
@@ -14,10 +15,13 @@ import sys
 
 
 def glob_to_regex(pattern):
-    """`**` matches across folders, `*` and `?` stay inside one folder."""
+    """`**/` matches zero or more folders, a trailing `**` anything below; `*` and `?` stay in one folder."""
     out, i = [], 0
     while i < len(pattern):
-        if pattern.startswith("**", i):
+        if pattern.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pattern.startswith("**", i):
             out.append(".*")
             i += 2
         elif pattern[i] == "*":
@@ -37,36 +41,36 @@ def side_person(branch, config):
     return m.group("person") if m else None
 
 
-def check(branch, files, open_branches, config):
+def check(branch, files, config):
     """Returns a list of problems in plain English; empty means the PR may proceed."""
     if re.match(config.get("never_merge", "(?!)"), branch):
         return [f"`{branch}` is an archive branch (saved work from a retired chat, RETIRE-PROMPT.md). "
                 "It is never merged; the main build takes what's needed from it."]
     if not re.match(config["side_prefix"], branch):
         return []
-    m = re.match(config["side_branch"], branch)
-    if not m:
+    if not re.match(config["side_branch"], branch):
         return [f"Branch `{branch}` doesn't follow the side-lane name `side-<jay|rudd>-<issue number>-<short-name>` "
                 "(for example `side-jay-14-station-list`). Claim an issue on the board first and use its number."]
-    problems = []
     allowed = [glob_to_regex(p) for p in config["side_may_change"]]
     blocked = [glob_to_regex(p) for p in config.get("side_may_not_change", [])]
     outside = [f for f in files
                if not any(rx.match(f) for rx in allowed) or any(rx.match(f) for rx in blocked)]
-    if outside:
-        listed = "\n".join(f"- `{f}`" for f in outside)
-        lane = ", ".join(f"`{p}`" for p in config["side_may_change"])
-        if config.get("side_may_not_change"):
-            lane += ", except " + ", ".join(f"`{p}`" for p in config["side_may_not_change"])
-        problems.append(f"These files are outside the side lane ({lane}); hand them to the main build "
-                        f"through a spec instead:\n{listed}")
-    person = m.group("person")
-    others = [b for b in open_branches if b != branch and side_person(b, config) == person]
-    if others:
-        listed = ", ".join(f"`{b}`" for b in others)
-        problems.append(f"{person.capitalize()} already has an open pull request ({listed}). "
-                        "One open pull request per person: finish or close that one first.")
-    return problems
+    if not outside:
+        return []
+    listed = "\n".join(f"- `{f}`" for f in outside)
+    lane = ", ".join(f"`{p}`" for p in config["side_may_change"])
+    if config.get("side_may_not_change"):
+        lane += ", except " + ", ".join(f"`{p}`" for p in config["side_may_not_change"])
+    return [f"These files are outside the side lane ({lane}); hand them to the main build "
+            f"through a spec instead:\n{listed}"]
+
+
+def same_person_open(branch, open_branches, config):
+    """Other open side-lane branches of the same person (one open pull request per person)."""
+    person = side_person(branch, config)
+    if not person:
+        return []
+    return [b for b in open_branches if b != branch and side_person(b, config) == person]
 
 
 def overlap(files, others):
@@ -85,6 +89,11 @@ def read_lines(path):
         return [line.strip() for line in f if line.strip()]
 
 
+def load(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -92,16 +101,16 @@ def main(argv=None):
     c.add_argument("--config", required=True)
     c.add_argument("--branch", required=True)
     c.add_argument("--files", required=True, help="file with one changed path per line")
-    c.add_argument("--open-branches", required=True, help="file with the head branch of each other open PR")
     o = sub.add_parser("overlap")
+    o.add_argument("--config", required=True)
+    o.add_argument("--branch", required=True)
     o.add_argument("--files", required=True)
     o.add_argument("--others", required=True, help='JSON file: [{"number", "branch", "files"}]')
     args = ap.parse_args(argv)
+    config = load(args.config)
 
     if args.cmd == "check":
-        with open(args.config, encoding="utf-8") as f:
-            config = json.load(f)
-        problems = check(args.branch, read_lines(args.files), read_lines(args.open_branches), config)
+        problems = check(args.branch, read_lines(args.files), config)
         if not problems:
             print(f"Lane check passed for `{args.branch}`.")
             return 0
@@ -109,10 +118,14 @@ def main(argv=None):
         print("\n\n".join(problems))
         return 1
 
-    with open(args.others, encoding="utf-8") as f:
-        others = json.load(f)
+    others = load(args.others)
+    mine = same_person_open(args.branch, [pr["branch"] for pr in others], config)
+    if mine:
+        numbers = ", ".join(f"#{pr['number']} (`{pr['branch']}`)" for pr in others if pr["branch"] in mine)
+        print(f"- **One open pull request per person:** {side_person(args.branch, config)} also has {numbers} open. "
+              "Finish or close that one first.")
     for number, branch, shared in overlap(read_lines(args.files), others):
-        print(f"- #{number} (`{branch}`): " + ", ".join(f"`{p}`" for p in shared))
+        print(f"- **Same files as #{number}** (`{branch}`): " + ", ".join(f"`{p}`" for p in shared))
     return 0
 
 
