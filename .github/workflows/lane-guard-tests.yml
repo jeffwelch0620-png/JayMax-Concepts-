@@ -1,8 +1,9 @@
 name: Lane guard tests
 
+# Runs on every pull request (not only when the lane files change), so it can be a required check
+# without leaving screen-only pull requests waiting on a check that never starts.
 on:
   pull_request:
-    paths: ['tools/lanes/**', '.github/lanes.json']
 
 permissions:
   contents: read
