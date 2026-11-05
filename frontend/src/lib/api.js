@@ -80,6 +80,8 @@ export const moveStation = (rid, day, body, key) => axios.post(`${purchaseUrl(ri
 export const setProductStation = (rid, productId, body, key) => axios.put(`${purchaseUrl(rid)}/stations/products/${encodeURIComponent(productId)}`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const prepPlanning = rid => axios.get(`${purchaseUrl(rid)}/prep-planning`).then(r => r.data);
 export const savePrepPlan = (rid, product, body, version, key) => axios.put(`${purchaseUrl(rid)}/prep-planning/${encodeURIComponent(product)}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const bulkParMode = rid => axios.get(`${purchaseUrl(rid)}/bulk-par-mode`).then(r => r.data);
+export const saveBulkParMode = (rid, body, version, key) => axios.put(`${purchaseUrl(rid)}/bulk-par-mode`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const prepBatchesEnabled = prepSetupEnabled && process.env.REACT_APP_PREP_BATCHES === "true";
 export const prepObservationsEnabled = prepBatchesEnabled && process.env.REACT_APP_PREP_OBSERVATIONS === "true";
 export const prepContainersEnabled = prepObservationsEnabled && process.env.REACT_APP_PREP_CONTAINERS === "true";
