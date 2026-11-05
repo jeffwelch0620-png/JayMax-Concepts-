@@ -15,6 +15,7 @@ const detail = e => { const d = e?.response?.data?.detail; return typeof d === "
 const decimal = v => /^\d+(?:\.\d+)?$/.test(String(v).trim());
 const amount = (v, unit) => v == null ? "—" : `${plain(v)} ${unit}`;
 const weekday = iso => DAYS[(new Date(`${iso}T12:00:00Z`).getUTCDay() + 6) % 7];
+const same = (a, b) => [a, b].map(v => plain(v).replace(/^0+(?=\d)/, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")).reduce((x, y) => x === y);
 const nextDay = iso => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
 // Before 6 a.m. a count is still for last night.
 export function countNight(now = new Date()) {
@@ -33,7 +34,8 @@ export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
   function show(d) {
     setData(d);
     const latest = d.counts?.[d.counts.length - 1];
-    setQuantities(Object.fromEntries(d.items.map(i => { const l = latest?.lines?.find(x => x.product_id === i.product_id); return [i.product_id, l ? plain(l.quantity) : ""]; })));
+    // A saved amount is only filled in when the item still counts in the same unit; otherwise count it fresh.
+    setQuantities(Object.fromEntries(d.items.map(i => { const l = latest?.lines?.find(x => x.product_id === i.product_id); return [i.product_id, l && same(l.factor, i.factor) ? plain(l.quantity) : ""]; })));
   }
   useEffect(() => {
     let active = true; setData(null); setError("");

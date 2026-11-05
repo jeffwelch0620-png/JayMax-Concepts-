@@ -103,11 +103,13 @@ async def incoming(conn, store, counted_at, next_run):
     """Base amounts per item that this store's spot requests add after the count: requests needed before
     the next run and not cancelled; the amount asked until the maker signs off, then what it actually
     sent; once accepted, what arrived, but only if it was accepted after the count (earlier deliveries
-    are already in the count)."""
+    are already in the count). Stock the maker holds for this store counts toward its par too, if it
+    was signed off after the count (earlier holdings are in the count's "Held at" zone)."""
     if bulk.MAKERS.get(store) is None or not await bulk.installed(conn): return {}
     rows = await conn.fetch('''SELECT l.product_id::text AS product_id,
         sum(CASE WHEN ae.id IS NOT NULL THEN CASE WHEN ae.created_at>$2 THEN a.base_quantity ELSE 0 END
-            ELSE coalesce(f.base_quantity, l.requested_base_quantity) END) AS amount
+            ELSE coalesce(f.base_quantity, l.requested_base_quantity) END
+          + CASE WHEN fe.created_at>$2 THEN f.held_base_quantity ELSE 0 END) AS amount
         FROM prep_inventory.bulk_request_lines l JOIN prep_inventory.bulk_requests r ON r.id=l.request_id
         LEFT JOIN (prep_inventory.bulk_event_lines f JOIN prep_inventory.bulk_events fe ON fe.id=f.event_id AND fe.action='fulfill')
          ON f.request_id=l.request_id AND f.ordinal=l.ordinal

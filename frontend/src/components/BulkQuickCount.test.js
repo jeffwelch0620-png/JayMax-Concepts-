@@ -7,7 +7,7 @@ import * as api from "../lib/api";
 jest.mock("../lib/api", () => ({ __esModule: true, bulkQuickCount: jest.fn(), saveBulkQuickCount: jest.fn(), bulkSupply: jest.fn(), prepPlanning: jest.fn(), previewBulkRequest: jest.fn(), sendBulkRequest: jest.fn() }));
 const item = { product_id: "ranch", name: "Invented ranch", base_unit: "qt", source_unit: "bucket", factor: "4" };
 const read = (changes = {}) => ({ store_id: "berts", business_date: "2026-10-09", par_mode: "daily", maker_store_id: "rudds", days_before_next_run: [5, 6], next_run: "2026-10-12", revision: 0, items: [item], counts: [], check: null, ...changes });
-const checked = (short = "36", spot = "9") => read({ revision: 1, counts: [{ id: "c1", revision: 1, lines: [{ product_id: "ranch", quantity: "4" }] }],
+const checked = (short = "36", spot = "9") => read({ revision: 1, counts: [{ id: "c1", revision: 1, lines: [{ product_id: "ranch", quantity: "4", factor: "4.000" }] }],
   check: [{ product_id: "ranch", name: "Invented ranch", base_unit: "qt", source_unit: "bucket", need_base_quantity: "52", counted_base_quantity: "16", incoming_base_quantity: "0", short_base_quantity: short, spot_quantity: spot }] });
 let root, container, onSpot;
 beforeEach(() => {
@@ -118,4 +118,10 @@ test("an unresolved count keeps the Bulk panel on its form so the retry key is n
   api.saveBulkQuickCount.mockResolvedValue({ ...checked(), request_key: "stable-key", replayed: true });
   await click(button("Retry the same count"));
   expect(button("Spot request").disabled).toBe(false);
+});
+test("a saved amount in a unit the item no longer uses is left blank to count fresh", async () => {
+  const data = checked(); data.counts[0].lines[0].factor = "1";
+  api.bulkQuickCount.mockResolvedValue(data);
+  await render(<BulkQuickCount rid="berts" onSpot={onSpot} />);
+  expect(field("Quick count Invented ranch").value).toBe("");
 });
