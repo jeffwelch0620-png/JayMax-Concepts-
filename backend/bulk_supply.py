@@ -55,8 +55,9 @@ class RequestIn(mapping.Strict):
     @model_validator(mode='after')
     def by_kind(self):
         if self.kind == 'scheduled':
-            if self.day_group is None or self.count_event_id is None or self.lines:
-                raise ValueError('A scheduled request uses the par group and last night\'s count')
+            # The par group follows the run day (prep_day_tasks.bulk_day_group); the server sets it.
+            if self.count_event_id is None or self.lines:
+                raise ValueError('A scheduled request uses last night\'s count')
         else:
             if self.day_group is not None or self.count_event_id is not None or not self.lines:
                 raise ValueError('A spot request lists the items and amounts needed')
@@ -120,6 +121,10 @@ async def maker_products(conn, maker):
 async def preview(conn, store, body):
     await ready(conn)
     maker = maker_for(store)
+    if body.kind == 'scheduled':
+        group = day_tasks.bulk_day_group(body.run_date)
+        if group is None: raise HTTPException(422, 'Bulk runs are on Monday or Thursday; send a spot request for another day')
+        body.day_group = group  # Monday: weekday par; Thursday: weekend par
     if body.kind == 'scheduled' and await maker_released(conn, maker, body.run_date):
         raise HTTPException(409, "The maker already released this Bulk run; send a spot request instead")
     setup = await planning.setup(conn, store)

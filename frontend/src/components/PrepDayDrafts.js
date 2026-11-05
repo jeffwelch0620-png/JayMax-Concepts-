@@ -3,6 +3,7 @@ import * as api from "../lib/api";
 import {useRetainedDraft} from "../lib/saveIntegrity";
 import {todayISO} from "../lib/calc";
 import {validOverviewDay} from "../lib/managerOverview";
+import {bulkDayGroup,bulkDayGroupLabel} from "../lib/prepTracks";
 import {cardCls,inpCls,btnGhost,SectionLabel} from "./common";
 import {PrepExecution} from "./PrepExecution";
 import {StaffPrepAssignments} from "./StaffPrepTasks";
@@ -53,6 +54,8 @@ function DraftForm({rid,day,track,drafts,showToast}){
   async function preview(){
     if(busy||reading||draft.pending)return;const id=epoch.current;
     const body={...draft.inputs,note:draft.inputs.note.trim(),overrides:draft.inputs.overrides.map(o=>({...o,reason:o.reason.trim(),quantity:o.kind==="omit"?null:decimal(o.quantity)})).sort((a,b)=>a.planning_version_id.localeCompare(b.planning_version_id))};
+    // Bulk: the par group follows the run day, as the server sets it.
+    if(track==="bulk"){if(!bulkDayGroup(day)){setError("Bulk runs are on Monday or Thursday. Choose a Monday or Thursday.");return;}body.day_group=bulkDayGroup(day);}
     if(!body.note||body.overrides.some(o=>!o.reason||(o.kind!=="omit"&&!/^\d+(?:\.\d+)?$/.test(o.quantity)))){setError("Record a draft reason and a reviewed nonnegative decimal quantity/reason for each override.");return;}
     setBusy(true);setError("");
     try{
@@ -88,7 +91,8 @@ function DraftForm({rid,day,track,drafts,showToast}){
   return <div>{error&&<p role="alert">{error}</p>}{!data?<p>Dated planning awaiting a confirmed read.</p>:<>
     <p>Saved draft version {data.current?.revision||0}.{data.current?.source_changed?(released?" Source settings or physical count changed since this released version; manager review required.":" Source settings or physical count changed; preview a new version."):""}</p>
     <fieldset disabled={locked}>
-      <label>Par group<select aria-label="Prep draft par group" className={inpCls} value={draft.inputs.day_group} onChange={e=>change("day_group",e.target.value)}><option value="weekday">Weekday pars</option><option value="weekend">Weekend pars</option></select></label>
+      {track==="bulk"?<p aria-label="Prep draft par group">{bulkDayGroupLabel(day)}</p>
+        :<label>Par group<select aria-label="Prep draft par group" className={inpCls} value={draft.inputs.day_group} onChange={e=>change("day_group",e.target.value)}><option value="weekday">Weekday pars</option><option value="weekend">Weekend pars</option></select></label>}
       <label>Prior-day physical prep count<select aria-label="Prep draft count" className={inpCls} value={draft.inputs.count_event_id||""} onChange={e=>change("count_event_id",e.target.value||null)}><option value="">No count selected; to-par amounts stay unknown</option>{data.counts.map(c=><option key={c.id} value={c.id} disabled={!c.latest}>{c.business_date} · {c.performed_at} · {c.timezone_name}{c.latest?" (latest)":" (older)"}</option>)}</select></label>
       <p>One-day overrides use each standing plan's verified quantity unit. They do not change its usual par or recipe.</p>
       {plans.map(p=>{const o=draft.inputs.overrides.find(row=>row.planning_version_id===p.id),name=data.planning.products.find(v=>v.product_id===p.product_id)?.name||p.product_id,unit=data.planning.unitProfiles.find(u=>u.id===p.unit_profile_id)?.source_unit||"historical unit";
