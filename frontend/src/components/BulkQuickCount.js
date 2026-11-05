@@ -15,7 +15,6 @@ const detail = e => { const d = e?.response?.data?.detail; return typeof d === "
 const decimal = v => /^\d+(?:\.\d+)?$/.test(String(v).trim());
 const amount = (v, unit) => v == null ? "—" : `${plain(v)} ${unit}`;
 const weekday = iso => DAYS[(new Date(`${iso}T12:00:00Z`).getUTCDay() + 6) % 7];
-const same = (a, b) => [a, b].map(v => plain(v).replace(/^0+(?=\d)/, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")).reduce((x, y) => x === y);
 const nextDay = iso => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
 // Before 6 a.m. a count is still for last night.
 export function countNight(now = new Date()) {
@@ -34,8 +33,9 @@ export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
   function show(d) {
     setData(d);
     const latest = d.counts?.[d.counts.length - 1];
-    // A saved amount is only filled in when the item still counts in the same unit; otherwise count it fresh.
-    setQuantities(Object.fromEntries(d.items.map(i => { const l = latest?.lines?.find(x => x.product_id === i.product_id); return [i.product_id, l && same(l.factor, i.factor) ? plain(l.quantity) : ""]; })));
+    // A correction is a full recount: every amount is observed at the new count's time, so nothing is
+    // carried over (the saved amounts are shown beside each item for reference).
+    setQuantities(Object.fromEntries(d.items.map(i => [i.product_id, ""])));
   }
   useEffect(() => {
     let active = true; setData(null); setError("");
@@ -71,6 +71,7 @@ export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
   // Items added to Bulk after this count: a missing count is not zero, so the check is incomplete.
   const uncounted = (data?.check || []).filter(c => c.counted === false);
   const requests = data?.maker_store_id;
+  const saved = Object.fromEntries((data?.counts?.[data.counts.length - 1]?.lines || []).map(l => [l.product_id, l]));
   return <section className={`${cardCls} p-4 space-y-3`} aria-label="Quick Bulk count">
     <h3 className="font-semibold">Quick Bulk count</h3>
     <p className="text-sm text-slate-400">Count only your Bulk items tonight{requests ? ", including your Bulk held at the Bulk kitchen" : ""}. With daily pars, this shows whether a spot prep is needed before the next run. It does not replace the Sunday and Wednesday night counts for the runs.</p>
@@ -80,7 +81,8 @@ export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
       {!data.items.length && <p>No active to-par Bulk items to count here.</p>}
       <fieldset disabled={busy || pending} className="space-y-3">
         <div className="grid md:grid-cols-3 gap-3">{data.items.map(i => <Field key={i.product_id} label={`${i.name} (${i.source_unit})`}>
-          <input aria-label={`Quick count ${i.name}`} inputMode="decimal" className={inpCls} value={quantities[i.product_id] ?? ""} onChange={e => setQuantities(q => ({ ...q, [i.product_id]: e.target.value }))} /></Field>)}</div>
+          <input aria-label={`Quick count ${i.name}`} inputMode="decimal" className={inpCls} value={quantities[i.product_id] ?? ""} onChange={e => setQuantities(q => ({ ...q, [i.product_id]: e.target.value }))} />
+          {saved[i.product_id] && <span className="text-xs text-slate-400">Last saved: {amount(saved[i.product_id].base_quantity, i.base_unit)}</span>}</Field>)}</div>
         <Field label="Note"><input aria-label="Quick count note" className={inpCls} value={note} onChange={e => setNote(e.target.value)} placeholder="Who counted" /></Field>
       </fieldset>
       {!!data.items.length && <button className={btnAcc} disabled={busy || !ready && !pending} onClick={save}>{busy ? "Saving…" : pending ? "Retry the same count" : data.revision ? "Save corrected count" : "Save count"}</button>}
