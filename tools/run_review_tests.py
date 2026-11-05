@@ -175,6 +175,8 @@ DATABASE_CASES = (
  ('order_commands','OrderCalendarTests','test_an_order_keeps_its_delivery_when_the_schedule_changes'),
  ('order_commands','OrderCalendarTests','test_far_ahead_moves_cannot_stack_and_have_a_limit'),
  ('staff_prep_counts','StaffPrepCountsTests','test_review_corrections_count_author_cannot_accept_after_staff_revision'),
+ ('staff_count_drafts','StaffCountDraftTests','test_counter_cannot_accept_their_own_count_when_self_acceptance_is_off'),
+ ('staff_count_drafts','StaffCountDraftTests','test_counter_accepts_their_own_count_when_self_acceptance_is_on'),
  ('staff_prep_production','StaffProductionTests','test_a_signed_in_cook_submits_verified_output_as_themself'),
  ('staff_prep_production','StaffProductionTests','test_shift_leaders_accept_kitchen_managers_send_back_and_reassign'),
  ('staff_prep_production','StaffProductionTests','test_shift_leaders_assign_open_tasks_and_kitchen_managers_reassign'),
@@ -251,6 +253,7 @@ DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name
 # Manager receiving journal: explicit local/CI selection, no hosted configuration.
 OFFLINE_CLASSES += ['manager_handoff::HandoffValidationTests','manager_handoff::HandoffActorTests']
 OFFLINE_CLASSES += ['manager_handoff_install::InstallGuards']
+OFFLINE_CLASSES += ['workflow_integrity::SelfAcceptanceTests']
 OFFLINE_MODULES += ['journal_backup_receipts','hosted_journal_backup']
 OFFLINE_MODULES += ['receiving_install_evidence','receiving_install_coordinator']
 DATABASE_CASES += tuple(('receiving_install_coordinator_pg','TransitionDatabaseTests',name) for name in (
