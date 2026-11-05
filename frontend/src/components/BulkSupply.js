@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { Field, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 import { RESTAURANTS, todayISO } from "../lib/calc";
+import { bulkDayGroup, bulkDayGroupLabel } from "../lib/prepTracks";
 
 // M3 Bulk supply (Jeff 2026-10-29): Bert's Bulk is made at Rudd's from Bert's own goods.
 // Bert's sends its Bulk count as a request (par minus on hand); Rudd's makes it in the Monday
@@ -13,7 +14,6 @@ const detail = e => { const d = e?.response?.data?.detail; return typeof d === "
 const decimal = v => /^\d+(?:\.\d+)?$/.test(String(v).trim());
 // Store ids from the server ("rudds") shown as names ("Rudd's"); the server calls Papa Leoni's "papa".
 export const storeName = id => RESTAURANTS.find(r => r.id === id || (id === "papa" && r.id === "papa_leonis"))?.short || id;
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const amount = (v, unit) => v == null ? "—" : `${Number(v)} ${unit}`;
 const STATUS = { requested: "Waiting for the Bulk kitchen", sent: "Sent; waiting for acceptance", accepted: "Accepted", cancelled: "Cancelled" };
 
@@ -40,7 +40,8 @@ function useSubmit(onDone) {
 }
 
 export function RequestForm({ rid, maker, onSent }) {
-  const [runDate, setRunDate] = useState(() => nextRunDate()), [group, setGroup] = useState("weekday"), [note, setNote] = useState("");
+  const [runDate, setRunDate] = useState(() => nextRunDate()), [note, setNote] = useState("");
+  const group = bulkDayGroup(runDate); // the par group follows the run day, as the server sets it
   const [counts, setCounts] = useState(null), [review, setReview] = useState(null), [checked, setChecked] = useState(false);
   const s = useSubmit(r => { setReview(null); setChecked(false); onSent(r); });
   useEffect(() => {
@@ -52,6 +53,7 @@ export function RequestForm({ rid, maker, onSent }) {
   const body = () => ({ run_date: runDate, kind: "scheduled", day_group: group, count_event_id: latest.id, note: note.trim() });
   async function preview() {
     s.setError(""); s.reset();
+    if (!group) { s.setError("Bulk runs are on Monday or Thursday. Send a spot request for another day."); return; }
     if (!note.trim()) { s.setError("Add a short note (who counted)."); return; }
     try { const b = body(); setReview({ body: b, result: await api.previewBulkRequest(rid, b) }); setChecked(false); }
     catch (e) { s.setError(detail(e)); }
@@ -62,7 +64,7 @@ export function RequestForm({ rid, maker, onSent }) {
     <p className="text-sm text-slate-400">Uses last night's prep count. Each item's request is its Bulk par minus what you counted. One par covers your Bulk wherever it is kept, so your count includes your Bulk held at {storeName(maker)} (the "Held at {storeName(maker)}" zone). Sunday night count is for Monday's run; Wednesday night count is for Thursday's.</p>
     <div className="grid md:grid-cols-3 gap-3">
       <Field label="Bulk run date"><input aria-label="Bulk run date" type="date" className={inpCls} value={runDate} onChange={e => setRunDate(e.target.value)} /></Field>
-      <Field label={`Par group (${DAYS[new Date(`${runDate}T12:00:00Z`).getUTCDay()] || "run"} run)`}><select aria-label="Bulk par group" className={inpCls} value={group} onChange={e => { setGroup(e.target.value); setReview(null); }}><option value="weekday">Weekday pars</option><option value="weekend">Weekend pars</option></select></Field>
+      <Field label="Par group"><p aria-label="Bulk par group">{bulkDayGroupLabel(runDate)}</p></Field>
       <Field label="Note"><input aria-label="Bulk request note" className={inpCls} value={note} onChange={e => { setNote(e.target.value); setReview(null); }} placeholder="e.g. Sunday close, J. Smith" /></Field>
     </div>
     {counts && !latest && <p role="alert">No prep count from the night before {runDate}. Count Bulk items first.</p>}

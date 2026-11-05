@@ -49,13 +49,14 @@ class Override(mapping.Strict):
 
 class DraftIn(mapping.Strict):
     track:prep_tracks.Track
-    day_group:Literal['weekday','weekend']
+    day_group:Literal['weekday','weekend']|None=None  # Bulk: set by the server from the run day (bulk_day_group)
     count_event_id:UUID|None=None
     overrides:list[Override]=Field(default_factory=list,max_length=500)
     note:str=Field(min_length=1,max_length=2000)
 
     @model_validator(mode='after')
     def unique_overrides(self):
+        if self.track!='bulk' and self.day_group is None:raise ValueError('Choose the weekday or weekend par')
         if len({o.planning_version_id for o in self.overrides})!=len(self.overrides):raise ValueError('Override each standing plan once')
         self.overrides.sort(key=lambda o:str(o.planning_version_id))
         return self
@@ -96,6 +97,13 @@ def batch_plan(target_base,carryover_base,incoming_base,batch_base,requested_bas
         return {'need':need,'batches':batches,'planned_base':batches*batch_base}
 
 
+def bulk_day_group(day):
+    """Bulk runs on Monday and Thursday (Jeff 2026-11-04). The Monday run covers Monday to Wednesday and
+    uses the weekday par; the Thursday run covers Thursday to Sunday and uses the weekend par. None on
+    other days. migrations/20261104_bulk_run_days.sql enforces the same."""
+    return {0:'weekday',3:'weekend'}.get(day.weekday())
+
+
 async def requested_for_run(conn,store,day):
     import bulk_supply  # bulk_supply builds on this module
     return await bulk_supply.requested_for_run(conn,store,day)
@@ -110,6 +118,10 @@ def exact_source_quantity(base,factor):
 
 async def preview(conn,store,day,body,expected):
     await ready(conn)
+    if body.track=='bulk':
+        group=bulk_day_group(day)
+        if group is None:raise HTTPException(422,'Bulk runs are on Monday or Thursday')
+        body.day_group=group  # the server picks the par group from the run day, not the manager
     previous=await latest(conn,store,day,body.track)
     if previous and await conn.fetchval("SELECT to_regclass('prep_inventory.execution_events') IS NOT NULL"):
         phase=await conn.fetchval("SELECT action FROM prep_inventory.execution_events WHERE list_id=$1 AND action IN ('release','reopen') ORDER BY revision DESC LIMIT 1",UUID(previous['list_id']))

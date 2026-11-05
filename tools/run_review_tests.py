@@ -16,7 +16,7 @@ OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activat
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('staff_login::StaffLoginModelTests stations::StationModelTests store_transfers::TransferModelTests bulk_supply::BulkModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests order_calendar::OrderCalendarTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('staff_login::StaffLoginModelTests stations::StationModelTests store_transfers::TransferModelTests bulk_supply::BulkModelTests bulk_run_days::BulkRunDayModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests order_calendar::OrderCalendarTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
@@ -50,6 +50,9 @@ DATABASE_CASES = (
  ('bulk_supply','BulkSupplyDatabaseTests','test_sign_off_order_shortfall_and_one_request_per_run'),
  ('bulk_supply','BulkSupplyDatabaseTests','test_database_refuses_a_forged_request_line'),
  ('bulk_supply','BulkSupplyDatabaseTests','test_run_cannot_be_released_while_a_request_is_uncovered'),
+ ('bulk_run_days','BulkRunDayDatabaseTests','test_bulk_runs_only_on_monday_or_thursday_and_spot_requests_any_day'),
+ ('bulk_run_days','BulkRunDayDatabaseTests','test_the_par_group_follows_the_run_day'),
+ ('bulk_run_days','BulkRunDayDatabaseTests','test_database_refuses_another_day_or_the_wrong_par_group'),
  ('prep_count_zones','PrepCountZoneTests','test_zone_count_adds_up_zones_and_keeps_the_breakdown'),
  ('prep_count_zones','PrepCountZoneTests','test_zones_must_match_the_layout'),
  ('prep_count_zones','PrepCountZoneTests','test_layout_places_every_item_and_replays_by_key'),
