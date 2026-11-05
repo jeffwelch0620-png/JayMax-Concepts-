@@ -2,7 +2,7 @@
 import prep_tracks
 import os
 from datetime import date,timedelta
-from decimal import ROUND_CEILING,Decimal,localcontext
+from decimal import ROUND_CEILING,Decimal,Inexact,localcontext
 from typing import Literal
 from uuid import UUID
 from fastapi import Header,HTTPException,Request
@@ -104,6 +104,27 @@ def bulk_day_group(day):
     return {0:'weekday',3:'weekend'}.get(day.weekday())
 
 
+# Days each Bulk run covers, Monday is zero: Monday to Wednesday, and Thursday to Sunday.
+BULK_RUN_DAYS={'weekday':(0,1,2),'weekend':(3,4,5,6)}
+
+
+def bulk_run_target(plan,day,mode):
+    """A Bulk run's target par in the plan's unit (Jeff 2026-11-04). Window mode: the weekday or weekend
+    par by run day. Daily mode: the sum of the daily pars for the days the run covers. None when Bulk does
+    not run that day or the item has no daily pars. migrations/20261105_bulk_daily_pars.sql bulk_run_target
+    is the same; a future par agent changes the pars, never this rule."""
+    group=bulk_day_group(day)
+    if group is None:return None
+    if mode=='daily':
+        pars=plan.get('daily_pars')
+        if not pars:return None
+        # Exact like the SQL numeric sum; the default 28-digit context would round and break the DB check.
+        with localcontext() as ctx:
+            ctx.prec=80;ctx.traps[Inexact]=True
+            return sum((Decimal(pars[d]) for d in BULK_RUN_DAYS[group]),Decimal(0))
+    return Decimal(plan['weekend_par'] if group=='weekend' else plan['weekday_par'])
+
+
 async def requested_for_run(conn,store,day):
     import bulk_supply  # bulk_supply builds on this module
     return await bulk_supply.requested_for_run(conn,store,day)
@@ -141,6 +162,7 @@ async def preview(conn,store,day,body,expected):
         count_lines={str(l['product_id']):dict(l) for l in await conn.fetch('SELECT * FROM prep_inventory.count_observations WHERE event_id=$1',body.count_event_id)}
     recipes={r['id']:r for r in setup['recipes']};profiles={p['id']:p for p in setup['unitProfiles']};products={p['product_id']:p for p in setup['products']}
     requested=await requested_for_run(conn,store,day) if body.track=='bulk' else None
+    par_mode=setup['bulk_par_mode'] if body.track=='bulk' else None
     tasks=[]
     for p in sorted(plans,key=lambda p:p['product_id']):
         override=overrides.get(p['id'])
@@ -157,9 +179,12 @@ async def preview(conn,store,day,body,expected):
         elif mode=='fixed_quantity':
             qty=override.quantity if override else Decimal(p['fixed_quantity']);needed=mapping.times(qty,factor)
         else:
-            target=override.quantity if override else Decimal(p['weekend_par'] if body.day_group=='weekend' else p['weekday_par'])
+            if override:target=override.quantity
+            elif body.track=='bulk':target=bulk_run_target(p,day,par_mode)
+            else:target=Decimal(p['weekend_par'] if body.day_group=='weekend' else p['weekday_par'])
             line=count_lines.get(p['product_id'])
-            if not line:issue='Physical prep count is missing for this product; no zero stock assumed'
+            if target is None:issue='Enter daily pars for this Bulk item; this store uses daily Bulk pars'
+            elif not line:issue='Physical prep count is missing for this product; no zero stock assumed'
             else:
                 # Confirmed incoming supply (I) arrives with store transfers (M3); none is recorded yet.
                 counted=line['base_quantity'];incoming=Decimal(0);batch=Decimal(str(recipe['usable_base_yield']))
@@ -177,6 +202,7 @@ async def preview(conn,store,day,body,expected):
             'planned_quantity':qty,'planned_base_quantity':mapping.times(qty,factor) if qty is not None else None,'issue':issue,
             'override_reason':override.reason if override else None}))
     review=serial({'store_id':store,'prep_date':day,'track':body.track,'base_revision':expected,'inputs':body.model_dump(),
+        **({'par_mode':par_mode} if par_mode else {}),
         'source_scope':sorted(p['id'] for p in plans),'count':count,'tasks':tasks,'status':'draft','execution_ready':False,
         'unresolved_tasks':sum(t['included'] and t['planned_quantity'] is None for t in tasks),
         'requested':requested,
@@ -196,6 +222,8 @@ async def read(conn,store,day,track):
         changed=scope!=review['source_scope'] or (bool(saved_count) and (not available_counts or str(available_counts[0]['id'])!=saved_count))
         scheduled={t['planning_version_id'] for t in review['tasks'] if t['included']}
         if track=='bulk':
+            # The store switched Bulk par mode after this draft was saved.
+            changed=changed or review.get('par_mode','window')!=setup['bulk_par_mode']
             # Another store's Bulk request was sent or cancelled after this draft was saved.
             now=await requested_for_run(conn,store,day)
             changed=changed or ({k:Decimal(v) for k,v in (review.get('requested') or {}).items() if Decimal(v)} if now is not None else None)!=({k:v for k,v in now.items() if v} if now is not None else None)
