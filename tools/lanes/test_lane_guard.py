@@ -26,6 +26,15 @@ class RepoConfig(unittest.TestCase):
         for pattern in config["side_may_change"] + config.get("side_may_not_change", []):
             glob_to_regex(pattern)
 
+    def test_repo_examples_pass_or_are_blocked_as_listed(self):
+        with open(os.path.join(ROOT, ".github", "lanes.json"), encoding="utf-8") as f:
+            config = json.load(f)
+        examples = config.get("examples", {})
+        for path in examples.get("allowed", []):
+            self.assertEqual(check("side-jay-1-example", [path], config), [], path)
+        for path in examples.get("blocked", []):
+            self.assertEqual(len(check("side-jay-1-example", [path], config)), 1, path)
+
 
 class Globs(unittest.TestCase):
     def test_double_star_crosses_folders_single_star_does_not(self):
