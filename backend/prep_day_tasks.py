@@ -2,7 +2,7 @@
 import prep_tracks
 import os
 from datetime import date,timedelta
-from decimal import ROUND_CEILING,Decimal,localcontext
+from decimal import ROUND_CEILING,Decimal,Inexact,localcontext
 from typing import Literal
 from uuid import UUID
 from fastapi import Header,HTTPException,Request
@@ -117,7 +117,11 @@ def bulk_run_target(plan,day,mode):
     if group is None:return None
     if mode=='daily':
         pars=plan.get('daily_pars')
-        return sum((Decimal(pars[d]) for d in BULK_RUN_DAYS[group]),Decimal(0)) if pars else None
+        if not pars:return None
+        # Exact like the SQL numeric sum; the default 28-digit context would round and break the DB check.
+        with localcontext() as ctx:
+            ctx.prec=80;ctx.traps[Inexact]=True
+            return sum((Decimal(pars[d]) for d in BULK_RUN_DAYS[group]),Decimal(0))
     return Decimal(plan['weekend_par'] if group=='weekend' else plan['weekday_par'])
 
 

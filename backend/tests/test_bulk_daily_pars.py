@@ -23,6 +23,9 @@ class BulkDailyParModelTests(unittest.TestCase):
         self.assertEqual([tasks.bulk_run_target(PLAN, d, 'daily') for d in (monday, thursday)], [D(6), D(22)])
         self.assertIsNone(tasks.bulk_run_target(PLAN, tuesday, 'window'))
         self.assertIsNone(tasks.bulk_run_target(PLAN | {'daily_pars': None}, monday, 'daily'))
+        # Summed exactly, as SQL numeric does; Python's default 28 digits would round this.
+        big = PLAN | {'daily_pars': ['9999999999999999.999999999999'] * 7}
+        self.assertEqual(tasks.bulk_run_target(big, monday, 'daily'), D('29999999999999999.999999999997'))
 
     def test_only_to_par_bulk_items_take_seven_daily_pars(self):
         base = dict(action='save', recipe_version_id=uuid4(), unit_profile_id=uuid4(), weekday_par='5', weekend_par='9', note='Invented pars', verified=True)

@@ -134,7 +134,7 @@ END $$;
 CREATE OR REPLACE FUNCTION prep_inventory.guard_day_task() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE parent prep_inventory.day_list_versions; plan prep_inventory.planning_versions; profile prep_inventory.unit_profiles;
  identity prep_inventory.day_lists; override jsonb; included boolean; mode text; target numeric; counted numeric; needed numeric; qty numeric;
- batch numeric; batches numeric; incoming numeric; requested numeric;
+ batch numeric; batches numeric; incoming numeric; requested numeric; shown_count numeric;
 BEGIN
  SELECT * INTO parent FROM prep_inventory.day_list_versions WHERE id=NEW.version_id;
  IF parent.created_xid<>pg_current_xact_id() THEN RAISE EXCEPTION 'Committed dated draft cannot acquire new tasks'; END IF;
@@ -190,9 +190,11 @@ BEGIN
    THEN RAISE EXCEPTION 'To-par task must plan the fewest whole recipe batches covering its measured deficit'; END IF;
   ELSIF NEW.planned_quantity IS NOT NULL THEN RAISE EXCEPTION 'Missing physical count cannot be treated as zero stock'; END IF;
  END IF;
+ -- A to-par item with no target shows no count; computed here because PL/pgSQL ends an IF test at its first THEN.
+ shown_count:=CASE WHEN target IS NOT NULL OR mode<>'target_par' THEN counted END;
  IF (mode IN ('fixed_quantity','omit') AND NEW.planned_quantity IS DISTINCT FROM qty)
  OR (NEW.task_snapshot->>'target_par')::numeric IS DISTINCT FROM target
- OR (NEW.task_snapshot->>'counted_base_quantity')::numeric IS DISTINCT FROM CASE WHEN target IS NOT NULL OR mode<>'target_par' THEN counted END
+ OR (NEW.task_snapshot->>'counted_base_quantity')::numeric IS DISTINCT FROM shown_count
  OR (NEW.task_snapshot->>'needed_base_quantity')::numeric IS DISTINCT FROM needed
  OR (NEW.planned_quantity IS NULL AND coalesce(length(btrim(NEW.task_snapshot->>'issue')),0)=0)
  THEN RAISE EXCEPTION 'Task calculation needs matching measured or explicitly overridden evidence'; END IF;
