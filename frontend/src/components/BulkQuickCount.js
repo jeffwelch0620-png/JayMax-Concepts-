@@ -55,8 +55,15 @@ export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
     } catch (e) {
       if ([400, 403, 404, 409, 422, 428].includes(e?.response?.status)) { attempt.current = null; setPending(false); }
       setError(detail(e));
-      // Someone else saved this night's count first: reload it (keeping what was typed) so a correction uses its version.
-      if (e?.response?.status === 409) { try { setData(await api.bulkQuickCount(rid, night)); } catch { /* the refusal stays shown */ } }
+      // Someone else saved this night's count first, or an item's unit changed: reload, keeping what was
+      // typed except amounts whose unit changed, which must be counted again in the new unit.
+      if (e?.response?.status === 409) {
+        try {
+          const fresh = await api.bulkQuickCount(rid, night), before = Object.fromEntries((data?.items || []).map(i => [i.product_id, i.profile_id]));
+          setQuantities(q => Object.fromEntries(fresh.items.map(i => [i.product_id, before[i.product_id] === i.profile_id ? q[i.product_id] ?? "" : ""])));
+          setData(fresh);
+        } catch { /* the refusal stays shown */ }
+      }
     }
     finally { setBusy(false); }
   }

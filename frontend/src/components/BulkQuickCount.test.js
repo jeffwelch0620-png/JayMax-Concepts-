@@ -125,3 +125,14 @@ test("a saved amount in a unit the item no longer uses is left blank to count fr
   await render(<BulkQuickCount rid="berts" onSpot={onSpot} />);
   expect(field("Quick count Invented ranch").value).toBe("");
 });
+test("after a unit-change refusal, amounts entered in the old unit are cleared to count again", async () => {
+  api.bulkQuickCount.mockResolvedValue(read());
+  await render(<BulkQuickCount rid="berts" onSpot={onSpot} />); await input("Quick count night", "2026-10-09");
+  await input("Quick count Invented ranch", "2"); await input("Quick count note", "Invented closer");
+  api.bulkQuickCount.mockResolvedValue(read({ items: [{ ...item, profile_id: "u-quart", source_unit: "quart", factor: "1" }] }));
+  api.saveBulkQuickCount.mockRejectedValueOnce({ response: { status: 409, data: { detail: "The counting unit changed for: Invented ranch." } } });
+  await click(button("Save count"));
+  expect(container.textContent).toContain("counting unit changed");
+  expect(field("Quick count Invented ranch").value).toBe("");
+  expect(button("Save count").disabled).toBe(true);
+});
