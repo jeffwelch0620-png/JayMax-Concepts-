@@ -85,6 +85,13 @@ export function SpotForm({ rid, items, onSent, onPending = () => {}, initial = n
   const s = useSubmit(r => { setRows([{ product_id: "", quantity: "", reason: "" }]); setNote(""); onSent(r); });
   // Inputs stay frozen while a send is unresolved, so a retry replays it rather than sending twice.
   const edit = (i, patch) => setRows(x => x.map((r, n) => n === i ? { ...r, ...patch } : r));
+  // A suggested amount is in the unit the check used; if the item's unit changed since, count it again.
+  useEffect(() => {
+    const moved = rows.filter(r => r.profile_id && items.some(i => i.product_id === r.product_id && i.profile !== r.profile_id));
+    if (!moved.length) return;
+    setRows(x => x.map(r => moved.includes(r) ? { ...r, quantity: "", profile_id: undefined } : r));
+    s.setError(`The unit changed for ${moved.map(r => items.find(i => i.product_id === r.product_id).name).join(", ")} since the check; enter the amount again in the current unit.`);
+  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
   const ready = note.trim() && rows.every(r => r.product_id && decimal(r.quantity) && Number(r.quantity) > 0 && r.reason.trim());
   // The form can't be hidden while a send is unresolved, which would drop the retry's request key.
   const unresolved = s.busy || s.pending();
@@ -169,7 +176,7 @@ export function BulkSupply({ rid }) {
     api.prepPlanning(rid).then(p => {
       if (!active) return;
       const names = Object.fromEntries((p.products || []).map(v => [v.product_id, v.name])), units = Object.fromEntries((p.unitProfiles || []).map(u => [u.id, u.source_unit]));
-      setItems((p.plans || []).filter(x => x.active && x.track === "bulk").map(x => ({ product_id: x.product_id, name: names[x.product_id] || x.product_id, unit: units[x.unit_profile_id] || "" })));
+      setItems((p.plans || []).filter(x => x.active && x.track === "bulk").map(x => ({ product_id: x.product_id, name: names[x.product_id] || x.product_id, unit: units[x.unit_profile_id] || "", profile: x.unit_profile_id })));
     }).catch(() => {});
     return () => { active = false; };
   }, [rid, form]);

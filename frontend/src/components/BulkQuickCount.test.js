@@ -34,7 +34,7 @@ test("a quick count sends every Bulk item with the night, version and one key, t
   expect(container.textContent).toContain("Days left before the Mon 2026-10-12 run: Sat, Sun.");
   expect(container.textContent).toContain("36 qt");
   await click(button("Fill in a spot request for review"));
-  expect(onSpot).toHaveBeenCalledWith([{ product_id: "ranch", quantity: "9", reason: "Quick count 2026-10-09: short before the 2026-10-12 run" }], "2026-10-10");
+  expect(onSpot).toHaveBeenCalledWith([{ product_id: "ranch", profile_id: "u-ranch", quantity: "9", reason: "Quick count 2026-10-09: short before the 2026-10-12 run" }], "2026-10-10");
 });
 
 test("a lost response keeps the exact count for retry, and a refusal releases it", async () => {
@@ -71,7 +71,7 @@ test("weekday / weekend pars keep the count without a check, and no shortfall ne
 
 test("the spot request form opens filled in from the check, for review before sending", async () => {
   api.bulkSupply.mockResolvedValue({ store_id: "berts", maker_store_id: "rudds", makes_for: [], requests: [], open_shortfalls: [] });
-  api.prepPlanning.mockResolvedValue({ products: [{ product_id: "ranch", name: "Invented ranch" }], unitProfiles: [{ id: "u", source_unit: "bucket" }], plans: [{ product_id: "ranch", active: true, track: "bulk", unit_profile_id: "u" }] });
+  api.prepPlanning.mockResolvedValue({ products: [{ product_id: "ranch", name: "Invented ranch" }], unitProfiles: [{ id: "u-ranch", source_unit: "bucket" }], plans: [{ product_id: "ranch", active: true, track: "bulk", unit_profile_id: "u-ranch" }] });
   api.bulkQuickCount.mockResolvedValue(checked());
   await render(<BulkSupply rid="berts" />);
   await click(button("Quick Bulk count")); await input("Quick count night", "2026-10-09");
@@ -135,4 +135,14 @@ test("after a unit-change refusal, amounts entered in the old unit are cleared t
   expect(container.textContent).toContain("counting unit changed");
   expect(field("Quick count Invented ranch").value).toBe("");
   expect(button("Save count").disabled).toBe(true);
+});
+test("a suggested spot amount is cleared if the item's unit changed since the check", async () => {
+  api.bulkSupply.mockResolvedValue({ store_id: "berts", maker_store_id: "rudds", makes_for: [], requests: [], open_shortfalls: [] });
+  api.prepPlanning.mockResolvedValue({ products: [{ product_id: "ranch", name: "Invented ranch" }], unitProfiles: [{ id: "u-quart", source_unit: "quart" }], plans: [{ product_id: "ranch", active: true, track: "bulk", unit_profile_id: "u-quart" }] });
+  api.bulkQuickCount.mockResolvedValue(checked());
+  await render(<BulkSupply rid="berts" />);
+  await click(button("Quick Bulk count")); await input("Quick count night", "2026-10-09");
+  await click(button("Fill in a spot request for review"));
+  expect(field("Spot amount 1").value).toBe("");
+  expect(container.textContent).toContain("The unit changed for Invented ranch since the check");
 });

@@ -93,7 +93,7 @@ export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
             <td>{Number(c.short_base_quantity) > 0 ? <strong>{amount(c.short_base_quantity, c.base_unit)}</strong> : "—"}</td></tr>)}</tbody></table></div>
         {!!uncounted.length && <p role="alert">Not in this count: {uncounted.map(c => c.name).join(", ")}. Save a corrected count with every item before relying on this check.</p>}
         {!short.length ? !uncounted.length && <p>No spot prep needed before the next run.</p> : requests
-          ? <button className={btnGhost} onClick={() => onSpot(short.map(c => ({ product_id: c.product_id, quantity: plain(c.spot_quantity), reason: `Quick count ${night}: short before the ${data.next_run} run` })), nextDay(night))}>Fill in a spot request for review</button>
+          ? <button className={btnGhost} onClick={() => onSpot(short.map(c => ({ product_id: c.product_id, profile_id: data.items.find(i => i.product_id === c.product_id)?.profile_id, quantity: plain(c.spot_quantity), reason: `Quick count ${night}: short before the ${data.next_run} run` })), nextDay(night))}>Fill in a spot request for review</button>
           : <p><strong>Spot prep needed before the {weekday(data.next_run)} run:</strong> {short.map(c => `${c.name} ${plain(c.spot_quantity)} ${c.source_unit}`).join(", ")}.</p>}
       </div>}
     </>}
