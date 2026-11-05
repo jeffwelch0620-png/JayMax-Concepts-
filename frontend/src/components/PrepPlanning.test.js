@@ -1,6 +1,6 @@
 import React,{act} from "react";
 import {createRoot} from "react-dom/client";
-import {PrepPlanning} from "./PrepPlanning";
+import {PrepPlanning,plain} from "./PrepPlanning";
 import * as api from "../lib/api";
 jest.mock("../lib/api",()=>({prepPlanning:jest.fn(),savePrepPlan:jest.fn(),bulkParMode:jest.fn(),saveBulkParMode:jest.fn()}));
 const body={action:"save",recipe_version_id:"recipe",unit_profile_id:"unit",track:"bulk",schedule:"daily",weekday_par:"2.123456789012",weekend_par:"7",recur_days:[],fixed_quantity:null,daily_pars:null,note:"Reviewed values",verified:true};
@@ -75,4 +75,10 @@ test("a mismatched daily par acknowledgement is not treated as saved",async()=>{
   for(const d of ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])await set(`Planning daily par ${d}`,"2");await click(input("Verify planning values"));
   api.savePrepPlan.mockResolvedValue(ack(saved(1,{daily_pars:["2","2","2","2","2","2","3"]})));await click(button("Save reviewed plan"));
   expect(toast).not.toHaveBeenCalled();expect(button("Retry the same planning save")).toBeDefined();
+});
+test("exponent-form decimals from the server are spelled out exactly",async()=>{
+  expect([plain("1E-7"),plain("1.5E+3"),plain("2.50E-1"),plain("12E+0"),plain("3.25")]).toEqual(["0.0000001","1500","0.250","12","3.25"]);
+  for(const d of ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])await set(`Planning daily par ${d}`,"0.0000001");await click(input("Verify planning values"));
+  api.savePrepPlan.mockResolvedValue(ack(saved(1,{daily_pars:Array(7).fill("1E-7")})));await click(button("Save reviewed plan"));
+  expect(toast).toHaveBeenCalledWith("Prep planning saved.");expect(input("Planning daily par Mon").value).toBe("0.0000001");expect(container.textContent).toContain("Saved daily pars (Mon to Sun): 0.0000001,");
 });

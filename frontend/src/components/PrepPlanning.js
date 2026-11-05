@@ -9,7 +9,14 @@ const blank={product:"",recipe_version_id:"",unit_profile_id:"",track:"daily",sc
 const fields=["recipe_version_id","unit_profile_id","track","schedule","weekday_par","weekend_par","recur_days","fixed_quantity","daily_pars"];
 const storeId=rid=>rid==="papa_leonis"?"papa":rid;
 const QUANTITY=/^\+?(?:\d+(?:\.\d*)?|\.\d+)$/;
-const decimal=value=>String(value).trim().replace(/^\+/,"").replace(/^\./,"0.").replace(/^0+(?=\d)/,"").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/,"");
+// The server writes some decimals in exponent form ("1E-7"); spell them out exactly, without floating point.
+export function plain(value){
+  const m=/^\+?(\d+)(?:\.(\d*))?[eE]([+-]?\d+)$/.exec(String(value).trim());
+  if(!m)return String(value).trim();
+  const digits=m[1]+(m[2]||""),point=m[1].length+Number(m[3]);
+  return point<=0?`0.${"0".repeat(-point)}${digits}`:point>=digits.length?digits+"0".repeat(point-digits.length):`${digits.slice(0,point)}.${digits.slice(point)}`;
+}
+const decimal=value=>plain(value).replace(/^\+/,"").replace(/^\./,"0.").replace(/^0+(?=\d)/,"").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/,"");
 const sameList=(a,b)=>(a??null)===null||(b??null)===null?(a??null)===(b??null):a.length===b.length&&a.every((v,n)=>decimal(v)===decimal(b[n]));
 const equal=(a,b,k)=>k==="recur_days"?JSON.stringify(a)===JSON.stringify(b):k==="daily_pars"?sameList(a,b):["weekday_par","weekend_par","fixed_quantity"].includes(k)?(a==null||b==null?a===b:decimal(a)===decimal(b)):a===b;
 // Exact decimal sum of plain decimal strings (no floating point), for showing a run's daily-par target.
@@ -21,7 +28,10 @@ export function sumDecimals(values){
 // Each Bulk run covers these days (Monday first): backend/prep_day_tasks.py BULK_RUN_DAYS.
 const RUNS=[["Monday run (Mon to Wed)",[0,1,2]],["Thursday run (Thu to Sun)",[3,4,5,6]]];
 const bulkToPar=d=>d.track==="bulk"&&d.schedule==="daily";
-function editing(plan,product){return {...blank,product,...(plan?Object.fromEntries(fields.map(k=>[k,plan[k]??""])):{}),note:"",fixed_quantity:plan?.fixed_quantity??"",daily_pars:plan?.daily_pars?plan.daily_pars.map(String):noDailyPars(),version:plan?.revision||0,verified:false};}
+function editing(plan,product){
+  const quantities=plan?{weekday_par:plain(plan.weekday_par??""),weekend_par:plain(plan.weekend_par??""),fixed_quantity:plan.fixed_quantity==null?"":plain(plan.fixed_quantity)}:{};
+  return {...blank,product,...(plan?Object.fromEntries(fields.map(k=>[k,plan[k]??""])):{}),...quantities,note:"",daily_pars:plan?.daily_pars?plan.daily_pars.map(plain):noDailyPars(),version:plan?.revision||0,verified:false};
+}
 export function PrepPlanning(props){return <PlanningForm key={props.rid} {...props}/>;}
 function PlanningForm({rid,drafts,showToast=()=>{}}){
   const [data,setData]=useState(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[reading,setReading]=useState(false),[parMode,setParMode]=useState(null);
@@ -81,7 +91,7 @@ function PlanningForm({rid,drafts,showToast=()=>{}}){
       <BulkParMode rid={rid} drafts={drafts} showToast={showToast} onMode={setParMode} plans={data.plans.map(p=>p.id).sort().join(",")}/>
       <label>Prepared product<select aria-label="Planning product" className={inpCls} value={draft.product} disabled={locked} onChange={e=>choose(e.target.value)}><option value="">Choose prepared product</option>{data.products.map(p=><option key={p.product_id} value={p.product_id}>{p.name}</option>)}</select></label>
       {draft.product&&<>
-        <p>Saved version {plan?.revision||0}: {plan?plan.active?"active":"retired":"no plan"}. Saved weekday / weekend par: {plan?`${plan.weekday_par} / ${plan.weekend_par}`:"none"}.{plan?.daily_pars?` Saved daily pars (Mon to Sun): ${plan.daily_pars.join(", ")}.`:""}{plan?.reviewNeeded?" Definition changed; planning needs review.":""}</p>
+        <p>Saved version {plan?.revision||0}: {plan?plan.active?"active":"retired":"no plan"}. Saved weekday / weekend par: {plan?`${plan.weekday_par} / ${plan.weekend_par}`:"none"}.{plan?.daily_pars?` Saved daily pars (Mon to Sun): ${plan.daily_pars.map(plain).join(", ")}.`:""}{plan?.reviewNeeded?" Definition changed; planning needs review.":""}</p>
         <fieldset disabled={locked}>
           <label>Recipe<select aria-label="Planning recipe" className={inpCls} value={draft.recipe_version_id} onChange={e=>{change("recipe_version_id",e.target.value);change("unit_profile_id","");}}><option value="">Choose reviewed recipe</option>{data.recipes.filter(r=>r.product_id===draft.product).map(r=><option key={r.id} value={r.id} disabled={r.reviewNeeded}>Recipe version {r.revision}{r.reviewNeeded?" (review required)":""}</option>)}</select></label>
           <label>Quantity unit<select aria-label="Planning unit" className={inpCls} value={draft.unit_profile_id} onChange={e=>change("unit_profile_id",e.target.value)}><option value="">Choose verified unit</option>{data.unitProfiles.filter(p=>p.product_version_id===recipe?.product_version_id).map(p=><option key={p.id} value={p.id}>{p.source_unit} ({p.base_units_per_source_unit} base units)</option>)}</select></label>

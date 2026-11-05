@@ -40,9 +40,11 @@ function ModePanel({rid,drafts,plans="",onMode=()=>{},showToast=()=>{}}){
     try{
       const response=await api.saveBulkParMode(rid,submitted.body,submitted.version,submitted.key);
       if(epoch.current!==id)return;
-      if(response?.request_key!==submitted.key||response.mode!==submitted.body.mode||!Number.isSafeInteger(response.revision)||response.revision<submitted.version+1||!Array.isArray(response.history))throw new Error("Bulk par mode switch was not confirmed. The exact request is retained for retry.");
+      // Confirmed by the switch's own history entry: on a replay the store may have been switched again since.
+      const own=Array.isArray(response?.history)&&response.history.find(h=>h.revision===submitted.version+1);
+      if(response?.request_key!==submitted.key||!own||own.mode!==submitted.body.mode||own.note!==submitted.body.note||!Number.isSafeInteger(response.revision)||response.revision<own.revision||(!response.replayed&&(response.mode!==submitted.body.mode||response.revision!==own.revision)))throw new Error("Bulk par mode switch was not confirmed. The exact request is retained for retry.");
       setDraft(previous=>previous.pending?.key===submitted.key?blank:previous);
-      showToast(response.replayed?"Bulk par mode switch confirmed.":"Bulk par mode switched.");
+      showToast(response.replayed?(response.mode===submitted.body.mode?"Bulk par mode switch confirmed.":"Your switch was saved, but the store has been switched again since; the current mode is shown."):"Bulk par mode switched.");
       await load(id);
     }catch(e){if(epoch.current!==id)return;setError(e?.response?.data?.detail||e.message||"Bulk par mode switch was not confirmed.");if([400,403,404,409,422,428].includes(e?.response?.status))setDraft(previous=>({...previous,pending:null}));}
     finally{if(epoch.current===id)setBusy(false);}

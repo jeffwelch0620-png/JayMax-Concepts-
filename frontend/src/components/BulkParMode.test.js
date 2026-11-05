@@ -3,9 +3,9 @@ import {createRoot} from "react-dom/client";
 import {BulkParMode} from "./BulkParMode";
 import * as api from "../lib/api";
 jest.mock("../lib/api",()=>({bulkParMode:jest.fn(),saveBulkParMode:jest.fn()}));
-const entry=(revision,mode)=>({id:`mode-${revision}`,store_id:"berts",revision,mode,note:"Invented reason",actor:"owner",recorded_at:"2026-11-05T10:00:00-05:00"});
+const entry=(revision,mode,note="Invented switch")=>({id:`mode-${revision}`,store_id:"berts",revision,mode,note,actor:"owner",recorded_at:"2026-11-05T10:00:00-05:00"});
 const state=(mode="window",missing=[],history=[])=>({store_id:"berts",mode,revision:history.length,history,missing_daily_pars:missing});
-const ack=(mode="daily",history=[entry(1,"daily")])=>({request_key:"key",mode,revision:history.length,history,replayed:false});
+const ack=(mode="daily",history=[entry(1,"daily")],replayed=false)=>({request_key:"key",mode,revision:history.length,history,replayed});
 let root,container,drafts,toast,onMode;
 const button=text=>[...container.querySelectorAll("button")].find(b=>b.textContent===text);
 const input=label=>container.querySelector(`[aria-label="${label}"]`);
@@ -41,4 +41,15 @@ test("a refusal clears the pending switch and a mismatched acknowledgement is no
 });
 test("a read for another store is not shown",async()=>{
   api.bulkParMode.mockResolvedValue({...state(),store_id:"rudds"});await render();expect(container.textContent).toContain("Bulk par mode read was not confirmed.");expect(onMode).not.toHaveBeenCalled();
+});
+test("a replay is confirmed by its own history entry even after the store was switched back",async()=>{
+  await render();await note("Invented switch");api.saveBulkParMode.mockRejectedValueOnce(new Error("Lost response"));await click(button("Switch to daily pars"));
+  api.saveBulkParMode.mockResolvedValue(ack("window",[entry(1,"daily"),entry(2,"window","Another owner switched back")],true));api.bulkParMode.mockResolvedValue(state("window",[],[entry(1,"daily"),entry(2,"window","Another owner switched back")]));
+  await click(button("Retry the same Bulk par switch"));
+  expect(toast).toHaveBeenCalledWith("Your switch was saved, but the store has been switched again since; the current mode is shown.");
+  expect(button("Switch to daily pars")).toBeDefined();expect(input("Bulk par mode reason").disabled).toBe(false);
+});
+test("a replay whose history entry is another switch is not confirmed",async()=>{
+  await render();await note("Invented switch");api.saveBulkParMode.mockResolvedValue(ack("daily",[entry(1,"daily","Someone else's switch")],true));await click(button("Switch to daily pars"));
+  expect(toast).not.toHaveBeenCalled();expect(button("Retry the same Bulk par switch")).toBeDefined();
 });
