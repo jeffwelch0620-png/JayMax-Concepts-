@@ -153,6 +153,27 @@ class StaffCountDraftTests(unittest.IsolatedAsyncioTestCase):
             await conn.execute('DROP TRIGGER synthetic_failure ON actual_inventory.staff_decisions; DROP FUNCTION public.synthetic_fail_decision()')
         self.assertEqual((await self.decision(review,key=key))[0].status_code,200)
 
+    async def test_counter_cannot_accept_their_own_count(self):
+        # Jeff 2026-11-05 (EP-07): a manager who submitted a revision through the staff route never accepts it.
+        issued=(await self.issue())[0].json()
+        body={'expected_review_hash':issued['reviewHash'],'counter_name':'Invented owner counting','note':'Measured by the owner',
+              'lines':[{'item_code':'test_food','counted_quantity':'3'}]}
+        saved=await self.real.post(f"/api/pg/staff/berts/count-drafts/{issued['sheet']['id']}/submit",json=body,headers={'Idempotency-Key':str(uuid4())})
+        self.assertEqual(saved.status_code,200,saved.text)
+        review=saved.json()['review']; self.assertEqual(review['latest']['submitted_by'],'invented-owner')
+        own,_=await self.decision(review)
+        self.assertEqual(own.status_code,403,own.text)
+        async with self.pool.acquire() as conn:
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM actual_inventory.staff_decisions'),0)
+            self.assertEqual(await conn.fetchval('SELECT count(*) FROM actual_inventory.count_snapshots'),0)
+        other=self.server._token({'id':'invented-second-owner','email':'second@example.invalid','role':'owner','locations':[]})
+        payload={'expected_review_hash':review['reviewHash'],'decision':'accepted','quantities_reviewed':True,'note':'Independent review',
+                 'values':[{'item_code':'test_food','inventory_value':'45.00','confirmed':True,'note':'Invented explicit total inventory value'}]}
+        accepted=await self.pin_client.post(f"/api/pg/actual-inventory/berts/staff-sheets/{review['sheet']['id']}/decision",json=payload,
+                                            headers={'Authorization':'Bearer '+other,'Idempotency-Key':str(uuid4())})
+        self.assertEqual(accepted.status_code,200,accepted.text)
+        self.assertEqual(accepted.json()['count']['header']['counted_by'],'invented-second-owner')
+
     async def test_real_authorization_locations_and_disabled_flags(self):
         review=(await self.issue())[0].json()
         for pin in ('','bad','7193'):
