@@ -11,7 +11,7 @@ import actual_inventory_api as actual
 from native_units import profiles
 from purchase_api import serial
 from purchase_parser import fingerprint
-from workflow_integrity import require_independent
+from workflow_integrity import require_independent_staff_work
 
 
 class NoteModel(actual.StrictModel):
@@ -227,8 +227,8 @@ async def decide(pool, store, sheet_id, actor, body, key):
         snapshot_id = None
         if body.decision == 'accepted':
             check_current(review, body.expected_review_hash)
-            # Nobody accepts their own count (Jeff 2026-11-05, EP-07), as for prep counts and cook output.
-            require_independent(actor, [row['submitted_by'] for row in review['history']])
+            # The same self-acceptance rule as prep counts and cook output (Jeff 2026-11-05, EP-07).
+            require_independent_staff_work(actor, [row['submitted_by'] for row in review['history']])
             if not body.quantities_reviewed or not review['latest']: raise HTTPException(422, 'Review the submitted physical quantities before accepting')
             quantities = {r['item_code']:r for r in review['latest']['quantities']}
             items = review['sheet']['sheet_snapshot']['items']
