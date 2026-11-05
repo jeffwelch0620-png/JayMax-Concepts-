@@ -3,6 +3,7 @@ import * as api from "../lib/api";
 import { Field, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 import { RESTAURANTS, todayISO } from "../lib/calc";
 import { bulkDayGroup, bulkDayGroupLabel } from "../lib/prepTracks";
+import { BulkQuickCount } from "./BulkQuickCount";
 
 // M3 Bulk supply (Jeff 2026-10-29): Bert's Bulk is made at Rudd's from Bert's own goods.
 // Bert's sends its Bulk count as a request (par minus on hand); Rudd's makes it in the Monday
@@ -78,11 +79,19 @@ export function RequestForm({ rid, maker, onSent }) {
   </section>;
 }
 
-export function SpotForm({ rid, items, onSent, onPending = () => {} }) {
-  const [rows, setRows] = useState([{ product_id: "", quantity: "", reason: "" }]), [note, setNote] = useState(""), [runDate, setRunDate] = useState(todayISO());
+// initial: rows and a needed-by date filled in from the quick Bulk count's spot-prep check, for review.
+export function SpotForm({ rid, items, onSent, onPending = () => {}, initial = null }) {
+  const [rows, setRows] = useState(() => initial?.rows || [{ product_id: "", quantity: "", reason: "" }]), [note, setNote] = useState(""), [runDate, setRunDate] = useState(() => initial?.runDate || todayISO());
   const s = useSubmit(r => { setRows([{ product_id: "", quantity: "", reason: "" }]); setNote(""); onSent(r); });
   // Inputs stay frozen while a send is unresolved, so a retry replays it rather than sending twice.
   const edit = (i, patch) => setRows(x => x.map((r, n) => n === i ? { ...r, ...patch } : r));
+  // A suggested amount is in the unit the check used; if the item's unit changed since, count it again.
+  useEffect(() => {
+    const moved = rows.filter(r => r.profile_id && items.some(i => i.product_id === r.product_id && i.profile !== r.profile_id));
+    if (!moved.length) return;
+    setRows(x => x.map(r => moved.includes(r) ? { ...r, quantity: "", profile_id: undefined } : r));
+    s.setError(`The unit changed for ${moved.map(r => items.find(i => i.product_id === r.product_id).name).join(", ")} since the check; enter the amount again in the current unit.`);
+  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
   const ready = note.trim() && rows.every(r => r.product_id && decimal(r.quantity) && Number(r.quantity) > 0 && r.reason.trim());
   // The form can't be hidden while a send is unresolved, which would drop the retry's request key.
   const unresolved = s.busy || s.pending();
@@ -154,7 +163,7 @@ export function RequestCard({ rid, store, request, onChange }) {
 }
 
 export function BulkSupply({ rid }) {
-  const [data, setData] = useState(null), [items, setItems] = useState([]), [error, setError] = useState(""), [epoch, setEpoch] = useState(0), [form, setForm] = useState(null), [pending, setPending] = useState(false);
+  const [data, setData] = useState(null), [items, setItems] = useState([]), [error, setError] = useState(""), [epoch, setEpoch] = useState(0), [form, setForm] = useState(null), [pending, setPending] = useState(false), [prefill, setPrefill] = useState(null);
   const since = (() => { const d = new Date(`${todayISO()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 28); return d.toISOString().slice(0, 10); })();
   useEffect(() => {
     let active = true; setError("");
@@ -167,7 +176,7 @@ export function BulkSupply({ rid }) {
     api.prepPlanning(rid).then(p => {
       if (!active) return;
       const names = Object.fromEntries((p.products || []).map(v => [v.product_id, v.name])), units = Object.fromEntries((p.unitProfiles || []).map(u => [u.id, u.source_unit]));
-      setItems((p.plans || []).filter(x => x.active && x.track === "bulk").map(x => ({ product_id: x.product_id, name: names[x.product_id] || x.product_id, unit: units[x.unit_profile_id] || "" })));
+      setItems((p.plans || []).filter(x => x.active && x.track === "bulk").map(x => ({ product_id: x.product_id, name: names[x.product_id] || x.product_id, unit: units[x.unit_profile_id] || "", profile: x.unit_profile_id })));
     }).catch(() => {});
     return () => { active = false; };
   }, [rid, form]);
@@ -176,17 +185,20 @@ export function BulkSupply({ rid }) {
   if (error && !data) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading Bulk supply…</p>;
   // A sent request closes its form; other list changes only refresh it, so an unresolved send keeps its retry.
-  const store = data.store_id, refresh = () => setEpoch(n => n + 1), reload = () => { setPending(false); setForm(null); refresh(); };
+  const store = data.store_id, refresh = () => setEpoch(n => n + 1), reload = () => { setPending(false); setForm(null); setPrefill(null); refresh(); };
+  const toggle = name => { setPrefill(null); setForm(form === name ? null : name); };
   if (!data.maker_store_id && !data.makes_for.length) return null;
   return <div className="space-y-4 mb-6" data-testid="bulk-supply">
     {error && <p role="alert">Couldn't refresh Bulk supply: {error}</p>}
-    {data.maker_store_id && <div className="flex gap-2">
-      <button className={form === "request" ? btnAcc : btnGhost} disabled={pending} onClick={() => setForm(form === "request" ? null : "request")}>Send Bulk count</button>
-      <button className={form === "spot" ? btnAcc : btnGhost} disabled={pending} title={pending ? "Finish or retry the request first" : undefined} onClick={() => setForm(form === "spot" ? null : "spot")}>Spot request</button>
-    </div>}
+    <div className="flex gap-2">
+      {data.maker_store_id && <button className={form === "request" ? btnAcc : btnGhost} disabled={pending} onClick={() => toggle("request")}>Send Bulk count</button>}
+      {data.maker_store_id && <button className={form === "spot" ? btnAcc : btnGhost} disabled={pending} title={pending ? "Finish or retry the request first" : undefined} onClick={() => toggle("spot")}>Spot request</button>}
+      <button className={form === "quick" ? btnAcc : btnGhost} disabled={pending} onClick={() => toggle("quick")}>Quick Bulk count</button>
+    </div>
     {data.makes_for.length > 0 && <p className="text-sm text-slate-400">Bulk held here for {data.makes_for.map(storeName).join(", ")} is their stock and counts toward their par: count only your own Bulk in your count.</p>}
     {form === "request" && <RequestForm rid={rid} maker={data.maker_store_id} onSent={reload} />}
-    {form === "spot" && <SpotForm rid={rid} items={items} onSent={reload} onPending={setPending} />}
+    {form === "quick" && <BulkQuickCount rid={rid} onPending={setPending} onSpot={(rows, runDate) => { setPrefill({ rows, runDate }); setForm("spot"); }} />}
+    {form === "spot" && <SpotForm rid={rid} items={items} onSent={reload} onPending={setPending} initial={prefill} />}
     {!!data.open_shortfalls.length && <section className={`${cardCls} p-4`} aria-label="Open Bulk shortfalls">
       <h3 className="font-semibold">Still owed</h3>
       <ul>{data.open_shortfalls.map(s => <li key={`${s.request_id}:${s.product_id}`}>{s.name}: {amount(s.shortfall_base_quantity, s.base_unit)} short from {s.run_date}{s.store_id !== store ? ` (${storeName(s.store_id)})` : ""}</li>)}</ul>

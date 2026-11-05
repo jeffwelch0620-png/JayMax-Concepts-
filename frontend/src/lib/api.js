@@ -73,6 +73,8 @@ export const savePrepDayDraft = (rid, day, body, version, key) => axios.put(`${p
 export const bulkSupply = (rid, since) => axios.get(`${purchaseUrl(rid)}/bulk-supply`, { params: { since } }).then(r => r.data);
 export const previewBulkRequest = (rid, body) => axios.post(`${purchaseUrl(rid)}/bulk-requests/preview`, body).then(r => r.data);
 export const sendBulkRequest = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/bulk-requests`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const bulkQuickCount = (rid, night) => axios.get(`${purchaseUrl(rid)}/bulk-quick-counts`, { params: { night } }).then(r => r.data);
+export const saveBulkQuickCount = (rid, body, version, key) => axios.post(`${purchaseUrl(rid)}/bulk-quick-counts`, body, { headers: { "If-Match": `"${version}"`, "Idempotency-Key": key } }).then(r => r.data);
 export const signBulkStep = (rid, id, body, key) => axios.post(`${purchaseUrl(rid)}/bulk-requests/${encodeURIComponent(id)}/steps`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const acceptanceQueue = (rid, day) => axios.get(`${purchaseUrl(rid)}/acceptance-queue/${day}`).then(r => r.data);
 export const stationBoard = (rid, day) => axios.get(`${purchaseUrl(rid)}/stations/board/${day}`).then(r => r.data);
