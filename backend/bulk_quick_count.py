@@ -28,6 +28,8 @@ SPOT_STEP = Decimal('1e-12')
 
 class QuickLine(mapping.Strict):
     product_id: UUID
+    # The unit shown when the amount was entered; a changed unit is refused rather than reinterpreted.
+    profile_id: UUID
     quantity: Decimal = Field(ge=0, max_digits=28, decimal_places=12)
 
 
@@ -176,7 +178,9 @@ async def save(pool, store, actor, body, key, expected):
         missing = [i['name'] for i in found if i['product_id'] not in sent]
         if missing: raise HTTPException(422, f"Count every Bulk item; a missing count is not zero: {', '.join(missing)}")
         if set(sent) - set(scope): raise HTTPException(422, 'Only count active to-par Bulk items here')
-        lines = [{'line_number': n, 'product_id': i['product_id'], 'product_version_id': i['product_version_id'], 'profile_id': i['profile_id'],
+        changed = [scope[str(l.product_id)]['name'] for l in body.lines if str(l.profile_id) != scope[str(l.product_id)]['profile_id']]
+        if changed: raise HTTPException(409, f"The counting unit changed for: {', '.join(changed)}. Refresh and count them in the current unit.")
+        lines =[{'line_number': n, 'product_id': i['product_id'], 'product_version_id': i['product_version_id'], 'profile_id': i['profile_id'],
             'base_unit': i['base_unit'], 'quantity': sent[i['product_id']], 'factor': i['factor'],
             'base_quantity': mapping.times(sent[i['product_id']], i['factor'])} for n, i in enumerate(sorted(found, key=lambda i: i['product_id']), 1)]
         review = serial({'store_id': store, 'business_date': body.business_date, 'lines': lines})

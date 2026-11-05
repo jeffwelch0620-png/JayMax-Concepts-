@@ -34,12 +34,12 @@ class QuickCountModelTests(unittest.TestCase):
         self.assertEqual(quick.spot_need({'daily_pars': PARS}, D(1), date(2026, 10, 7), D(0), D(0))['need_base_quantity'], D(0))  # Wednesday night
 
     def test_a_quick_count_is_for_the_night_it_was_taken(self):
-        line = [dict(product_id=uuid4(), quantity='2')]
+        line = [dict(product_id=uuid4(), profile_id=uuid4(), quantity='2')]
         quick.QuickCountIn(business_date='2026-10-09', performed_at='2026-10-09T22:00:00-04:00', note='Invented close', lines=line)
         quick.QuickCountIn(business_date='2026-10-09', performed_at='2026-10-10T01:30:00-04:00', note='After midnight', lines=line)
         for bad in (dict(performed_at='2026-10-11T09:00:00-04:00', lines=line), dict(performed_at='2026-10-09T22:00:00', lines=line),
                     dict(performed_at='2026-10-09T22:00:00-04:00', lines=line * 2),
-                    dict(performed_at='2026-10-09T22:00:00-04:00', lines=[dict(product_id=uuid4(), quantity='-1')])):
+                    dict(performed_at='2026-10-09T22:00:00-04:00', lines=[dict(product_id=uuid4(), profile_id=uuid4(), quantity='-1')])):
             with self.assertRaises(ValidationError): quick.QuickCountIn(business_date='2026-10-09', note='Invented', **bad)
 
 
@@ -61,9 +61,9 @@ class QuickCountDatabaseTests(daily_pars.BulkDailyParDatabaseTests):
             await c.execute((daily_pars.run_days.supply.day.recovery.counts.native.ROOT / MIGRATION).read_text(encoding='utf-8'))
         await self.pool.expire_connections()
 
-    async def quick(self, quantity, night=FRIDAY, version=0, store='berts', product=None, key=None, at='22:00:00'):
+    async def quick(self, quantity, night=FRIDAY, version=0, store='berts', product=None, profile=None, key=None, at='22:00:00'):
         body = dict(business_date=night, performed_at=f'{night}T{at}-04:00', note='Invented quick Bulk count',
-                    lines=[dict(product_id=str(product or self.p['product_id']), quantity=quantity)])
+                    lines=[dict(product_id=str(product or self.p['product_id']), profile_id=str(profile or self.u['id']), quantity=quantity)])
         return await self.catalog.post(f'/api/pg/purchases/{store}/bulk-quick-counts', json=body,
                                        headers={'If-Match': str(version), 'Idempotency-Key': key or str(uuid4())})
 
@@ -91,6 +91,8 @@ class QuickCountDatabaseTests(daily_pars.BulkDailyParDatabaseTests):
         replay = await self.quick('20', version=1, key=key)
         self.assertEqual((replay.json()['replayed'], replay.json()['count_id']), (True, fixed.json()['count_id']))
         self.assertEqual((await self.quick('20', version=1)).status_code, 409)  # stale version
+        # An amount entered in a unit the item no longer counts in is refused, not reinterpreted.
+        moved = await self.quick('20', version=2, profile=uuid4()); self.assertEqual(moved.status_code, 409, moved.text); self.assertIn('counting unit changed', moved.text)
         # Wednesday night: Thursday's run covers Thursday, so nothing is needed.
         wednesday = await self.quick('0', night=WEDNESDAY); self.assertEqual(wednesday.status_code, 200, wednesday.text)
         self.assertEqual(D(wednesday.json()['check'][0]['short_base_quantity']), D(0))
@@ -105,7 +107,7 @@ class QuickCountDatabaseTests(daily_pars.BulkDailyParDatabaseTests):
                 {'id': str(uuid4()), 'revision': plan['revision'] + 1, 'predecessor_id': str(plan['id']), 'daily_pars': ['10'] * 7, 'request_key': str(uuid4())})
             await c.execute('''INSERT INTO prep_inventory.bulk_par_modes(store_id,revision,mode,note,actor,request_key,request_fingerprint)
                 VALUES('rudds',1,'daily','Invented switch','synthetic-DB-probe',$1,$2)''', uuid4(), b'\x00' * 32)
-        counted = await self.quick('12', store='rudds', product=self.requester['product']); self.assertEqual(counted.status_code, 200, counted.text)
+        counted = await self.quick('12', store='rudds', product=self.requester['product'], profile=self.requester['profile']); self.assertEqual(counted.status_code, 200, counted.text)
         factor = D(counted.json()['items'][0]['factor'])
         self.assertEqual(D(counted.json()['check'][0]['short_base_quantity']), 20 * factor - 12 * factor)
         spot = await self.request(dict(run_date='2026-10-10', kind='spot', note='Busy weekend',

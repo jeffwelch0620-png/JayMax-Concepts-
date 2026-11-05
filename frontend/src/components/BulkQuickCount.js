@@ -47,7 +47,7 @@ export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
     setBusy(true); setError("");
     try {
       if (!attempt.current) attempt.current = { key: crypto.randomUUID(), version: data.revision, body: { business_date: night, performed_at: new Date().toISOString(), note: note.trim(),
-        lines: data.items.map(i => ({ product_id: i.product_id, quantity: quantities[i.product_id].trim() })) } };
+        lines: data.items.map(i => ({ product_id: i.product_id, profile_id: i.profile_id, quantity: quantities[i.product_id].trim() })) } };
       setPending(true);
       const r = await api.saveBulkQuickCount(rid, attempt.current.body, attempt.current.version, attempt.current.key);
       if (r?.request_key !== attempt.current.key || r.business_date !== attempt.current.body.business_date || (!r.replayed && r.revision !== attempt.current.version + 1)) throw new Error("Not confirmed. Retry the same count.");

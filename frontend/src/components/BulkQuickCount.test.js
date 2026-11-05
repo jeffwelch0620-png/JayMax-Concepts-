@@ -5,7 +5,7 @@ import { BulkSupply } from "./BulkSupply";
 import * as api from "../lib/api";
 
 jest.mock("../lib/api", () => ({ __esModule: true, bulkQuickCount: jest.fn(), saveBulkQuickCount: jest.fn(), bulkSupply: jest.fn(), prepPlanning: jest.fn(), previewBulkRequest: jest.fn(), sendBulkRequest: jest.fn() }));
-const item = { product_id: "ranch", name: "Invented ranch", base_unit: "qt", source_unit: "bucket", factor: "4" };
+const item = { product_id: "ranch", profile_id: "u-ranch", name: "Invented ranch", base_unit: "qt", source_unit: "bucket", factor: "4" };
 const read = (changes = {}) => ({ store_id: "berts", business_date: "2026-10-09", par_mode: "daily", maker_store_id: "rudds", days_before_next_run: [5, 6], next_run: "2026-10-12", revision: 0, items: [item], counts: [], check: null, ...changes });
 const checked = (short = "36", spot = "9") => read({ revision: 1, counts: [{ id: "c1", revision: 1, lines: [{ product_id: "ranch", quantity: "4", factor: "4.000" }] }],
   check: [{ product_id: "ranch", name: "Invented ranch", base_unit: "qt", source_unit: "bucket", need_base_quantity: "52", counted_base_quantity: "16", incoming_base_quantity: "0", short_base_quantity: short, spot_quantity: spot }] });
@@ -30,7 +30,7 @@ test("a quick count sends every Bulk item with the night, version and one key, t
   api.saveBulkQuickCount.mockResolvedValue({ ...checked(), request_key: "stable-key", replayed: false });
   await click(button("Save count"));
   const [rid, body, version, key] = api.saveBulkQuickCount.mock.calls[0];
-  expect([rid, body.business_date, body.note, body.lines, version, key]).toEqual(["berts", "2026-10-09", "Invented closer", [{ product_id: "ranch", quantity: "4" }], 0, "stable-key"]);
+  expect([rid, body.business_date, body.note, body.lines, version, key]).toEqual(["berts", "2026-10-09", "Invented closer", [{ product_id: "ranch", profile_id: "u-ranch", quantity: "4" }], 0, "stable-key"]);
   expect(container.textContent).toContain("Days left before the Mon 2026-10-12 run: Sat, Sun.");
   expect(container.textContent).toContain("36 qt");
   await click(button("Fill in a spot request for review"));
