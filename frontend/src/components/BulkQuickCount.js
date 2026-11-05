@@ -22,11 +22,14 @@ export function countNight(now = new Date()) {
   const d = new Date(`${todayISO()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10);
 }
 
-export function BulkQuickCount({ rid, onSpot }) {
+// onPending: told while a save is unresolved, so the Bulk panel keeps this form (and its retry key) open.
+export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
   const [night, setNight] = useState(() => countNight()), [data, setData] = useState(null), [error, setError] = useState("");
   const [quantities, setQuantities] = useState({}), [note, setNote] = useState(""), [busy, setBusy] = useState(false);
   // The exact body is kept with its key, so a retry after a lost response replays the same count.
   const attempt = useRef(null), [pending, setPending] = useState(false);
+  const unresolved = busy || pending;
+  useEffect(() => { onPending(unresolved); }, [unresolved]); // eslint-disable-line react-hooks/exhaustive-deps
   function show(d) {
     setData(d);
     const latest = d.counts?.[d.counts.length - 1];
@@ -56,6 +59,8 @@ export function BulkQuickCount({ rid, onSpot }) {
     finally { setBusy(false); }
   }
   const short = (data?.check || []).filter(c => Number(c.short_base_quantity) > 0);
+  // Items added to Bulk after this count: a missing count is not zero, so the check is incomplete.
+  const uncounted = (data?.check || []).filter(c => c.counted === false);
   const requests = data?.maker_store_id;
   return <section className={`${cardCls} p-4 space-y-3`} aria-label="Quick Bulk count">
     <h3 className="font-semibold">Quick Bulk count</h3>
@@ -75,9 +80,10 @@ export function BulkQuickCount({ rid, onSpot }) {
       {data.check && <div aria-label="Spot prep check">
         <p className="text-sm">{data.days_before_next_run.length ? `Days left before the ${weekday(data.next_run)} ${data.next_run} run: ${data.days_before_next_run.map(d => DAYS[d]).join(", ")}.` : `The ${weekday(data.next_run)} ${data.next_run} run covers tomorrow, so no spot prep is needed.`}</p>
         <div className="overflow-auto"><table className="ops-table"><thead><tr><th>Item</th><th>Needed until the run</th><th>Counted</th><th>Spot requests on the way</th><th>Short</th></tr></thead>
-          <tbody>{data.check.map(c => <tr key={c.product_id}><td>{c.name}</td><td>{amount(c.need_base_quantity, c.base_unit)}</td><td>{amount(c.counted_base_quantity, c.base_unit)}</td><td>{amount(c.incoming_base_quantity, c.base_unit)}</td>
+          <tbody>{data.check.map(c => <tr key={c.product_id}><td>{c.name}</td><td>{amount(c.need_base_quantity, c.base_unit)}</td><td>{c.counted === false ? <strong>Not counted</strong> : amount(c.counted_base_quantity, c.base_unit)}</td><td>{amount(c.incoming_base_quantity, c.base_unit)}</td>
             <td>{Number(c.short_base_quantity) > 0 ? <strong>{amount(c.short_base_quantity, c.base_unit)}</strong> : "—"}</td></tr>)}</tbody></table></div>
-        {!short.length ? <p>No spot prep needed before the next run.</p> : requests
+        {!!uncounted.length && <p role="alert">Not in this count: {uncounted.map(c => c.name).join(", ")}. Save a corrected count with every item before relying on this check.</p>}
+        {!short.length ? !uncounted.length && <p>No spot prep needed before the next run.</p> : requests
           ? <button className={btnGhost} onClick={() => onSpot(short.map(c => ({ product_id: c.product_id, quantity: plain(c.spot_quantity), reason: `Quick count ${night}: short before the ${data.next_run} run` })), nextDay(night))}>Fill in a spot request for review</button>
           : <p><strong>Spot prep needed before the {weekday(data.next_run)} run:</strong> {short.map(c => `${c.name} ${plain(c.spot_quantity)} ${c.source_unit}`).join(", ")}.</p>}
       </div>}

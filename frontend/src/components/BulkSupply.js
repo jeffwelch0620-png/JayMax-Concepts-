@@ -190,7 +190,7 @@ export function BulkSupply({ rid }) {
     </div>
     {data.makes_for.length > 0 && <p className="text-sm text-slate-400">Bulk held here for {data.makes_for.map(storeName).join(", ")} is their stock and counts toward their par: count only your own Bulk in your count.</p>}
     {form === "request" && <RequestForm rid={rid} maker={data.maker_store_id} onSent={reload} />}
-    {form === "quick" && <BulkQuickCount rid={rid} onSpot={(rows, runDate) => { setPrefill({ rows, runDate }); setForm("spot"); }} />}
+    {form === "quick" && <BulkQuickCount rid={rid} onPending={setPending} onSpot={(rows, runDate) => { setPrefill({ rows, runDate }); setForm("spot"); }} />}
     {form === "spot" && <SpotForm rid={rid} items={items} onSent={reload} onPending={setPending} initial={prefill} />}
     {!!data.open_shortfalls.length && <section className={`${cardCls} p-4`} aria-label="Open Bulk shortfalls">
       <h3 className="font-semibold">Still owed</h3>

@@ -91,7 +91,8 @@ async def items(conn, store):
         if not (p['active'] and p['track'] == 'bulk' and p['schedule'] == 'daily'): continue
         profile = profiles.get(p['unit_profile_id'])
         name = products[p['product_id']]['name']
-        if not profile or p.get('reviewNeeded'): raise HTTPException(409, f'Review the Bulk plan for {name} before counting it')
+        # A count only needs the item's par unit, as a Bulk request does (bulk_supply.preview).
+        if not profile: raise HTTPException(409, f'Review the Bulk plan for {name} before counting it')
         found.append({'product_id': p['product_id'], 'name': name, 'base_unit': products[p['product_id']]['base_unit'],
             'profile_id': profile['id'], 'product_version_id': profile['product_version_id'], 'source_unit': profile['source_unit'],
             'factor': Decimal(str(profile['base_units_per_source_unit'])), 'plan': p})
@@ -99,10 +100,15 @@ async def items(conn, store):
 
 
 async def incoming(conn, store):
-    """Base amounts per item from this store's spot requests not yet accepted or cancelled."""
+    """Base amounts per item on their way from this store's spot requests not yet accepted or cancelled:
+    the amount asked until the maker signs off, then what it actually sent (held at the maker is
+    already in this store's count)."""
     if bulk.MAKERS.get(store) is None or not await bulk.installed(conn): return {}
-    rows = await conn.fetch('''SELECT l.product_id::text AS product_id, sum(l.requested_base_quantity) AS amount FROM prep_inventory.bulk_request_lines l
-        JOIN prep_inventory.bulk_requests r ON r.id=l.request_id WHERE r.store_id=$1 AND r.kind='spot'
+    rows = await conn.fetch('''SELECT l.product_id::text AS product_id, sum(coalesce(f.base_quantity, l.requested_base_quantity)) AS amount
+        FROM prep_inventory.bulk_request_lines l JOIN prep_inventory.bulk_requests r ON r.id=l.request_id
+        LEFT JOIN (prep_inventory.bulk_event_lines f JOIN prep_inventory.bulk_events fe ON fe.id=f.event_id AND fe.action='fulfill')
+         ON f.request_id=l.request_id AND f.ordinal=l.ordinal
+        WHERE r.store_id=$1 AND r.kind='spot'
         AND NOT EXISTS(SELECT 1 FROM prep_inventory.bulk_events e WHERE e.request_id=r.id AND e.action IN ('accept','cancel')) GROUP BY l.product_id''', store)
     return {r['product_id']: r['amount'] for r in rows}
 
@@ -127,15 +133,21 @@ async def read(conn, store, night):
         on_way = await incoming(conn, store)
         check = []
         for i in found:
-            if i['product_id'] not in counted: continue  # added to Bulk after this count; count again
+            if i['product_id'] not in counted:
+                # Added to Bulk after this count: a missing count is not zero, so the check is incomplete.
+                check.append({'product_id': i['product_id'], 'name': i['name'], 'base_unit': i['base_unit'], 'source_unit': i['source_unit'], 'counted': False,
+                    'counted_base_quantity': None, 'incoming_base_quantity': None, 'days': None, 'next_run': None,
+                    'need_base_quantity': None, 'short_base_quantity': None, 'spot_quantity': None})
+                continue
             need = spot_need(i['plan'], i['factor'], night, counted[i['product_id']], on_way.get(i['product_id'], Decimal(0)))
-            check.append({'product_id': i['product_id'], 'name': i['name'], 'base_unit': i['base_unit'], 'source_unit': i['source_unit'],
+            check.append({'product_id': i['product_id'], 'name': i['name'], 'base_unit': i['base_unit'], 'source_unit': i['source_unit'], 'counted': True,
                 'counted_base_quantity': counted[i['product_id']], 'incoming_base_quantity': on_way.get(i['product_id'], Decimal(0)),
                 **(need or {'days': None, 'next_run': None, 'need_base_quantity': None, 'short_base_quantity': None, 'spot_quantity': None})})
     days, run = days_before_next_run(night)
     return serial({'store_id': store, 'business_date': night, 'par_mode': mode, 'maker_store_id': bulk.MAKERS.get(store),
         'days_before_next_run': days, 'next_run': run, 'revision': latest['revision'] if latest else 0,
-        'items': [{k: v for k, v in i.items() if k != 'plan'} for i in found], 'counts': counts, 'check': check})
+        'items': [{k: v for k, v in i.items() if k != 'plan'} for i in found], 'counts': counts, 'check': check,
+        'check_complete': check is not None and all(c['counted'] for c in check)})
 
 
 async def save(pool, store, actor, body, key, expected):

@@ -79,6 +79,7 @@ class QuickCountDatabaseTests(daily_pars.BulkDailyParDatabaseTests):
         factor = D(first.json()['items'][0]['factor'])
         await self.daily_pars(); self.assertEqual((await self.switch('daily', 0)).status_code, 200)
         read = await self.read()
+        self.assertTrue(read['check_complete'])
         # Friday night: Saturday and Sunday (6 + 7 par units) are left before Monday's run.
         line = read['check'][0]
         self.assertEqual((line['days'], line['next_run'], D(line['need_base_quantity']), D(line['counted_base_quantity'])), ([5, 6], '2026-10-12', 13 * factor, 4 * factor))
@@ -112,6 +113,12 @@ class QuickCountDatabaseTests(daily_pars.BulkDailyParDatabaseTests):
         self.assertEqual(spot.status_code, 200, spot.text)
         line = (await self.read(store='rudds'))['check'][0]
         self.assertEqual((D(line['incoming_base_quantity']), D(line['short_base_quantity'])), (3 * factor, 17 * factor - 12 * factor))
+        # Once the maker signs off, only what it actually sent is on the way.
+        sent = await self.step('berts', spot.json()['request']['id'], dict(action='fulfill', handoff='delivery', note='Made part of it',
+                                                                          lines=[dict(ordinal=1, base_quantity=str(factor), packaging='1 x invented tub')]))
+        self.assertEqual(sent.status_code, 200, sent.text)
+        line = (await self.read(store='rudds'))['check'][0]
+        self.assertEqual((D(line['incoming_base_quantity']), D(line['short_base_quantity'])), (factor, 19 * factor - 12 * factor))
         # Only active to-par Bulk items of this store can be counted here.
         self.assertEqual((await self.quick('1', store='rudds', product=self.p['product_id'])).status_code, 422)
 
@@ -123,7 +130,7 @@ class QuickCountDatabaseTests(daily_pars.BulkDailyParDatabaseTests):
                 'Forged','synthetic-DB-probe',$5,$6,$7)''', ident, date(2026, 10, 9), revision, predecessor, {'lines': [{}] * lines}, uuid4(), b'\x00' * 32)
             for n in range(lines):
                 await c.execute('''INSERT INTO prep_inventory.bulk_quick_count_lines(count_id,store_id,line_number,product_id,product_version_id,profile_id,
-                    base_unit,quantity,factor,base_quantity) VALUES($1,'berts',$2,$3,$4,$5,$6,2,$7,2*$7)''', ident, n + 1, UUID(self.p['product_id']),
+                    base_unit,quantity,factor,base_quantity) VALUES($1,'berts',$2,$3,$4,$5,$6,2,$7::numeric,2*$7::numeric)''', ident, n + 1, UUID(self.p['product_id']),
                     UUID(self.u['product_version_id']), UUID(self.u['id']), self.p['base_unit'], factor or D(self.u['base_units_per_source_unit']))
             return ident
         async with self.pool.acquire() as c:
@@ -138,5 +145,5 @@ class QuickCountDatabaseTests(daily_pars.BulkDailyParDatabaseTests):
                 await c.execute("UPDATE prep_inventory.bulk_quick_count_lines SET quantity=3, base_quantity=3*factor WHERE count_id=$1", first)
             with self.assertRaisesRegex(asyncpg.PostgresError, 'cannot gain lines'):
                 await c.execute('''INSERT INTO prep_inventory.bulk_quick_count_lines(count_id,store_id,line_number,product_id,product_version_id,profile_id,
-                    base_unit,quantity,factor,base_quantity) VALUES($1,'berts',2,$2,$3,$4,$5,1,$6,$6)''', first, uuid4(),
+                    base_unit,quantity,factor,base_quantity) VALUES($1,'berts',2,$2,$3,$4,$5,1,$6::numeric,$6::numeric)''', first, uuid4(),
                     UUID(self.u['product_version_id']), UUID(self.u['id']), self.p['base_unit'], D(self.u['base_units_per_source_unit']))

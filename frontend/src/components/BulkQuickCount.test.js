@@ -95,3 +95,27 @@ test("a stale-version refusal reloads the night's count and keeps what was typed
   await click(button("Save corrected count"));
   expect(api.saveBulkQuickCount.mock.calls[1][2]).toBe(1);
 });
+test("an item added after the count makes the check incomplete instead of saying no spot prep is needed", async () => {
+  const data = checked("0", "0");
+  data.check.push({ product_id: "slaw", name: "Invented slaw", base_unit: "qt", source_unit: "tub", counted: false, counted_base_quantity: null, incoming_base_quantity: null, need_base_quantity: null, short_base_quantity: null, spot_quantity: null });
+  api.bulkQuickCount.mockResolvedValue(data);
+  await render(<BulkQuickCount rid="berts" onSpot={onSpot} />);
+  expect(container.textContent).toContain("Not in this count: Invented slaw.");
+  expect(container.textContent).toContain("Not counted");
+  expect(container.textContent).not.toContain("No spot prep needed before the next run.");
+});
+
+test("an unresolved count keeps the Bulk panel on its form so the retry key is not lost", async () => {
+  api.bulkSupply.mockResolvedValue({ store_id: "berts", maker_store_id: "rudds", makes_for: [], requests: [], open_shortfalls: [] });
+  api.bulkQuickCount.mockResolvedValue(read());
+  await render(<BulkSupply rid="berts" />);
+  await click(button("Quick Bulk count")); await input("Quick count night", "2026-10-09");
+  await input("Quick count Invented ranch", "4"); await input("Quick count note", "Invented closer");
+  api.saveBulkQuickCount.mockRejectedValueOnce(new Error("Lost response"));
+  await click(button("Save count"));
+  expect(button("Spot request").disabled).toBe(true);
+  expect(button("Quick Bulk count").disabled).toBe(true);
+  api.saveBulkQuickCount.mockResolvedValue({ ...checked(), request_key: "stable-key", replayed: true });
+  await click(button("Retry the same count"));
+  expect(button("Spot request").disabled).toBe(false);
+});
