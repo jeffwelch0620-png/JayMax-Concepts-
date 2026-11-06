@@ -22,6 +22,9 @@ export const handoffDay = (rid, day, track, options = {}) => axios.get(`${handof
 export const saveHandoff = (rid, body, version, key) => axios.post(`${handoffUrl(rid)}/commands`, body, { timeout: 60000, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const handoffStatus = (rid, body, version, key) => axios.post(`${handoffUrl(rid)}/status`, body, { timeout: 60000, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const handoffHistory = (rid, noteId, after = 0, options = {}) => axios.get(`${handoffUrl(rid)}/notes/${noteId}/history`, { ...options, params: { after } }).then(r => r.data);
+// M6 analytics: a read for the General Manager and above (backend/analytics.py), off by default.
+export const analyticsEnabled = USE_PG && process.env.REACT_APP_ANALYTICS === "true";
+export const analyticsReport = (rid, params) => axios.get(`${PG_API}/analytics/${pgStoreId(rid)}`, { params }).then(r => r.data);
 export const nativePurchasesEnabled = USE_PG && process.env.REACT_APP_NATIVE_PURCHASES === "true";
 export const actualInventoryEnabled = nativePurchasesEnabled && process.env.REACT_APP_ACTUAL_INVENTORY === "true";
 export const catalogMappingEnabled = actualInventoryEnabled && process.env.REACT_APP_CATALOG_MAPPING === "true";

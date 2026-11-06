@@ -87,8 +87,11 @@ def configuration(backend,frontend):
     login=boolean(backend,'STAFF_PERSONAL_LOGIN_ENABLED','false');login_view=boolean(frontend,'REACT_APP_STAFF_PERSONAL_LOGIN','false')
     if login!=login_view:problems.append({'key':'STAFF_PERSONAL_LOGIN','reason':'Backend and built frontend feature flags differ'})
     if login and not pg:problems.append({'key':'STAFF_PERSONAL_LOGIN','reason':'Requires PostgreSQL'})
+    # M6 analytics is a read only: off in one place and on in the other just shows a tab that answers 503.
+    insight=boolean(backend,'ANALYTICS_ENABLED','false');insight_view=boolean(frontend,'REACT_APP_ANALYTICS','false')
+    if insight!=insight_view:problems.append({'key':'ANALYTICS','reason':'Backend and built frontend feature flags differ'})
     return {'status':'held' if problems else 'passed','problems':problems,'features':pairs,
-        'staffPersonalLogin':{'backend':login,'frontend':login_view},
+        'staffPersonalLogin':{'backend':login,'frontend':login_view},'analytics':{'backend':insight,'frontend':insight_view},
         'allNativeFeaturesHeld':not any(values.values()),'secretValuesIncluded':False}
 
 def migration_plan():

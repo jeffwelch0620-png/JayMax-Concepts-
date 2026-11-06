@@ -25,8 +25,9 @@ OFFLINE_CLASSES = ('staff_login::StaffLoginModelTests stations::StationModelTest
 OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests',
                     's1_observation_pg::CollectorFixtureSafetyTests',
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
-                    'batched_fingerprints::BatchedFingerprintGuards']
+                    'batched_fingerprints::BatchedFingerprintGuards','analytics::AnalyticsModelTests']
 DATABASE_CASES = (
+ ('analytics','AnalyticsDatabaseTests','test_a_short_bulk_run_and_a_delivery_accepted_short'),
  ('staff_login','StaffLoginDatabaseTests','test_an_owner_issues_the_first_pin_and_the_employee_replaces_it'),
  ('staff_login','StaffLoginDatabaseTests','test_five_wrong_pins_lock_the_person_until_a_manager_unlocks_them'),
  ('staff_login','StaffLoginDatabaseTests','test_a_session_ends_on_sign_out_idle_new_pin_or_inactive'),
