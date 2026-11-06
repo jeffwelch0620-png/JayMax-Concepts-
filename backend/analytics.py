@@ -227,6 +227,12 @@ async def transfers(conn, store, start, end, track):
     return out
 
 
+def deadline(value):
+    """A weekly day restored from before a schedule change keeps its deadlines as 'HH:MM' text
+    (order_calendar.day_view); today's rows have times."""
+    return time.fromisoformat(value) if isinstance(value, str) else value
+
+
 async def on_time(conn, store, start, end, now):
     """Each order cycle in the range under the schedule that stood on its day (skips and moves included):
     the count and each supplier's order done on time, late or still overdue, with the late reasons kept."""
@@ -250,7 +256,7 @@ async def on_time(conn, store, start, end, now):
     orders = {'done': 0, 'late': 0, 'overdue': 0, 'due': 0}
     for d, entry in cycles:
         row = entry['row']
-        count_due, order_due = datetime.combine(d, row['count_due'], tz), datetime.combine(d, row['order_due'], tz)
+        count_due, order_due = datetime.combine(d, deadline(row['count_due']), tz), datetime.combine(d, deadline(row['order_due']), tz)
         count = await conn.fetchrow('''SELECT status,recorded_at FROM actual_inventory.count_snapshots s WHERE store_id=$1 AND count_date=$2
             AND NOT EXISTS(SELECT 1 FROM actual_inventory.count_snapshots c WHERE c.corrects_snapshot_id=s.id)
             ORDER BY recorded_at DESC,id DESC LIMIT 1''', store, d)

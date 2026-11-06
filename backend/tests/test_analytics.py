@@ -2,7 +2,7 @@
 from a Bulk run that came up short and a delivery accepted short."""
 import os
 import unittest
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal as D
 from unittest.mock import patch
 from uuid import uuid4
@@ -24,6 +24,15 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
         for start, end in ((date(2026, 11, 5), date(2026, 11, 4)), (TODAY - timedelta(days=analytics.MAX_DAYS), TODAY)):
             with self.assertRaises(HTTPException) as e: analytics.window(start, end, TODAY)
             self.assertEqual(e.exception.status_code, 422)
+
+    def test_a_cycle_before_a_schedule_change_keeps_its_old_deadlines(self):
+        import order_calendar as cal
+        now_rows = [{'order_weekday': 2, 'count_due': time(11), 'order_due': time(14), 'delivery_weekday': 3, 'vendor_ids': ['pfg'], 'timezone_name': 'America/New_York'}]
+        before = {**cal.day_view({**now_rows[0], 'count_due': time(12), 'order_due': time(15)})}
+        changes = [{'order_weekday': 2, 'day_before': before, 'changed_at': datetime(2026, 11, 5, tzinfo=timezone.utc)}]
+        row = cal.effective(cal.rows_at(now_rows, changes, datetime(2026, 11, 4, 23, tzinfo=timezone.utc)), {}, date(2026, 11, 4), 1)[date(2026, 11, 4)]['row']
+        self.assertEqual((row['count_due'], analytics.deadline(row['count_due']), analytics.deadline(row['order_due'])), ('12:00', time(12), time(15)))
+        self.assertEqual(analytics.deadline(time(11)), time(11))
 
     def test_waits_in_whole_minutes(self):
         self.assertEqual(analytics._minutes([{'minutes': D(10)}, {'minutes': D(20)}, {'minutes': D(90)}, {'minutes': None}]),
