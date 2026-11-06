@@ -11,7 +11,8 @@ const num = v => v === null || v === undefined ? "–" : Number(v).toLocaleStrin
 const qty = (v, unit) => `${num(v)} ${unit || ""}`.trim();
 const wait = m => m === null || m === undefined ? "–" : m < 60 ? `${m} min` : `${(m / 60).toFixed(1)} h`;
 const pct = (part, whole) => whole ? `${Math.round(part / whole * 100)}%` : "–";
-const isoDay = d => d.toISOString().slice(0, 10);
+// The local calendar day: toISOString is UTC, which is already tomorrow on an Eastern evening.
+const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); };
 const STATUS = { done: "On time", late: "Late", overdue: "Not done", due: "Due today", upcoming: "Upcoming" };
 const REASONS = { out_of_ingredient: "Out of an ingredient", ran_out_of_time: "Ran out of time", equipment: "Equipment", other: "Other" };
@@ -133,6 +134,8 @@ function OnTime({ o }) {
       rows={o.late_reasons.map(n => [n.cycle_date, n.kind === "count_late" ? "Late count" : "Late order", n.name || "–", n.reason])} />
   </>;
 }
+
+export { isoDay };
 
 export function AnalyticsTab({ rid }) {
   const [start, setStart] = useState(daysAgo(6));

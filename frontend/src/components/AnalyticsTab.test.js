@@ -1,12 +1,17 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { AnalyticsTab } from "./AnalyticsTab";
+import { AnalyticsTab, isoDay } from "./AnalyticsTab";
 import * as api from "../lib/api";
 
 jest.mock("../lib/api", () => ({ analyticsReport: jest.fn() }));
 
 const report = tasks => ({ throughput: { available: true, lists: { released: 1, not_released: 0 }, tasks, met_plan: tasks, short: 0, tracks: [], short_tasks: [] },
   shortages: { available: false }, waste: { available: false }, acceptance: {}, transfers: {}, on_time: { available: false } });
+
+test("the default range uses the local calendar day, not UTC", () => {
+  expect(isoDay(new Date(2026, 10, 6, 23, 30))).toBe("2026-11-06");   // 11:30 PM local is already Nov 7 in UTC west of Greenwich
+  expect(isoDay(new Date(2026, 0, 2, 0, 5))).toBe("2026-01-02");
+});
 
 test("an older range answering late never replaces the newer one", async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
