@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { prepTracks, prepTrackLabel } from "../lib/prepTracks";
 import { cardCls, inpCls, btnGhost, EmptyState, Field, MetricCard, PageTitle, SectionLabel } from "./common";
@@ -141,10 +141,15 @@ export function AnalyticsTab({ rid }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const latest = useRef(0);
   const load = () => {
+    // Only the newest request may fill the page: an older range or track answering late is dropped.
+    const ask = ++latest.current;
     setLoading(true); setError("");
     api.analyticsReport(rid, { start, end, track: track || undefined })
-      .then(setData).catch(e => setError(e?.response?.data?.detail || "Analytics could not be loaded")).finally(() => setLoading(false));
+      .then(d => { if (ask === latest.current) setData(d); })
+      .catch(e => { if (ask === latest.current) setError(e?.response?.data?.detail || "Analytics could not be loaded"); })
+      .finally(() => { if (ask === latest.current) setLoading(false); });
   };
   useEffect(load, [rid, start, end, track]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
