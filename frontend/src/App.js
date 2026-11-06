@@ -3,7 +3,7 @@ import { storeMark } from "./theme/storeMark";
 import { Toaster, toast } from "sonner";
 import {
   LayoutDashboard, ClipboardList, ClipboardCheck, Settings, FileText, ShoppingCart, BookOpen, ChefHat,
-  Printer, Activity, AlertTriangle, TrendingUp, Building2, Sparkles, Boxes, CalendarClock, Users,
+  Printer, Activity, AlertTriangle, TrendingUp, Building2, Sparkles, Boxes, CalendarClock, Users, BarChart3,
 } from "lucide-react";
 import { RESTAURANTS, OWNER, isOrderEnabled, statusOf, downloadJSON, todayISO, workweekRange } from "./lib/calc";
 import * as api from "./lib/api";
@@ -28,6 +28,8 @@ import { NativePurchaseHistory } from "./components/NativePurchaseHistory";
 import { PrepTab } from "./components/PrepTab";
 import { ManagerOverviewTab } from "./components/ManagerOverviewTab";
 import { ManagerHandoffTab } from "./components/ManagerHandoffTab";
+import { AnalyticsTab } from "./components/AnalyticsTab";
+import { canSeeAnalytics } from "./lib/positions";
 import { overviewContext } from "./lib/managerOverview";
 import { SchedulingTab } from "./components/SchedulingTab";
 import { StaffTab } from "./components/StaffTab";
@@ -40,6 +42,7 @@ const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "managerOverview", label: "Manager overview", icon: ClipboardCheck },
   { id: "managerHandoff", label: "Manager handoff", icon: FileText },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "prep", label: "Prep", icon: ChefHat },
   { id: "counts", label: "Enter Counts", icon: ClipboardList },
   { id: "setup", label: "Item Setup", icon: Settings },
@@ -96,7 +99,8 @@ export default function App() {
     : session?.user?.role === "staff"
       ? TABS.filter((t) => ["dashboard", "prep", "counts"].includes(t.id))
       : TABS.filter(t => (t.id !== "managerOverview" || ["owner", "manager"].includes(session?.user?.role))
-        && (t.id !== "managerHandoff" || (api.managerHandoffEnabled && ["owner", "manager"].includes(session?.user?.role))));
+        && (t.id !== "managerHandoff" || (api.managerHandoffEnabled && ["owner", "manager"].includes(session?.user?.role)))
+        && (t.id !== "analytics" || (api.analyticsEnabled && canSeeAnalytics(session?.user))));
 
   useEffect(() => {
     setCostingFocus(null);
@@ -288,6 +292,8 @@ export default function App() {
               if (!api.prepExecutionEnabled || selection.rid !== loc || !overviewContext(loc, selection.day, selection.track, session.user)) return;
               setPrepFocus(selection); setActiveTab("prep");
             }}/>
+        ) : activeTab === "analytics" && api.analyticsEnabled && canSeeAnalytics(session?.user) ? (
+          <AnalyticsTab key={`${session.user.id}:${loc}`} rid={loc} />
         ) : activeTab === "managerHandoff" && api.managerHandoffEnabled && ["owner", "manager"].includes(session?.user?.role) ? (
           <ManagerHandoffTab key={`${session.user.id}:${loc}:${handoffFocus?.day || "default"}:${handoffFocus?.track || "bulk"}`} rid={loc} user={session.user} initialContext={handoffFocus} drafts={drafts.current} showToast={showToast}/>
         ) : !S ? (
