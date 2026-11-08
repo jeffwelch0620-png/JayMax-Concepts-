@@ -110,9 +110,10 @@ async def shortages(conn, store, start, end, track):
 
 async def waste(conn, store, start, end, track):
     """Waste recorded (container waste is already a waste record), current revisions only, per item in its unit.
-    Purchased items carry no track, so they show only when no track is chosen."""
+    Purchased items carry no track, so they show only when no track is chosen. Grouped by the waste category the
+    manager chose (storage spoilage, service discard, other); o.reason is the free-text note."""
     if not await _has(conn, 'prep_inventory.observations', 'prep_inventory.waste_movements'): return {'available': False}
-    rows = await conn.fetch(f'''SELECT o.id, o.business_date, o.reason, o.base_unit, o.product_id, o.raw_item_code,
+    rows = await conn.fetch(f'''SELECT o.id, o.business_date, o.review_snapshot->'body'->>'category' AS category, o.base_unit, o.product_id, o.raw_item_code,
             coalesce(n.name, i.name, o.raw_item_code) AS name, pl.track,
             -sum(m.quantity) FILTER (WHERE m.side='apply') AS quantity
         FROM prep_inventory.observations o JOIN prep_inventory.waste_movements m ON m.event_id=o.id
@@ -129,7 +130,7 @@ async def waste(conn, store, start, end, track):
                                     'quantity': Decimal(0), 'entries': 0})
         it['quantity'] += _num(r['quantity']); it['entries'] += 1
     reasons = {}
-    for r in rows: reasons[r['reason']] = reasons.get(r['reason'], 0) + 1
+    for r in rows: reasons[r['category'] or 'other'] = reasons.get(r['category'] or 'other', 0) + 1
     top = sorted(items.values(), key=lambda r: (-r['entries'], r['name']))
     return {'available': True, 'entries': len(rows), 'items': len(items), 'by_reason': reasons, 'top_items': top[:LIST_LIMIT]}
 

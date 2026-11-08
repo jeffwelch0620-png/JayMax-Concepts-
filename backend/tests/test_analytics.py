@@ -39,6 +39,24 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
                          {'median_minutes': 20, 'average_minutes': 40, 'longest_minutes': 90})
         self.assertEqual(analytics._minutes([]), {'median_minutes': None, 'average_minutes': None, 'longest_minutes': None})
 
+    async def test_waste_is_grouped_by_the_chosen_category_not_the_note(self):
+        rows = [{'id': 1, 'business_date': TODAY, 'category': 'storage_spoilage', 'base_unit': 'lb', 'product_id': None, 'raw_item_code': 'romaine',
+                 'name': 'Romaine', 'track': None, 'quantity': D('2')},
+                {'id': 2, 'business_date': TODAY, 'category': 'storage_spoilage', 'base_unit': 'lb', 'product_id': None, 'raw_item_code': 'romaine',
+                 'name': 'Romaine', 'track': None, 'quantity': D('1')},
+                {'id': 3, 'business_date': TODAY, 'category': 'service_discard', 'base_unit': 'fl_oz', 'product_id': 'p1', 'raw_item_code': None,
+                 'name': 'Ranch', 'track': 'daily', 'quantity': D('16')}]
+        seen = []
+
+        class Conn:
+            async def fetchval(self, *a): return True
+            async def fetch(self, sql, *a): seen.append(sql); return rows
+
+        w = await analytics.waste(Conn(), 'berts', TODAY, TODAY, None)
+        self.assertEqual((w['entries'], w['items'], w['by_reason']), (3, 2, {'storage_spoilage': 2, 'service_discard': 1}))
+        self.assertIn("review_snapshot->'body'->>'category'", seen[0])
+        self.assertEqual((await analytics.waste(Conn(), 'berts', TODAY, TODAY, 'daily'))['by_reason'], {'service_discard': 1})
+
     def test_general_manager_and_above_see_it(self):
         seen = {code for code, (role, _, _) in positions.POSITIONS.items() if positions.can({'role': role, 'position': code}, 'see_analytics')}
         self.assertEqual(seen, {'OWN', 'OPS', 'GM'})

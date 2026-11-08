@@ -13,6 +13,23 @@ test("the default range uses the local calendar day, not UTC", () => {
   expect(isoDay(new Date(2026, 0, 2, 0, 5))).toBe("2026-01-02");
 });
 
+test("waste tiles name the waste category, not the manager's note", async () => {
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  api.analyticsReport.mockResolvedValue({ ...report(0), waste: { available: true, entries: 3, items: 2,
+    by_reason: { storage_spoilage: 2, service_discard: 1 }, top_items: [] } });
+  const container = document.createElement("div"); document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<AnalyticsTab rid="berts" />));
+    const text = container.querySelector('[data-testid="analytics-waste-section"]').textContent;
+    expect(text).toContain("Storage spoilage");
+    expect(text).toContain("Service discard");
+    expect(text).not.toContain("storage_spoilage");
+  } finally {
+    await act(async () => root.unmount()); container.remove();
+  }
+});
+
 test("an older range answering late never replaces the newer one", async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   const pending = [];
