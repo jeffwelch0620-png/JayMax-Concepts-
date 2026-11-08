@@ -16,6 +16,7 @@ const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "
 const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); };
 const STATUS = { done: "On time", late: "Late", overdue: "Not done", due: "Due today", upcoming: "Upcoming" };
 const REASONS = { out_of_ingredient: "Out of an ingredient", ran_out_of_time: "Ran out of time", equipment: "Equipment", other: "Other" };
+const WASTE = { storage_spoilage: "Storage spoilage", service_discard: "Service discard", other: "Other waste" };
 
 const Grid = ({ children }) => <div className="grid gap-3 mb-3" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))" }}>{children}</div>;
 
@@ -78,7 +79,7 @@ function Waste({ w }) {
   return <>
     <Grid>
       <MetricCard testId="analytics-waste" label="Waste records" value={num(w.entries)} sub={`${w.items} items`} tone={w.entries ? "warn" : "good"} />
-      {Object.entries(w.by_reason).slice(0, 4).map(([k, v]) => <MetricCard key={k} label={k} value={num(v)} />)}
+      {Object.entries(w.by_reason).map(([k, v]) => <MetricCard key={k} label={WASTE[k] || k} value={num(v)} />)}
     </Grid>
     <Table testId="analytics-waste-items" head={["Item", "Kind", "Track", "Records", "Amount"]}
       rows={w.top_items.map(r => [r.name, r.kind === "prep" ? "Prep" : "Purchased", r.track ? prepTrackLabel(r.track) : "–", r.entries, qty(r.quantity, r.unit)])} />
