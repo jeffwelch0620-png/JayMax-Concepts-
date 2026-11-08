@@ -136,6 +136,7 @@ class CliAdapterBindingTests(unittest.IsolatedAsyncioTestCase):
             captured.update(args[-1]);kwargs['progress']({'format':'jaymax-backup-progress-v1',
                 'phase':'fingerprint','state':'running','elapsedSeconds':1})
             self.assertEqual(kwargs['timeout_seconds'],120)
+            self.assertEqual(kwargs['schemas'],backup.CURRENT_SCHEMAS)
             return {'status':'TEST ONLY collection boundary'}
         with TemporaryDirectory() as temporary:
             root=Path(temporary)

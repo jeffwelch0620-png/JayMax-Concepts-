@@ -79,6 +79,98 @@ class EncryptionTests(unittest.TestCase):
                 backup.open_backup(self.encrypted, self.key, PROJECT)
             self.manifest = original
 
+    def test_in_memory_backups_of_either_reviewed_scope_open(self):
+        for schemas in (backup.SCHEMAS, backup.CURRENT_SCHEMAS):
+            self.manifest['schemas'] = list(schemas); self.save()
+            self.assertEqual(backup.open_backup(self.encrypted, self.key, PROJECT)[0]['schemas'], list(schemas))
+            self.assertEqual(backup.decrypt_backup(self.encrypted, self.key, PROJECT)['schemas'], list(schemas))
+
+
+class StreamEnvelopeTests(unittest.TestCase):
+    """Streamed encryption: chunk-by-chunk, so production's 200 MB never sits in memory."""
+    def setUp(self):
+        self.directory = TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.key = self.root / 'key'
+        self.key.write_bytes(Fernet.generate_key())
+        self.raw = self.root / 'archive'
+        self.archive = b'PGDMP\x00synthetic\r\n' + bytes(range(256)) * 9
+        self.raw.write_bytes(self.archive)
+        size, sha = backup.file_digest(self.raw)
+        self.manifest = {'format': backup.STREAM_FORMAT, 'projectRef': PROJECT, 'schemas': list(backup.CURRENT_SCHEMAS),
+            'rowFingerprintAlgorithm': backup.ROW_ALGORITHM, 'archiveBytes': size, 'archiveSha256': sha}
+        self.encrypted = self.root / 'backup.enc'
+        chunk = patch.object(backup, 'STREAM_CHUNK', 1000)
+        chunk.start(); self.addCleanup(chunk.stop)
+
+    def write(self):
+        self.encrypted.unlink(missing_ok=True)
+        backup.write_stream_envelope(self.encrypted, self.key.read_bytes(), self.manifest, self.raw)
+
+    def tokens(self):
+        data = self.encrypted.read_bytes()[len(backup.STREAM_MAGIC):]
+        found = []
+        while data:
+            size = int.from_bytes(data[:4], 'big'); found.append(data[4:4 + size]); data = data[4 + size:]
+        return found
+
+    def rewrite(self, tokens):
+        self.encrypted.write_bytes(backup.STREAM_MAGIC + b''.join(len(t).to_bytes(4, 'big') + t for t in tokens))
+
+    def test_multi_chunk_roundtrip_streams_in_order_and_opens_in_memory(self):
+        self.write()
+        self.assertEqual(len(self.tokens()), 1 + 3)  # manifest + 2321 bytes in 1000-byte chunks
+        self.assertNotIn(b'synthetic', self.encrypted.read_bytes())
+        parts = []
+        self.assertEqual(backup.decrypt_backup(self.encrypted, self.key, PROJECT, parts.append), self.manifest)
+        self.assertEqual(b''.join(parts), self.archive)
+        self.assertEqual(backup.open_backup(self.encrypted, self.key, PROJECT), (self.manifest, self.archive))
+
+    def test_empty_archive_still_has_one_final_chunk(self):
+        self.raw.write_bytes(b''); self.manifest.update(archiveBytes=0, archiveSha256=backup.digest(b''))
+        self.write()
+        self.assertEqual(backup.open_backup(self.encrypted, self.key, PROJECT)[1], b'')
+
+    def test_reordered_dropped_duplicated_or_trailing_chunks_are_rejected(self):
+        self.write()
+        manifest, *chunks = self.tokens()
+        for damaged in ([manifest, chunks[1], chunks[0], chunks[2]], [manifest, chunks[0], chunks[2]],
+                        [manifest, chunks[0], chunks[1]], [manifest, *chunks, chunks[2]], [manifest]):
+            with self.subTest(count=len(damaged)):
+                self.rewrite(damaged)
+                with self.assertRaises(backup.BackupError):
+                    backup.decrypt_backup(self.encrypted, self.key, PROJECT)
+
+    def test_damage_wrong_key_project_scope_or_size_are_rejected(self):
+        for mode in ('damage', 'truncate', 'key', 'project', 'schemas', 'size', 'digest', 'format'):
+            with self.subTest(mode=mode):
+                self.key.write_bytes(Fernet.generate_key())
+                manifest = dict(self.manifest); project = PROJECT
+                if mode == 'schemas': self.manifest['schemas'] = ['public']
+                elif mode == 'size': self.manifest['archiveBytes'] += 1
+                elif mode == 'digest': self.manifest['archiveSha256'] = 'a' * 64
+                elif mode == 'format': self.manifest['format'] = backup.FORMAT
+                self.write(); self.manifest = manifest
+                if mode == 'damage':
+                    damaged = bytearray(self.encrypted.read_bytes()); damaged[-20] ^= 1
+                    self.encrypted.write_bytes(damaged)
+                elif mode == 'truncate':
+                    self.encrypted.write_bytes(self.encrypted.read_bytes()[:-5])
+                elif mode == 'key':
+                    self.key.write_bytes(Fernet.generate_key())
+                elif mode == 'project':
+                    project = 'differentprojectxxxx'
+                with self.assertRaises(backup.BackupError):
+                    backup.decrypt_backup(self.encrypted, self.key, project)
+
+    def test_in_memory_open_keeps_its_bound(self):
+        self.write()
+        with patch.object(backup, 'MAX_ARCHIVE', len(self.archive) - 1):
+            with self.assertRaises(backup.BackupError):
+                backup.open_backup(self.encrypted, self.key, PROJECT)
+        self.assertEqual(backup.decrypt_backup(self.encrypted, self.key, PROJECT), self.manifest)
+
 
 class BoundaryTests(unittest.IsolatedAsyncioTestCase):
     def test_private_directory_acl_and_no_overwrite_boundary(self):
@@ -153,7 +245,7 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_deadline_closes_owned_connection_with_bounded_rollback_and_safe_progress(self):
         with TemporaryDirectory() as temporary:
             root=Path(temporary);conn,tx=self.connection();events=[]
-            async def stalled(connection):
+            async def stalled(connection,**options):
                 await asyncio.Event().wait()
             started=time.monotonic()
             with patch.object(backup,'PROGRESS_INTERVAL_SECONDS',0.01):
@@ -177,7 +269,7 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_operator_cancellation_waits_for_worker_cleanup_without_claiming_success(self):
         with TemporaryDirectory() as temporary:
             root=Path(temporary);conn,tx=self.connection();entered=asyncio.Event()
-            async def stalled(connection):
+            async def stalled(connection,**options):
                 entered.set();await asyncio.Event().wait()
             task=asyncio.create_task(self.export(root,conn,fingerprint_action=stalled))
             await asyncio.wait_for(entered.wait(),2)
@@ -195,7 +287,7 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             real_popen=subprocess.Popen;real_tool=backup.tool;real_cleanup=backup.remove_partial_files
             def start(*args,**kwargs):
                 process=real_popen(*args,**kwargs);children.append(process);return process
-            async def dumping(executable,args,*extra):
+            async def dumping(executable,args,*extra,**options):
                 filename=next(arg[7:] for arg in args if arg.startswith('--file='))
                 script='import pathlib,sys,time; pathlib.Path(sys.argv[1]).write_bytes(b"TEST ONLY partial"); time.sleep(600)'
                 return await real_tool(sys.executable,['-c',script,filename])
@@ -243,7 +335,7 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_synchronous_overrun_is_held_before_final_rename(self):
         with TemporaryDirectory() as temporary:
             root=Path(temporary);conn,tx=self.connection()
-            async def cpu_delay(connection):
+            async def cpu_delay(connection,**options):
                 time.sleep(0.06)
                 return {'tables':{},'catalog':{}}
             with self.assertRaisesRegex(backup.BackupError,'deadline exceeded'):
@@ -251,11 +343,51 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((root/'archive/backup.jmax.enc').exists())
 
     async def test_invalid_budgets_are_refused_before_connection_or_files(self):
-        for budget in (0,-1,601,True,float('nan'),float('inf'),'600'):
+        for budget in (0,-1,3601,True,float('nan'),float('inf'),'600'):
             with self.subTest(budget=budget),patch.object(backup.asyncpg,'connect',AsyncMock()) as connect:
                 with self.assertRaises(backup.BackupError):
                     await backup.export_backup('TEST ONLY',PROJECT,'dump','restore','archive','key',{},timeout_seconds=budget)
                 connect.assert_not_awaited()
+        with patch.object(backup.asyncpg,'connect',AsyncMock()) as connect:
+            with self.assertRaisesRegex(backup.BackupError,'schema scope'):
+                await backup.export_backup('TEST ONLY',PROJECT,'dump','restore','archive','key',{},
+                                           schemas=backup.SCHEMAS[:5])
+            connect.assert_not_awaited()
+
+    async def test_dump_time_follows_the_export_budget_not_the_fixed_tool_limit(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection();seen=[]
+            async def dumping(executable,args,*extra,**options):
+                seen.append((args,options))
+                filename=next((arg[7:] for arg in args if arg.startswith('--file=')),None)
+                if filename: Path(filename).write_bytes(b'PGDMP TEST ONLY fictional archive')
+                return b'; TEST ONLY archive list'
+            await self.export(root,conn,tool_action=dumping,timeout_seconds=1500)
+            dump=next(options for args,options in seen if any(a.startswith('--snapshot=') for a in args))
+            self.assertGreater(dump['timeout_seconds'],backup.TOOL_TIMEOUT_SECONDS)
+            self.assertLessEqual(dump['timeout_seconds'],1500)
+            listing=next(options for args,options in seen if args[0]=='--list')
+            self.assertNotIn('timeout_seconds',listing)
+
+    async def test_current_scope_exports_operations_in_a_streamed_envelope(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection(schemas=backup.CURRENT_SCHEMAS);seen=[]
+            async def dumping(executable,args,*extra,**options):
+                seen.append(args)
+                filename=next((arg[7:] for arg in args if arg.startswith('--file=')),None)
+                if filename: Path(filename).write_bytes(b'PGDMP TEST ONLY fictional archive')
+                return b'; TEST ONLY archive list'
+            result=await self.export(root,conn,tool_action=dumping,schemas=backup.CURRENT_SCHEMAS)
+            self.assertIn('--schema=operations',seen[0])
+            self.assertTrue(backup.is_stream_envelope(result['encryptedBackup']))
+            manifest=backup.decrypt_backup(result['encryptedBackup'],result['privateKey'],PROJECT)
+            self.assertEqual(manifest['schemas'],list(backup.CURRENT_SCHEMAS))
+            self.assertEqual(manifest['format'],backup.STREAM_FORMAT)
+        with TemporaryDirectory() as temporary:
+            # The six-schema scope refuses a database that has the notes journal.
+            root=Path(temporary);conn,tx=self.connection(schemas=backup.CURRENT_SCHEMAS)
+            with self.assertRaisesRegex(backup.BackupError,'unclassified'):
+                await self.export(root,conn)
 
     async def test_progress_sink_failure_is_reported_without_echoing_sink_exception(self):
         with TemporaryDirectory() as temporary:
@@ -265,7 +397,7 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(result['backupDiagnostics']['progressReportingHeld'])
             self.assertNotIn('private console',json.dumps(result))
 
-    def connection(self, *, close_error=None, settings=None):
+    def connection(self, *, close_error=None, settings=None, schemas=backup.SCHEMAS):
         tx=SimpleNamespace(start=AsyncMock(),commit=AsyncMock(),rollback=AsyncMock())
         async def fetch(sql,*args):
             if 'pg_settings' in sql:
@@ -274,10 +406,10 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                     {'name':'idle_in_transaction_session_timeout','setting':'0','unit':'ms'},
                     {'name':'tcp_keepalives_idle','setting':'7200','unit':'s'}]
             if 'FROM pg_namespace WHERE nspname NOT' in sql:
-                return [{'nspname':name} for name in backup.SCHEMAS]
+                return [{'nspname':name} for name in schemas]
             if 'pg_roles' in sql or 'pg_auth_members' in sql: return []
             if 'nspname,pg_get_userbyid' in sql:
-                return [{'nspname':name,'owner':'TEST ONLY owner'} for name in backup.SCHEMAS]
+                return [{'nspname':name,'owner':'TEST ONLY owner'} for name in schemas]
             raise AssertionError('Unexpected fictional query')
         async def scalar(sql,*args):
             if 'pg_export_snapshot' in sql: return 'TEST ONLY exported snapshot'
@@ -292,9 +424,9 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def export(self, root, conn, *, fingerprint_error=None, facts=None,
                      cleanup_error=None, readback_error=None, publish_error=None,
                      fingerprint_action=None, tool_action=None, timeout_seconds=600, progress=None,
-                     maintenance_direct_ipv6=False):
+                     maintenance_direct_ipv6=False, schemas=backup.SCHEMAS):
         def directory(path,area): path.mkdir();return path
-        async def tool(executable,args,*extra):
+        async def tool(executable,args,*extra,**options):
             filename=next((arg[7:] for arg in args if arg.startswith('--file=')),None)
             if filename: Path(filename).write_bytes(b'PGDMP TEST ONLY fictional archive')
             return b'; TEST ONLY archive list'
@@ -315,14 +447,15 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             if cleanup_error:
                 patches.enter_context(patch.object(backup,'remove_partial_files',AsyncMock(side_effect=cleanup_error)))
             if readback_error:
-                patches.enter_context(patch.object(backup,'open_backup',side_effect=readback_error))
+                patches.enter_context(patch.object(backup,'decrypt_backup',side_effect=readback_error))
             if publish_error:
                 patches.enter_context(patch.object(Path,'rename',side_effect=publish_error))
             url=('postgresql://postgres:TEST_ONLY@db.'+PROJECT+'.supabase.co:5432/postgres' if maintenance_direct_ipv6 else
                  'postgresql://postgres.'+PROJECT+':TEST_ONLY@aws-0.pooler.supabase.com:5432/postgres')
             result=await backup.export_backup(url,
                 PROJECT,'TEST ONLY dump','TEST ONLY restore',root/'archive',root/'key',{},
-                timeout_seconds=timeout_seconds,progress=progress,maintenance_direct_ipv6=maintenance_direct_ipv6)
+                timeout_seconds=timeout_seconds,progress=progress,maintenance_direct_ipv6=maintenance_direct_ipv6,
+                schemas=schemas)
             if maintenance_direct_ipv6:
                 connect.assert_not_awaited()
                 self.assertEqual(direct_connect.await_args.args,(url,PROJECT))

@@ -18,7 +18,10 @@ BEGIN
       ADD CONSTRAINT day_lists_track_check CHECK (track IN ('daily','bulk','salad')),
       ADD CONSTRAINT day_lists_salad_store_check CHECK (track <> 'salad' OR store_id = 'berts');
   END IF;
-  IF to_regclass('operations.handoff_notes') IS NOT NULL THEN
+  -- Skip once 20261029_salad_manager_notes.sql has widened the notes, so the two run in either order.
+  IF to_regclass('operations.handoff_notes') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM pg_constraint
+                     WHERE conrelid = to_regclass('operations.handoff_notes') AND conname = 'handoff_notes_salad_store_check') THEN
     ALTER TABLE operations.handoff_notes
       DROP CONSTRAINT handoff_notes_prep_track_check,
       ADD CONSTRAINT handoff_notes_prep_track_check CHECK (prep_track IN ('daily','bulk','salad')),
