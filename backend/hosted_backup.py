@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import time
 from urllib.parse import unquote, urlsplit
@@ -41,8 +42,19 @@ async def remove_partial_files(paths):
         raise failure
 
 SCHEMAS = ('public', 'purchasing', 'actual_inventory', 'prep_inventory', 'integrations', 'supabase_migrations')
+# Databases with the manager note journal also hold `operations`. The CLI exports this
+# scope; the six-schema default stays for the older install/evidence callers.
+CURRENT_SCHEMAS = SCHEMAS + ('operations',)
 MANAGED = {'auth', 'cron', 'extensions', 'graphql', 'graphql_public', 'net', 'realtime', 'storage', 'vault'}
 FORMAT = 'jaymax-encrypted-application-backup-v1'
+# Streamed envelope: magic, then length-prefixed Fernet tokens (manifest, then numbered
+# archive chunks with a final flag). No whole archive is ever held in memory.
+STREAM_FORMAT = 'jaymax-encrypted-application-backup-v2'
+STREAM_MAGIC = b'JMAXENC2\n'
+STREAM_CHUNK = 4 * 1024 * 1024
+MAX_STREAM_TOKEN = 2 * STREAM_CHUNK
+MAX_STREAM_ARCHIVE = 8 * 1024 * 1024 * 1024
+CHUNK_HEADER = struct.Struct('>QB')
 ROW_ALGORITHM = 'sha256-sorted-sha256-canonical-jsonb-utf8-v1'
 # Each modern row contributes 64 ASCII hex bytes plus one LF. Bound the
 # aggregation input, including the sentinel row used to select cursor fallback.
@@ -50,16 +62,20 @@ ROW_ALGORITHM = 'sha256-sorted-sha256-canonical-jsonb-utf8-v1'
 MAX_FINGERPRINT_AGGREGATE_BYTES = 8 * 1024 * 1024
 ROW_HASH_LINE_BYTES = 65
 FINGERPRINT_PATHS = ('serverAggregateRelations', 'cursorFallbackRelations', 'cursorOnlyRelations')
-MAX_ARCHIVE = 64 * 1024 * 1024  # Bounded build tool; larger backups need streaming encryption.
+MAX_ARCHIVE = 64 * 1024 * 1024  # In-memory reads (open_backup); exports and restores stream.
 MAX_ENVELOPE = 3 * MAX_ARCHIVE
 FLAGS = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 CONNECT_TIMEOUT_SECONDS = 20
 COMMAND_TIMEOUT_SECONDS = 60
-TOOL_TIMEOUT_SECONDS = 240
-EXPORT_TIMEOUT_SECONDS = 600
+TOOL_TIMEOUT_SECONDS = 240  # pg_restore and other tools; an export's pg_dump uses the export budget.
+# Production's 200 MB took about 6 minutes to dump on 2026-11-07.
+EXPORT_TIMEOUT_SECONDS = 1800
+MAX_EXPORT_TIMEOUT_SECONDS = 3600
 CLEANUP_TIMEOUT_SECONDS = 5
 PROGRESS_INTERVAL_SECONDS = 5
 EXPORT_CONTROL = ContextVar('jaymax_backup_export_control', default=None)
+# Set only around an export's pg_dump, which gets the rest of the export budget.
+TOOL_BUDGET = ContextVar('jaymax_backup_tool_budget', default=None)
 LIMIT_NAMES = ('idle_in_transaction_session_timeout', 'statement_timeout',
     'idle_session_timeout', 'transaction_timeout', 'tcp_keepalives_idle',
     'tcp_keepalives_interval', 'tcp_keepalives_count', 'tcp_user_timeout')
@@ -250,8 +266,11 @@ class ExportControl:
             except Exception as error:
                 self.termination_error = type(error).__name__
 
+    def remaining(self):
+        return self.diagnostics.timeout_seconds - (time.monotonic()-self.diagnostics.started)
+
     def check_deadline(self):
-        if time.monotonic()-self.diagnostics.started >= self.diagnostics.timeout_seconds:
+        if self.remaining() <= 0:
             self.diagnostics.deadline_exceeded = True
             self.abort()
             raise BackupError('Overall backup export deadline exceeded')
@@ -353,7 +372,8 @@ async def tool(executable, args, settings=None, remote=False):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=FLAGS)
     communication = asyncio.create_task(asyncio.to_thread(process.communicate))
     try:
-        stdout, stderr = await asyncio.wait_for(asyncio.shield(communication), TOOL_TIMEOUT_SECONDS)
+        stdout, stderr = await asyncio.wait_for(asyncio.shield(communication),
+            TOOL_BUDGET.get() or TOOL_TIMEOUT_SECONDS)
     except BaseException as original:
         try:
             if process.poll() is None:
@@ -484,7 +504,7 @@ async def relation_fingerprints_batched(conn, relations, row_hashes=True, *,
     return tables
 
 
-async def fingerprint(conn, row_hashes=True, *, server_aggregation=True):
+async def fingerprint(conn, row_hashes=True, *, server_aggregation=True, schemas=SCHEMAS):
     # Deparser output is session-sensitive (pg_dump uses quote_all_identifiers).
     # Normalize within the caller's snapshot, without changing role/app defaults.
     await conn.execute("SET LOCAL quote_all_identifiers=off; SET LOCAL TIME ZONE 'UTC'; SET LOCAL search_path=pg_catalog; SET LOCAL DateStyle='ISO,YMD'; SET LOCAL IntervalStyle=postgres; SET LOCAL bytea_output=hex; SET LOCAL extra_float_digits=3; SET LOCAL standard_conforming_strings=on; SET LOCAL row_security=off")
@@ -496,19 +516,19 @@ async def fingerprint(conn, row_hashes=True, *, server_aggregation=True):
         if key == 'functions':
             sql = sql.replace('p.proacl::text AS acl', "ARRAY(SELECT a::text FROM unnest(coalesce(p.proacl,acldefault('f',p.proowner))) a ORDER BY a::text) AS acl")
         sql = sql.replace('ORDER BY a::text', 'ORDER BY a::text COLLATE "C"')
-        rows = await conn.fetch('SELECT to_jsonb(r)::text AS value FROM (' + sql + ') r ORDER BY to_jsonb(r)::text', list(SCHEMAS))
+        rows = await conn.fetch('SELECT to_jsonb(r)::text AS value FROM (' + sql + ') r ORDER BY to_jsonb(r)::text', list(schemas))
         # Database collations differ between hosted Linux and local Windows.
         # Compare identical records in a portable client order, not locale order.
         catalog[key] = {'objects': len(rows), 'sha256': digest('\n'.join(sorted(r['value'] for r in rows)).encode())}
     acl = await conn.fetch('''SELECT n.nspname,pg_get_userbyid(d.defaclrole) AS role,d.defaclobjtype::text AS kind,
         ARRAY(SELECT a::text FROM unnest(d.defaclacl) a ORDER BY a::text COLLATE "C") AS acl
         FROM pg_default_acl d JOIN pg_namespace n ON n.oid=d.defaclnamespace WHERE n.nspname=ANY($1::text[])
-        ORDER BY 1,2,3''', list(SCHEMAS))
+        ORDER BY 1,2,3''', list(schemas))
     catalog['default_acl'] = {'objects': len(acl), 'sha256': digest('\n'.join(sorted(json.dumps(dict(r), sort_keys=True) for r in acl)).encode())}
     tables = {}
     relations = await conn.fetch('''SELECT n.nspname,c.relname,c.relkind::text AS kind FROM pg_class c
         JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=ANY($1::text[])
-        AND c.relkind IN ('r','p','m','S') ORDER BY 1,2''', list(SCHEMAS))
+        AND c.relkind IN ('r','p','m','S') ORDER BY 1,2''', list(schemas))
     for relation in relations:
         name = relation['nspname'] + '.' + relation['relname']
         quoted = native.quoted(relation['nspname']) + '.' + native.quoted(relation['relname'])
@@ -554,7 +574,7 @@ async def fingerprint_batched(conn, row_hashes=True, *, server_aggregation=True)
                                                 server_aggregation=server_aggregation)
     return {'tables': tables, 'catalog': catalog}
 
-async def dependencies(conn):
+async def dependencies(conn, schemas=SCHEMAS):
     """Record referenced managed objects. Unsupported dependencies hold recovery."""
     rows = await conn.fetch('''WITH objects AS (
       SELECT 'pg_class'::regclass AS classid,c.oid AS objid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=ANY($1::text[])
@@ -570,7 +590,7 @@ async def dependencies(conn):
       CROSS JOIN LATERAL pg_identify_object(d.refclassid,d.refobjid,d.refobjsubid) i
       LEFT JOIN pg_depend member ON member.classid=d.refclassid AND member.objid=d.refobjid AND member.deptype='e' AND member.refclassid='pg_extension'::regclass
       LEFT JOIN pg_extension e ON e.oid=member.refobjid
-      WHERE i.schema IS NOT NULL AND NOT i.schema=ANY($1::text[]) AND i.schema NOT LIKE 'pg_%' ORDER BY 2,3''', list(SCHEMAS))
+      WHERE i.schema IS NOT NULL AND NOT i.schema=ANY($1::text[]) AND i.schema NOT LIKE 'pg_%' ORDER BY 2,3''', list(schemas))
     facts = [dict(row) for row in rows]
     extensions = []
     functions = []
@@ -590,8 +610,107 @@ async def dependencies(conn):
     return {'objects': facts, 'extensions': extensions, 'authFunctions': functions}
 
 
-def open_backup(encrypted, key, expected_project):
+def file_digest(path):
+    sha = hashlib.sha256()
+    size = 0
+    with Path(path).open('rb') as stream:
+        while chunk := stream.read(STREAM_CHUNK):
+            sha.update(chunk)
+            size += len(chunk)
+    return size, sha.hexdigest()
+
+
+def write_token(stream, token):
+    stream.write(struct.pack('>I', len(token)))
+    stream.write(token)
+
+
+def read_token(stream):
+    length = stream.read(4)
+    if len(length) != 4:
+        raise ValueError('Truncated envelope')
+    (size,) = struct.unpack('>I', length)
+    if not 0 < size <= MAX_STREAM_TOKEN:
+        raise ValueError('Envelope token size')
+    token = stream.read(size)
+    if len(token) != size:
+        raise ValueError('Truncated envelope')
+    return token
+
+
+def write_stream_envelope(path, key, manifest, raw):
+    """Encrypt the archive chunk by chunk; memory stays near one chunk."""
+    fernet = Fernet(key)
+    with Path(path).open('xb') as out, Path(raw).open('rb') as source:
+        out.write(STREAM_MAGIC)
+        write_token(out, fernet.encrypt(json.dumps(manifest).encode()))
+        index, chunk = 0, source.read(STREAM_CHUNK)
+        while True:
+            following = source.read(STREAM_CHUNK)
+            final = not following
+            write_token(out, fernet.encrypt(CHUNK_HEADER.pack(index, final) + chunk))
+            if final:
+                return
+            index, chunk = index + 1, following
+
+
+def is_stream_envelope(path):
+    path = Path(path)
+    if not path.is_file():
+        return False
+    with path.open('rb') as stream:
+        return stream.read(len(STREAM_MAGIC)) == STREAM_MAGIC
+
+
+def decrypt_backup(encrypted, key, expected_project, sink=None, *, max_archive=MAX_STREAM_ARCHIVE):
+    """Authenticate a backup of either format, passing archive bytes to sink in order.
+
+    Every chunk is authenticated; the archive digest and size are checked at the end,
+    so a caller must discard whatever sink received if this raises."""
     encrypted = Path(encrypted)
+    if not is_stream_envelope(encrypted):
+        manifest, archive = open_backup(encrypted, key, expected_project)
+        if sink is not None:
+            sink(archive)
+        return manifest
+    try:
+        fernet = Fernet(Path(key).read_bytes())
+        with encrypted.open('rb') as stream:
+            stream.read(len(STREAM_MAGIC))
+            manifest = json.loads(fernet.decrypt(read_token(stream)))
+            if (manifest['format'] != STREAM_FORMAT or manifest['projectRef'] != expected_project
+                or manifest['schemas'] not in (list(SCHEMAS), list(CURRENT_SCHEMAS))
+                or manifest.get('rowFingerprintAlgorithm') not in (None, ROW_ALGORITHM)
+                or type(manifest['archiveBytes']) is not int or not 0 <= manifest['archiveBytes'] <= max_archive):
+                raise ValueError('Manifest validation failed')
+            sha, total, index = hashlib.sha256(), 0, 0
+            while True:
+                plain = fernet.decrypt(read_token(stream))
+                number, final = CHUNK_HEADER.unpack_from(plain)
+                data = plain[CHUNK_HEADER.size:]
+                total += len(data)
+                if number != index or final not in (0, 1) or total > manifest['archiveBytes']:
+                    raise ValueError('Chunk order or size')
+                sha.update(data)
+                if sink is not None:
+                    sink(data)
+                if final:
+                    break
+                index += 1
+            if stream.read(1) or total != manifest['archiveBytes'] or sha.hexdigest() != manifest['archiveSha256']:
+                raise ValueError('Archive digest or size')
+    except Exception as exc:
+        raise BackupError('Backup authentication or manifest validation failed') from exc
+    return manifest
+
+
+def open_backup(encrypted, key, expected_project):
+    """Whole archive in memory (bounded); restores of large backups use decrypt_backup."""
+    encrypted = Path(encrypted)
+    if is_stream_envelope(encrypted):
+        parts = []
+        manifest = decrypt_backup(encrypted, key, expected_project, parts.append, max_archive=MAX_ARCHIVE)
+        return manifest, b''.join(parts)
     if not encrypted.is_file() or encrypted.stat().st_size > MAX_ENVELOPE:
         raise BackupError('Missing or oversized encrypted backup')
     try:
@@ -599,7 +718,7 @@ def open_backup(encrypted, key, expected_project):
         manifest = value['manifest']
         archive = base64.b64decode(value['archive'], validate=True)
         if (manifest['format'] != FORMAT or manifest['projectRef'] != expected_project
-            or manifest['schemas'] != list(SCHEMAS) or len(archive) > MAX_ARCHIVE
+            or manifest['schemas'] not in (list(SCHEMAS), list(CURRENT_SCHEMAS)) or len(archive) > MAX_ARCHIVE
             or manifest.get('rowFingerprintAlgorithm') not in (None, ROW_ALGORITHM)
             or digest(archive) != manifest['archiveSha256'] or len(archive) != manifest['archiveBytes']):
             raise ValueError('Manifest validation failed')
@@ -619,18 +738,24 @@ def restore_list(toc):
 
 
 async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory, migration_hashes,
-                        *, timeout_seconds=EXPORT_TIMEOUT_SECONDS, progress=None, maintenance_direct_ipv6=False):
-    if type(maintenance_direct_ipv6) is not bool:
+                        *, timeout_seconds=EXPORT_TIMEOUT_SECONDS, progress=None, maintenance_direct_ipv6=False,
+                        schemas=SCHEMAS, streamed=False):
+    # streamed=False keeps the v1 in-memory envelope that the install/evidence callers
+    # (receiving_install_evidence) authenticate directly; the CLI streams.
+    if type(maintenance_direct_ipv6) is not bool or type(streamed) is not bool:
         raise BackupError('Explicit boolean maintenance mode required')
     if (isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float))
-            or not 0 < timeout_seconds <= EXPORT_TIMEOUT_SECONDS or not math.isfinite(timeout_seconds)):
-        raise BackupError('Export timeout must be positive and at most 600 seconds')
+            or not 0 < timeout_seconds <= MAX_EXPORT_TIMEOUT_SECONDS or not math.isfinite(timeout_seconds)):
+        raise BackupError(f'Export timeout must be positive and at most {MAX_EXPORT_TIMEOUT_SECONDS} seconds')
+    if tuple(schemas) not in (SCHEMAS, CURRENT_SCHEMAS):
+        raise BackupError('Unreviewed backup schema scope')
     diagnostics = ExportDiagnostics(timeout_seconds, progress)
     control = ExportControl(diagnostics)
     token = EXPORT_CONTROL.set(control)
     options = {'maintenance_direct_ipv6': True} if maintenance_direct_ipv6 else {}
     worker = asyncio.create_task(_export_backup(url, project, pg_dump, pg_restore, backup_directory,
-                                               key_directory, migration_hashes, diagnostics, **options))
+                                               key_directory, migration_hashes, diagnostics,
+                                               schemas=tuple(schemas), streamed=streamed, **options))
     watcher = asyncio.create_task(control.watch(worker))
     try:
         try:
@@ -680,7 +805,8 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
 
 
 async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory,
-                         migration_hashes, diagnostics, *, maintenance_direct_ipv6=False):
+                         migration_hashes, diagnostics, *, maintenance_direct_ipv6=False, schemas=SCHEMAS,
+                         streamed=False):
     if maintenance_direct_ipv6:
         import maintenance_connection
         settings = await maintenance_connection.dump_settings(url, project)
@@ -726,22 +852,30 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
                         await diagnostics.read_limits(conn)
                     with diagnostics.phase('schema_check'):
                         found = {r['nspname'] for r in await conn.fetch("SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname<>'information_schema'")}
-                        if set(SCHEMAS) - found or found - set(SCHEMAS) - MANAGED:
+                        if set(schemas) - found or found - set(schemas) - MANAGED:
                             raise BackupError('Missing or unclassified database schemas')
                     with diagnostics.phase('export_snapshot'):
                         snapshot = await conn.fetchval('SELECT pg_export_snapshot()')
+                    # The default scope keeps the original call shape that existing callers stub.
                     with diagnostics.phase('fingerprint'):
-                        facts = await fingerprint(conn)
+                        facts = await (fingerprint(conn) if schemas == SCHEMAS else fingerprint(conn, schemas=schemas))
                     with diagnostics.phase('dependencies'):
-                        dependency = await dependencies(conn)
+                        dependency = await (dependencies(conn) if schemas == SCHEMAS else dependencies(conn, schemas))
                     with diagnostics.phase('role_metadata'):
                         roles = [dict(r) for r in await conn.fetch("SELECT rolname,rolinherit,rolconnlimit,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication,rolcanlogin,rolvaliduntil::text,rolconfig FROM pg_roles WHERE rolname NOT LIKE 'pg_%' ORDER BY rolname")]
                         memberships = [dict(r) for r in await conn.fetch('SELECT pg_get_userbyid(roleid) AS role,pg_get_userbyid(member) AS member,admin_option,inherit_option,set_option FROM pg_auth_members ORDER BY 1,2')]
                     with diagnostics.phase('pg_dump'):
-                        await tool(pg_dump, ['--format=custom', '--quote-all-identifiers', '--encoding=UTF8', '--lock-wait-timeout=5000',
-                            '--snapshot=' + snapshot, '--file=' + str(raw), '--no-password', *['--schema=' + schema for schema in SCHEMAS]], settings, True)
-                        if raw.stat().st_size > MAX_ARCHIVE:
-                            raise BackupError('Archive exceeds build encryption bound; streaming export required')
+                        # The export deadline (watcher) stops the dump; this is only its backstop.
+                        budget = TOOL_BUDGET.set(max(EXPORT_CONTROL.get().remaining(), 0) + CLEANUP_TIMEOUT_SECONDS)
+                        try:
+                            await tool(pg_dump, ['--format=custom', '--quote-all-identifiers', '--encoding=UTF8', '--lock-wait-timeout=5000',
+                                '--snapshot=' + snapshot, '--file=' + str(raw), '--no-password', *['--schema=' + schema for schema in schemas]],
+                                settings, True)
+                        finally:
+                            TOOL_BUDGET.reset(budget)
+                        if raw.stat().st_size > (MAX_STREAM_ARCHIVE if streamed else MAX_ARCHIVE):
+                            raise BackupError('Archive exceeds the encryption bound' +
+                                              ('' if streamed else '; streamed export required'))
                     with diagnostics.phase('sequence_recheck'):
                         # Sequence values are outside MVCC: hold on observed changes.
                         for name, fact in facts['tables'].items():
@@ -751,22 +885,27 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
                                 if digest((row + '\n').encode()) != fact['sha256']:
                                     raise BackupError('Sequence changed during export')
                     with diagnostics.phase('manifest'):
-                        data = raw.read_bytes()
-                        manifest = {'format': FORMAT, 'projectRef': project, 'schemas': list(SCHEMAS),
+                        archive_bytes, archive_sha256 = file_digest(raw)
+                        manifest = {'format': STREAM_FORMAT if streamed else FORMAT, 'projectRef': project, 'schemas': list(schemas),
                             'rowFingerprintAlgorithm': ROW_ALGORITHM, 'databaseOwner': await conn.fetchval('SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()'),
-                            'schemaOwners': {r['nspname']: r['owner'] for r in await conn.fetch('SELECT nspname,pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname=ANY($1::text[])', list(SCHEMAS))},
+                            'schemaOwners': {r['nspname']: r['owner'] for r in await conn.fetch('SELECT nspname,pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname=ANY($1::text[])', list(schemas))},
                             'createdAt': datetime.now(timezone.utc).isoformat(), 'serverVersionNum': await conn.fetchval('SHOW server_version_num'),
-                            'archiveBytes': len(data), 'archiveSha256': digest(data), 'dependencies': dependency,
+                            'archiveBytes': archive_bytes, 'archiveSha256': archive_sha256, 'dependencies': dependency,
                             'rolesWithoutPasswords': roles, 'roleMemberships': memberships, 'migrationFileHashes': migration_hashes,
                             'sequenceStateIsMvcc': False, 'sequencesObservedStable': True, 'managedRecoveryVerified': False, **facts}
             with diagnostics.phase('encrypt'):
-                with candidate.open('xb') as stream:
-                    stream.write(Fernet(key).encrypt(json.dumps({'manifest': manifest, 'archive': base64.b64encode(data).decode()}).encode()))
+                if streamed:
+                    write_stream_envelope(candidate, key, manifest, raw)
+                else:
+                    with candidate.open('xb') as stream:
+                        stream.write(Fernet(key).encrypt(json.dumps({'manifest': manifest,
+                            'archive': base64.b64encode(raw.read_bytes()).decode()}).encode()))
             with diagnostics.phase('read_back'):
-                verified, archive = open_backup(candidate, private_key, project)
-                if verified != manifest or archive != data:
+                readback = hashlib.sha256()
+                verified = decrypt_backup(candidate, private_key, project, readback.update)
+                if verified != manifest or readback.hexdigest() != archive_sha256:
                     raise BackupError('Encrypted readback mismatch')
-                encrypted_sha256 = digest(candidate.read_bytes())
+                encrypted_sha256 = file_digest(candidate)[1]
             with diagnostics.phase('archive_list'):
                 await tool(pg_restore, ['--list', str(raw)])
         # Reached only after the protected connection-close step succeeds.
@@ -788,7 +927,7 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
     settings = native.disposable_connection(dsn)
     if not re.fullmatch(r'native_purchase_test_backup_[a-f0-9]{32}', settings['database']):
         raise BackupError('Fresh UUID-named backup test database required')
-    manifest, archive = open_backup(encrypted, key, project)  # Authenticate before connection or writes.
+    manifest = decrypt_backup(encrypted, key, project)  # Authenticate in full before connection or writes.
     directory = private_directory(temporary_directory, 'backups')
     raw = directory / 'restore.partial'
     listing = directory / 'restore.list.partial'
@@ -799,7 +938,8 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
     async with preserve_cleanup_failure(lambda: remove_partial_files((raw, listing)), 'partialCleanupErrorType'), \
                preserve_cleanup_failure(close_connection, 'connectionCloseErrorType'):
         with raw.open('xb') as stream:
-            stream.write(archive)
+            if decrypt_backup(encrypted, key, project, stream.write) != manifest:
+                raise BackupError('Backup changed during restore')
         with listing.open('xb') as stream:
             stream.write(restore_list(await tool(pg_restore, ['--list', str(raw)])))
         conn = await asyncpg.connect(**settings, ssl=False)
@@ -843,7 +983,9 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
             algorithm = manifest.get('rowFingerprintAlgorithm')
             if algorithm not in (None, ROW_ALGORITHM):
                 raise BackupError('Unsupported row fingerprint algorithm')
-            actual = await fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM)
+            scope = tuple(manifest['schemas'])
+            actual = await (fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM) if scope == SCHEMAS else
+                            fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM, schemas=scope))
         expected = {key: manifest[key] for key in ('tables', 'catalog')}
         differences = {group: [name for name in sorted(set(actual[group]) | set(expected[group])) if actual[group].get(name) != expected[group].get(name)] for group in expected}
         if any(differences.values()):

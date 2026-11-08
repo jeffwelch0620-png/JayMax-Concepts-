@@ -27,7 +27,9 @@ digest = backup.digest
 BackupError = backup.BackupError
 record_fingerprint_path = backup.record_fingerprint_path
 
-FROZEN_FUNCTION_SHA256 = {'backend/hosted_install_preservation.py:fingerprints': '1023ddfa1851bde1295e4a268d3c82ee97aa4dfa15a50ac4d9328838d773e7ef', 'backend/hosted_backup.py:relation_fingerprint': '158e9bd5b5b3c89b226c79424a1580dc6215df7b65a42071f6bc57f991103b3e', 'backend/hosted_backup.py:fingerprint': 'f017bce91d347c408c04b460a85550d2f752e2e236632ca36a6f40b7e72ad4a8'}
+# fingerprint re-pinned 2026-11-08: it gained a `schemas` keyword whose default (SCHEMAS) keeps
+# the original six-schema behaviour, so the oracle below still matches its default call.
+FROZEN_FUNCTION_SHA256 = {'backend/hosted_install_preservation.py:fingerprints': '1023ddfa1851bde1295e4a268d3c82ee97aa4dfa15a50ac4d9328838d773e7ef', 'backend/hosted_backup.py:relation_fingerprint': '158e9bd5b5b3c89b226c79424a1580dc6215df7b65a42071f6bc57f991103b3e', 'backend/hosted_backup.py:fingerprint': '4ac9daec58900656fea666e6a7b19705a9cae66b9fde68790f3994c98719e626'}
 
 
 async def _oracle_preservation(conn, baseline, *, exclude_synthetic=None):
