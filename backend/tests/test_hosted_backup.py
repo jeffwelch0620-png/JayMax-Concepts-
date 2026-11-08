@@ -377,7 +377,7 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 filename=next((arg[7:] for arg in args if arg.startswith('--file=')),None)
                 if filename: Path(filename).write_bytes(b'PGDMP TEST ONLY fictional archive')
                 return b'; TEST ONLY archive list'
-            result=await self.export(root,conn,tool_action=dumping,schemas=backup.CURRENT_SCHEMAS)
+            result=await self.export(root,conn,tool_action=dumping,schemas=backup.CURRENT_SCHEMAS,streamed=True)
             self.assertIn('--schema=operations',seen[0])
             self.assertTrue(backup.is_stream_envelope(result['encryptedBackup']))
             manifest=backup.decrypt_backup(result['encryptedBackup'],result['privateKey'],PROJECT)
@@ -388,6 +388,25 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             root=Path(temporary);conn,tx=self.connection(schemas=backup.CURRENT_SCHEMAS)
             with self.assertRaisesRegex(backup.BackupError,'unclassified'):
                 await self.export(root,conn)
+
+    async def test_default_export_keeps_the_v1_envelope_that_install_evidence_authenticates(self):
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection()
+            result=await self.export(root,conn)
+            self.assertFalse(backup.is_stream_envelope(result['encryptedBackup']))
+            # receiving_install_evidence decrypts the file as one Fernet token holding JSON.
+            value=json.loads(Fernet(Path(result['privateKey']).read_bytes()).decrypt(
+                Path(result['encryptedBackup']).read_bytes()))
+            self.assertEqual(value['manifest']['format'],backup.FORMAT)
+            self.assertEqual(base64.b64decode(value['archive']),b'PGDMP TEST ONLY fictional archive')
+        with TemporaryDirectory() as temporary, patch.object(backup,'MAX_ARCHIVE',5):
+            root=Path(temporary);conn,tx=self.connection()
+            with self.assertRaisesRegex(backup.BackupError,'streamed export required'):
+                await self.export(root,conn)
+        with patch.object(backup.asyncpg,'connect',AsyncMock()) as connect:
+            with self.assertRaises(backup.BackupError):
+                await backup.export_backup('TEST ONLY',PROJECT,'dump','restore','archive','key',{},streamed=1)
+            connect.assert_not_awaited()
 
     async def test_progress_sink_failure_is_reported_without_echoing_sink_exception(self):
         with TemporaryDirectory() as temporary:
@@ -424,7 +443,7 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def export(self, root, conn, *, fingerprint_error=None, facts=None,
                      cleanup_error=None, readback_error=None, publish_error=None,
                      fingerprint_action=None, tool_action=None, timeout_seconds=600, progress=None,
-                     maintenance_direct_ipv6=False, schemas=backup.SCHEMAS):
+                     maintenance_direct_ipv6=False, schemas=backup.SCHEMAS, streamed=False):
         def directory(path,area): path.mkdir();return path
         async def tool(executable,args,*extra,**options):
             filename=next((arg[7:] for arg in args if arg.startswith('--file=')),None)
@@ -455,7 +474,7 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             result=await backup.export_backup(url,
                 PROJECT,'TEST ONLY dump','TEST ONLY restore',root/'archive',root/'key',{},
                 timeout_seconds=timeout_seconds,progress=progress,maintenance_direct_ipv6=maintenance_direct_ipv6,
-                schemas=schemas)
+                schemas=schemas,streamed=streamed)
             if maintenance_direct_ipv6:
                 connect.assert_not_awaited()
                 self.assertEqual(direct_connect.await_args.args,(url,PROJECT))

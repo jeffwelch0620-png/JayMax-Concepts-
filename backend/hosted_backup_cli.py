@@ -59,7 +59,7 @@ async def main():
         options = {'maintenance_direct_ipv6': True} if args.maintenance_direct_ipv6 else {}
         result = await backup.export_backup(url, args.expected_project,
             binaries / 'pg_dump.exe', binaries / 'pg_restore.exe', root / 'backups' / label,
-            root / 'credentials' / label, migrations, timeout_seconds=args.timeout_seconds, schemas=backup.CURRENT_SCHEMAS,
+            root / 'credentials' / label, migrations, timeout_seconds=args.timeout_seconds, schemas=backup.CURRENT_SCHEMAS, streamed=True,
             progress=lambda event: print(json.dumps(event), file=sys.stderr, flush=True), **options)
     else:
         dsn = os.environ.get(args.connection_env)

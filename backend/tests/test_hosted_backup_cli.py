@@ -137,6 +137,7 @@ class CliAdapterBindingTests(unittest.IsolatedAsyncioTestCase):
                 'phase':'fingerprint','state':'running','elapsedSeconds':1})
             self.assertEqual(kwargs['timeout_seconds'],120)
             self.assertEqual(kwargs['schemas'],backup.CURRENT_SCHEMAS)
+            self.assertIs(kwargs['streamed'],True)
             return {'status':'TEST ONLY collection boundary'}
         with TemporaryDirectory() as temporary:
             root=Path(temporary)

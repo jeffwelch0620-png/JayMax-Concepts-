@@ -737,8 +737,10 @@ def restore_list(toc):
 
 async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory, migration_hashes,
                         *, timeout_seconds=EXPORT_TIMEOUT_SECONDS, progress=None, maintenance_direct_ipv6=False,
-                        schemas=SCHEMAS):
-    if type(maintenance_direct_ipv6) is not bool:
+                        schemas=SCHEMAS, streamed=False):
+    # streamed=False keeps the v1 in-memory envelope that the install/evidence callers
+    # (receiving_install_evidence) authenticate directly; the CLI streams.
+    if type(maintenance_direct_ipv6) is not bool or type(streamed) is not bool:
         raise BackupError('Explicit boolean maintenance mode required')
     if (isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float))
             or not 0 < timeout_seconds <= MAX_EXPORT_TIMEOUT_SECONDS or not math.isfinite(timeout_seconds)):
@@ -751,7 +753,7 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
     options = {'maintenance_direct_ipv6': True} if maintenance_direct_ipv6 else {}
     worker = asyncio.create_task(_export_backup(url, project, pg_dump, pg_restore, backup_directory,
                                                key_directory, migration_hashes, diagnostics,
-                                               schemas=tuple(schemas), **options))
+                                               schemas=tuple(schemas), streamed=streamed, **options))
     watcher = asyncio.create_task(control.watch(worker))
     try:
         try:
@@ -801,7 +803,8 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
 
 
 async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory,
-                         migration_hashes, diagnostics, *, maintenance_direct_ipv6=False, schemas=SCHEMAS):
+                         migration_hashes, diagnostics, *, maintenance_direct_ipv6=False, schemas=SCHEMAS,
+                         streamed=False):
     if maintenance_direct_ipv6:
         import maintenance_connection
         settings = await maintenance_connection.dump_settings(url, project)
@@ -862,8 +865,9 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
                         await tool(pg_dump, ['--format=custom', '--quote-all-identifiers', '--encoding=UTF8', '--lock-wait-timeout=5000',
                             '--snapshot=' + snapshot, '--file=' + str(raw), '--no-password', *['--schema=' + schema for schema in schemas]],
                             settings, True, timeout_seconds=max(EXPORT_CONTROL.get().remaining(), 0.001))
-                        if raw.stat().st_size > MAX_STREAM_ARCHIVE:
-                            raise BackupError('Archive exceeds the streamed encryption bound')
+                        if raw.stat().st_size > (MAX_STREAM_ARCHIVE if streamed else MAX_ARCHIVE):
+                            raise BackupError('Archive exceeds the encryption bound' +
+                                              ('' if streamed else '; streamed export required'))
                     with diagnostics.phase('sequence_recheck'):
                         # Sequence values are outside MVCC: hold on observed changes.
                         for name, fact in facts['tables'].items():
@@ -874,7 +878,7 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
                                     raise BackupError('Sequence changed during export')
                     with diagnostics.phase('manifest'):
                         archive_bytes, archive_sha256 = file_digest(raw)
-                        manifest = {'format': STREAM_FORMAT, 'projectRef': project, 'schemas': list(schemas),
+                        manifest = {'format': STREAM_FORMAT if streamed else FORMAT, 'projectRef': project, 'schemas': list(schemas),
                             'rowFingerprintAlgorithm': ROW_ALGORITHM, 'databaseOwner': await conn.fetchval('SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()'),
                             'schemaOwners': {r['nspname']: r['owner'] for r in await conn.fetch('SELECT nspname,pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname=ANY($1::text[])', list(schemas))},
                             'createdAt': datetime.now(timezone.utc).isoformat(), 'serverVersionNum': await conn.fetchval('SHOW server_version_num'),
@@ -882,7 +886,12 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
                             'rolesWithoutPasswords': roles, 'roleMemberships': memberships, 'migrationFileHashes': migration_hashes,
                             'sequenceStateIsMvcc': False, 'sequencesObservedStable': True, 'managedRecoveryVerified': False, **facts}
             with diagnostics.phase('encrypt'):
-                write_stream_envelope(candidate, key, manifest, raw)
+                if streamed:
+                    write_stream_envelope(candidate, key, manifest, raw)
+                else:
+                    with candidate.open('xb') as stream:
+                        stream.write(Fernet(key).encrypt(json.dumps({'manifest': manifest,
+                            'archive': base64.b64encode(raw.read_bytes()).decode()}).encode()))
             with diagnostics.phase('read_back'):
                 readback = hashlib.sha256()
                 verified = decrypt_backup(candidate, private_key, project, readback.update)
