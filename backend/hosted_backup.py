@@ -74,6 +74,8 @@ MAX_EXPORT_TIMEOUT_SECONDS = 3600
 CLEANUP_TIMEOUT_SECONDS = 5
 PROGRESS_INTERVAL_SECONDS = 5
 EXPORT_CONTROL = ContextVar('jaymax_backup_export_control', default=None)
+# Set only around an export's pg_dump, which gets the rest of the export budget.
+TOOL_BUDGET = ContextVar('jaymax_backup_tool_budget', default=None)
 LIMIT_NAMES = ('idle_in_transaction_session_timeout', 'statement_timeout',
     'idle_session_timeout', 'transaction_timeout', 'tcp_keepalives_idle',
     'tcp_keepalives_interval', 'tcp_keepalives_count', 'tcp_user_timeout')
@@ -361,7 +363,7 @@ def process_env(settings, remote):
     return env
 
 
-async def tool(executable, args, settings=None, remote=False, *, timeout_seconds=None):
+async def tool(executable, args, settings=None, remote=False):
     # Popen gives this coroutine ownership before its first cancellation point.
     # A cancelled to_thread(subprocess.run) used to leave pg_dump writing after
     # partial-file cleanup. Kill and reap this exact child before unwinding.
@@ -371,7 +373,7 @@ async def tool(executable, args, settings=None, remote=False, *, timeout_seconds
     communication = asyncio.create_task(asyncio.to_thread(process.communicate))
     try:
         stdout, stderr = await asyncio.wait_for(asyncio.shield(communication),
-            TOOL_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds)
+            TOOL_BUDGET.get() or TOOL_TIMEOUT_SECONDS)
     except BaseException as original:
         try:
             if process.poll() is None:
@@ -854,17 +856,23 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
                             raise BackupError('Missing or unclassified database schemas')
                     with diagnostics.phase('export_snapshot'):
                         snapshot = await conn.fetchval('SELECT pg_export_snapshot()')
+                    # The default scope keeps the original call shape that existing callers stub.
                     with diagnostics.phase('fingerprint'):
-                        facts = await fingerprint(conn, schemas=schemas)
+                        facts = await (fingerprint(conn) if schemas == SCHEMAS else fingerprint(conn, schemas=schemas))
                     with diagnostics.phase('dependencies'):
-                        dependency = await dependencies(conn, schemas)
+                        dependency = await (dependencies(conn) if schemas == SCHEMAS else dependencies(conn, schemas))
                     with diagnostics.phase('role_metadata'):
                         roles = [dict(r) for r in await conn.fetch("SELECT rolname,rolinherit,rolconnlimit,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication,rolcanlogin,rolvaliduntil::text,rolconfig FROM pg_roles WHERE rolname NOT LIKE 'pg_%' ORDER BY rolname")]
                         memberships = [dict(r) for r in await conn.fetch('SELECT pg_get_userbyid(roleid) AS role,pg_get_userbyid(member) AS member,admin_option,inherit_option,set_option FROM pg_auth_members ORDER BY 1,2')]
                     with diagnostics.phase('pg_dump'):
-                        await tool(pg_dump, ['--format=custom', '--quote-all-identifiers', '--encoding=UTF8', '--lock-wait-timeout=5000',
-                            '--snapshot=' + snapshot, '--file=' + str(raw), '--no-password', *['--schema=' + schema for schema in schemas]],
-                            settings, True, timeout_seconds=max(EXPORT_CONTROL.get().remaining(), 0.001))
+                        # The export deadline (watcher) stops the dump; this is only its backstop.
+                        budget = TOOL_BUDGET.set(max(EXPORT_CONTROL.get().remaining(), 0) + CLEANUP_TIMEOUT_SECONDS)
+                        try:
+                            await tool(pg_dump, ['--format=custom', '--quote-all-identifiers', '--encoding=UTF8', '--lock-wait-timeout=5000',
+                                '--snapshot=' + snapshot, '--file=' + str(raw), '--no-password', *['--schema=' + schema for schema in schemas]],
+                                settings, True)
+                        finally:
+                            TOOL_BUDGET.reset(budget)
                         if raw.stat().st_size > (MAX_STREAM_ARCHIVE if streamed else MAX_ARCHIVE):
                             raise BackupError('Archive exceeds the encryption bound' +
                                               ('' if streamed else '; streamed export required'))
@@ -975,7 +983,9 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
             algorithm = manifest.get('rowFingerprintAlgorithm')
             if algorithm not in (None, ROW_ALGORITHM):
                 raise BackupError('Unsupported row fingerprint algorithm')
-            actual = await fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM, schemas=tuple(manifest['schemas']))
+            scope = tuple(manifest['schemas'])
+            actual = await (fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM) if scope == SCHEMAS else
+                            fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM, schemas=scope))
         expected = {key: manifest[key] for key in ('tables', 'catalog')}
         differences = {group: [name for name in sorted(set(actual[group]) | set(expected[group])) if actual[group].get(name) != expected[group].get(name)] for group in expected}
         if any(differences.values()):

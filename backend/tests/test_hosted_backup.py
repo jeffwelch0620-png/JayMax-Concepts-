@@ -357,17 +357,18 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_dump_time_follows_the_export_budget_not_the_fixed_tool_limit(self):
         with TemporaryDirectory() as temporary:
             root=Path(temporary);conn,tx=self.connection();seen=[]
-            async def dumping(executable,args,*extra,**options):
-                seen.append((args,options))
+            async def dumping(executable,args,*extra):
+                seen.append((args,backup.TOOL_BUDGET.get()))
                 filename=next((arg[7:] for arg in args if arg.startswith('--file=')),None)
                 if filename: Path(filename).write_bytes(b'PGDMP TEST ONLY fictional archive')
                 return b'; TEST ONLY archive list'
             await self.export(root,conn,tool_action=dumping,timeout_seconds=1500)
-            dump=next(options for args,options in seen if any(a.startswith('--snapshot=') for a in args))
-            self.assertGreater(dump['timeout_seconds'],backup.TOOL_TIMEOUT_SECONDS)
-            self.assertLessEqual(dump['timeout_seconds'],1500)
-            listing=next(options for args,options in seen if args[0]=='--list')
-            self.assertNotIn('timeout_seconds',listing)
+            dump=next(budget for args,budget in seen if any(a.startswith('--snapshot=') for a in args))
+            self.assertGreater(dump,backup.TOOL_TIMEOUT_SECONDS)
+            self.assertLessEqual(dump,1500+backup.CLEANUP_TIMEOUT_SECONDS)
+            listing=next(budget for args,budget in seen if args[0]=='--list')
+            self.assertIsNone(listing)
+            self.assertIsNone(backup.TOOL_BUDGET.get())
 
     async def test_current_scope_exports_operations_in_a_streamed_envelope(self):
         with TemporaryDirectory() as temporary:
@@ -640,6 +641,17 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
 
 class OwnedToolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_export_budget_replaces_the_fixed_tool_limit_for_the_dump(self):
+        script='import time; time.sleep(600)'
+        token=backup.TOOL_BUDGET.set(0.25)
+        try:
+            started=time.monotonic()
+            with self.assertRaises(TimeoutError):
+                await asyncio.wait_for(backup.tool(sys.executable,['-c',script]),5)
+            self.assertLess(time.monotonic()-started,4)
+        finally:
+            backup.TOOL_BUDGET.reset(token)
+
     async def test_real_child_is_reaped_on_timeout_or_cancellation_before_partial_cleanup(self):
         for mode in ('timeout','cancel'):
             with self.subTest(mode=mode),TemporaryDirectory() as temporary:
