@@ -1,0 +1,69 @@
+name: Overlap check
+
+# Warns when another open pull request changes the same files, so two people don't build over each
+# other (JMAX collaboration rules §8), and when the same person already has another open pull request (§2).
+# Keeps one comment per pull request up to date; never fails the check.
+# Like the lane guard, runs from main (pull_request_target) and never runs the pull request's code.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: overlap-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  overlap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Compare with the other open pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          if [ ! -f tools/lanes/lane_guard.py ]; then echo "Overlap check isn't on main yet; skipping."; exit 0; fi
+          # Changed paths plus a renamed file's old path, as in the lane guard.
+          files() { gh api --paginate "repos/$REPO/pulls/$1/files" --jq '.[] | .filename, (.previous_filename // empty)'; }
+          files "$PR" > "$RUNNER_TEMP/files.txt"
+          echo '[]' > "$RUNNER_TEMP/others.json"
+          for n in $(gh pr list --repo "$REPO" --state open --limit 100 --json number --jq ".[] | select(.number != $PR) | .number"); do
+            branch=$(gh pr view "$n" --repo "$REPO" --json headRefName --jq .headRefName)
+            files "$n" > "$RUNNER_TEMP/f.txt" || continue
+            jq --argjson n "$n" --arg b "$branch" --rawfile f "$RUNNER_TEMP/f.txt" \
+              '. + [{number: $n, branch: $b, files: ($f | split("\n") | map(select(length > 0)))}]' \
+              "$RUNNER_TEMP/others.json" > "$RUNNER_TEMP/o.json" && mv "$RUNNER_TEMP/o.json" "$RUNNER_TEMP/others.json"
+          done
+          python3 tools/lanes/lane_guard.py overlap --config .github/lanes.json --branch "$HEAD" \
+            --files "$RUNNER_TEMP/files.txt" --others "$RUNNER_TEMP/others.json" > "$RUNNER_TEMP/hits.md"
+          cat "$RUNNER_TEMP/hits.md"
+
+          marker='<!-- overlap-check -->'
+          existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" | head -n1)
+          if [ -s "$RUNNER_TEMP/hits.md" ]; then
+            body="$marker
+          **Heads up from the overlap check.** When another open pull request changes the same files, talk before going further: per the JMAX collaboration rules (§8) the later one waits until the first is merged, then updates from \`main\`.
+
+          $(cat "$RUNNER_TEMP/hits.md")"
+          elif [ -n "$existing" ]; then
+            body="$marker
+          Nothing to flag with other open pull requests any more."
+          else
+            exit 0
+          fi
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" > /dev/null
+          else
+            gh pr comment "$PR" --repo "$REPO" --body "$body"
+          fi

@@ -13,7 +13,7 @@ import prep_observations as observations
 from native_units import lock_store
 from purchase_api import serial
 from purchase_parser import fingerprint
-from workflow_integrity import conflict_transaction, require_independent
+from workflow_integrity import conflict_transaction, require_independent_staff_work
 from staff_response import staff_view
 
 
@@ -290,7 +290,7 @@ async def decision_preview(conn, store, ident, body, actor=None):
     plan = None
     if body.decision == 'accepted':
         if actor is not None:
-            require_independent(actor, [row['submitted_by'] for row in review['history']])
+            require_independent_staff_work(actor, [row['submitted_by'] for row in review['history']])
         if review['errors']: raise HTTPException(409, '; '.join(review['errors']))
         if not review['latest']: raise HTTPException(422, 'Staff must submit measured quantities first')
         rows = {l['product_id']: l for l in review['latest']['quantities']}

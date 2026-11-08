@@ -16,7 +16,7 @@ OFFLINE_MODULES = ('s1_claim_gates s1_resources s1_failure s1_process s1_activat
  'connection_transition transition_permissions parallel_install_plan parallel_rotation_review credential_retirement_review '
  'client_handoff_review local_install_recovery local_supervisor_checkpoint local_parallel_install combined_rotation_rehearsal readonly_snapshot '
  'combined_rehearsal_result pooler_denial_contract pooler_drain_trial review_guards review_test_runner').split()
-OFFLINE_CLASSES = ('staff_login::StaffLoginModelTests stations::StationModelTests store_transfers::TransferModelTests bulk_supply::BulkModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests order_calendar::OrderCalendarTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
+OFFLINE_CLASSES = ('staff_login::StaffLoginModelTests stations::StationModelTests store_transfers::TransferModelTests bulk_supply::BulkModelTests bulk_run_days::BulkRunDayModelTests bulk_daily_pars::BulkDailyParModelTests bulk_quick_count::QuickCountModelTests salad_track::SaladTrackRuleTests count_walk_order::LayoutModelTests staff_walk_order::SheetLayoutTests prep_calculation::BatchPlanTests par_authority::ParAuthorityTests par_authority::PositionTests order_calendar::OrderCalendarTests prep_count_zones::ZoneModelTests inventory_pars::InventoryParValidationTests catalog_integrity::CatalogValidationTests backup_fingerprint::FingerprintGuards deployment_readiness::ReadinessConfigurationTests runtime_permissions::RuntimeProfileTests '
  'runtime_permissions::RuntimeFixtureSafetyTests hosted_test_trial::HostedTrialGuards hosted_test_trial::TrialPoolTests '
  'schema_reconciliation::SchemaComparisonTests native_backup::BackupSafetyTests menu_contract::MenuModelTests '
  'menu_contract::MenuGraphValidationTests native_purchases::ParserTests '
@@ -25,8 +25,9 @@ OFFLINE_CLASSES = ('staff_login::StaffLoginModelTests stations::StationModelTest
 OFFLINE_CLASSES += ['reviewed_par_install::ParInstallGuards','reviewed_par_install::ParInstallReceiptTests',
                     's1_observation_pg::CollectorFixtureSafetyTests',
                     'par_role_preflight::ParRolePreflightGuards','deployment_readiness::ReadinessBatchTests',
-                    'batched_fingerprints::BatchedFingerprintGuards']
+                    'batched_fingerprints::BatchedFingerprintGuards','analytics::AnalyticsModelTests']
 DATABASE_CASES = (
+ ('analytics','AnalyticsDatabaseTests','test_a_short_bulk_run_and_a_delivery_accepted_short'),
  ('staff_login','StaffLoginDatabaseTests','test_an_owner_issues_the_first_pin_and_the_employee_replaces_it'),
  ('staff_login','StaffLoginDatabaseTests','test_five_wrong_pins_lock_the_person_until_a_manager_unlocks_them'),
  ('staff_login','StaffLoginDatabaseTests','test_a_session_ends_on_sign_out_idle_new_pin_or_inactive'),
@@ -50,6 +51,15 @@ DATABASE_CASES = (
  ('bulk_supply','BulkSupplyDatabaseTests','test_sign_off_order_shortfall_and_one_request_per_run'),
  ('bulk_supply','BulkSupplyDatabaseTests','test_database_refuses_a_forged_request_line'),
  ('bulk_supply','BulkSupplyDatabaseTests','test_run_cannot_be_released_while_a_request_is_uncovered'),
+ ('bulk_run_days','BulkRunDayDatabaseTests','test_bulk_runs_only_on_monday_or_thursday_and_spot_requests_any_day'),
+ ('bulk_run_days','BulkRunDayDatabaseTests','test_the_par_group_follows_the_run_day'),
+ ('bulk_run_days','BulkRunDayDatabaseTests','test_database_refuses_another_day_or_the_wrong_par_group'),
+ ('bulk_daily_pars','BulkDailyParDatabaseTests','test_daily_mode_targets_the_sum_of_the_days_each_run_covers'),
+ ('bulk_daily_pars','BulkDailyParDatabaseTests','test_switching_mode_flags_a_saved_run_and_each_store_keeps_its_own_mode'),
+ ('bulk_daily_pars','BulkDailyParDatabaseTests','test_database_refuses_daily_mode_without_pars_and_keeps_retired_pars'),
+ ('bulk_quick_count','QuickCountDatabaseTests','test_the_check_shows_the_spot_prep_needed_before_the_next_run'),
+ ('bulk_quick_count','QuickCountDatabaseTests','test_a_requesting_store_counts_spot_requests_on_their_way'),
+ ('bulk_quick_count','QuickCountDatabaseTests','test_database_refuses_incomplete_or_changed_quick_counts'),
  ('prep_count_zones','PrepCountZoneTests','test_zone_count_adds_up_zones_and_keeps_the_breakdown'),
  ('prep_count_zones','PrepCountZoneTests','test_zones_must_match_the_layout'),
  ('prep_count_zones','PrepCountZoneTests','test_layout_places_every_item_and_replays_by_key'),
@@ -166,6 +176,8 @@ DATABASE_CASES = (
  ('order_commands','OrderCalendarTests','test_an_order_keeps_its_delivery_when_the_schedule_changes'),
  ('order_commands','OrderCalendarTests','test_far_ahead_moves_cannot_stack_and_have_a_limit'),
  ('staff_prep_counts','StaffPrepCountsTests','test_review_corrections_count_author_cannot_accept_after_staff_revision'),
+ ('staff_count_drafts','StaffCountDraftTests','test_counter_cannot_accept_their_own_count_when_self_acceptance_is_off'),
+ ('staff_count_drafts','StaffCountDraftTests','test_counter_accepts_their_own_count_when_self_acceptance_is_on'),
  ('staff_prep_production','StaffProductionTests','test_a_signed_in_cook_submits_verified_output_as_themself'),
  ('staff_prep_production','StaffProductionTests','test_shift_leaders_accept_kitchen_managers_send_back_and_reassign'),
  ('staff_prep_production','StaffProductionTests','test_shift_leaders_assign_open_tasks_and_kitchen_managers_reassign'),
@@ -242,6 +254,7 @@ DATABASE_CASES += tuple(('reviewed_par_install', 'ParInstallDatabaseTests', name
 # Manager receiving journal: explicit local/CI selection, no hosted configuration.
 OFFLINE_CLASSES += ['manager_handoff::HandoffValidationTests','manager_handoff::HandoffActorTests']
 OFFLINE_CLASSES += ['manager_handoff_install::InstallGuards']
+OFFLINE_CLASSES += ['workflow_integrity::SelfAcceptanceTests']
 OFFLINE_MODULES += ['journal_backup_receipts','hosted_journal_backup']
 OFFLINE_MODULES += ['receiving_install_evidence','receiving_install_coordinator']
 DATABASE_CASES += tuple(('receiving_install_coordinator_pg','TransitionDatabaseTests',name) for name in (

@@ -45,7 +45,8 @@ MIGRATIONS=(
  '20261031_stations.sql',
  '20261101_staff_personal_login.sql',
  '20261101_staff_shortages.sql',
- '20261101_staff_verified_production.sql', '20261102_order_calendar.sql', '20261102_order_schedule_changes.sql')
+ '20261101_staff_verified_production.sql', '20261102_order_calendar.sql', '20261102_order_schedule_changes.sql', '20261104_bulk_run_days.sql',
+    '20261105_bulk_daily_pars.sql', '20261105_bulk_quick_counts.sql')
 # Historical installation receipts and the unapproved runtime candidate retain
 # their reviewed baselines. Later feature DDL never becomes part of those receipts.
 ORIGINAL_NATIVE_MIGRATIONS=MIGRATIONS[:MIGRATIONS.index('20261013_purchase_source_lookup_index.sql')]
@@ -86,8 +87,11 @@ def configuration(backend,frontend):
     login=boolean(backend,'STAFF_PERSONAL_LOGIN_ENABLED','false');login_view=boolean(frontend,'REACT_APP_STAFF_PERSONAL_LOGIN','false')
     if login!=login_view:problems.append({'key':'STAFF_PERSONAL_LOGIN','reason':'Backend and built frontend feature flags differ'})
     if login and not pg:problems.append({'key':'STAFF_PERSONAL_LOGIN','reason':'Requires PostgreSQL'})
+    # M6 analytics is a read only: off in one place and on in the other just shows a tab that answers 503.
+    insight=boolean(backend,'ANALYTICS_ENABLED','false');insight_view=boolean(frontend,'REACT_APP_ANALYTICS','false')
+    if insight!=insight_view:problems.append({'key':'ANALYTICS','reason':'Backend and built frontend feature flags differ'})
     return {'status':'held' if problems else 'passed','problems':problems,'features':pairs,
-        'staffPersonalLogin':{'backend':login,'frontend':login_view},
+        'staffPersonalLogin':{'backend':login,'frontend':login_view},'analytics':{'backend':insight,'frontend':insight_view},
         'allNativeFeaturesHeld':not any(values.values()),'secretValuesIncluded':False}
 
 def migration_plan():

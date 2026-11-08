@@ -22,6 +22,9 @@ export const handoffDay = (rid, day, track, options = {}) => axios.get(`${handof
 export const saveHandoff = (rid, body, version, key) => axios.post(`${handoffUrl(rid)}/commands`, body, { timeout: 60000, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const handoffStatus = (rid, body, version, key) => axios.post(`${handoffUrl(rid)}/status`, body, { timeout: 60000, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const handoffHistory = (rid, noteId, after = 0, options = {}) => axios.get(`${handoffUrl(rid)}/notes/${noteId}/history`, { ...options, params: { after } }).then(r => r.data);
+// M6 analytics: a read for the General Manager and above (backend/analytics.py), off by default.
+export const analyticsEnabled = USE_PG && process.env.REACT_APP_ANALYTICS === "true";
+export const analyticsReport = (rid, params) => axios.get(`${PG_API}/analytics/${pgStoreId(rid)}`, { params }).then(r => r.data);
 export const nativePurchasesEnabled = USE_PG && process.env.REACT_APP_NATIVE_PURCHASES === "true";
 export const actualInventoryEnabled = nativePurchasesEnabled && process.env.REACT_APP_ACTUAL_INVENTORY === "true";
 export const catalogMappingEnabled = actualInventoryEnabled && process.env.REACT_APP_CATALOG_MAPPING === "true";
@@ -73,6 +76,8 @@ export const savePrepDayDraft = (rid, day, body, version, key) => axios.put(`${p
 export const bulkSupply = (rid, since) => axios.get(`${purchaseUrl(rid)}/bulk-supply`, { params: { since } }).then(r => r.data);
 export const previewBulkRequest = (rid, body) => axios.post(`${purchaseUrl(rid)}/bulk-requests/preview`, body).then(r => r.data);
 export const sendBulkRequest = (rid, body, key) => axios.post(`${purchaseUrl(rid)}/bulk-requests`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
+export const bulkQuickCount = (rid, night) => axios.get(`${purchaseUrl(rid)}/bulk-quick-counts`, { params: { night } }).then(r => r.data);
+export const saveBulkQuickCount = (rid, body, version, key) => axios.post(`${purchaseUrl(rid)}/bulk-quick-counts`, body, { headers: { "If-Match": `"${version}"`, "Idempotency-Key": key } }).then(r => r.data);
 export const signBulkStep = (rid, id, body, key) => axios.post(`${purchaseUrl(rid)}/bulk-requests/${encodeURIComponent(id)}/steps`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const acceptanceQueue = (rid, day) => axios.get(`${purchaseUrl(rid)}/acceptance-queue/${day}`).then(r => r.data);
 export const stationBoard = (rid, day) => axios.get(`${purchaseUrl(rid)}/stations/board/${day}`).then(r => r.data);
@@ -80,6 +85,8 @@ export const moveStation = (rid, day, body, key) => axios.post(`${purchaseUrl(ri
 export const setProductStation = (rid, productId, body, key) => axios.put(`${purchaseUrl(rid)}/stations/products/${encodeURIComponent(productId)}`, body, { headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const prepPlanning = rid => axios.get(`${purchaseUrl(rid)}/prep-planning`).then(r => r.data);
 export const savePrepPlan = (rid, product, body, version, key) => axios.put(`${purchaseUrl(rid)}/prep-planning/${encodeURIComponent(product)}`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const bulkParMode = rid => axios.get(`${purchaseUrl(rid)}/bulk-par-mode`).then(r => r.data);
+export const saveBulkParMode = (rid, body, version, key) => axios.put(`${purchaseUrl(rid)}/bulk-par-mode`, body, { headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const prepBatchesEnabled = prepSetupEnabled && process.env.REACT_APP_PREP_BATCHES === "true";
 export const prepObservationsEnabled = prepBatchesEnabled && process.env.REACT_APP_PREP_OBSERVATIONS === "true";
 export const prepContainersEnabled = prepObservationsEnabled && process.env.REACT_APP_PREP_CONTAINERS === "true";

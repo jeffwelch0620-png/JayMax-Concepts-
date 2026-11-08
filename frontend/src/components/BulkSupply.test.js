@@ -24,6 +24,19 @@ test("Bulk runs are Monday and Thursday", () => {
   expect(nextRunDate("2026-11-05")).toBe("2026-11-05");
 });
 
+test("a Bulk request for another day asks for a spot request instead", async () => {
+  api.bulkSupply.mockResolvedValue({ store_id: "berts", maker_store_id: "rudds", makes_for: [], requests: [], open_shortfalls: [] });
+  api.prepDayDraft.mockResolvedValue({ counts: [{ id: "count-1", latest: true }] });
+  await render(<BulkSupply rid="berts" />);
+  await click(button("Send Bulk count"));
+  await input("Bulk run date", "2026-11-04"); // a Wednesday
+  expect(container.textContent).toContain("Bulk runs are on Monday or Thursday");
+  await input("Bulk request note", "Midweek close");
+  await click(button("Preview request"));
+  expect(api.previewBulkRequest).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Send a spot request for another day");
+});
+
 test("the requesting store previews par minus count and sends the reviewed request", async () => {
   api.bulkSupply.mockResolvedValue({ store_id: "berts", maker_store_id: "rudds", makes_for: [], requests: [], open_shortfalls: [] });
   api.prepDayDraft.mockResolvedValue({ counts: [{ id: "count-1", latest: true }] });
@@ -33,10 +46,11 @@ test("the requesting store previews par minus count and sends the reviewed reque
   expect(api.prepDayDraft).not.toHaveBeenCalled(); // forms open on demand
   await click(button("Send Bulk count"));
   expect(container.textContent).toContain("Held at Rudd's"); // store names, not ids
-  expect(container.textContent).toMatch(/Par group \((Monday|Thursday) run\)/); // the run day is shown next to the par choice
+  await input("Bulk run date", "2026-11-05");
+  expect(container.textContent).toContain("Thursday run: weekend pars"); // the par group follows the run day; no choice to get wrong
   await input("Bulk request note", "Wednesday close");
   await click(button("Preview request"));
-  expect(api.previewBulkRequest.mock.calls[0][1]).toMatchObject({ kind: "scheduled", day_group: "weekday", count_event_id: "count-1", note: "Wednesday close" });
+  expect(api.previewBulkRequest.mock.calls[0][1]).toMatchObject({ run_date: "2026-11-05", kind: "scheduled", day_group: "weekend", count_event_id: "count-1", note: "Wednesday close" });
   expect(container.textContent).toContain("3 bucket");
   expect(button("Send request").disabled).toBe(true);
   await click(container.querySelector('[aria-label="Review Bulk request"]'));

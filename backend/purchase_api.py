@@ -548,4 +548,6 @@ def create_router(pool_factory, store_check, authorize):
     install_container_routes(router,context)
     from bulk_supply import install_routes as install_bulk_supply_routes
     install_bulk_supply_routes(router,context)
+    from bulk_quick_count import install_routes as install_quick_count_routes
+    install_quick_count_routes(router,context)
     return router

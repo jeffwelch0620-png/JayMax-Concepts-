@@ -1,0 +1,19 @@
+name: Lane guard tests
+
+# Runs on every pull request (not only when the lane files change), so it can be a required check
+# without leaving screen-only pull requests waiting on a check that never starts.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Run the lane guard tests
+        working-directory: tools/lanes
+        run: python3 -m unittest -v test_lane_guard

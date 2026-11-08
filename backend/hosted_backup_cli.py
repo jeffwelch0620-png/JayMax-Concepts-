@@ -33,7 +33,7 @@ async def main():
     export.add_argument('--maintenance-direct-ipv6', action='store_true',
         help='Opt-in operator path using separate MAINTENANCE_DATABASE_URL; never reads the app URL')
     export.add_argument('--timeout-seconds', type=int, default=backup.EXPORT_TIMEOUT_SECONDS,
-        help='Overall export budget, 1–600 seconds; reserve additional time for cleanup and service recovery')
+        help='Overall export budget including pg_dump, 1–3600 seconds (default 1800); reserve additional time for cleanup and service recovery')
     restore = commands.add_parser('verify-restore')
     restore.add_argument('--connection-env', required=True, help='Name of environment variable containing a disposable loopback DSN')
     restore.add_argument('--backup', required=True)
@@ -59,7 +59,7 @@ async def main():
         options = {'maintenance_direct_ipv6': True} if args.maintenance_direct_ipv6 else {}
         result = await backup.export_backup(url, args.expected_project,
             binaries / 'pg_dump.exe', binaries / 'pg_restore.exe', root / 'backups' / label,
-            root / 'credentials' / label, migrations, timeout_seconds=args.timeout_seconds,
+            root / 'credentials' / label, migrations, timeout_seconds=args.timeout_seconds, schemas=backup.CURRENT_SCHEMAS, streamed=True,
             progress=lambda event: print(json.dumps(event), file=sys.stderr, flush=True), **options)
     else:
         dsn = os.environ.get(args.connection_env)

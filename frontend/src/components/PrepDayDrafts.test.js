@@ -26,6 +26,15 @@ afterEach(async()=>{await act(async()=>root.unmount());container.remove();});
 test("dated draft saves the reviewed snapshot and preserves unknown quantities",async()=>{
   expect(container.textContent).toContain("Unknown lb");await click(button("Save reviewed dated draft"));expect(api.savePrepDayDraft).toHaveBeenCalledWith("berts","2026-10-08",{draft:inputs,expected_review_hash:hash,reviewed:true},0,"key");expect(toast).toHaveBeenCalledWith("Dated prep draft saved.");expect(container.textContent).toContain("Saved draft version 1");
 });
+test("a Bulk draft takes its par group from the run day",async()=>{
+  // 2026-10-08 is a Thursday: the weekend pars, with no choice to get wrong.
+  api.prepDayDraft.mockResolvedValue({...data,track:"bulk",planning:{...data.planning,plans:[{...data.planning.plans[0],track:"bulk"}]}});
+  api.previewPrepDayDraft.mockImplementation((rid,day,body,version)=>Promise.resolve({reviewHash:hash,review:{...review(body,version),track:"bulk"}}));
+  await render("berts","bulk","berts-bulk");
+  expect(input("Prep draft par group").textContent).toBe("Thursday run: weekend pars");
+  await set("Prep draft reason","Bulk run");await click(button("Preview dated tasks"));
+  expect(api.previewPrepDayDraft.mock.calls.at(-1)[2]).toMatchObject({track:"bulk",day_group:"weekend"});
+});
 test("changing a day override invalidates the preview and requires another review",async()=>{
   await set("Day override plan","fixed_quantity");await set("Day quantity plan",".5000");await set("Day reason plan","Reviewed demand");expect(input("Review dated prep draft")).toBeNull();expect(button("Save reviewed dated draft").disabled).toBe(true);
   await click(button("Preview dated tasks"));await click(input("Review dated prep draft"));await click(button("Save reviewed dated draft"));expect(api.savePrepDayDraft.mock.calls[0][2].draft.overrides).toEqual([{planning_version_id:"plan",kind:"fixed_quantity",quantity:"0.5",reason:"Reviewed demand"}]);

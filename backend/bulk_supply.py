@@ -55,8 +55,9 @@ class RequestIn(mapping.Strict):
     @model_validator(mode='after')
     def by_kind(self):
         if self.kind == 'scheduled':
-            if self.day_group is None or self.count_event_id is None or self.lines:
-                raise ValueError('A scheduled request uses the par group and last night\'s count')
+            # The par group follows the run day (prep_day_tasks.bulk_day_group); the server sets it.
+            if self.count_event_id is None or self.lines:
+                raise ValueError('A scheduled request uses last night\'s count')
         else:
             if self.day_group is not None or self.count_event_id is not None or not self.lines:
                 raise ValueError('A spot request lists the items and amounts needed')
@@ -120,6 +121,10 @@ async def maker_products(conn, maker):
 async def preview(conn, store, body):
     await ready(conn)
     maker = maker_for(store)
+    if body.kind == 'scheduled':
+        group = day_tasks.bulk_day_group(body.run_date)
+        if group is None: raise HTTPException(422, 'Bulk runs are on Monday or Thursday; send a spot request for another day')
+        body.day_group = group  # Monday: weekday par; Thursday: weekend par
     if body.kind == 'scheduled' and await maker_released(conn, maker, body.run_date):
         raise HTTPException(409, "The maker already released this Bulk run; send a spot request instead")
     setup = await planning.setup(conn, store)
@@ -128,7 +133,7 @@ async def preview(conn, store, body):
     keys = {r['id']: r['identity_key'] for r in await conn.fetch('SELECT id::text, identity_key FROM prep_inventory.products WHERE store_id=$1', store)}
     made = await maker_products(conn, maker)
     plans = {p['product_id']: p for p in setup['plans'] if p['active'] and p['track'] == 'bulk'}
-    lines, missing_count, not_made = [], [], []
+    lines, missing_count, not_made, missing_pars = [], [], [], []
     count = None
     if body.kind == 'scheduled':
         available = await day_tasks.counts(conn, store, body.run_date)
@@ -145,9 +150,11 @@ async def preview(conn, store, body):
             if not profile: raise HTTPException(409, f'Review the Bulk plan for {name} before requesting it')
             maker_item = made.get(keys[p['product_id']])
             if not maker_item or maker_item['base_unit'] != products[p['product_id']]['base_unit']: not_made.append(name); continue
+            # The requester's own par mode: window (weekday/weekend par) or the sum of its daily pars.
+            target = day_tasks.bulk_run_target(p, body.run_date, setup['bulk_par_mode'])
+            if target is None: missing_pars.append(name); continue
             if p['product_id'] not in counted: missing_count.append(name); continue
             factor = Decimal(str(profile['base_units_per_source_unit']))
-            target = Decimal(p['weekend_par'] if body.day_group == 'weekend' else p['weekday_par'])
             on_hand = counted[p['product_id']]
             lines.append({'product_id': p['product_id'], 'maker_product_id': str(maker_item['id']), 'name': name,
                 'base_unit': products[p['product_id']]['base_unit'], 'source_unit': profile['source_unit'],
@@ -167,11 +174,12 @@ async def preview(conn, store, body):
                 'planning_version_id': None, 'factor': None, 'target_par': None, 'counted_base_quantity': None,
                 'requested_base_quantity': mapping.times(l.quantity, factor), 'reason': l.reason})
     if not_made: raise HTTPException(409, f"The maker has no active to-par Bulk plan for: {', '.join(not_made)}. Add one there (par can be 0) first.")
+    if missing_pars: raise HTTPException(409, f"Enter daily pars for these Bulk items before requesting: {', '.join(missing_pars)}")
     if missing_count: raise HTTPException(409, f"Count these Bulk items before requesting; a missing count is not zero: {', '.join(missing_count)}")
     if not lines: raise HTTPException(409, 'No Bulk items to request')
     for n, line in enumerate(lines, 1): line['ordinal'] = n
     review = serial({'store_id': store, 'maker_store_id': maker, 'run_date': body.run_date, 'kind': body.kind,
-        'inputs': body.model_dump(), 'count': count, 'lines': lines})
+        'inputs': body.model_dump(), **({'par_mode': setup['bulk_par_mode']} if body.kind == 'scheduled' else {}), 'count': count, 'lines': lines})
     return {'review': review, 'reviewHash': fingerprint(review).hex()}
 
 

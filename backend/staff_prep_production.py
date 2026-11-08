@@ -16,7 +16,7 @@ from staff_prep_counts import Reviewed, Credentials
 from native_units import lock_store
 from purchase_api import serial
 from purchase_parser import fingerprint
-from workflow_integrity import conflict_transaction, require_independent
+from workflow_integrity import conflict_transaction, require_independent_staff_work
 from staff_response import staff_view
 
 
@@ -171,7 +171,7 @@ async def decision_preview(conn,store,day,track,body,actor=None):
     if body.decision=='accepted':
         if actor is not None:
             authors = await conn.fetch('SELECT submitted_by FROM prep_inventory.staff_production_submissions WHERE root_id=$1 AND store_id=$2', row['root_id'], store)
-            require_independent(actor, [author['submitted_by'] for author in authors], row['staff_member_id'])
+            require_independent_staff_work(actor, [author['submitted_by'] for author in authors], row['staff_member_id'])
         b=Submission(**s['review_snapshot']['submission']);e,t,a,progress=await current_assignment(conn,store,day,track,b)
         batch=await batches.preview(conn,store,b.batch)
         batch['review']['staff_submission_id']=s['id']
