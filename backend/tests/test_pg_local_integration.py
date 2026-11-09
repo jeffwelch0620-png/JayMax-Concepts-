@@ -464,6 +464,16 @@ def test_no_api_route_touches_mongo_in_postgres_mode(monkeypatch):
     import re
     import httpx
     from fastapi.routing import APIRoute
+
+    def api_routes(routes, prefix=""):
+        """(path template, route) for every API route. FastAPI 0.16x keeps included routers nested
+        (an included router's routes sit under original_router); older versions list them flat."""
+        for r in routes:
+            inner = getattr(r, "original_router", None)
+            if inner is not None:
+                yield from api_routes(inner.routes, prefix + r.include_context.prefix)
+            elif isinstance(r, APIRoute):
+                yield prefix + r.path, r
     monkeypatch.setattr(server, "db", server._MongoRetired())
     params = {"rid": "papa_leonis", "store_id": "papa", "oid": "po_missing", "rec_id": "rec_missing", "collection": "adjustments"}
 
@@ -473,17 +483,17 @@ def test_no_api_route_touches_mongo_in_postgres_mode(monkeypatch):
         failures, legacy, called = [], 0, 0
         async with httpx.AsyncClient(transport=transport, base_url="http://test",
                                      headers={"Authorization": "Bearer " + token}) as client:
-            for route in server.app.routes:
-                if not isinstance(route, APIRoute) or not route.path.startswith("/api") or route.path.startswith("/api/pg/"):
+            for template, route in api_routes(server.app.routes):
+                if not template.startswith("/api") or template.startswith("/api/pg/"):
                     continue
-                path = re.sub(r"\{(\w+)\}", lambda m: params.get(m.group(1), "x"), route.path)
+                path = re.sub(r"\{(\w+)\}", lambda m: params.get(m.group(1), "x"), template)
                 for method in sorted(route.methods):
-                    body = [] if method == "PUT" and "/state/" in route.path else {}
+                    body = [] if method == "PUT" and "/state/" in template else {}
                     resp = await client.request(method, path, json=body if method in ("POST", "PUT") else None)
                     called += 1
                     legacy += resp.status_code == 410
                     if resp.status_code >= 500 and "ANTHROPIC_API_KEY is missing" not in resp.text:
-                        failures.append((method, route.path, resp.status_code, resp.text[:200]))
+                        failures.append((method, template, resp.status_code, resp.text[:200]))
         assert failures == []
         assert called > 60 and legacy > 30
         logged = await db_pg.pool().fetchval(
