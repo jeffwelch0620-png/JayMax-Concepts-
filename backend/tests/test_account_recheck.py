@@ -1,5 +1,6 @@
 """Open manager sessions follow their login (data-safety audit 2026-11-08): removing a store, changing the
-position or deleting the login ends sessions already open, instead of waiting up to 8 hours for the token."""
+position, resetting the password or deleting the login ends sessions already open, instead of waiting up
+to 8 hours for the token."""
 import asyncio
 
 import httpx
@@ -24,7 +25,11 @@ class Accounts:
         if self.fail: raise OSError('account database unreachable')
         return self.rows.get(user_id)
 
-    async def fetchval(self, _, user_id):  # DELETE ... RETURNING id
+    async def fetchval(self, sql, user_id, *args):  # DELETE or password UPDATE ... RETURNING id
+        if sql.startswith('UPDATE'):
+            row = self.rows.get(user_id)
+            if row: row['password_hash'] = args[0]
+            return row and row['id']
         return self.rows.pop(user_id, {}).get('id')
 
 
@@ -77,6 +82,30 @@ def test_deleting_a_login_ends_its_session_at_once_despite_the_cache(monkeypatch
             return await client.delete('/api/auth/users/usr_km', headers={'Authorization': 'Bearer ' + owner})
     assert asyncio.run(delete()).status_code == 200
     assert call(km).status_code == 401
+
+
+def test_a_password_reset_ends_sessions_opened_with_the_old_password(monkeypatch):
+    old = server._password_hash('TEST-ONLY-old-password')
+    accounts = Accounts({**KM, 'password_hash': old}, OWNER); setup(monkeypatch, accounts)
+    km, owner = server._token({**KM, 'passwordHash': old}), server._token(OWNER)
+    assert 'password_hash' not in server._decode_token(km) and old not in str(server._decode_token(km))
+    assert call(km).status_code == 204  # now cached
+
+    async def reset():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server.app), base_url='http://test') as client:
+            return await client.put('/api/auth/users/usr_km/password', json={'password': 'TEST-ONLY-new-password'},
+                                    headers={'Authorization': 'Bearer ' + owner})
+    assert asyncio.run(reset()).status_code == 200
+    refused = call(km)
+    assert (refused.status_code, b'Sign in again' in refused.body) == (401, True)
+    # Signing in with the new password issues a session that matches the login again.
+    new = accounts.rows['usr_km']['password_hash']
+    assert new != old and call(server._token({**KM, 'passwordHash': new})).status_code == 204
+
+
+def test_a_session_from_before_this_check_signs_in_once_more(monkeypatch):
+    accounts = Accounts({**KM, 'password_hash': server._password_hash('TEST-ONLY-password')}); setup(monkeypatch, accounts)
+    assert call(server._token(KM)).status_code == 401  # a token without the password fingerprint
 
 
 def test_an_unreachable_account_store_refuses_rather_than_trusting_the_token(monkeypatch):

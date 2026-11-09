@@ -123,7 +123,13 @@ def _token(user):
                "exp": int(datetime.now(timezone.utc).timestamp()) + SESSION_TTL}
     if user.get("position"):  # logins without a position keep the original session shape
         payload["position"] = user["position"]
+    if user.get("passwordHash"):  # a password reset ends sessions opened with the old password
+        payload["pw"] = _password_tag(user["passwordHash"])
     return _sign(payload)
+
+def _password_tag(password_hash):
+    """Keyed fingerprint of the stored hash: tokens are readable, so the hash itself never goes in one."""
+    return hmac.new(AUTH_SECRET.encode(), password_hash.encode(), hashlib.sha256).hexdigest()[:16] if password_hash else None
 
 def _staff_token(payload):
     """A personal staff session (staff_login.py); its session row decides whether it is still open."""
@@ -175,10 +181,11 @@ async def _account_current(user):
     else:
         found = await db_auxiliary.pool().fetchrow("SELECT * FROM app_users WHERE id=$1", sub)
         row = {"role": found["role"], "locations": set(found["locations"] or []),
-               "position": found["position"] if "position" in found.keys() else None} if found else None
+               "position": found["position"] if "position" in found.keys() else None,
+               "pw": _password_tag(found["password_hash"]) if "password_hash" in found.keys() else None} if found else None
         _account_cache[sub] = (now, row)
     return bool(row) and row["role"] == user.get("role") and row["locations"] == set(user.get("locations") or []) \
-        and (row["position"] or None) == (user.get("position") or None)
+        and (row["position"] or None) == (user.get("position") or None) and row["pw"] == user.get("pw")
 
 def _path_rid(path):
     parts = path.split("/")
@@ -880,6 +887,7 @@ async def auth_reset_password(user_id: str, body: PasswordIn, request: Request):
     pw_hash = _password_hash(body.password)
     if USE_PG:
         found = await db_auxiliary.pool().fetchval("UPDATE app_users SET password_hash=$2 WHERE id=$1 RETURNING id", user_id, pw_hash)
+        _account_cache.pop(user_id, None)  # sessions opened with the old password end on their next request
     else:
         found = (await db.users.update_one({"id": user_id}, {"$set": {"passwordHash": pw_hash}})).matched_count
     if not found:
