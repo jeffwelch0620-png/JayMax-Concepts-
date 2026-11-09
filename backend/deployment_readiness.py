@@ -90,6 +90,9 @@ def configuration(backend,frontend):
     # M6 analytics is a read only: off in one place and on in the other just shows a tab that answers 503.
     insight=boolean(backend,'ANALYTICS_ENABLED','false');insight_view=boolean(frontend,'REACT_APP_ANALYTICS','false')
     if insight!=insight_view:problems.append({'key':'ANALYTICS','reason':'Backend and built frontend feature flags differ'})
+    # Open manager sessions follow login changes (server.ACCOUNT_RECHECK); only the test harness turns that off.
+    if str(backend.get('ACCOUNT_RECHECK','true')).lower() in ('0','false','no'):
+        problems.append({'key':'ACCOUNT_RECHECK','reason':'Open sessions must follow store, position and login changes'})
     return {'status':'held' if problems else 'passed','problems':problems,'features':pairs,
         'staffPersonalLogin':{'backend':login,'frontend':login_view},'analytics':{'backend':insight,'frontend':insight_view},
         'allNativeFeaturesHeld':not any(values.values()),'secretValuesIncluded':False}

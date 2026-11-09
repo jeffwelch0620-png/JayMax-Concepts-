@@ -257,6 +257,7 @@ OFFLINE_CLASSES += ['manager_handoff_install::InstallGuards']
 OFFLINE_CLASSES += ['workflow_integrity::SelfAcceptanceTests']
 OFFLINE_MODULES += ['journal_backup_receipts','hosted_journal_backup']
 OFFLINE_MODULES += ['receiving_install_evidence','receiving_install_coordinator']
+OFFLINE_MODULES += ['account_recheck']
 DATABASE_CASES += tuple(('receiving_install_coordinator_pg','TransitionDatabaseTests',name) for name in (
  'test_complete_six_to_seven_chain_and_post_failure_keeps_installation',
  'test_changed_baseline_refuses_before_install_without_repair',
@@ -324,7 +325,9 @@ def main():
             env.pop(key)
     env.update(DATABASE_URL='',AUXILIARY_DATABASE_URL='',PYTHON_DOTENV_DISABLED='1',
                USE_PG='true',AUTH_REQUIRED='true',AUTH_SECRET='synthetic-review-test-secret-only',
-               MONGO_URL='mongodb://127.0.0.1:27017',DB_NAME='synthetic_review_test')
+               MONGO_URL='mongodb://127.0.0.1:27017',DB_NAME='synthetic_review_test',
+               # Tests sign in as invented logins with no account row; test_account_recheck turns the check back on.
+               ACCOUNT_RECHECK='false')
     if args.profile == 'database':
         try:
             parsed = urlsplit(dsn)
