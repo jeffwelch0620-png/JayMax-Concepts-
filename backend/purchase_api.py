@@ -326,6 +326,20 @@ async def append_review_mappings(conn, store_id, actor, header, body, source_lin
             raise HTTPException(422,'Non-food, fee and tax lines must have no food-inventory movement')
         if food and movement=='price_credit' and review.original_line_id is None:
             raise HTTPException(422,'Link a price-only credit to its original receipt')
+        # A link holds corrections of the original invoice, so it must be this store's matching receipt
+        # (data-safety audit 2026-11-08); post_document checks price credits, this covers returns and the rest.
+        if review.original_line_id is not None:
+            if not food or movement not in ('price_credit','physical_return'):
+                raise HTTPException(422,'Only a price credit or a return links to an original receipt')
+        if food and movement=='physical_return' and review.original_line_id is not None:
+            # The corrections migration narrows facts to the current receipt; before it, every posted fact is current.
+            facts='current_purchase_facts' if await conn.fetchval("SELECT to_regclass('purchasing.current_purchase_facts') IS NOT NULL") else 'actual_purchase_facts'
+            match=await conn.fetchval(f'''SELECT EXISTS(SELECT 1 FROM purchasing.{facts} f
+                JOIN purchasing.mapping_decisions m ON m.id=f.mapping_id WHERE f.store_id=$1 AND f.vendor_id=$2
+                AND f.line_id=$3 AND f.item_code=$4 AND f.base_unit=$5 AND m.movement_kind='receipt')''',
+                store_id,header['vendor_id'],review.original_line_id,review.item_code,review.base_unit)
+            if not match:
+                raise HTTPException(422,'Link to the current matching receipt from this supplier at this location')
         if food and movement=='no_inventory' and amount!=0:
             raise HTTPException(422,'A nonzero food amount needs a receipt, return or price-credit disposition')
         if food and review.item_code:

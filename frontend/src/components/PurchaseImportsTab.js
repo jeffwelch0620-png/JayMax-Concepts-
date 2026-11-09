@@ -62,7 +62,9 @@ export function PurchaseDocumentReview({ document, items, history, onPost, onChe
         return { ...r, item_code: empty(r.item_code), base_unit: empty(r.base_unit),
           received_quantity: r.classification === "food" && ["receipt", "physical_return"].includes(r.movement_kind) ? empty(r.received_quantity) : null,
           received_unit: empty(r.received_unit), base_units_per_received_unit: empty(r.base_units_per_received_unit),
-          movement_date: empty(r.movement_date), original_line_id: empty(r.original_line_id) };
+          movement_date: empty(r.movement_date),
+          // Only a price credit or a return links to an original receipt; a link kept from an earlier choice is dropped.
+          original_line_id: ["price_credit", "physical_return"].includes(r.movement_kind) ? empty(r.original_line_id) : null };
       });
       if (!currencyConfirmed) throw new Error("Confirm the invoice currency.");
       request.current = { key: crypto.randomUUID(), body: { confirmed_currency: "USD", received_date: empty(receivedDate), lines } };
@@ -113,7 +115,7 @@ export function PurchaseDocumentReview({ document, items, history, onPost, onChe
                 <Field label="Inventory units per received unit"><input className={inpCls} value={r.base_units_per_received_unit} onChange={e => change(line.id, { base_units_per_received_unit: e.target.value })} inputMode="decimal" /></Field>
               </>}
               {["physical_return", "price_credit"].includes(r.movement_kind) && <Field label="Return / credit inventory date"><input type="date" className={inpCls} value={r.movement_date} onChange={e => change(line.id, { movement_date: e.target.value })} /></Field>}
-              {r.movement_kind === "price_credit" && <Field label="Original purchase"><select className={inpCls} value={r.original_line_id} onChange={e => change(line.id, { original_line_id: e.target.value })}><option value="">Choose original receipt</option>{history.filter(h => h.current_receipt !== false && h.vendor_id === header.vendor_id && h.item_code === r.item_code && Number(h.base_quantity) > 0).map(h => <option key={h.fact_id || h.line_id} value={h.line_id}>{h.document_number} · {h.description_snapshot} · {h.inventory_record_date}</option>)}</select></Field>}
+              {["price_credit", "physical_return"].includes(r.movement_kind) && <Field label="Original purchase"><select className={inpCls} value={r.original_line_id} onChange={e => change(line.id, { original_line_id: e.target.value })}><option value="">Choose original receipt</option>{history.filter(h => h.current_receipt !== false && h.vendor_id === header.vendor_id && h.item_code === r.item_code && Number(h.base_quantity) > 0).map(h => <option key={h.fact_id || h.line_id} value={h.line_id}>{h.document_number} · {h.description_snapshot} · {h.inventory_record_date}</option>)}</select></Field>}
             </>}
             <Field label="Review note"><input aria-label={`Note ${index + 1}`} className={inpCls} value={r.note} onChange={e => change(line.id, { note: e.target.value })} /></Field>
           </div>
