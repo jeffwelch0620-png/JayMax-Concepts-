@@ -332,7 +332,9 @@ async def append_review_mappings(conn, store_id, actor, header, body, source_lin
             if not food or movement not in ('price_credit','physical_return'):
                 raise HTTPException(422,'Only a price credit or a return links to an original receipt')
         if food and movement=='physical_return' and review.original_line_id is not None:
-            match=await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM purchasing.current_purchase_facts f
+            # The corrections migration narrows facts to the current receipt; before it, every posted fact is current.
+            facts='current_purchase_facts' if await conn.fetchval("SELECT to_regclass('purchasing.current_purchase_facts') IS NOT NULL") else 'actual_purchase_facts'
+            match=await conn.fetchval(f'''SELECT EXISTS(SELECT 1 FROM purchasing.{facts} f
                 JOIN purchasing.mapping_decisions m ON m.id=f.mapping_id WHERE f.store_id=$1 AND f.vendor_id=$2
                 AND f.line_id=$3 AND f.item_code=$4 AND f.base_unit=$5 AND m.movement_kind='receipt')''',
                 store_id,header['vendor_id'],review.original_line_id,review.item_code,review.base_unit)

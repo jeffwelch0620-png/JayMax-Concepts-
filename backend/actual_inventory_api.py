@@ -342,11 +342,6 @@ async def save_count(pool, store_id, actor, body, key, *, conn=None):
                 if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM actual_inventory.active_scope_bridges
                     WHERE old_closing_snapshot_id=$1 OR new_opening_snapshot_id=$1)''',body.corrects_snapshot_id):
                     raise HTTPException(409,'Reopen the scope handoff anchor and later periods before correcting this count')
-            elif await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM actual_inventory.count_snapshots
-                WHERE store_id=$1 AND scope_id=$2 AND count_date=$3 AND timing=$4)''',store_id,body.scope_id,body.count_date,body.timing):
-                # One count per boundary, as for staff sheets: a second one is a recount of the first, so a count
-                # sealed by a closed period can't be sidestepped (data-safety audit 2026-11-08).
-                raise HTTPException(409,'This date already has a count; recount it instead')
             members={r['item_code']:r for r in scope['items']}
             if len(body.lines)!=len(members) or {r.item_code for r in body.lines}!=set(members):
                 raise HTTPException(422,'Include every item in the physical count scope exactly once; leave uncounted values blank')
@@ -381,6 +376,11 @@ async def save_count(pool, store_id, actor, body, key, *, conn=None):
                 if line.confirmed and (quantity is None or line.inventory_value is None or not line.note.strip()):
                     raise HTTPException(422,'Confirm the measured quantity, explicit value and note for every completed line')
                 complete=complete and line.confirmed
+            if not body.corrects_snapshot_id and await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM actual_inventory.count_snapshots
+                WHERE store_id=$1 AND scope_id=$2 AND count_date=$3 AND timing=$4)''',store_id,body.scope_id,body.count_date,body.timing):
+                # One count per boundary, as for staff sheets: a second one is a recount of the first, so a count
+                # sealed by a closed period can't be sidestepped (data-safety audit 2026-11-08).
+                raise HTTPException(409,'This date already has a count; recount it instead')
             # layout_id is named only when used, so databases without the walk-order migration still save counts.
             layout_column,layout_value=(',layout_id',',$11') if body.layout_id else ('','')
             snapshot_id=await conn.fetchval(f'''INSERT INTO actual_inventory.count_snapshots
