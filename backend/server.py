@@ -142,6 +142,8 @@ def _sign(payload):
     return f"{raw}.{_b64(hmac.new(key.encode(), raw.encode(), hashlib.sha256).digest())}"
 
 def _decode_token(token):
+    if not AUTH_SECRET:
+        return None  # like _sign: never accept a token signed with an empty key
     try:
         raw, sig = token.split(".", 1)
         key = AUTH_SECRET
@@ -156,6 +158,27 @@ def _decode_token(token):
         return payload
     except (ValueError, TypeError, json.JSONDecodeError):
         return None
+
+# A manager or owner session must still match its login: removing a store, changing the position or
+# deleting the login ends open sessions instead of waiting for the token to expire. Rows are cached
+# briefly so each request doesn't hit the small account pool; this process forgets a login it changes.
+# Only the review test harness turns it off (its tests sign in as invented logins); the readiness check holds it off.
+ACCOUNT_RECHECK = os.environ.get("ACCOUNT_RECHECK", "true").lower() not in ("0", "false", "no")
+ACCOUNT_CACHE_SECONDS = 30
+_account_cache = {}
+
+async def _account_current(user):
+    sub, now = user.get("sub"), time.monotonic()
+    hit = _account_cache.get(sub)
+    if hit and now - hit[0] < ACCOUNT_CACHE_SECONDS:
+        row = hit[1]
+    else:
+        found = await db_auxiliary.pool().fetchrow("SELECT * FROM app_users WHERE id=$1", sub)
+        row = {"role": found["role"], "locations": set(found["locations"] or []),
+               "position": found["position"] if "position" in found.keys() else None} if found else None
+        _account_cache[sub] = (now, row)
+    return bool(row) and row["role"] == user.get("role") and row["locations"] == set(user.get("locations") or []) \
+        and (row["position"] or None) == (user.get("position") or None)
 
 def _path_rid(path):
     parts = path.split("/")
@@ -213,6 +236,16 @@ async def collaboration_security(request: Request, call_next):
         return await call_next(request)
     if user.get("kind") == "staff" and not await staff_login.check_session(db_pg.pool(), user):
         return JSONResponse({"detail": "Your sign-in has ended. Sign in again with your name and PIN."}, status_code=401)
+    if ACCOUNT_RECHECK and USE_PG and user.get("kind") != "staff":
+        try:
+            current = await _account_current(user)
+        except HTTPException as exc:
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        except Exception as exc:
+            logger.warning("Login check unavailable (%s)", type(exc).__name__)
+            return JSONResponse({"detail": "Your login could not be checked. Try again shortly."}, status_code=503)
+        if not current:
+            return JSONResponse({"detail": "Your access changed or your login was removed. Sign in again."}, status_code=401)
     if path.startswith(("/api/ai/chat", "/api/orders/")):
         now = time.monotonic()
         key = (request.client.host if request.client else "unknown", path.split("/")[3] if path.startswith("/api/") else path)
@@ -835,7 +868,8 @@ async def auth_set_access(user_id: str, body: UserAccessIn, request: Request):
         raise HTTPException(400, "You can't remove your own owner access")
     row = await db_auxiliary.pool().fetchrow(
         "UPDATE app_users SET position=$2, role=$3, locations=$4 WHERE id=$1 RETURNING *", user_id, body.position, role, locations)
-    # Takes effect at the person's next sign-in, when a new session token is issued.
+    # Open sessions no longer match the login, so the person signs in again to get the new access.
+    _account_cache.pop(user_id, None)
     return _clean_user(_pg_user_row(row))
 
 @api_router.put("/auth/users/{user_id}/password")
@@ -859,6 +893,7 @@ async def auth_delete_user(user_id: str, request: Request):
         raise HTTPException(400, "You can't remove your own account")
     if USE_PG:
         found = await db_auxiliary.pool().fetchval("DELETE FROM app_users WHERE id=$1 RETURNING id", user_id)
+        _account_cache.pop(user_id, None)
     else:
         found = (await db.users.delete_one({"id": user_id})).deleted_count
     if not found:
