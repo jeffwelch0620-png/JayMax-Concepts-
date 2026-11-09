@@ -193,7 +193,9 @@ DATABASE_CASES = (
  ('deployment_readiness','DeploymentReadinessTests','test_readiness_holds_missing_or_wrong_source_lookup_index'),
  ('deployment_readiness','DeploymentReadinessTests','test_readiness_detects_function_exposure_then_hardens_full_chain_and_restores'),
  ('actual_inventory','ActualInventoryTests','test_explicit_value_usage_math_ignores_sales_flag_and_prep'),
- ('actual_inventory','ActualInventoryTests','test_prepared_items_excluded_and_fixed_unit_conflict_rolls_back'))
+ ('actual_inventory','ActualInventoryTests','test_prepared_items_excluded_and_fixed_unit_conflict_rolls_back'),
+ ('actual_inventory','ActualInventoryTests','test_a_counted_boundary_takes_a_recount_not_a_second_count'),
+ ('actual_inventory','ActualInventoryTests','test_only_credits_and_returns_link_to_a_matching_receipt'))
 DATABASE_CASES += tuple(('apply_additive_migration', 'AdditiveDatabaseTests', name) for name in (
  'test_readonly_nested_failure_rolls_back_savepoint_and_keeps_outer_transaction',
  'test_dry_run_is_readonly_and_success_is_durable_without_business_changes',

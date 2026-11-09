@@ -108,15 +108,16 @@ class ActualInventoryTests(unittest.IsolatedAsyncioTestCase):
         async with self.pool.acquire() as conn:self.assertEqual(await conn.fetchval('SELECT count(*) FROM actual_inventory.scopes'),1)
 
     async def test_missing_counts_values_and_confirmations_do_not_become_zero(self):
-        r,_=await self.scope();scope=r.json();a,_=await self.count(scope,'2026-10-01')
-        for quantity,value in ((None,None),('1',None)):
-            b,_=await self.count(scope,'2026-10-08',quantity=quantity,value=value,confirmed=False)
+        r,_=await self.scope();scope=r.json();a,_=await self.count(scope,'2026-10-01');b=None
+        for quantity,value in ((None,None),('1',None)):  # each later count on the date is a recount
+            again={'corrects_snapshot_id':b.json()['header']['id']} if b else {}
+            b,_=await self.count(scope,'2026-10-08',quantity=quantity,value=value,confirmed=False,**again)
             self.assertEqual(b.status_code,200,b.text)
             report=(await self.report(a.json(),b.json())).json()
             self.assertEqual(report['status'],'incomplete');self.assertIsNone(report['actualFoodCost'])
             self.assertIsNone(report['rows'][0]['actualUsage'])
             self.assertEqual((await self.close(report)).status_code,409)
-        b,_=await self.count(scope,'2026-10-08',quantity='0',value='0')
+        b,_=await self.count(scope,'2026-10-08',quantity='0',value='0',corrects_snapshot_id=b.json()['header']['id'])
         report=(await self.report(a.json(),b.json())).json()
         self.assertEqual(report['status'],'complete');self.assertEqual(report['rows'][0]['closingQuantity'],'0')
 
@@ -155,9 +156,9 @@ class ActualInventoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_overlap_continuity_and_scope_mismatch(self):
         scope,a,b=await self.pair();report=(await self.report(a,b)).json();self.assertEqual((await self.close(report)).status_code,200)
         c,_=await self.count(scope,'2026-10-15',quantity='1',value='30')
+        # A second count at the closed boundary is refused outright; only the closing count anchors the next period.
         wrong,_=await self.count(scope,'2026-10-08',quantity='1.5',value='45')
-        wrong_report=(await self.report(wrong.json(),c.json())).json()
-        self.assertEqual((await self.close(wrong_report)).status_code,409)
+        self.assertEqual(wrong.status_code,409)
         right=(await self.report(b,c.json())).json();self.assertEqual((await self.close(right)).status_code,200)
         gap_open,_=await self.count(scope,'2026-10-17',quantity='1',value='30')
         gap_close,_=await self.count(scope,'2026-10-22',quantity='0.5',value='15')
@@ -190,6 +191,36 @@ class ActualInventoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.report(a,newer.json())).status_code,200)
         old=await self.client.get('/api/pg/actual-inventory/berts/counts/'+b['header']['id'])
         self.assertEqual(old.json(),b)
+
+    async def test_a_counted_boundary_takes_a_recount_not_a_second_count(self):
+        # Data-safety audit 2026-11-08: a parallel count let the dashboard show a value the closed period never had.
+        scope,a,b=await self.pair()
+        second,_=await self.count(scope,'2026-10-08',quantity='9',value='270')
+        self.assertEqual(second.status_code,409,second.text);self.assertIn('recount',second.text)
+        other,_=await self.count(scope,'2026-10-08',timing='after_receipts',quantity='1.5',value='45')
+        self.assertEqual(other.status_code,200,other.text)  # the other side of the delivery is its own boundary
+        self.assertEqual((await self.close((await self.report(a,b)).json())).status_code,200)
+        sealed,_=await self.count(scope,'2026-10-08',quantity='9',value='270')
+        self.assertEqual(sealed.status_code,409)
+        recount,_=await self.count(scope,'2026-10-08',quantity='9',value='270',corrects_snapshot_id=b['header']['id'])
+        self.assertEqual(recount.status_code,409)  # sealed by the closed period until it is reopened
+        async with self.pool.acquire() as conn:
+            self.assertEqual(await conn.fetchval("SELECT count(*) FROM actual_inventory.count_snapshots WHERE count_date='2026-10-08'"),2)
+
+    async def test_only_credits_and_returns_link_to_a_matching_receipt(self):
+        # Data-safety audit 2026-11-08: a stray link held corrections of an unrelated receipt.
+        _,a,b=await self.pair();r,original=await self.purchase();self.assertEqual(r.status_code,200,r.text)
+        receipt_line=original['lines'][0]['id']
+        file,*_=await self.capture(amounts=('-10',),overrides={'document_type_raw':'Credit'});doc=file['documents'][0]
+        def returned(**patches):
+            return self.body(doc,movement_kind='physical_return',received_quantity='-0.5',movement_date='2026-10-05',**patches)
+        for body,detail in ((returned(original_line_id=receipt_line,item_code='other_food'),'matching receipt'),
+                            (returned(original_line_id=str(uuid4())),'matching receipt')):
+            r=await self.post(doc,body);self.assertEqual(r.status_code,422,r.text);self.assertIn(detail,r.text)
+        stray=self.body(doc,received_quantity='1',original_line_id=receipt_line)  # a receipt never links
+        r=await self.post(doc,stray);self.assertEqual(r.status_code,422,r.text);self.assertIn('Only a price credit or a return',r.text)
+        r=await self.post(doc,returned(original_line_id=receipt_line));self.assertEqual(r.status_code,200,r.text)
+        report=(await self.report(a,b)).json();self.assertEqual(report['rows'][0]['netPurchaseCost'],'30.00')
 
     async def test_purchase_return_and_price_credit_affect_quantity_and_cost_independently(self):
         _,a,b=await self.pair();r,original=await self.purchase();self.assertEqual(r.status_code,200)

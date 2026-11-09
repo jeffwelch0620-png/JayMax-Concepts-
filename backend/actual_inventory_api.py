@@ -342,6 +342,11 @@ async def save_count(pool, store_id, actor, body, key, *, conn=None):
                 if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM actual_inventory.active_scope_bridges
                     WHERE old_closing_snapshot_id=$1 OR new_opening_snapshot_id=$1)''',body.corrects_snapshot_id):
                     raise HTTPException(409,'Reopen the scope handoff anchor and later periods before correcting this count')
+            elif await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM actual_inventory.count_snapshots
+                WHERE store_id=$1 AND scope_id=$2 AND count_date=$3 AND timing=$4)''',store_id,body.scope_id,body.count_date,body.timing):
+                # One count per boundary, as for staff sheets: a second one is a recount of the first, so a count
+                # sealed by a closed period can't be sidestepped (data-safety audit 2026-11-08).
+                raise HTTPException(409,'This date already has a count; recount it instead')
             members={r['item_code']:r for r in scope['items']}
             if len(body.lines)!=len(members) or {r.item_code for r in body.lines}!=set(members):
                 raise HTTPException(422,'Include every item in the physical count scope exactly once; leave uncounted values blank')
@@ -427,6 +432,12 @@ async def period_report(conn, store_id, opening_id, closing_id):
     if outside:errors.append('Food purchases outside the selected count scope: '+', '.join(outside))
     moved=sorted({r['item_code'] for r in transfers}-members)
     if moved:errors.append('Store transfers outside the selected count scope: '+', '.join(moved))
+    # A transfer is booked when it's received; closing while one sent before the boundary is still in transit
+    # would push it into the next period at both stores (data-safety audit 2026-11-08).
+    if await store_transfers.installed(conn) and await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM actual_inventory.store_transfers t
+        WHERE $1 IN (t.from_store_id,t.to_store_id) AND t.sent_date<$2
+        AND NOT EXISTS(SELECT 1 FROM actual_inventory.store_transfer_events e WHERE e.transfer_id=t.id))''',store_id,c['boundary_date']):
+        errors.append('Receive or cancel store transfers still in transit before closing this period')
     with localcontext() as ctx:
         ctx.prec=80;ctx.traps[Inexact]=True
         net_cost=sum((p['inventory_cost_amount'] for p in purchases),Decimal(0))

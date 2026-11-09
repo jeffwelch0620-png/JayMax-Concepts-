@@ -105,11 +105,14 @@ class StoreTransferDatabaseTests(actual.ActualInventoryTests):
             await c.execute("INSERT INTO public.reporting_periods(store_id,period_start,period_end,name,status,ref) VALUES('rudds','2026-10-07','2026-10-07','Legacy close','closed','legacy-close-test')")
         legacy = await self.step('rudds', t, action='receive', received_base_quantity='8', record_date='2026-10-07', note='x')
         self.assertEqual(legacy.status_code, 409, legacy.text)
-        # Close Bert's period: a receipt dated inside it is held; after it, accepted.
-        self.assertEqual((await self.close((await self.report(a, b)).json())).status_code, 200)
-        self.assertEqual((await self.step('rudds', t, action='receive', received_base_quantity='8', record_date='2026-10-06', note='x')).status_code, 409)
+        # Neither store closes a period while a transfer sent in it is still in transit (data-safety audit
+        # 2026-11-08): it would land in the next period at both stores. Received, the period closes.
+        held = (await self.report(a, b)).json()
+        self.assertEqual(held['status'], 'incomplete'); self.assertIn('still in transit', ' '.join(held['errors']))
+        self.assertEqual((await self.close(held)).status_code, 409)
         ok = await self.step('rudds', t, action='receive', received_base_quantity='10', record_date='2026-10-09', note='All arrived')
         self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertEqual((await self.close((await self.report(a, b)).json())).status_code, 200)
         self.assertEqual((await self.step('berts', t, action='cancel', note='Too late')).status_code, 409)
         # A cancelled transfer moves nothing.
         c = (await self.send(sent_date='2026-10-09')).json()['transfer']
