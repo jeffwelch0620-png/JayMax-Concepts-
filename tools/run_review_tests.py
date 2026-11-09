@@ -260,6 +260,7 @@ OFFLINE_CLASSES += ['workflow_integrity::SelfAcceptanceTests']
 OFFLINE_MODULES += ['journal_backup_receipts','hosted_journal_backup']
 OFFLINE_MODULES += ['receiving_install_evidence','receiving_install_coordinator']
 OFFLINE_MODULES += ['account_recheck']
+OFFLINE_MODULES += ['host_header_gate']
 DATABASE_CASES += tuple(('receiving_install_coordinator_pg','TransitionDatabaseTests',name) for name in (
  'test_complete_six_to_seven_chain_and_post_failure_keeps_installation',
  'test_changed_baseline_refuses_before_install_without_repair',

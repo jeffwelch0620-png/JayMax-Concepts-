@@ -129,7 +129,8 @@ class HandoffActorTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(server,'AUTH_SECRET',''):
                 with self.assertRaises(HTTPException) as error: await server._manager_handoff_actor(request(token),'berts')
                 self.assertEqual(error.exception.status_code,503)
-            self.assertIn('/api/pg/operations/{store}/handoff-notes/commands',{r.path for r in server.app.routes})
+            # The API schema lists every registered path (FastAPI 0.16x no longer flattens included routers into app.routes).
+            self.assertIn('/api/pg/operations/{store}/handoff-notes/commands',server.app.openapi()['paths'])
 
 
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'),'Disposable loopback PostgreSQL required')

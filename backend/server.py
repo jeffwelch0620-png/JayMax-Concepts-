@@ -213,22 +213,25 @@ def _is_pin_optional(path):
     return not (len(tail) >= 2 and tail[1] in ("pin", "members"))
 
 async def _record_activity(request, user, status):
-    if user and request.url.path not in ("/api/health",) and USE_PG:
-        rid = _path_rid(request.url.path)
+    path = request.scope["path"]  # the routed path, as in collaboration_security
+    if user and path not in ("/api/health",) and USE_PG:
+        rid = _path_rid(path)
         await db_pg.pool().execute(
             """INSERT INTO activity_log (user_id, user_email, role, method, path, status, store_id)
                VALUES ($1, $2, $3, $4, $5, $6, $7)""",
-            user.get("sub"), user.get("email"), user.get("role"), request.method, request.url.path, status,
+            user.get("sub"), user.get("email"), user.get("role"), request.method, path, status,
             RESTAURANT_TO_PG_STORE.get(rid) if rid else None)
-    elif user and request.url.path not in ("/api/health",):
+    elif user and path not in ("/api/health",):
         await db.activity_log.insert_one({"id": "act_" + uuid.uuid4().hex[:12],
             "userId": user.get("sub"), "email": user.get("email"), "role": user.get("role"),
-            "method": request.method, "path": request.url.path, "status": status,
-            "restaurantId": _path_rid(request.url.path), "createdAt": _now_iso()})
+            "method": request.method, "path": path, "status": status,
+            "restaurantId": _path_rid(path), "createdAt": _now_iso()})
 
 @app.middleware("http")
 async def collaboration_security(request: Request, call_next):
-    path = request.url.path
+    # The path the router uses. request.url is rebuilt from the Host header, which a client controls
+    # (Starlette GHSA-86qp), so access decisions never read it.
+    path = request.scope["path"]
     if not path.startswith("/api") or path in ("/api/health", "/api/auth/login", "/api/auth/bootstrap"):
         return await call_next(request)
     if AUTH_REQUIRED and not AUTH_SECRET:
