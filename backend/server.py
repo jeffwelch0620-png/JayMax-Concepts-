@@ -5995,7 +5995,7 @@ async def _manager_handoff_actor(request, store_id):
 app.include_router(manager_handoff.create_router(db_pg.pool, _manager_handoff_actor))
 # AM-to-PM prep task handoff: same personal-account check and feature flag as the handoff notes.
 import prep_handoff
-app.include_router(prep_handoff.create_router(db_pg.pool, _manager_handoff_actor))
+app.include_router(prep_handoff.create_router(db_pg.pool, _manager_handoff_actor, db_auxiliary.pool))
 
 async def _staff_count_actor(request, conn, store_id, pin):
     token = (request.headers.get('authorization') or '').removeprefix('Bearer ').strip()

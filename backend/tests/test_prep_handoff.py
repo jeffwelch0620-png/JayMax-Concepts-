@@ -51,6 +51,24 @@ class PrepHandoffValidationTests(unittest.TestCase):
         self.assertEqual((facts['planned_base_quantity'], facts['remaining_base_quantity'], facts['available']), (None, None, False))
         self.assertRegex(facts['prep_hash'], '^[a-f0-9]{64}$')
 
+    def test_manager_accounts_are_read_through_the_accounts_connection(self):
+        class Accounts:
+            def __init__(self, fail=False): self.fail, self.queries = fail, []
+            async def fetchrow(self, sql, *args):
+                if self.fail: raise RuntimeError('restricted login')
+                self.queries.append(sql); return {'id': 'usr_am', 'email': 'am@example.invalid', 'role': 'manager', 'position': 'KM'}
+            async def fetch(self, sql, *args):
+                if self.fail: raise RuntimeError('restricted login')
+                self.queries.append(sql); return []
+        ok = Accounts()
+        self.assertEqual(asyncio.run(prep_handoff.account(lambda: ok, 'usr_am'))['position'], 'KM')
+        self.assertEqual(asyncio.run(prep_handoff.managers(lambda: ok, 'papa')), [])
+        self.assertTrue(all('public.app_users' in q for q in ok.queries))
+        for call in (lambda a: prep_handoff.account(a, 'usr_am'), lambda a: prep_handoff.managers(a, 'berts')):
+            with self.assertRaises(prep_handoff.HTTPException) as held:
+                asyncio.run(call(lambda: Accounts(fail=True)))
+            self.assertEqual(held.exception.status_code, 503); self.assertNotIn('restricted', held.exception.detail)
+
     def test_digest_is_stable_and_order_free(self):
         self.assertEqual(prep_handoff.digest({'a': 1, 'b': [1, 2]}), prep_handoff.digest({'b': [1, 2], 'a': 1}))
         self.assertNotEqual(prep_handoff.digest({'a': 1}), prep_handoff.digest({'a': 2}))
@@ -84,7 +102,7 @@ class PrepHandoffTests(staff.StaffTaskTests):
 
         async def authorize(request, store):
             return await manager_actor.resolve(request, store, lambda t: {'sub': t}, lambda: self.pool, True)
-        app = FastAPI(); app.include_router(prep_handoff.create_router(lambda: self.pool, authorize))
+        app = FastAPI(); app.include_router(prep_handoff.create_router(lambda: self.pool, authorize, lambda: self.pool))
         self.h = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test')
         self.addAsyncCleanup(self.h.aclose)
         for p in (patch.dict(os.environ, {'MANAGER_HANDOFF_NOTES_ENABLED': 'true'}),

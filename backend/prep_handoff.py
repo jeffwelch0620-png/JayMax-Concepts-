@@ -104,16 +104,21 @@ async def settings(conn, store):
     return config
 
 
-async def account(conn, actor):
-    row = await conn.fetchrow('SELECT id,email,role,position FROM public.app_users WHERE id=$1', actor)
+# Manager accounts are read through the accounts connection (as manager_actor does), never the inventory
+# login, which may be restricted from account tables.
+async def account(accounts, actor):
+    try: row = await accounts().fetchrow('SELECT id,email,role,position FROM public.app_users WHERE id=$1', actor)
+    except Exception: raise HTTPException(503, 'Current manager account could not be confirmed') from None
     if not row: raise HTTPException(403, 'Current manager or owner access required')
     return dict(row)
 
 
-async def managers(conn, store):
+async def managers(accounts, store):
     """Logins that may receive or take over a handoff at this store: owners and its managers."""
-    rows = await conn.fetch('''SELECT id,email,role,position FROM public.app_users
-        WHERE role='owner' OR (role='manager' AND $1=ANY(locations)) ORDER BY role DESC,email''', manager_actor.RESTAURANTS[store])
+    try:
+        rows = await accounts().fetch('''SELECT id,email,role,position FROM public.app_users
+            WHERE role='owner' OR (role='manager' AND $1=ANY(locations)) ORDER BY role DESC,email''', manager_actor.RESTAURANTS[store])
+    except Exception: raise HTTPException(503, 'Manager accounts could not be confirmed') from None
     return [dict(r) for r in rows]
 
 
@@ -206,10 +211,10 @@ async def view(conn, store, row, people, timezone_name):
         current_prep=facts, prep_changed=changed))
 
 
-async def day_state(conn, store, day, track, actor):
+async def day_state(conn, accounts, store, day, track, actor):
     config = await settings(conn, store)
-    people = {p['id']: p for p in await managers(conn, store)}
-    me = await account(conn, actor)
+    people = {p["id"]: p for p in await managers(accounts, store)}
+    me = await account(accounts, actor)
     ids = await conn.fetch('''SELECT id FROM operations.prep_handoffs WHERE store_id=$1 AND business_date=$2 AND prep_track=$3
         ORDER BY created_at,id''', store, day, track)
     handoffs = [await view(conn, store, await current(conn, store, r['id']), people, config['timezone_name']) for r in ids]
@@ -232,7 +237,7 @@ async def replayed(conn, store, actor, key, body, expected):
     return receipt
 
 
-async def execute(pool, store, actor, body, key, expected):
+async def execute(pool, accounts, store, actor, body, key, expected):
     async with pool.acquire() as conn, conn.transaction():
         await conn.execute("SET LOCAL lock_timeout='5s'")
         await conn.execute("SET LOCAL statement_timeout='20s'")
@@ -242,11 +247,11 @@ async def execute(pool, store, actor, body, key, expected):
         # commit, so no prep change can land between reading the facts and saving against them.
         await lock_store(conn, store)
         config = await settings(conn, store)
-        people = {p['id']: p for p in await managers(conn, store)}
+        people = {p["id"]: p for p in await managers(accounts, store)}
         if await replayed(conn, store, actor, key, body, expected):
             row = await current(conn, store, body.handoff_id)
             return dict(handoff=await view(conn, store, row, people, config['timezone_name']), replayed=True)
-        me = await account(conn, actor)
+        me = await account(accounts, actor)
         senior = me['role'] == 'owner' or me['position'] in SENIOR
         day = datetime.strptime(body.business_date, '%Y-%m-%d').date()
         zone = ZoneInfo(config['timezone_name'])
@@ -319,7 +324,7 @@ async def execute(pool, store, actor, body, key, expected):
         return dict(handoff=await view(conn, store, await current(conn, store, body.handoff_id), people, config['timezone_name']), replayed=False)
 
 
-def create_router(pool_factory, authorize):
+def create_router(pool_factory, authorize, accounts):
     router = APIRouter(prefix='/api/pg/operations/{store}/prep-handoffs', route_class=manager_handoff.HandoffRoute)
 
     async def context(request, store):
@@ -333,7 +338,7 @@ def create_router(pool_factory, authorize):
         except ValueError: raise HTTPException(422, 'Use an ISO business date') from None
         actor, pool = await context(request, store)
         async with manager_handoff.read_connection(pool) as conn:
-            return await day_state(conn, store, datetime.strptime(day, '%Y-%m-%d').date(), track, actor)
+            return await day_state(conn, accounts, store, datetime.strptime(day, '%Y-%m-%d').date(), track, actor)
 
     @router.get('/handoffs/{handoff_id}/history')
     async def history(store: str, handoff_id: UUID, request: Request):
@@ -341,7 +346,7 @@ def create_router(pool_factory, authorize):
         async with manager_handoff.read_connection(pool) as conn:
             config = await settings(conn, store)
             if not await current(conn, store, handoff_id): raise HTTPException(404, 'Handoff not found at this restaurant')
-            people = {p['id']: p for p in await managers(conn, store)}
+            people = {p["id"]: p for p in await managers(accounts, store)}
             rows = await conn.fetch('''SELECT * FROM operations.prep_handoff_revisions WHERE store_id=$1 AND handoff_id=$2
                 ORDER BY revision LIMIT 200''', store, handoff_id)
             zone = ZoneInfo(config['timezone_name'])
@@ -356,5 +361,5 @@ def create_router(pool_factory, authorize):
         prep_tracks.check(store, body.prep_track)
         actor, pool = await context(request, store)
         async with manager_handoff.database_errors():
-            return await execute(pool, store, actor, body, idempotency_key, manager_handoff.version(request))
+            return await execute(pool, accounts, store, actor, body, idempotency_key, manager_handoff.version(request))
     return router
