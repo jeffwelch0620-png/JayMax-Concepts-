@@ -6,6 +6,7 @@ import { readStateWithDeadline } from "../lib/stateRead";
 import { handoffContext, handoffJournal, handoffFingerprint, checkedHandoffDay, checkedHandoffReceipt,
   checkedHandoffStatus, checkedHandoffHistory, stableHandoff } from "../lib/managerHandoff";
 import { PageTitle, cardCls, inpCls, btnGhost, btnAcc } from "./common";
+import { PrepHandoffs } from "./PrepHandoffs";
 
 const reported = { not_assessed: "Not assessed", ready: "Ready (reported)", action_needed: "Action needed" };
 const errorText = "Handoff information could not be confirmed. Refresh or check the retained request before sending anything new.";
@@ -40,6 +41,7 @@ export function ManagerHandoffTab({ rid, user, initialContext, drafts, showToast
       <label className="flex flex-col gap-1">Business date<input className={inpCls} aria-label="Handoff date" type="date" value={chosen.day} disabled={!state?.ready || !!state.request} onChange={e => setSelection({ ...chosen, day: e.target.value })}/></label>
       <label className="flex flex-col gap-1">Prep track<select className={inpCls} aria-label="Handoff track" value={chosen.track} disabled={!state?.ready || !!state.request} onChange={e => setSelection({ ...chosen, track: e.target.value })}><option value="bulk">Bulk Prep</option><option value="daily">Daily Prep</option>{rid === "berts" && <option value="salad">Salad Bar Prep</option>}</select></label>
     </div>
+    {c && <PrepHandoffs key={c.key} rid={rid} day={chosen.day} track={chosen.track} showToast={showToast}/>}
     {!c ? <p role="alert">Select a valid restaurant/date/track for your personal manager or owner account.</p> : !state?.ready ? <p role="alert">{state?.error ? "Browser recovery is unavailable. No new handoff request will be sent." : "Checking this account's retained request…"}<button className={btnGhost} onClick={() => setBoot(n => n + 1)}>Recheck browser recovery</button></p> :
       <HandoffForm key={c.key} context={c} drafts={drafts} journal={journal} request={state.request} onRequest={request => setRecovery({ scope, ready: true, request })} showToast={showToast}/>}
   </div>;

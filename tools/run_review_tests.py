@@ -304,6 +304,14 @@ DATABASE_CASES += tuple(('manager_handoff','HandoffDatabaseTests',name) for name
  'test_disposable_dump_restore_preserves_context_history_and_exact_replay',
  'test_disposable_role_matrix_and_catalog_snapshot'))
 
+OFFLINE_CLASSES += ['prep_handoff::PrepHandoffValidationTests']
+DATABASE_CASES += tuple(('prep_handoff','PrepHandoffTests',name) for name in (
+ 'test_send_accept_then_changed_prep_needs_acceptance_again_and_writes_no_prep',
+ 'test_backup_and_same_person_take_over_need_a_reason_and_are_recorded',
+ 'test_correction_returns_to_waiting_and_only_sender_or_gm_corrects_or_withdraws',
+ 'test_refusals_store_role_recipient_duplicate_stale_and_replay',
+ 'test_history_cannot_be_rewritten'))
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

@@ -35,7 +35,13 @@ def guides():
               'reference and manifest are in `supabase/manager_handoff.schema.sql` and '
               '`supabase/manager_handoff.manifest.json`. No live timezone rows or role policies/grants '
               'are seeded. A separate exact installation, per-object permission and activation review '
-              'is required; existing native installers must not apply it automatically.\n')
+              'is required; existing native installers must not apply it automatically.\n\n'
+              '[20261111_prep_task_handoffs.sql](20261111_prep_task_handoffs.sql) (AM-to-PM prep task handoff) builds on it: '
+              'apply it after `20261025_manager_handoff_notes.sql` and `20261029_salad_manager_notes.sql`, and after the native '
+              'day tasks and `20261007_staff_prep_tasks.sql`. It seeds nothing and is outside the native installers. Each store '
+              'using the handoff needs its `operations.store_settings` timezone row (all three stores are `America/New_York`). '
+              'Where the backend role is not the table owner, grant it SELECT and INSERT on the three new tables and UPDATE on '
+              '`operations.prep_handoffs`.\n')
     profile = '# Native build/test feature settings\n\n'
     profile += ('Generated from the reviewed feature map. This is a proposed testing profile, '
                 'not evidence of live Render settings and not an instruction to enable features '

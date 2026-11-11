@@ -21,6 +21,10 @@ const handoffUrl = rid => `${PG_API}/operations/${pgStoreId(rid)}/handoff-notes`
 export const handoffDay = (rid, day, track, options = {}) => axios.get(`${handoffUrl(rid)}/days/${day}`, { ...options, params: { track } }).then(r => r.data);
 export const saveHandoff = (rid, body, version, key) => axios.post(`${handoffUrl(rid)}/commands`, body, { timeout: 60000, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
 export const handoffStatus = (rid, body, version, key) => axios.post(`${handoffUrl(rid)}/status`, body, { timeout: 60000, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+const prepHandoffUrl = rid => `${PG_API}/operations/${pgStoreId(rid)}/prep-handoffs`;
+export const prepHandoffDay = (rid, day, track) => axios.get(`${prepHandoffUrl(rid)}/days/${day}`, { params: { track }, timeout: 60000 }).then(r => r.data);
+export const prepHandoffCommand = (rid, body, version, key) => axios.post(`${prepHandoffUrl(rid)}/commands`, body, { timeout: 60000, headers: { ...revisionHeaders(version), "Idempotency-Key": key } }).then(r => r.data);
+export const prepHandoffHistory = (rid, id) => axios.get(`${prepHandoffUrl(rid)}/handoffs/${id}/history`, { timeout: 60000 }).then(r => r.data);
 export const handoffHistory = (rid, noteId, after = 0, options = {}) => axios.get(`${handoffUrl(rid)}/notes/${noteId}/history`, { ...options, params: { after } }).then(r => r.data);
 // M6 analytics: a read for the General Manager and above (backend/analytics.py), off by default.
 export const analyticsEnabled = USE_PG && process.env.REACT_APP_ANALYTICS === "true";
