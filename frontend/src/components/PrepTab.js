@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { confirmed, confirmSave, saveFailureMessage, useRetainedDraft } from "../lib/saveIntegrity";
 import { ChefHat, Play, PackageCheck, Layers, X, Plus, Trash2, Check, Sparkles, ClipboardList, Send, Package } from "lucide-react";
-import { normalizeRecipeSchema, recipeCostSummary, fmtDate, fmtMoney, num, todayISO, FREQS, VESSELS } from "../lib/calc";
+import { normalizeRecipeSchema, fmtDate, fmtMoney, num, todayISO, FREQS, VESSELS } from "../lib/calc";
 import { ManualForecast } from "./ManualForecast";
 import * as api from "../lib/api";
 import { PrepDayDrafts } from "./PrepDayDrafts";

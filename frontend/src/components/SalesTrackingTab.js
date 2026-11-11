@@ -4,7 +4,7 @@ import { confirmed, saveFailureMessage, useRetainedDraft } from "../lib/saveInte
 import { mergeSalesDraft } from "../lib/salesDraft";
 import { expectedSalesUsage } from "../lib/expectedSalesUsage";
 import { Save, Plus } from "lucide-react";
-import { itemDerived, adjustmentSignedPortions, todayISO, fmtDate, num, workweekRange, shiftWorkweek } from "../lib/calc";
+import { itemDerived, adjustmentSignedPortions, fmtDate, num, workweekRange, shiftWorkweek } from "../lib/calc";
 import { PageTitle, EmptyState, Field, SectionLabel, Pill, cardCls, inpCls, btnAcc, btnGhost } from "./common";
 
 export function SalesTrackingTab({ rid, revision = 0, drafts, showError = () => {}, actualMode = false, items, dishes, purchases, adjustments, salesPeriod, persist, loadLatestSales, reportingPeriods, persistReportingPeriods, showToast }) {
