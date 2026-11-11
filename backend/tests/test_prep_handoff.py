@@ -254,8 +254,12 @@ class PrepHandoffTests(staff.StaffTaskTests):
         # before the inventory connection is taken, so concurrent requests never wait on each other.
         dsn = os.environ['NATIVE_PURCHASE_TEST_DSN'].rsplit('/', 1)[0] + '/' + self.db
         small = await asyncpg.create_pool(dsn, min_size=1, max_size=1)
-        self.addAsyncCleanup(small.close)
+        try:
+            await self.small_pool_requests(small)
+        finally:
+            await small.close()  # before teardown drops the test database
 
+    async def small_pool_requests(self, small):
         async def authorize(request, store):
             return await manager_actor.resolve(request, store, lambda t: {'sub': t}, lambda: small, True)
         app = FastAPI(); app.include_router(prep_handoff.create_router(lambda: small, authorize, lambda: small))
