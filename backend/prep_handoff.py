@@ -126,6 +126,8 @@ async def task_facts(conn, store, task_id):
             ORDER BY e.revision DESC LIMIT 1) AS phase_version,
           (SELECT e.action FROM prep_inventory.execution_events e WHERE e.list_id=l.id AND e.action IN ('release','reopen')
             ORDER BY e.revision DESC LIMIT 1) AS phase_action,
+          (SELECT e.id FROM prep_inventory.execution_events e WHERE e.list_id=l.id AND e.action IN ('release','reopen')
+            ORDER BY e.revision DESC LIMIT 1) AS phase_event,
           prep_inventory.task_progress(t.id) AS progress,
           a.revision AS assignment_revision,a.staff_member_id,s.name AS staff_name
         FROM prep_inventory.day_tasks t
@@ -148,7 +150,9 @@ async def task_facts(conn, store, task_id):
                  effective_base_quantity=qty(progress.get('effective_base_quantity') or 0), reviewed_base_quantity=qty(reviewed),
                  remaining_base_quantity=None if planned is None else qty(max(planned - reviewed, Decimal(0))),
                  status=progress['status'], closed=bool(progress['closed']), needs_review=bool(progress['needs_review']),
-                 available=bool(released), assignment_revision=row['assignment_revision'],
+                 # The release event itself, so reopening and releasing again can't revive an earlier acceptance.
+                 available=bool(released), release_event_id=str(row['phase_event']) if row['phase_event'] else None,
+                 assignment_revision=row['assignment_revision'],
                  assignee=({'id': str(row['staff_member_id']), 'name': row['staff_name']} if row['staff_member_id'] else None))
     return dict(facts, prep_hash=digest(facts))
 
@@ -289,6 +293,8 @@ async def execute(pool, store, actor, body, key, expected):
                 status = 'accepted'
             elif body.action == 'take_over':
                 if actor not in people: raise HTTPException(403, 'Current manager or owner access required')
+                if not facts['available']:
+                    raise HTTPException(409, 'The linked prep task is no longer released; ask the sending manager to correct or withdraw the handoff')
                 if actor == row['recipient_id'] and row['status'] == 'waiting':
                     raise HTTPException(409, 'You are the named manager; accept the handoff instead')
                 recipient, status = actor, 'accepted'

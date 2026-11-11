@@ -40,7 +40,7 @@ class PrepHandoffValidationTests(unittest.TestCase):
     def test_unresolved_draft_task_reads_as_not_carryable(self):
         # A par item still waiting for its count has no planned amount (prep_day_tasks); the day read must not fail.
         row = dict(id=uuid4(), version_id=uuid4(), included=True, planned_base_quantity=None, task_snapshot={'name': 'Invented item', 'base_unit': 'lb'},
-                   list_id=uuid4(), prep_date=date(2026, 10, 8), track='daily', superseded=False, phase_version=None, phase_action=None,
+                   list_id=uuid4(), prep_date=date(2026, 10, 8), track='daily', superseded=False, phase_version=None, phase_action=None, phase_event=None,
                    progress={'planned_base_quantity': None, 'effective_base_quantity': '0', 'reviewed_base_quantity': '0',
                              'status': 'open', 'closed': False, 'needs_review': False},
                    assignment_revision=None, staff_member_id=None, staff_name=None)
@@ -90,7 +90,7 @@ class PrepHandoffTests(staff.StaffTaskTests):
         for p in (patch.dict(os.environ, {'MANAGER_HANDOFF_NOTES_ENABLED': 'true'}),
                   patch.object(manager_handoff, 'business_today', return_value=date(2026, 10, 8))):
             p.start(); self.addCleanup(p.stop)
-        _, self.task = await self.start()
+        self.draft, self.task = await self.start()
 
     async def day(self, actor='usr_am', store='berts', track='daily'):
         r = await self.h.get(f'/api/pg/operations/{store}/prep-handoffs/days/{DAY}', params={'track': track}, headers={'Authorization': 'Bearer ' + actor})
@@ -210,6 +210,26 @@ class PrepHandoffTests(staff.StaffTaskTests):
         with patch.object(prep_handoff, 'lock_store', locked), patch.object(prep_handoff, 'task_facts', facts):
             self.assertEqual((await self.cmd(self.act(h, 'accept', f['prep_hash']), 'usr_pm', 1)).status_code, 200)
         self.assertEqual(seen[:2], [('lock', 'berts'), ('facts', 'berts')])
+
+    async def test_reopen_blocks_take_over_and_a_re_release_still_needs_acceptance_again(self):
+        h = await self.send()
+        f = await self.facts('usr_pm')
+        self.assertEqual((await self.cmd(self.act(h, 'accept', f['prep_hash']), 'usr_pm', 1)).status_code, 200)
+        reopened = await self.write_execution(self.command(self.draft, "reopen"), version=1)
+        self.assertEqual(reopened.status_code, 200, reopened.text)
+        closed = await self.facts('usr_backup')
+        self.assertFalse(closed['available'])
+        refused = await self.cmd(self.act(h, 'take_over', closed['prep_hash'], reason='Invented: covering'), 'usr_backup', 2)
+        self.assertEqual(refused.status_code, 409, refused.text)
+        # Releasing the same unchanged draft again does not bring the earlier acceptance back.
+        released = await self.write_execution(self.command(self.draft), version=2)
+        self.assertEqual(released.status_code, 200, released.text)
+        again = await self.facts('usr_pm')
+        self.assertTrue(again['available']); self.assertNotEqual(again['prep_hash'], f['prep_hash'])
+        state = (await self.day('usr_pm')).json()['handoffs'][0]
+        self.assertEqual(state['effective_status'], 'needs_acceptance')
+        self.assertEqual((await self.cmd(self.act(h, 'accept', f['prep_hash']), 'usr_pm', 2)).status_code, 409)
+        self.assertEqual((await self.cmd(self.act(h, 'accept', again['prep_hash']), 'usr_pm', 2)).status_code, 200)
 
     async def test_history_cannot_be_rewritten(self):
         h = await self.send()
