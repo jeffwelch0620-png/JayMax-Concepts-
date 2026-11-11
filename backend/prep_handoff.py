@@ -211,10 +211,14 @@ async def view(conn, store, row, people, timezone_name):
         current_prep=facts, prep_changed=changed))
 
 
-async def day_state(conn, accounts, store, day, track, actor):
+async def staff(accounts, store, actor):
+    """The store's managers and the signed-in account, read before any inventory connection is taken: without a
+    separate accounts database both come from one small pool, and holding one while waiting for another can stall."""
+    return {p['id']: p for p in await managers(accounts, store)}, await account(accounts, actor)
+
+
+async def day_state(conn, store, day, track, actor, people, me):
     config = await settings(conn, store)
-    people = {p["id"]: p for p in await managers(accounts, store)}
-    me = await account(accounts, actor)
     ids = await conn.fetch('''SELECT id FROM operations.prep_handoffs WHERE store_id=$1 AND business_date=$2 AND prep_track=$3
         ORDER BY created_at,id''', store, day, track)
     handoffs = [await view(conn, store, await current(conn, store, r['id']), people, config['timezone_name']) for r in ids]
@@ -237,7 +241,7 @@ async def replayed(conn, store, actor, key, body, expected):
     return receipt
 
 
-async def execute(pool, accounts, store, actor, body, key, expected):
+async def execute(pool, store, actor, body, key, expected, people, me):
     async with pool.acquire() as conn, conn.transaction():
         await conn.execute("SET LOCAL lock_timeout='5s'")
         await conn.execute("SET LOCAL statement_timeout='20s'")
@@ -247,11 +251,9 @@ async def execute(pool, accounts, store, actor, body, key, expected):
         # commit, so no prep change can land between reading the facts and saving against them.
         await lock_store(conn, store)
         config = await settings(conn, store)
-        people = {p["id"]: p for p in await managers(accounts, store)}
         if await replayed(conn, store, actor, key, body, expected):
             row = await current(conn, store, body.handoff_id)
             return dict(handoff=await view(conn, store, row, people, config['timezone_name']), replayed=True)
-        me = await account(accounts, actor)
         senior = me['role'] == 'owner' or me['position'] in SENIOR
         day = datetime.strptime(body.business_date, '%Y-%m-%d').date()
         zone = ZoneInfo(config['timezone_name'])
@@ -337,16 +339,17 @@ def create_router(pool_factory, authorize, accounts):
         try: iso_day(day)
         except ValueError: raise HTTPException(422, 'Use an ISO business date') from None
         actor, pool = await context(request, store)
+        people, me = await staff(accounts, store, actor)
         async with manager_handoff.read_connection(pool) as conn:
-            return await day_state(conn, accounts, store, datetime.strptime(day, '%Y-%m-%d').date(), track, actor)
+            return await day_state(conn, store, datetime.strptime(day, '%Y-%m-%d').date(), track, actor, people, me)
 
     @router.get('/handoffs/{handoff_id}/history')
     async def history(store: str, handoff_id: UUID, request: Request):
         actor, pool = await context(request, store)
+        people, _ = await staff(accounts, store, actor)
         async with manager_handoff.read_connection(pool) as conn:
             config = await settings(conn, store)
             if not await current(conn, store, handoff_id): raise HTTPException(404, 'Handoff not found at this restaurant')
-            people = {p["id"]: p for p in await managers(accounts, store)}
             rows = await conn.fetch('''SELECT * FROM operations.prep_handoff_revisions WHERE store_id=$1 AND handoff_id=$2
                 ORDER BY revision LIMIT 200''', store, handoff_id)
             zone = ZoneInfo(config['timezone_name'])
@@ -360,6 +363,8 @@ def create_router(pool_factory, authorize, accounts):
     async def command(store: str, body: Command, request: Request, idempotency_key: UUID = Header(...)):
         prep_tracks.check(store, body.prep_track)
         actor, pool = await context(request, store)
+        expected = manager_handoff.version(request)
+        people, me = await staff(accounts, store, actor)
         async with manager_handoff.database_errors():
-            return await execute(pool, accounts, store, actor, body, idempotency_key, manager_handoff.version(request))
+            return await execute(pool, store, actor, body, idempotency_key, expected, people, me)
     return router

@@ -86,7 +86,7 @@ function NewHandoff({ tasks, managers, busy, onSend }) {
   return <fieldset disabled={busy} className="border-t border-jm-line mt-4 pt-4 flex flex-col gap-3">
     <legend className="text-sm font-semibold text-jm-ink">Hand off a prep task</legend>
     <label className="flex flex-col gap-1 text-sm">Prep task
-      <select className={inpCls} value={taskId} onChange={e => { const t = tasks.find(x => x.task_id === e.target.value); setTaskId(e.target.value); if (t) change("remaining", amount(t.remaining_base_quantity)); }}>
+      <select className={inpCls} value={taskId} onChange={e => { const t = tasks.find(x => x.task_id === e.target.value); setTaskId(e.target.value); if (t) change("remaining", t.remaining_base_quantity); }}>
         <option value="">Choose a task</option>
         {tasks.map(t => <option key={t.task_id} value={t.task_id}>{t.name} · {amount(t.remaining_base_quantity)} {t.base_unit} left</option>)}
       </select></label>
@@ -117,7 +117,7 @@ function Handoff({ h, data, rid, busy, send }) {
   function open(action) {
     setProblem("");
     if (action === "accept") { send("accept", { handoff: h }, h.revision); return; }
-    setForm(action === "correct" ? { recipient_id: h.recipient_id, remaining: amount(h.remaining_base_quantity), ready_by: h.ready_by, note: h.note, reason: "" } : { reason: "" });
+    setForm(action === "correct" ? { recipient_id: h.recipient_id, remaining: h.remaining_base_quantity, ready_by: h.ready_by, note: h.note, reason: "" } : { reason: "" });
     setMode(action);
   }
   async function confirm() {

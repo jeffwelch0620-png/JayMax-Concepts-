@@ -249,6 +249,27 @@ class PrepHandoffTests(staff.StaffTaskTests):
         self.assertEqual((await self.cmd(self.act(h, 'accept', f['prep_hash']), 'usr_pm', 2)).status_code, 409)
         self.assertEqual((await self.cmd(self.act(h, 'accept', again['prep_hash']), 'usr_pm', 2)).status_code, 200)
 
+    async def test_one_small_shared_pool_serves_concurrent_reads_and_commands(self):
+        # Without a separate accounts database both factories are the same small pool; account reads happen
+        # before the inventory connection is taken, so concurrent requests never wait on each other.
+        dsn = os.environ['NATIVE_PURCHASE_TEST_DSN'].rsplit('/', 1)[0] + '/' + self.db
+        small = await asyncpg.create_pool(dsn, min_size=1, max_size=1)
+        self.addAsyncCleanup(small.close)
+
+        async def authorize(request, store):
+            return await manager_actor.resolve(request, store, lambda t: {'sub': t}, lambda: small, True)
+        app = FastAPI(); app.include_router(prep_handoff.create_router(lambda: small, authorize, lambda: small))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            def get(actor):
+                return client.get(f'/api/pg/operations/berts/prep-handoffs/days/{DAY}', params={'track': 'daily'}, headers={'Authorization': 'Bearer ' + actor})
+            reads = await asyncio.wait_for(asyncio.gather(*(get(a) for a in ('usr_am', 'usr_pm', 'usr_backup'))), 30)
+            self.assertEqual([r.status_code for r in reads], [200, 200, 200])
+            f = next(t for t in reads[0].json()['tasks'] if t['task_id'] == str(self.task['id']))
+            sent = await asyncio.wait_for(client.post('/api/pg/operations/berts/prep-handoffs/commands',
+                content=json.dumps(body(task_id=f['task_id'], prep_hash=f['prep_hash'])),
+                headers={'Content-Type': 'application/json', 'Authorization': 'Bearer usr_am', 'If-Match': '0', 'Idempotency-Key': str(uuid4())}), 30)
+            self.assertEqual(sent.status_code, 200, sent.text)
+
     async def test_history_cannot_be_rewritten(self):
         h = await self.send()
         async with self.pool.acquire() as c:
