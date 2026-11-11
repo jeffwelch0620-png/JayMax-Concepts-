@@ -1,5 +1,5 @@
 """AM-to-PM manager prep handoff (Jeff 2026-11-11) with invented managers and prep on disposable PostgreSQL."""
-import json, os, unittest
+import asyncio, json, os, unittest
 from datetime import date
 from unittest.mock import patch
 from uuid import uuid4
@@ -36,6 +36,20 @@ class PrepHandoffValidationTests(unittest.TestCase):
 
     def test_amounts_have_one_spelling(self):
         self.assertEqual([prep_handoff.qty(v) for v in ('256.000000000000', '256.00', '0E-12', '1.50', '1E+2')], ['256', '256', '0', '1.5', '100'])
+
+    def test_unresolved_draft_task_reads_as_not_carryable(self):
+        # A par item still waiting for its count has no planned amount (prep_day_tasks); the day read must not fail.
+        row = dict(id=uuid4(), version_id=uuid4(), included=True, planned_base_quantity=None, task_snapshot={'name': 'Invented item', 'base_unit': 'lb'},
+                   list_id=uuid4(), prep_date=date(2026, 10, 8), track='daily', superseded=False, phase_version=None, phase_action=None,
+                   progress={'planned_base_quantity': None, 'effective_base_quantity': '0', 'reviewed_base_quantity': '0',
+                             'status': 'open', 'closed': False, 'needs_review': False},
+                   assignment_revision=None, staff_member_id=None, staff_name=None)
+
+        class Conn:
+            async def fetchrow(self, *_): return row
+        facts = asyncio.run(prep_handoff.task_facts(Conn(), 'berts', row['id']))
+        self.assertEqual((facts['planned_base_quantity'], facts['remaining_base_quantity'], facts['available']), (None, None, False))
+        self.assertRegex(facts['prep_hash'], '^[a-f0-9]{64}$')
 
     def test_digest_is_stable_and_order_free(self):
         self.assertEqual(prep_handoff.digest({'a': 1, 'b': [1, 2]}), prep_handoff.digest({'b': [1, 2], 'a': 1}))
@@ -182,6 +196,20 @@ class PrepHandoffTests(staff.StaffTaskTests):
         self.assertEqual((await self.cmd({**ok, 'note': 'Different'}, key=key)).status_code, 409)
         self.assertEqual((await self.cmd({**ok, 'handoff_id': str(uuid4())})).status_code, 409)  # one open per task
         self.assertEqual((await self.cmd(self.act(first.json()['handoff'], 'accept', f['prep_hash']), 'usr_pm', 0)).status_code, 409)  # old revision
+
+    async def test_commands_hold_the_prep_writers_store_lock_through_the_write(self):
+        # The prep writers lock public.store_state; a handoff command takes the same lock before reading facts.
+        h = await self.send()
+        f = await self.facts('usr_pm')
+        seen = []
+        lock, read = prep_handoff.lock_store, prep_handoff.task_facts
+        async def locked(conn, store):
+            await lock(conn, store); seen.append(('lock', store))
+        async def facts(conn, store, task):
+            seen.append(('facts', store)); return await read(conn, store, task)
+        with patch.object(prep_handoff, 'lock_store', locked), patch.object(prep_handoff, 'task_facts', facts):
+            self.assertEqual((await self.cmd(self.act(h, 'accept', f['prep_hash']), 'usr_pm', 1)).status_code, 200)
+        self.assertEqual(seen[:2], [('lock', 'berts'), ('facts', 'berts')])
 
     async def test_history_cannot_be_rewritten(self):
         h = await self.send()

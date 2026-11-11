@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 import manager_actor
 import manager_handoff
 import prep_tracks
+from native_units import lock_store
 from purchase_api import serial
 from purchase_parser import fingerprint
 
@@ -136,13 +137,16 @@ async def task_facts(conn, store, task_id):
     if not row: return None
     progress = row['progress'] if isinstance(row['progress'], dict) else json.loads(row['progress'])
     snapshot = row['task_snapshot'] if isinstance(row['task_snapshot'], dict) else json.loads(row['task_snapshot'] or '{}')
-    planned, reviewed = Decimal(progress['planned_base_quantity']), Decimal(progress['reviewed_base_quantity'])
+    # An unresolved draft task (e.g. a par item still waiting for its count) has no planned amount yet.
+    planned = None if progress.get('planned_base_quantity') is None else Decimal(progress['planned_base_quantity'])
+    reviewed = Decimal(progress.get('reviewed_base_quantity') or 0)
     released = (row['phase_action'] == 'release' and row['phase_version'] == row['version_id']
-                and not row['superseded'] and row['included'])
+                and not row['superseded'] and row['included'] and planned is not None)
     facts = dict(task_id=str(row['id']), business_date=str(row['prep_date']), prep_track=row['track'],
                  name=snapshot.get('name') or 'Prep item', base_unit=snapshot.get('base_unit') or 'unit',
-                 planned_base_quantity=qty(planned), effective_base_quantity=qty(progress['effective_base_quantity']),
-                 reviewed_base_quantity=qty(reviewed), remaining_base_quantity=qty(max(planned - reviewed, Decimal(0))),
+                 planned_base_quantity=None if planned is None else qty(planned),
+                 effective_base_quantity=qty(progress.get('effective_base_quantity') or 0), reviewed_base_quantity=qty(reviewed),
+                 remaining_base_quantity=None if planned is None else qty(max(planned - reviewed, Decimal(0))),
                  status=progress['status'], closed=bool(progress['closed']), needs_review=bool(progress['needs_review']),
                  available=bool(released), assignment_revision=row['assignment_revision'],
                  assignee=({'id': str(row['staff_member_id']), 'name': row['staff_name']} if row['staff_member_id'] else None))
@@ -230,6 +234,9 @@ async def execute(pool, store, actor, body, key, expected):
         await conn.execute("SET LOCAL statement_timeout='20s'")
         # Serializes handoff commands per store, so two managers can't act on the same handoff at once.
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('prep-handoff:'||$1,0))", store)
+        # The same store row lock the prep writers (execution, assignments, production) take, held until
+        # commit, so no prep change can land between reading the facts and saving against them.
+        await lock_store(conn, store)
         config = await settings(conn, store)
         people = {p['id']: p for p in await managers(conn, store)}
         if await replayed(conn, store, actor, key, body, expected):
