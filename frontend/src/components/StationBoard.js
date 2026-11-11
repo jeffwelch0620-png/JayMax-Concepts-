@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
-import { Field, cardCls, inpCls, btnAcc, btnGhost } from "./common";
+import { Field, cardCls, inpCls, btnGhost } from "./common";
 import { todayISO } from "../lib/calc";
 import { SHORTAGE_REASONS } from "./ShortageReport";
 

@@ -6,7 +6,7 @@ import { ManagerHandoffTab } from "./ManagerHandoffTab";
 import * as api from "../lib/api";
 import { resetComponentApiMock } from "../testHelpers/componentApiMock";
 import { handoffJournal, handoffFingerprint } from "../lib/managerHandoff";
-import { handoffOwner as user, handoffBody as body, handoffDay as day, handoffState as state,
+import { handoffOwner as user, handoffBody as body, handoffState as state,
   handoffNote as note, handoffReceipt as receipt, handoffId } from "../testFixtures/managerHandoff";
 jest.mock("../lib/api", () => require("../testHelpers/componentApiMock").createComponentApiMock());
 jest.mock("../lib/calc", () => ({ ...jest.requireActual("../lib/calc"), todayISO: () => "2026-10-25" }));

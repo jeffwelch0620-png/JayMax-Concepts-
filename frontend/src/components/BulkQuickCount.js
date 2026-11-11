@@ -32,7 +32,6 @@ export function BulkQuickCount({ rid, onSpot, onPending = () => {} }) {
   useEffect(() => { onPending(unresolved); }, [unresolved]); // eslint-disable-line react-hooks/exhaustive-deps
   function show(d) {
     setData(d);
-    const latest = d.counts?.[d.counts.length - 1];
     // A correction is a full recount: every amount is observed at the new count's time, so nothing is
     // carried over (the saved amounts are shown beside each item for reference).
     setQuantities(Object.fromEntries(d.items.map(i => [i.product_id, ""])));

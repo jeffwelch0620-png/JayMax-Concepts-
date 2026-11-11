@@ -40,7 +40,10 @@ jobs:
       - name: Run frontend tests
         working-directory: frontend
         run: yarn test --watchAll=false --runInBand
-      - name: Build production frontend (warnings fail CI)
+      - name: Lint frontend (warnings fail CI)
+        working-directory: frontend
+        run: yarn lint --max-warnings 0
+      - name: Build production frontend
         working-directory: frontend
         run: yarn build
 
