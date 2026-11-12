@@ -286,6 +286,97 @@ async def on_time(conn, store, start, end, now):
             'cycle_list': list(reversed(out))[:LIST_LIMIT], 'late_reasons': late[:LIST_LIMIT]}
 
 
+# Toast sales (I3, workspace sql/toast/04 and 08): built server-side from Toast's saved orders, one row per
+# store and business day, checked against Toast's own Sales Summary. Read only; JMAX never writes to Toast.
+TOAST_STORE = {'berts': 'berts', 'rudds': 'rudds', 'papa': 'papa', 'papa_leonis': 'papa'}
+# The daily sync saves yesterday at 10:15 UTC and builds it at 10:45 UTC (about 6 AM Eastern). After 8 AM a
+# missing yesterday is late, not just early.
+SALES_DUE_HOUR = 8
+# Salad Bar covers (proposed rule, to confirm with Jay and Rudd): menu items and add-ons whose Toast name
+# contains "salad bar", e.g. "Salad Bar Entree", "Pizza Bar and Salad Bar Combo", "Salad Bar with meal".
+SALAD_BAR = '%salad bar%'
+
+
+async def sales(conn, store, start, end, track, now):
+    """Net sales, orders and average check by day from integrations.toast_daily_sales, the same days before
+    for comparison, the best-selling items, Salad Bar covers and whether every day has arrived from Toast.
+    Store-wide: shown with All tracks; the Salad track sees its Salad Bar covers only."""
+    if track not in (None, 'salad'): return STORE_WIDE
+    toast = TOAST_STORE.get(store)
+    if toast is None: return {'available': False}
+    # The Toast tables are server-only (no anon or authenticated access). A database login that may not read
+    # them sees the section as not set up, instead of the whole report failing. Schema access is checked first:
+    # without USAGE on the schema, even resolving a table name in it is a permission error (runtime_permissions.py
+    # keeps the restricted login out of integrations).
+    if not await conn.fetchval("""SELECT CASE WHEN to_regnamespace('integrations') IS NULL THEN false
+                                      ELSE has_schema_privilege('integrations', 'USAGE') END"""):
+        return {'available': False}
+    for table in ('integrations.toast_daily_sales', 'integrations.toast_item_sales', 'integrations.toast_modifier_sales', 'integrations.toast_location_map'):
+        if not await conn.fetchval("SELECT CASE WHEN to_regclass($1) IS NULL THEN false ELSE has_table_privilege(to_regclass($1), 'SELECT') END", table):
+            return {'available': False}
+    zone = ZoneInfo(order_calendar.DEFAULT_ZONE)
+    local = now.astimezone(zone)
+    today = local.date()
+    span = (end - start).days + 1
+    rows = await conn.fetch('''SELECT business_date, orders, net_sales, discounts, refunds, status, problems
+        FROM integrations.toast_daily_sales WHERE store_id=$1 AND business_date BETWEEN $2 AND $3 ORDER BY business_date''',
+                            toast, start - timedelta(days=span), end)
+    days = [r for r in rows if r['business_date'] >= start]
+    before = [r for r in rows if r['business_date'] < start]
+    latest = await conn.fetchval('SELECT max(business_date) FROM integrations.toast_daily_sales WHERE store_id=$1', toast)
+
+    def totals(part):
+        net, orders = sum((_num(r['net_sales']) for r in part), Decimal(0)), sum(r['orders'] or 0 for r in part)
+        return {'net_sales': net, 'orders': orders, 'average_check': round(net / orders, 2) if orders else None,
+                'discounts': sum((_num(r['discounts']) for r in part), Decimal(0)), 'refunds': sum((_num(r['refunds']) for r in part), Decimal(0)),
+                'days': len(part), 'open_days': sum(1 for r in part if (r['orders'] or 0) > 0)}
+
+    # Days that should have arrived: through yesterday, and yesterday only once the morning sync is due.
+    last_expected = min(end, today - timedelta(days=1) if local.hour >= SALES_DUE_HOUR else today - timedelta(days=2))
+    have = {r['business_date'] for r in days}
+    missing = [start + timedelta(days=i) for i in range((last_expected - start).days + 1) if start + timedelta(days=i) not in have]
+    review = [{'business_date': r['business_date'], 'problems': list(r['problems'] or [])} for r in days if r['status'] != 'complete']
+    # The newest saved day, whatever the range: a stalled sync shows even on an older range.
+    stale = latest is None or latest < today - timedelta(days=1 if local.hour >= SALES_DUE_HOUR else 2)
+    health = {'latest_day': latest, 'missing_days': missing, 'needs_review': review, 'stale': stale}
+
+    covers = await conn.fetch('''SELECT business_date, sum(quantity) AS quantity, sum(amount) AS amount FROM (
+            SELECT s.business_date, s.quantity, s.net_amount AS amount FROM integrations.toast_item_sales s
+            JOIN integrations.toast_location_map m ON m.toast_restaurant_guid=s.toast_restaurant_guid
+            WHERE m.store_id=$1 AND s.business_date BETWEEN $2 AND $3 AND s.display_name ILIKE $4
+            UNION ALL
+            SELECT s.business_date, s.quantity, s.amount FROM integrations.toast_modifier_sales s
+            JOIN integrations.toast_location_map m ON m.toast_restaurant_guid=s.toast_restaurant_guid
+            WHERE m.store_id=$1 AND s.business_date BETWEEN $2 AND $3 AND s.display_name ILIKE $4
+              -- An add-on on an item that is itself a Salad Bar item is the same cover: count it once.
+              AND NOT EXISTS (SELECT 1 FROM integrations.toast_item_sales p WHERE p.toast_restaurant_guid=s.toast_restaurant_guid
+                              AND p.business_date=s.business_date AND p.item_key=s.parent_item_key AND p.display_name ILIKE $4)) x
+        GROUP BY business_date ORDER BY business_date''', toast, start, end, SALAD_BAR)
+    salad = {'covers': sum((_num(r['quantity']) for r in covers), Decimal(0)), 'amount': sum((_num(r['amount']) for r in covers), Decimal(0)),
+             'by_day': [dict(r) for r in covers]}
+    if track == 'salad':
+        return {'available': True, 'track_only': True, 'salad_bar': salad, **health}
+
+    items = await conn.fetch('''SELECT coalesce(s.item_guid::text, s.item_key) AS item, min(s.display_name) AS name,
+            sum(s.quantity) AS quantity, sum(s.net_amount) AS net_sales
+        FROM integrations.toast_item_sales s JOIN integrations.toast_location_map m ON m.toast_restaurant_guid=s.toast_restaurant_guid
+        WHERE m.store_id=$1 AND s.business_date BETWEEN $2 AND $3
+        GROUP BY 1 ORDER BY sum(s.net_amount) DESC NULLS LAST, min(s.display_name) LIMIT $4''', toast, start, end, LIST_LIMIT)
+    by_day = [{'business_date': r['business_date'], 'orders': r['orders'], 'net_sales': r['net_sales'],
+               'average_check': round(_num(r['net_sales']) / r['orders'], 2) if r['orders'] else None, 'status': r['status']} for r in days]
+    # The comparison covers the range up to the newest saved day (today is never saved yet), against the same
+    # number of days just before. It is fair only when both stretches are fully saved and complete.
+    upto = min(end, latest) if latest else None
+    compared = (upto - start).days + 1 if upto and upto >= start else 0
+    now_part = [r for r in days if r['business_date'] <= upto] if compared else []
+    earlier = [r for r in before if r['business_date'] >= start - timedelta(days=compared)] if compared else []
+    whole = lambda part: len(part) == compared and all(r['status'] == 'complete' for r in part)
+    return {'available': True, 'totals': totals(days),
+            'before': {**totals(earlier), 'start': start - timedelta(days=compared), 'end': start - timedelta(days=1),
+                       'compared_days': compared, 'complete': compared > 0 and whole(now_part) and whole(earlier)},
+            'by_day': by_day, 'top_items': [dict(r) for r in items], 'salad_bar': salad, **health}
+
+
 async def report(conn, store, start, end, track, now):
     zone = order_calendar.DEFAULT_ZONE
     today = now.astimezone(ZoneInfo(zone)).date()
@@ -295,7 +386,8 @@ async def report(conn, store, start, end, track, now):
                    'waste': await waste(conn, store, start, end, track),
                    'acceptance': await acceptance(conn, store, start, end, track, zone),
                    'transfers': await transfers(conn, store, start, end, track),
-                   'on_time': await on_time(conn, store, start, end, now) if track is None else STORE_WIDE})
+                   'on_time': await on_time(conn, store, start, end, now) if track is None else STORE_WIDE,
+                   'sales': await sales(conn, store, start, end, track, now)})
 
 
 def window(start, end, today):
