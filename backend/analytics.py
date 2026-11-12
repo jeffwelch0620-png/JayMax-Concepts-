@@ -364,10 +364,16 @@ async def sales(conn, store, start, end, track, now):
         GROUP BY 1 ORDER BY sum(s.net_amount) DESC NULLS LAST, min(s.display_name) LIMIT $4''', toast, start, end, LIST_LIMIT)
     by_day = [{'business_date': r['business_date'], 'orders': r['orders'], 'net_sales': r['net_sales'],
                'average_check': round(_num(r['net_sales']) / r['orders'], 2) if r['orders'] else None, 'status': r['status']} for r in days]
-    # The earlier days are a fair comparison only when every one of them is saved and complete.
-    before_complete = len(before) == span and all(r['status'] == 'complete' for r in before)
+    # The comparison covers the range up to the newest saved day (today is never saved yet), against the same
+    # number of days just before. It is fair only when both stretches are fully saved and complete.
+    upto = min(end, latest) if latest else None
+    compared = (upto - start).days + 1 if upto and upto >= start else 0
+    now_part = [r for r in days if r['business_date'] <= upto] if compared else []
+    earlier = [r for r in before if r['business_date'] >= start - timedelta(days=compared)] if compared else []
+    whole = lambda part: len(part) == compared and all(r['status'] == 'complete' for r in part)
     return {'available': True, 'totals': totals(days),
-            'before': {**totals(before), 'start': start - timedelta(days=span), 'end': start - timedelta(days=1), 'complete': before_complete},
+            'before': {**totals(earlier), 'start': start - timedelta(days=compared), 'end': start - timedelta(days=1),
+                       'compared_days': compared, 'complete': compared > 0 and whole(now_part) and whole(earlier)},
             'by_day': by_day, 'top_items': [dict(r) for r in items], 'salad_bar': salad, **health}
 
 
