@@ -57,6 +57,64 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("review_snapshot->'body'->>'category'", seen[0])
         self.assertEqual((await analytics.waste(Conn(), 'berts', TODAY, TODAY, 'daily'))['by_reason'], {'service_discard': 1})
 
+    def sales_conn(self, days, items=(), covers=(), latest=None, installed=True):
+        seen = []
+
+        class Conn:
+            async def fetchval(self, sql, *a):
+                if 'to_regclass' in sql: return installed
+                return latest
+
+            async def fetch(self, sql, *a):
+                seen.append((sql, a))
+                if 'toast_daily_sales' in sql: return [r for r in days if a[1] <= r['business_date'] <= a[2]]
+                if 'UNION ALL' in sql: return list(covers)
+                return list(items)
+        return Conn(), seen
+
+    @staticmethod
+    def day(d, net, orders, status='complete', problems=()):
+        return {'business_date': d, 'orders': orders, 'net_sales': D(net), 'discounts': D('1.00'), 'refunds': D('0'), 'status': status, 'problems': list(problems)}
+
+    async def test_sales_totals_compare_with_the_days_just_before(self):
+        # Range Nov 2-4 (3 days); the 3 days before are Oct 30 - Nov 1. Eastern 9 AM on Nov 6: through Nov 5 is due.
+        now = datetime(2026, 11, 6, 14, tzinfo=timezone.utc)
+        days = [self.day(date(2026, 10, 30), '100.00', 10), self.day(date(2026, 10, 31), '100.00', 10), self.day(date(2026, 11, 1), '100.00', 10),
+                self.day(date(2026, 11, 2), '150.00', 10), self.day(date(2026, 11, 3), '0.00', 0),
+                self.day(date(2026, 11, 4), '180.00', 12, 'needs review', ['refund without item detail'])]
+        conn, seen = self.sales_conn(days, items=[{'item': 'g1', 'name': 'Hamburger Steak', 'quantity': D(5), 'net_sales': D('80.00')}],
+                                     covers=[{'business_date': date(2026, 11, 2), 'quantity': D(4), 'amount': D('23.96')}], latest=date(2026, 11, 5))
+        s = await analytics.sales(conn, 'papa_leonis', date(2026, 11, 2), date(2026, 11, 4), None, now)
+        self.assertEqual(seen[0][1][0], 'papa', "Inventory's papa_leonis is Toast's papa")
+        self.assertEqual((s['totals']['net_sales'], s['totals']['orders'], s['totals']['average_check'], s['totals']['open_days']), (D('330.00'), 22, D('15.00'), 2))
+        self.assertEqual((s['before']['net_sales'], s['before']['start'], s['before']['end']), (D('300.00'), date(2026, 10, 30), date(2026, 11, 1)))
+        self.assertEqual([r['average_check'] for r in s['by_day']], [D('15.00'), None, D('15.00')])
+        self.assertEqual(s['needs_review'], [{'business_date': date(2026, 11, 4), 'problems': ['refund without item detail']}])
+        self.assertEqual((s['missing_days'], s['stale']), ([], False))
+        self.assertEqual((s['salad_bar']['covers'], s['top_items'][0]['name']), (D(4), 'Hamburger Steak'))
+
+    async def test_sales_say_when_a_day_has_not_arrived_from_toast(self):
+        days = [self.day(date(2026, 11, 2), '150.00', 10)]
+        conn, _ = self.sales_conn(days, latest=date(2026, 11, 2))
+        # 9 AM Eastern on Nov 5: Nov 3 and 4 are due and missing; the latest day is behind.
+        s = await analytics.sales(conn, 'berts', date(2026, 11, 2), date(2026, 11, 8), None, datetime(2026, 11, 5, 14, tzinfo=timezone.utc))
+        self.assertEqual((s['missing_days'], s['stale']), ([date(2026, 11, 3), date(2026, 11, 4)], True))
+        # 6 AM Eastern: yesterday's sync is not due yet, so only Nov 3 is missing and nothing is late.
+        conn, _ = self.sales_conn(days + [self.day(date(2026, 11, 3), '1.00', 1)], latest=date(2026, 11, 3))
+        s = await analytics.sales(conn, 'berts', date(2026, 11, 2), date(2026, 11, 8), None, datetime(2026, 11, 5, 11, tzinfo=timezone.utc))
+        self.assertEqual((s['missing_days'], s['stale']), ([], False))
+
+    async def test_sales_are_store_wide_and_the_salad_track_sees_its_covers(self):
+        conn, seen = self.sales_conn([], covers=[{'business_date': date(2026, 11, 2), 'quantity': D(4), 'amount': D('23.96')}], latest=date(2026, 11, 4))
+        now = datetime(2026, 11, 5, 14, tzinfo=timezone.utc)
+        self.assertEqual(await analytics.sales(conn, 'berts', date(2026, 11, 2), date(2026, 11, 4), 'bulk', now), analytics.STORE_WIDE)
+        s = await analytics.sales(conn, 'berts', date(2026, 11, 2), date(2026, 11, 4), 'salad', now)
+        self.assertEqual((s['track_only'], s['salad_bar']['covers'], 'totals' in s), (True, D(4), False))
+        self.assertIn('NOT EXISTS', [q for q, _ in seen if 'UNION ALL' in q][0], 'an add-on on a Salad Bar item is not a second cover')
+        conn, _ = self.sales_conn([], installed=False)
+        self.assertEqual(await analytics.sales(conn, 'berts', date(2026, 11, 2), date(2026, 11, 4), None, now), {'available': False})
+        self.assertEqual(await analytics.sales(conn, 'elsewhere', date(2026, 11, 2), date(2026, 11, 4), None, now), {'available': False})
+
     def test_general_manager_and_above_see_it(self):
         seen = {code for code, (role, _, _) in positions.POSITIONS.items() if positions.can({'role': role, 'position': code}, 'see_analytics')}
         self.assertEqual(seen, {'OWN', 'OPS', 'GM'})

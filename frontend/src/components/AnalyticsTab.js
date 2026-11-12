@@ -11,6 +11,9 @@ const num = v => v === null || v === undefined ? "–" : Number(v).toLocaleStrin
 const qty = (v, unit) => `${num(v)} ${unit || ""}`.trim();
 const wait = m => m === null || m === undefined ? "–" : m < 60 ? `${m} min` : `${(m / 60).toFixed(1)} h`;
 const pct = (part, whole) => whole ? `${Math.round(part / whole * 100)}%` : "–";
+const money = v => v === null || v === undefined ? "–" : `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// Change against the same number of days just before the range, e.g. "+4% vs 2026-11-03 – 2026-11-09".
+const change = (now, then) => !Number(then) ? null : `${Number(now) >= Number(then) ? "+" : ""}${Math.round((Number(now) - Number(then)) / Number(then) * 100)}%`;
 // The local calendar day: toISOString is UTC, which is already tomorrow on an Eastern evening.
 const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); };
@@ -136,6 +139,53 @@ function OnTime({ o }) {
   </>;
 }
 
+function DataHealth({ s }) {
+  const missing = s.missing_days || [], review = s.needs_review || [];
+  if (!s.stale && !missing.length && !review.length) {
+    return <p className="text-xs text-slate-500 mb-2" data-testid="analytics-sales-health">Every day in the range has arrived from Toast{s.latest_day ? ` (latest ${s.latest_day})` : ""}.</p>;
+  }
+  return <div className="text-sm text-jm-warn mb-2" data-testid="analytics-sales-health">
+    {s.stale && <p>Toast sales are behind: the latest day saved is {s.latest_day || "none"}. The morning sync may have failed.</p>}
+    {missing.length > 0 && <p>Not arrived from Toast yet: {missing.join(", ")}.</p>}
+    {review.length > 0 && <p>Needs review: {review.map(r => `${r.business_date} (${r.problems.join(", ") || "check"})`).join("; ")}.</p>}
+  </div>;
+}
+
+function SaladBar({ b }) {
+  return <>
+    <Grid>
+      <MetricCard testId="analytics-salad-covers" label="Salad Bar covers" value={num(b.covers)} sub="items and add-ons named Salad Bar" />
+      <MetricCard label="Salad Bar sales" value={money(b.amount)} />
+    </Grid>
+    <Table testId="analytics-salad-days" head={["Day", "Covers", "Sales"]} rows={b.by_day.map(r => [r.business_date, num(r.quantity), money(r.amount)])} />
+  </>;
+}
+
+function Sales({ s }) {
+  if (!s?.available || s.store_wide) return <Unavailable part={s} />;
+  if (s.track_only) {
+    return <>
+      <DataHealth s={s} />
+      {Number(s.salad_bar.covers) ? <SaladBar b={s.salad_bar} /> : <p className="text-sm text-slate-500">No Salad Bar sales in this range.</p>}
+    </>;
+  }
+  const t = s.totals, b = s.before, since = `vs ${b.start} – ${b.end}`;
+  const vs = (now, then) => change(now, then) ? `${change(now, then)} ${since}` : undefined;
+  return <>
+    <DataHealth s={s} />
+    <Grid>
+      <MetricCard testId="analytics-net-sales" label="Net sales" value={money(t.net_sales)} sub={vs(t.net_sales, b.net_sales) || `${t.open_days} days open`} />
+      <MetricCard testId="analytics-orders" label="Orders" value={num(t.orders)} sub={vs(t.orders, b.orders)} />
+      <MetricCard testId="analytics-average-check" label="Average order" value={money(t.average_check)} sub={b.average_check ? `${money(b.average_check)} before` : undefined} />
+      <MetricCard label="Discounts and refunds" value={money(Number(t.discounts) + Number(t.refunds))} sub={`${money(t.discounts)} discounts · ${money(t.refunds)} refunds`} />
+    </Grid>
+    {Number(s.salad_bar.covers) > 0 && <SaladBar b={s.salad_bar} />}
+    <Table testId="analytics-sales-days" head={["Day", "Net sales", "Orders", "Average order", "Toast data"]}
+      rows={s.by_day.map(r => [r.business_date, money(r.net_sales), num(r.orders), money(r.average_check), r.status === "complete" ? "Complete" : "Needs review"])} />
+    <Table testId="analytics-top-items" head={["Best sellers", "Sold", "Net sales"]} rows={s.top_items.map(r => [r.name, num(r.quantity), money(r.net_sales)])} />
+  </>;
+}
+
 export { isoDay };
 
 export function AnalyticsTab({ rid }) {
@@ -170,6 +220,7 @@ export function AnalyticsTab({ rid }) {
         </Field>
       </div>
       {error ? <p role="alert" className="text-sm text-jm-bad">{error}</p> : !data ? <EmptyState text="Loading analytics…" /> : <>
+        <Section testId="analytics-sales-section" title="Sales" note="From Toast, one business day at a time, counted the way Toast's Sales Summary counts them. Net sales are after discounts and refunds, before tax and tips."><Sales s={data.sales} /></Section>
         <Section testId="analytics-throughput" title="Prep made against plan" note="Released prep lists: each task's planned amount against what was made and accepted, in the item's own unit."><Throughput t={data.throughput} /></Section>
         <Section testId="analytics-shortages-section" title="Shortages" note="Notes cooks sent the Shift Leader."><Shortages s={data.shortages} /></Section>
         <Section testId="analytics-waste-section" title="Waste" note="Waste records, including container waste, at their latest correction."><Waste w={data.waste} /></Section>
