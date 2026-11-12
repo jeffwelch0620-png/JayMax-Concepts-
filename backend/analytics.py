@@ -364,7 +364,10 @@ async def sales(conn, store, start, end, track, now):
         GROUP BY 1 ORDER BY sum(s.net_amount) DESC NULLS LAST, min(s.display_name) LIMIT $4''', toast, start, end, LIST_LIMIT)
     by_day = [{'business_date': r['business_date'], 'orders': r['orders'], 'net_sales': r['net_sales'],
                'average_check': round(_num(r['net_sales']) / r['orders'], 2) if r['orders'] else None, 'status': r['status']} for r in days]
-    return {'available': True, 'totals': totals(days), 'before': {**totals(before), 'start': start - timedelta(days=span), 'end': start - timedelta(days=1)},
+    # The earlier days are a fair comparison only when every one of them is saved and complete.
+    before_complete = len(before) == span and all(r['status'] == 'complete' for r in before)
+    return {'available': True, 'totals': totals(days),
+            'before': {**totals(before), 'start': start - timedelta(days=span), 'end': start - timedelta(days=1), 'complete': before_complete},
             'by_day': by_day, 'top_items': [dict(r) for r in items], 'salad_bar': salad, **health}
 
 

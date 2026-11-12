@@ -170,13 +170,15 @@ function Sales({ s }) {
     </>;
   }
   const t = s.totals, b = s.before, since = `vs ${b.start} – ${b.end}`;
-  const vs = (now, then) => change(now, then) ? `${change(now, then)} ${since}` : undefined;
+  // No change is shown when the earlier days are missing or need review: it would compare against a partial total.
+  const vs = (now, then) => b.complete && change(now, then) ? `${change(now, then)} ${since}` : undefined;
   return <>
     <DataHealth s={s} />
     <Grid>
-      <MetricCard testId="analytics-net-sales" label="Net sales" value={money(t.net_sales)} sub={vs(t.net_sales, b.net_sales) || `${t.open_days} days open`} />
+      <MetricCard testId="analytics-net-sales" label="Net sales" value={money(t.net_sales)}
+        sub={vs(t.net_sales, b.net_sales) || (b.complete ? `${t.open_days} days open` : `${t.open_days} days open · earlier days incomplete, no comparison`)} />
       <MetricCard testId="analytics-orders" label="Orders" value={num(t.orders)} sub={vs(t.orders, b.orders)} />
-      <MetricCard testId="analytics-average-check" label="Average order" value={money(t.average_check)} sub={b.average_check ? `${money(b.average_check)} before` : undefined} />
+      <MetricCard testId="analytics-average-check" label="Average order" value={money(t.average_check)} sub={b.complete && b.average_check ? `${money(b.average_check)} before` : undefined} />
       <MetricCard label="Discounts and refunds" value={money(Number(t.discounts) + Number(t.refunds))} sub={`${money(t.discounts)} discounts · ${money(t.refunds)} refunds`} />
     </Grid>
     {Number(s.salad_bar.covers) > 0 && <SaladBar b={s.salad_bar} />}

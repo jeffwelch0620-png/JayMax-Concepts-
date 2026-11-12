@@ -34,7 +34,7 @@ test("sales show totals against the days before and say when Toast is behind", a
   global.IS_REACT_ACT_ENVIRONMENT = true;
   api.analyticsReport.mockResolvedValue({ ...report(0), sales: { available: true,
     totals: { net_sales: "1100.00", orders: 50, average_check: "22.00", discounts: "10.00", refunds: "5.90", days: 2, open_days: 2 },
-    before: { net_sales: "1000.00", orders: 50, average_check: "20.00", start: "2026-11-01", end: "2026-11-02" },
+    before: { net_sales: "1000.00", orders: 50, average_check: "20.00", start: "2026-11-01", end: "2026-11-02", complete: true },
     by_day: [{ business_date: "2026-11-03", net_sales: "600.00", orders: 25, average_check: "24.00", status: "complete" },
       { business_date: "2026-11-04", net_sales: "500.00", orders: 25, average_check: "20.00", status: "needs review" }],
     top_items: [{ name: "Hamburger Steak", quantity: "12", net_sales: "180.00" }],
@@ -56,6 +56,25 @@ test("sales show totals against the days before and say when Toast is behind", a
     expect(health).toContain("refund without item detail");
     expect(text).toContain("Hamburger Steak");
     expect(text).toContain("Needs review");
+  } finally {
+    await act(async () => root.unmount()); container.remove();
+  }
+});
+
+test("no change is shown against incomplete earlier days", async () => {
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  api.analyticsReport.mockResolvedValue({ ...report(0), sales: { available: true,
+    totals: { net_sales: "200.00", orders: 10, average_check: "20.00", discounts: "0", refunds: "0", days: 2, open_days: 2 },
+    before: { net_sales: "100.00", orders: 5, average_check: "20.00", start: "2026-11-01", end: "2026-11-02", complete: false },
+    by_day: [], top_items: [], salad_bar: { covers: "0", amount: "0", by_day: [] }, latest_day: "2026-11-04", missing_days: [], stale: false, needs_review: [] } });
+  const container = document.createElement("div"); document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<AnalyticsTab rid="berts" />));
+    const tile = container.querySelector('[data-testid="analytics-net-sales"]').textContent;
+    expect(tile).not.toContain("%");
+    expect(tile).toContain("earlier days incomplete");
+    expect(container.querySelector('[data-testid="analytics-average-check"]').textContent).not.toContain("before");
   } finally {
     await act(async () => root.unmount()); container.remove();
   }

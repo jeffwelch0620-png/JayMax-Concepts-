@@ -90,6 +90,11 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(queries[0][1][0], 'papa', "Inventory's papa_leonis is Toast's papa")
         self.assertEqual((s['totals']['net_sales'], s['totals']['orders'], s['totals']['average_check'], s['totals']['open_days']), (D('330.00'), 22, D('15.00'), 2))
         self.assertEqual((s['before']['net_sales'], s['before']['start'], s['before']['end']), (D('300.00'), date(2026, 10, 30), date(2026, 11, 1)))
+        self.assertTrue(s['before']['complete'])
+        # One earlier day missing, or one needing review: the comparison is not shown as complete.
+        for edit in (lambda d: d[1:], lambda d: [self.day(date(2026, 10, 30), '100.00', 10, 'needs review')] + d[1:]):
+            conn, _ = self.sales_conn(edit(days), latest=date(2026, 11, 5))
+            self.assertFalse((await analytics.sales(conn, 'berts', date(2026, 11, 2), date(2026, 11, 4), None, now))['before']['complete'])
         self.assertEqual([r['average_check'] for r in s['by_day']], [D('15.00'), None, D('15.00')])
         self.assertEqual(s['needs_review'], [{'business_date': date(2026, 11, 4), 'problems': ['refund without item detail']}])
         self.assertEqual((s['missing_days'], s['stale']), ([], False))
