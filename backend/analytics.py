@@ -305,9 +305,14 @@ async def sales(conn, store, start, end, track, now):
     toast = TOAST_STORE.get(store)
     if toast is None: return {'available': False}
     # The Toast tables are server-only (no anon or authenticated access). A database login that may not read
-    # them sees the section as not set up, instead of the whole report failing.
+    # them sees the section as not set up, instead of the whole report failing. Schema access is checked first:
+    # without USAGE on the schema, even resolving a table name in it is a permission error (runtime_permissions.py
+    # keeps the restricted login out of integrations).
+    if not await conn.fetchval("""SELECT CASE WHEN to_regnamespace('integrations') IS NULL THEN false
+                                      ELSE has_schema_privilege('integrations', 'USAGE') END"""):
+        return {'available': False}
     for table in ('integrations.toast_daily_sales', 'integrations.toast_item_sales', 'integrations.toast_modifier_sales', 'integrations.toast_location_map'):
-        if not await conn.fetchval("SELECT to_regclass($1) IS NOT NULL AND has_table_privilege(to_regclass($1), 'SELECT')", table):
+        if not await conn.fetchval("SELECT CASE WHEN to_regclass($1) IS NULL THEN false ELSE has_table_privilege(to_regclass($1), 'SELECT') END", table):
             return {'available': False}
     zone = ZoneInfo(order_calendar.DEFAULT_ZONE)
     local = now.astimezone(zone)
@@ -331,6 +336,9 @@ async def sales(conn, store, start, end, track, now):
     have = {r['business_date'] for r in days}
     missing = [start + timedelta(days=i) for i in range((last_expected - start).days + 1) if start + timedelta(days=i) not in have]
     review = [{'business_date': r['business_date'], 'problems': list(r['problems'] or [])} for r in days if r['status'] != 'complete']
+    # The newest saved day, whatever the range: a stalled sync shows even on an older range.
+    stale = latest is None or latest < today - timedelta(days=1 if local.hour >= SALES_DUE_HOUR else 2)
+    health = {'latest_day': latest, 'missing_days': missing, 'needs_review': review, 'stale': stale}
 
     covers = await conn.fetch('''SELECT business_date, sum(quantity) AS quantity, sum(amount) AS amount FROM (
             SELECT s.business_date, s.quantity, s.net_amount AS amount FROM integrations.toast_item_sales s
@@ -347,7 +355,7 @@ async def sales(conn, store, start, end, track, now):
     salad = {'covers': sum((_num(r['quantity']) for r in covers), Decimal(0)), 'amount': sum((_num(r['amount']) for r in covers), Decimal(0)),
              'by_day': [dict(r) for r in covers]}
     if track == 'salad':
-        return {'available': True, 'track_only': True, 'salad_bar': salad, 'missing_days': missing, 'latest_day': latest}
+        return {'available': True, 'track_only': True, 'salad_bar': salad, **health}
 
     items = await conn.fetch('''SELECT coalesce(s.item_guid::text, s.item_key) AS item, min(s.display_name) AS name,
             sum(s.quantity) AS quantity, sum(s.net_amount) AS net_sales
@@ -357,9 +365,7 @@ async def sales(conn, store, start, end, track, now):
     by_day = [{'business_date': r['business_date'], 'orders': r['orders'], 'net_sales': r['net_sales'],
                'average_check': round(_num(r['net_sales']) / r['orders'], 2) if r['orders'] else None, 'status': r['status']} for r in days]
     return {'available': True, 'totals': totals(days), 'before': {**totals(before), 'start': start - timedelta(days=span), 'end': start - timedelta(days=1)},
-            'by_day': by_day, 'top_items': [dict(r) for r in items], 'salad_bar': salad,
-            'latest_day': latest, 'missing_days': missing, 'needs_review': review,
-            'stale': latest is None or latest < today - timedelta(days=1 if local.hour >= SALES_DUE_HOUR else 2)}
+            'by_day': by_day, 'top_items': [dict(r) for r in items], 'salad_bar': salad, **health}
 
 
 async def report(conn, store, start, end, track, now):

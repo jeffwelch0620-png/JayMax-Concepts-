@@ -62,7 +62,7 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
 
         class Conn:
             async def fetchval(self, sql, *a):
-                if 'to_regclass' in sql: return installed
+                if 'to_regclass' in sql or 'to_regnamespace' in sql: seen.append((sql, a)); return installed
                 return latest
 
             async def fetch(self, sql, *a):
@@ -85,7 +85,9 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
         conn, seen = self.sales_conn(days, items=[{'item': 'g1', 'name': 'Hamburger Steak', 'quantity': D(5), 'net_sales': D('80.00')}],
                                      covers=[{'business_date': date(2026, 11, 2), 'quantity': D(4), 'amount': D('23.96')}], latest=date(2026, 11, 5))
         s = await analytics.sales(conn, 'papa_leonis', date(2026, 11, 2), date(2026, 11, 4), None, now)
-        self.assertEqual(seen[0][1][0], 'papa', "Inventory's papa_leonis is Toast's papa")
+        self.assertIn('has_schema_privilege', seen[0][0], 'schema access is checked before any table name in it is resolved')
+        queries = [(q, a) for q, a in seen if 'toast_daily_sales' in q and 'to_regclass' not in q]
+        self.assertEqual(queries[0][1][0], 'papa', "Inventory's papa_leonis is Toast's papa")
         self.assertEqual((s['totals']['net_sales'], s['totals']['orders'], s['totals']['average_check'], s['totals']['open_days']), (D('330.00'), 22, D('15.00'), 2))
         self.assertEqual((s['before']['net_sales'], s['before']['start'], s['before']['end']), (D('300.00'), date(2026, 10, 30), date(2026, 11, 1)))
         self.assertEqual([r['average_check'] for r in s['by_day']], [D('15.00'), None, D('15.00')])
@@ -105,11 +107,14 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((s['missing_days'], s['stale']), ([], False))
 
     async def test_sales_are_store_wide_and_the_salad_track_sees_its_covers(self):
-        conn, seen = self.sales_conn([], covers=[{'business_date': date(2026, 11, 2), 'quantity': D(4), 'amount': D('23.96')}], latest=date(2026, 11, 4))
+        conn, seen = self.sales_conn([self.day(date(2026, 11, 3), '9.00', 1, 'needs review', ['refund without item detail'])],
+                                     covers=[{'business_date': date(2026, 11, 2), 'quantity': D(4), 'amount': D('23.96')}], latest=date(2026, 11, 3))
         now = datetime(2026, 11, 5, 14, tzinfo=timezone.utc)
         self.assertEqual(await analytics.sales(conn, 'berts', date(2026, 11, 2), date(2026, 11, 4), 'bulk', now), analytics.STORE_WIDE)
         s = await analytics.sales(conn, 'berts', date(2026, 11, 2), date(2026, 11, 4), 'salad', now)
         self.assertEqual((s['track_only'], s['salad_bar']['covers'], 'totals' in s), (True, D(4), False))
+        # The Salad view keeps the data warnings: a day needing review, and a sync that has fallen behind.
+        self.assertEqual((s['needs_review'][0]['business_date'], s['stale'], s['missing_days']), (date(2026, 11, 3), True, [date(2026, 11, 2), date(2026, 11, 4)]))
         self.assertIn('NOT EXISTS', [q for q, _ in seen if 'UNION ALL' in q][0], 'an add-on on a Salad Bar item is not a second cover')
         conn, _ = self.sales_conn([], installed=False)
         self.assertEqual(await analytics.sales(conn, 'berts', date(2026, 11, 2), date(2026, 11, 4), None, now), {'available': False})
