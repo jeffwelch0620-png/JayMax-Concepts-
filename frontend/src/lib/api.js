@@ -29,6 +29,10 @@ export const handoffHistory = (rid, noteId, after = 0, options = {}) => axios.ge
 // M6 analytics: a read for the General Manager and above (backend/analytics.py), off by default.
 export const analyticsEnabled = USE_PG && process.env.REACT_APP_ANALYTICS === "true";
 export const analyticsReport = (rid, params) => axios.get(`${PG_API}/analytics/${pgStoreId(rid)}`, { params }).then(r => r.data);
+// M6 menu portions (backend/menu_portions.py): prep used per Toast item sold; owners and the Ops Lead set them.
+export const menuPortions = rid => axios.get(`${PG_API}/menu-portions/${pgStoreId(rid)}`, { timeout: 60000 }).then(r => r.data);
+export const menuPortionHistory = (rid, kind, guid) => axios.get(`${PG_API}/menu-portions/${pgStoreId(rid)}/history`, { params: { kind, guid }, timeout: 60000 }).then(r => r.data);
+export const saveMenuPortion = (rid, body, key) => axios.post(`${PG_API}/menu-portions/${pgStoreId(rid)}`, body, { timeout: 60000, headers: { "Idempotency-Key": key } }).then(r => r.data);
 export const nativePurchasesEnabled = USE_PG && process.env.REACT_APP_NATIVE_PURCHASES === "true";
 export const actualInventoryEnabled = nativePurchasesEnabled && process.env.REACT_APP_ACTUAL_INVENTORY === "true";
 export const catalogMappingEnabled = actualInventoryEnabled && process.env.REACT_APP_CATALOG_MAPPING === "true";

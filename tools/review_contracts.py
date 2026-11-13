@@ -41,7 +41,12 @@ def guides():
               'day tasks and `20261007_staff_prep_tasks.sql`. It seeds nothing and is outside the native installers. Each store '
               'using the handoff needs its `operations.store_settings` timezone row (all three stores are `America/New_York`). '
               'Where the backend role is not the table owner, grant it SELECT and INSERT on the three new tables and UPDATE on '
-              '`operations.prep_handoffs`.\n')
+              '`operations.prep_handoffs`.\n\n'
+              '[20261113_menu_portions.sql](20261113_menu_portions.sql) (M6 menu portions for prep against sales) adds one '
+              'append-only table, `prep_inventory.menu_portions`; apply it after `20261005_prep_mapping_foundation.sql`. It seeds '
+              'nothing, changes no stock or food records and is outside the native installers. Analytics reads it, so it is '
+              'used only with `ANALYTICS_ENABLED`; the comparison also needs the server-only Toast tables in `integrations`. Where '
+              'the backend role is not the table owner, grant it SELECT and INSERT on `prep_inventory.menu_portions`.\n')
     profile = '# Native build/test feature settings\n\n'
     profile += ('Generated from the reviewed feature map. This is a proposed testing profile, '
                 'not evidence of live Render settings and not an instruction to enable features '
