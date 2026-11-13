@@ -87,7 +87,7 @@ class FingerprintGuards(unittest.IsolatedAsyncioTestCase):
         hashes=['d'*64,'a'*64,'c'*64,'b'*64,'b'*64]
         async def rows():
             for value in hashes:yield {'value':value}
-        conn=SimpleNamespace(fetchrow=AsyncMock(return_value={'large':True,'rows':0,'sha256':'TEST ONLY nothing hashed'}),
+        conn=SimpleNamespace(fetchrow=AsyncMock(return_value={'large':True,'total':5,'rows':0,'sha256':'TEST ONLY nothing hashed'}),
             cursor=MagicMock(side_effect=lambda *args,**kwargs:rows()))
         fact=await backup.relation_fingerprint(conn,'"public"."test_only"','r')
         self.assertEqual(conn.fetchrow.await_args.args[2:],('"public"."test_only"',backup.MAX_FINGERPRINT_AGGREGATE_RELATION_BYTES))
@@ -99,6 +99,11 @@ class FingerprintGuards(unittest.IsolatedAsyncioTestCase):
             conn.cursor.side_effect=lambda *args,**kwargs:bad_rows()
             with self.subTest(bad=bad),self.assertRaises(backup.BackupError):
                 await backup.relation_fingerprint(conn,'"public"."test_only"','r')
+        # More rows than may be sorted here: the server sorts, as before, so memory stays bounded.
+        conn.cursor.side_effect=lambda *args,**kwargs:rows()
+        with patch.object(backup,'MAX_CLIENT_SORT_ROWS',4):
+            await backup.relation_fingerprint(conn,'"public"."test_only"','r')
+        self.assertIn('ORDER BY value COLLATE "C"',conn.cursor.call_args.args[0])
 
 
 class CountingConnection:
@@ -197,6 +202,11 @@ class FingerprintDatabaseTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(diagnostics.report()['fingerprintPaths'],{
                     'serverAggregateRelations':0,'cursorFallbackRelations':len(fast['tables'])-1,'cursorOnlyRelations':1})
                 self.assertFalse(any('ORDER BY value' in sql for sql in tracked.cursors), 'row hashes are sorted client-side')
+                tracked.clear()
+                with patch.object(backup,'MAX_FINGERPRINT_AGGREGATE_RELATION_BYTES',-1),patch.object(backup,'MAX_CLIENT_SORT_ROWS',1):
+                    server_sorted=await measured()
+                self.assertEqual(server_sorted,fast, 'the server sort for many rows gives the same digests')
+                self.assertTrue(any('ORDER BY value' in sql for sql in tracked.cursors))
                 tracked.clear()
                 legacy=await measured(row_hashes=False)
                 self.assertFalse(tracked.aggregates)
