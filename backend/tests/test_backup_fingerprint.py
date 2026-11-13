@@ -81,6 +81,31 @@ class FingerprintGuards(unittest.IsolatedAsyncioTestCase):
         conn.cursor.assert_called_once()
 
 
+    async def test_a_large_table_streams_and_sorts_its_row_hashes_here(self):
+        # The server reports the table as too large for one statement: nothing it partly hashed
+        # is used, every row streams unsorted, and the digest matches the sorted server order.
+        hashes=['d'*64,'a'*64,'c'*64,'b'*64,'b'*64]
+        async def rows():
+            for value in hashes:yield {'value':value}
+        conn=SimpleNamespace(fetchrow=AsyncMock(return_value={'large':True,'total':5,'rows':0,'sha256':'TEST ONLY nothing hashed'}),
+            cursor=MagicMock(side_effect=lambda *args,**kwargs:rows()))
+        fact=await backup.relation_fingerprint(conn,'"public"."test_only"','r')
+        self.assertEqual(conn.fetchrow.await_args.args[2:],('"public"."test_only"',backup.MAX_FINGERPRINT_AGGREGATE_RELATION_BYTES))
+        self.assertEqual(fact,{'rows':5,'sha256':hashlib.sha256(('\n'.join(sorted(hashes))+'\n').encode()).hexdigest()})
+        self.assertNotIn('ORDER BY',conn.cursor.call_args.args[0])
+        for bad in ('TEST ONLY not a hash','A'*64,'a'*63,None):
+            async def bad_rows(value=bad):
+                yield {'value':value}
+            conn.cursor.side_effect=lambda *args,**kwargs:bad_rows()
+            with self.subTest(bad=bad),self.assertRaises(backup.BackupError):
+                await backup.relation_fingerprint(conn,'"public"."test_only"','r')
+        # More rows than may be sorted here: the server sorts, as before, so memory stays bounded.
+        conn.cursor.side_effect=lambda *args,**kwargs:rows()
+        with patch.object(backup,'MAX_CLIENT_SORT_ROWS',4):
+            await backup.relation_fingerprint(conn,'"public"."test_only"','r')
+        self.assertIn('ORDER BY value COLLATE "C"',conn.cursor.call_args.args[0])
+
+
 class CountingConnection:
     def __init__(self,conn):
         self.conn=conn
@@ -168,6 +193,20 @@ class FingerprintDatabaseTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn('"test_only_below"',streamed_sql)
                 self.assertIn('"test_only_at"',streamed_sql)
                 self.assertIn('"test_only_above"',streamed_sql)
+                tracked.clear()
+                # Every table "too large" for one statement: none is hashed by the probe, all
+                # stream, and the digests are identical to the server aggregate's.
+                with patch.object(backup,'MAX_FINGERPRINT_AGGREGATE_RELATION_BYTES',-1):
+                    large=await measured()
+                self.assertEqual(large,fast)
+                self.assertEqual(diagnostics.report()['fingerprintPaths'],{
+                    'serverAggregateRelations':0,'cursorFallbackRelations':len(fast['tables'])-1,'cursorOnlyRelations':1})
+                self.assertFalse(any('ORDER BY value' in sql for sql in tracked.cursors), 'row hashes are sorted client-side')
+                tracked.clear()
+                with patch.object(backup,'MAX_FINGERPRINT_AGGREGATE_RELATION_BYTES',-1),patch.object(backup,'MAX_CLIENT_SORT_ROWS',1):
+                    server_sorted=await measured()
+                self.assertEqual(server_sorted,fast, 'the server sort for many rows gives the same digests')
+                self.assertTrue(any('ORDER BY value' in sql for sql in tracked.cursors))
                 tracked.clear()
                 legacy=await measured(row_hashes=False)
                 self.assertFalse(tracked.aggregates)

@@ -61,6 +61,12 @@ ROW_ALGORITHM = 'sha256-sorted-sha256-canonical-jsonb-utf8-v1'
 # This is not a bound on all PostgreSQL sorting/JSON workspace memory.
 MAX_FINGERPRINT_AGGREGATE_BYTES = 8 * 1024 * 1024
 ROW_HASH_LINE_BYTES = 65
+# A table this large on disk is never hashed in one server statement: hashing every row of the
+# 746 MB Toast payload table at once outran the statement limit (2026-11-12). It streams instead.
+MAX_FINGERPRINT_AGGREGATE_RELATION_BYTES = 64 * 1024 * 1024
+# Streamed row hashes are sorted in this process up to this many rows (about 55 MB of hashes);
+# a table with more rows keeps the server's sort, which can spill to disk.
+MAX_CLIENT_SORT_ROWS = 500_000
 FINGERPRINT_PATHS = ('serverAggregateRelations', 'cursorFallbackRelations', 'cursorOnlyRelations')
 MAX_ARCHIVE = 64 * 1024 * 1024  # In-memory reads (open_backup); exports and restores stream.
 MAX_ENVELOPE = 3 * MAX_ARCHIVE
@@ -412,16 +418,41 @@ async def relation_fingerprint(conn, quoted, kind, row_hashes=True, *, server_ag
         # LIMIT bounds the aggregate even when this table is far larger than the
         # limit. A full probe is inconclusive and must stream the entire relation
         # in the same caller-owned snapshot. No estimates or error fallback.
-        fact = await conn.fetchrow(f"""SELECT count(*) AS rows,
+        # A relation larger on disk than the bound hashes no rows here (the size test is
+        # evaluated once, before any row) and streams below, with the same digest rules.
+        # total counts every row without hashing any (cheap next to hashing), to choose where to sort.
+        fact = await conn.fetchrow(f"""WITH size AS (SELECT pg_total_relation_size($2::regclass) > $3::bigint AS large)
+            SELECT (SELECT large FROM size) AS large, (SELECT count(*) FROM {quoted}) AS total, count(*) AS rows,
             encode(sha256(convert_to(coalesce(string_agg(value || E'\\n', ''
                 ORDER BY value COLLATE "C"), ''), 'UTF8')), 'hex') AS sha256
             FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value
-                FROM {quoted} t LIMIT $1::bigint) hashed""", probe_rows)
-        if fact['rows'] < probe_rows:
+                FROM {quoted} t WHERE NOT (SELECT large FROM size) LIMIT $1::bigint) hashed""",
+            probe_rows, quoted, MAX_FINGERPRINT_AGGREGATE_RELATION_BYTES)
+        if not fact.get('large') and fact['rows'] < probe_rows:
             record_fingerprint_path('serverAggregateRelations')
             return {'rows': fact['rows'], 'sha256': fact['sha256']}
         path = 'cursorFallbackRelations'
+        total = fact.get('total')
+    else:
+        total = None
     # Sequences and pre-row-hash archives retain their existing byte/order rules.
+    # Sorted here only when the row count is known and bounded; otherwise the server sorts.
+    if kind != 'S' and row_hashes and isinstance(total, int) and not isinstance(total, bool) and 0 <= total <= MAX_CLIENT_SORT_ROWS:
+        # Row hashes stream unsorted, so the server never has to hash and sort a whole large
+        # table before its first row; they are sorted here instead. They are lowercase hex,
+        # so this order is exactly the server's COLLATE "C" order and the digest is unchanged.
+        values = []
+        async for row in conn.cursor(f"SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value FROM {quoted} t", prefetch=100):
+            value = row['value']
+            if not isinstance(value, str) or len(value) != 64 or value.strip('0123456789abcdef'):
+                raise BackupError('Unexpected row hash')
+            values.append(value)
+        values.sort()
+        sha = hashlib.sha256()
+        for value in values:
+            sha.update(value.encode()); sha.update(b'\n')
+        record_fingerprint_path(path)
+        return {'rows': len(values), 'sha256': sha.hexdigest()}
     sql = (f"SELECT jsonb_build_object('last_value',last_value,'is_called',is_called)::text AS value FROM {quoted}"
            if kind == 'S' else
            (f"SELECT value FROM (SELECT encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS value FROM {quoted} t) hashed ORDER BY value COLLATE \"C\"" if row_hashes
