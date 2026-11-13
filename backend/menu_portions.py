@@ -262,13 +262,14 @@ async def prep_against_sales(conn, store, start, end, track):
     # it at the maker is its stock from that sign-off (it counts it in its "Held at" zone) and what arrived is its
     # stock once accepted (as bulk_quick_count.incoming reads it). Sent but never accepted is a transfer loss,
     # listed under Transfers, and is no store's use. Dates are the Eastern day of each sign-off.
+    # Lines signed off at zero move nothing, so they are left out (and never set aside a count).
     bulk = [] if not await analytics._has(conn, 'prep_inventory.bulk_requests', 'prep_inventory.bulk_event_lines') else await conn.fetch('''SELECT product_id, day, sum(received) AS received, sum(sent) AS sent, max(at) AS at FROM (
             SELECT l.maker_product_id AS product_id, (fe.created_at AT TIME ZONE $4)::date AS day, 0::numeric AS received,
               f.base_quantity + f.held_base_quantity AS sent, fe.created_at AS at
             FROM prep_inventory.bulk_requests r JOIN prep_inventory.bulk_request_lines l ON l.request_id=r.id
             JOIN prep_inventory.bulk_event_lines f ON f.request_id=l.request_id AND f.ordinal=l.ordinal
             JOIN prep_inventory.bulk_events fe ON fe.id=f.event_id AND fe.action='fulfill'
-            WHERE r.maker_store_id=$1
+            WHERE r.maker_store_id=$1 AND f.base_quantity + f.held_base_quantity > 0
             UNION ALL
             SELECT l.product_id, (fe.created_at AT TIME ZONE $4)::date, f.held_base_quantity, 0, fe.created_at
             FROM prep_inventory.bulk_requests r JOIN prep_inventory.bulk_request_lines l ON l.request_id=r.id
@@ -280,7 +281,7 @@ async def prep_against_sales(conn, store, start, end, track):
             FROM prep_inventory.bulk_requests r JOIN prep_inventory.bulk_request_lines l ON l.request_id=r.id
             JOIN prep_inventory.bulk_event_lines a ON a.request_id=l.request_id AND a.ordinal=l.ordinal
             JOIN prep_inventory.bulk_events ae ON ae.id=a.event_id AND ae.action='accept'
-            WHERE r.store_id=$1) b
+            WHERE r.store_id=$1 AND a.base_quantity > 0) b
         WHERE day BETWEEN $2::date - 1 AND $3 GROUP BY product_id, day''', store, start, end, BULK_ZONE)
     # Counts: the day before the range (opening) and the last day of it (closing), latest count that day.
     counts = await conn.fetch('''SELECT DISTINCT ON (c.product_id, o.business_date) c.product_id, o.business_date, o.performed_at, c.base_quantity

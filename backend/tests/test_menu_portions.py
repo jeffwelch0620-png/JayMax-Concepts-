@@ -315,3 +315,18 @@ class PortionBulkTests(supply.BulkSupplyDatabaseTests):
         # Today's count was taken before the Bulk arrived, so it isn't the end of the day and is left out.
         self.assertEqual((r['bulk_received'], r['bulk_sent'], r['used'], r['counts_used']), (D(15), D(0), D(15), False))
         self.assertEqual(before['items'], [], 'Bulk counts on the day it was signed off')
+
+    async def test_a_bulk_line_signed_off_at_zero_does_not_set_aside_a_count(self):
+        # Rudd's counted 10 lb the night before and 4 lb early today; Bert's then signs off nothing sent or held.
+        today = datetime.now(ZoneInfo(portions.BULK_ZONE)).date()
+        await self.rudds_count('10', business_date=(today - timedelta(days=1)).isoformat(), at='22:00')
+        await self.rudds_count('4', business_date=today.isoformat(), at='00:00')
+        rid = (await self.scheduled(await self.rudds_count('12')))['id']
+        none = await self.step('berts', rid, dict(action='fulfill', handoff='pickup', note='Nothing made',
+                                                  lines=[dict(ordinal=1, base_quantity='0', held_base_quantity='0')]))
+        self.assertEqual(none.status_code, 200, none.text)
+        self.assertEqual((await self.step('rudds', rid, dict(action='accept', note='Nothing came', lines=[dict(ordinal=1, base_quantity='0')]))).status_code, 200)
+        async with self.pool.acquire() as c:
+            r = await portions.prep_against_sales(c, 'rudds', today, today, None)
+        row = next(i for i in r['items'] if i['product_id'] == self.requester['product'])
+        self.assertEqual((row['bulk_received'], row['counts_used'], row['used']), (D(0), True, D(6)))
