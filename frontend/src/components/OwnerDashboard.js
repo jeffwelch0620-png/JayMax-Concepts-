@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import * as api from "../lib/api";
 import { fmtMoney, fmtPlanningCost, num } from "../lib/calc";
 import { MetricCard, PageTitle, Pill, cardCls, btnGhost, btnAcc, btnDanger } from "./common";
+import { GroupAnalytics } from "./GroupAnalytics";
 
 // up = getting worse (higher variance / slower), down = improving
 function TrendArrow({ dir }) {
@@ -21,12 +22,13 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
   const [disc, setDisc] = useState([]);
   const [score, setScore] = useState([]);
   const [err, setErr] = useState("");
+  const [round, setRound] = useState(0);
   const request = useRef(0);
 
   function load() {
     const id = ++request.current;
     const apply = setter => result => { if (request.current === id) setter(result); };
-    setErr(""); setData(null); setPrep(null);
+    setErr(""); setData(null); setPrep(null); setRound(r => r + 1);
     api.ownerSummary().then(result => {
       if (!Array.isArray(result?.stores) || !result.totals || (api.nativePurchasesEnabled && result.inventoryBasis !== "native_received_purchases_and_explicit_counts")) throw new Error("Native ownership figures were not confirmed.");
       apply(setData)(result);
@@ -72,6 +74,8 @@ export function OwnerDashboard({ onOpenLocation, onOpenOrder }) {
         <MetricCard testId="owner-total-alerts" label="Items Below Par" value={native ? "Needs on-hand review" : totals.orderAlerts} sub={native ? "Dated counts do not establish live stock" : "need ordering"} tone={!native && totals.orderAlerts > 0 ? "warn" : "normal"} />
         <MetricCard testId="owner-total-waste" label={native ? "Estimated Waste — 30 Days" : "Waste — Last 30 Days"} value={fmtPlanningCost(totals.waste30)} sub={native ? "Explanation only; not an accounting deduction" : "logged removals"} tone={totals.waste30 == null || totals.waste30 > 0 ? "warn" : "good"} />
       </div>
+
+      {api.analyticsEnabled && <GroupAnalytics key={round} onOpenLocation={onOpenLocation} />}
 
       {pending.length > 0 && (
         <div className={`${cardCls} p-5 mb-6`} data-testid="owner-pending-approvals" style={{ borderTopWidth: 2, borderTopColor: "#F59E0B" }}>

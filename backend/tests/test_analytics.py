@@ -169,6 +169,56 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
                                                    headers={'x-position': 'GM'})).status_code, 422)
         self.assertEqual(calls[0], ('berts', False, 'see_analytics'))
 
+    async def test_group_summary_shows_each_store_the_login_may_see_for_the_last_seven_full_days(self):
+        def authorize(request, store, write, require=None):
+            if store not in request.headers.get('x-stores', '').split(','): raise HTTPException(403, positions.DENIED[require])
+
+        class Pool:
+            def acquire(self): return self
+            def transaction(self, **kw): return self
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+        seen = []
+
+        async def summary(conn, store, start, end, now):
+            seen.append((store, start, end)); return {'store_id': store}
+        app = FastAPI()
+        # 2 AM Eastern on Nov 7: yesterday is Nov 6, so the week is Oct 31 - Nov 6.
+        app.include_router(analytics.create_router(lambda: Pool(), lambda s: None, authorize,
+                                                   clock=lambda: datetime(2026, 11, 7, 7, tzinfo=timezone.utc)))
+        stub = patch.object(analytics, 'store_summary', summary); stub.start(); self.addCleanup(stub.stop)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            with patch.dict(os.environ, {'ANALYTICS_ENABLED': 'false'}):
+                self.assertEqual((await client.get('/api/pg/analytics-summary')).status_code, 503)
+            with patch.dict(os.environ, {'ANALYTICS_ENABLED': 'true'}):
+                none = await client.get('/api/pg/analytics-summary', headers={'x-stores': ''})
+                self.assertEqual((none.status_code, none.json()['detail']), (403, 'Analytics is visible to the General Manager and above'))
+                some = await client.get('/api/pg/analytics-summary', headers={'x-stores': 'rudds'})
+                self.assertEqual((some.json()['start'], some.json()['end'], some.json()['stores']), ('2026-10-31', '2026-11-06', [{'store_id': 'rudds'}]))
+                every = await client.get('/api/pg/analytics-summary', headers={'x-stores': 'berts,rudds,papa'})
+                self.assertEqual([s['store_id'] for s in every.json()['stores']], ['berts', 'rudds', 'papa'])
+        self.assertEqual(seen[0], ('rudds', date(2026, 10, 31), date(2026, 11, 6)))
+
+    async def test_a_store_tile_compares_only_complete_stretches_and_names_the_largest_prep_gap(self):
+        import menu_portions
+        sales = {'available': True, 'totals': {'net_sales': D('700'), 'orders': 70, 'average_check': D('10'), 'days': 7},
+                 'before': {'net_sales': D('600'), 'compared_days': 7, 'complete': False},
+                 'latest_day': date(2026, 11, 6), 'stale': False, 'missing_days': [], 'needs_review': [{'business_date': date(2026, 11, 2)}]}
+        prep = {'available': True, 'coverage': {'covered_percent': 80}, 'missing_count': 2,
+                'items': [{'has_portions': True, 'gap': D(0), 'name': 'Even', 'unit': 'lb', 'gap_percent': 0},
+                          {'has_portions': True, 'gap': D('-4'), 'name': 'Invented slaw', 'unit': 'qt', 'gap_percent': -20},
+                          {'has_portions': False, 'gap': None, 'name': 'No portions', 'unit': 'lb', 'gap_percent': None}]}
+
+        async def fixed(value): return value
+        with patch.object(analytics, 'sales', lambda *a: fixed(sales)), patch.object(analytics, 'waste', lambda *a: fixed({'available': False})),                 patch.object(menu_portions, 'prep_against_sales', lambda *a: fixed(prep)):
+            tile = await analytics.store_summary(None, 'berts', date(2026, 10, 31), date(2026, 11, 6), None)
+        self.assertEqual((tile['sales']['net_sales'], tile['sales']['before_net_sales'], tile['sales']['compared_days'], tile['sales']['needs_review']),
+                         (D('700'), None, 0, 1), 'an incomplete stretch is never compared')
+        self.assertEqual((tile['sales']['days'], tile['sales']['range_days']), (7, 7))
+        self.assertEqual(tile['waste'], {'available': False})
+        self.assertEqual(tile['prep_vs_sales'], {'available': True, 'covered_percent': 80, 'missing_count': 2,
+                                                 'largest_gap': {'name': 'Invented slaw', 'unit': 'qt', 'gap': D('-4'), 'gap_percent': -20}})
+
 
 import test_bulk_supply as bulk_tests
 import test_prep_day_tasks as day

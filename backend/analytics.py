@@ -400,6 +400,35 @@ async def report(conn, store, start, end, track, now):
                    'prep_vs_sales': await menu_portions.prep_against_sales(conn, store, start, end, track)})
 
 
+GROUP_STORES = ('berts', 'rudds', 'papa')   # the three restaurants on the owner's Group Overview
+GROUP_DAYS = 7
+
+
+async def store_summary(conn, store, start, end, now):
+    """One store's tiles for the owner's Group Overview, from the same figures as its Analytics tab:
+    sales against the days just before (only when both stretches are complete), Toast freshness,
+    waste records, and prep against sales (coverage and the prep item furthest from what sales imply)."""
+    import menu_portions  # imports this module
+    s = await sales(conn, store, start, end, None, now)
+    w = await waste(conn, store, start, end, None)
+    p = await menu_portions.prep_against_sales(conn, store, start, end, None)
+    out = {'store_id': store, 'sales': {'available': False}, 'waste': {'available': False}, 'prep_vs_sales': {'available': False}}
+    if s.get('available'):
+        before = s['before']
+        out['sales'] = {'available': True, **{k: s['totals'][k] for k in ('net_sales', 'orders', 'average_check', 'days')},
+                        'before_net_sales': before['net_sales'] if before['complete'] else None,
+                        'compared_days': before['compared_days'] if before['complete'] else 0,
+                        'range_days': (end - start).days + 1, 'latest_day': s['latest_day'], 'stale': s['stale'],
+                        'missing_days': len(s['missing_days']), 'needs_review': len(s['needs_review'])}
+    if w.get('available'):
+        out['waste'] = {'available': True, 'entries': w['entries'], 'items': w['items']}
+    if p.get('available'):
+        gap = next((i for i in p['items'] if i['has_portions'] and i['gap']), None)
+        out['prep_vs_sales'] = {'available': True, 'covered_percent': p['coverage']['covered_percent'], 'missing_count': p['missing_count'],
+                                'largest_gap': {k: gap[k] for k in ('name', 'unit', 'gap', 'gap_percent')} if gap else None}
+    return out
+
+
 def window(start, end, today):
     end = end or today
     start = start or end - timedelta(days=6)
@@ -420,5 +449,25 @@ def create_router(pool_factory, store_check, manager_authorize, clock=lambda: da
         start, end = window(start, end, now.astimezone(ZoneInfo(order_calendar.DEFAULT_ZONE)).date())
         async with pool_factory().acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
             return await report(conn, store, start, end, track, now)
+
+    @router.get('/api/pg/analytics-summary')
+    async def group(request: Request):
+        """The owner's Group Overview: the last 7 full days (through yesterday) for each store this login may see."""
+        if not enabled(): raise HTTPException(503, 'Analytics is not switched on')
+        stores, refused = [], None
+        for store in GROUP_STORES:
+            store_check(store)
+            try:
+                manager_authorize(request, store, False, require='see_analytics'); stores.append(store)
+            except HTTPException as e:
+                if e.status_code != 403: raise
+                refused = e
+        if not stores: raise refused
+        now = clock()
+        end = now.astimezone(ZoneInfo(order_calendar.DEFAULT_ZONE)).date() - timedelta(days=1)
+        start = end - timedelta(days=GROUP_DAYS - 1)
+        async with pool_factory().acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
+            return serial({'start': start, 'end': end, 'timezone_name': order_calendar.DEFAULT_ZONE,
+                           'stores': [await store_summary(conn, store, start, end, now) for store in stores]})
 
     return router
