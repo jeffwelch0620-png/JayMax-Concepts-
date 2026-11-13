@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { prepTracks, prepTrackLabel } from "../lib/prepTracks";
 import { cardCls, inpCls, btnGhost, EmptyState, Field, MetricCard, PageTitle, SectionLabel } from "./common";
+import { MenuPortions } from "./MenuPortions";
 
 // M6 analytics (Jeff 2026-11-06): how prep, counts and orders went over a date range, for the
 // General Manager and above. A read only; backend/analytics.py works out every number.
@@ -188,6 +189,33 @@ function Sales({ s }) {
   </>;
 }
 
+// Prep against sales (M6, backend/menu_portions.py): what was made, wasted and counted for each prep item
+// against what Toast sales imply was used, through the menu portions owners set.
+const signed = (v, unit) => v === null || v === undefined ? "–" : `${Number(v) > 0 ? "+" : ""}${qty(v, unit)}`;
+
+function PrepVsSales({ p, onPortions, showing }) {
+  if (!p?.available) return <Unavailable part={p} />;
+  const c = p.coverage;
+  const incomplete = p.sales_days_complete < p.range_days;
+  return <>
+    <Grid>
+      <MetricCard testId="analytics-portion-coverage" label="Sales covered by portions" value={c.covered_percent === null ? "–" : `${c.covered_percent}%`}
+        sub={`${p.missing_count} menu items missing portions`} tone={p.missing_count ? "warn" : "good"} />
+      <MetricCard label="Prep items compared" value={num(p.items.filter(r => r.has_portions).length)} sub={`${num(p.item_count)} prep items in the range`} />
+      <MetricCard label="Modifiers with portions" value={num(p.modifiers_with_portions)} sub="add-ons that use prep" />
+    </Grid>
+    {incomplete && <p className="text-sm text-jm-warn mb-2" data-testid="analytics-prep-sales-days">Toast data is complete for {p.sales_days_complete} of {p.range_days} days, so sales may imply too little.</p>}
+    <Table testId="analytics-prep-sales" head={["Prep item", "Track", "Made", "Wasted", "Used", "Sales imply", "Gap", "Counts"]}
+      rows={p.items.map(r => [r.name, r.track ? prepTrackLabel(r.track) : "–", qty(r.made, r.unit), qty(r.wasted, r.unit), qty(r.used, r.unit),
+        r.has_portions ? qty(r.implied, r.unit) : "No portions yet",
+        r.gap === null ? "–" : `${signed(r.gap, r.unit)}${r.gap_percent === null ? "" : ` (${r.gap_percent > 0 ? "+" : ""}${r.gap_percent}%)`}`,
+        r.counts_used ? `${num(r.opening)} → ${num(r.closing)}` : "Not counted"])} />
+    <p className="text-xs text-slate-500 mb-2">Used = made − used in other prep − wasted, plus the change in on-hand when the item was counted the night before the range and on its last day. A positive gap means more left the shelf than sales explain (bigger portions, waste not recorded, staff meals); a negative gap means sales imply more than was made. Bulk sent to or received from another store isn't counted yet.</p>
+    <Table testId="analytics-missing-portions" head={["Missing portions", "Sold", "Net sales"]} rows={p.missing_items.map(m => [m.name, num(m.quantity), money(m.amount)])} />
+    <button className={btnGhost} onClick={onPortions} data-testid="analytics-portions-toggle">{showing ? "Hide menu portions" : "Menu portions"}</button>
+  </>;
+}
+
 export { isoDay };
 
 export function AnalyticsTab({ rid }) {
@@ -198,6 +226,7 @@ export function AnalyticsTab({ rid }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const latest = useRef(0);
+  const [portions, setPortions] = useState(false);
   const load = () => {
     // Only the newest request may fill the page: an older range or track answering late is dropped.
     const ask = ++latest.current;
@@ -223,6 +252,10 @@ export function AnalyticsTab({ rid }) {
       </div>
       {error ? <p role="alert" className="text-sm text-jm-bad">{error}</p> : !data ? <EmptyState text="Loading analytics…" /> : <>
         <Section testId="analytics-sales-section" title="Sales" note="From Toast, one business day at a time, counted the way Toast's Sales Summary counts them. Net sales are after discounts and refunds, before tax and tips."><Sales s={data.sales} /></Section>
+        <Section testId="analytics-prep-sales-section" title="Prep against sales" note="Each prep item made, wasted and counted against what Toast sales imply was used, through the menu portions. In the item's own unit.">
+          <PrepVsSales p={data.prep_vs_sales} onPortions={() => setPortions(!portions)} showing={portions} />
+          {portions && data.prep_vs_sales?.available && <div className="mt-3"><MenuPortions rid={rid} onChanged={load} /></div>}
+        </Section>
         <Section testId="analytics-throughput" title="Prep made against plan" note="Released prep lists: each task's planned amount against what was made and accepted, in the item's own unit."><Throughput t={data.throughput} /></Section>
         <Section testId="analytics-shortages-section" title="Shortages" note="Notes cooks sent the Shift Leader."><Shortages s={data.shortages} /></Section>
         <Section testId="analytics-waste-section" title="Waste" note="Waste records, including container waste, at their latest correction."><Waste w={data.waste} /></Section>

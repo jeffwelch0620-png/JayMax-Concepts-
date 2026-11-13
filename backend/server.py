@@ -6026,6 +6026,8 @@ import acceptance_queue
 app.include_router(acceptance_queue.create_router(db_pg.pool,check_store_id,_purchase_actor,_token_user))
 import analytics
 app.include_router(analytics.create_router(db_pg.pool,check_store_id,_purchase_actor))
+import menu_portions
+app.include_router(menu_portions.create_router(db_pg.pool,check_store_id,_purchase_actor))
 import staff_prep_production
 app.include_router(staff_prep_production.create_router(db_pg.pool,check_store_id,_purchase_actor,_staff_count_actor))
 import prep_containers

@@ -316,6 +316,12 @@ DATABASE_CASES += tuple(('prep_handoff','PrepHandoffTests',name) for name in (
  'test_history_cannot_be_rewritten'))
 
 
+OFFLINE_CLASSES += ['menu_portions::PortionModelTests']
+DATABASE_CASES += tuple(('menu_portions','PortionDatabaseTests',name) for name in (
+ 'test_made_wasted_and_counted_against_what_sales_imply',
+ 'test_changes_are_kept_replayed_and_refused_outside_the_store'))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('profile',choices=('offline','database'))

@@ -49,6 +49,7 @@ PERMISSIONS = {
     'approve_orders': {'OWN', 'OPS', 'GM'},              # approve or reject someone else's order (P4, Jeff 2026-11-01)
     'edit_order_schedule': {'OWN', 'OPS'},               # order days, deadlines, suppliers; skip or move a cycle (Jeff 2026-11-01)
     'see_analytics': {'OWN', 'OPS', 'GM'},               # M6 analytics: prep, waste, acceptance, transfers, on-time (Jeff 2026-11-06)
+    'set_portions': {'OWN', 'OPS'},                      # menu portions: prep used per Toast item sold (proposed 2026-11-13, P8 for Jay and Rudd)
 }
 
 # Before positions: owners could do everything; managers could request and sign off Bulk and
@@ -75,6 +76,7 @@ DENIED = {
     'approve_orders': "Approving an order needs the General Manager, the Operations & Integration Lead or an owner",
     'edit_order_schedule': 'Only an owner or the Operations & Integration Lead changes the order schedule',
     'see_analytics': 'Analytics is visible to the General Manager and above',
+    'set_portions': 'Only an owner or the Operations & Integration Lead sets menu portions',
 }
 
 

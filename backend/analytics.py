@@ -297,23 +297,31 @@ SALES_DUE_HOUR = 8
 SALAD_BAR = '%salad bar%'
 
 
+TOAST_TABLES = ('integrations.toast_daily_sales', 'integrations.toast_item_sales', 'integrations.toast_modifier_sales',
+                'integrations.toast_location_map')
+
+
+async def toast_readable(conn):
+    """The Toast tables are server-only (no anon or authenticated access). A database login that may not read
+    them sees the section as not set up, instead of the whole report failing. Schema access is checked first:
+    without USAGE on the schema, even resolving a table name in it is a permission error (runtime_permissions.py
+    keeps the restricted login out of integrations)."""
+    if not await conn.fetchval("""SELECT CASE WHEN to_regnamespace('integrations') IS NULL THEN false
+                                      ELSE has_schema_privilege('integrations', 'USAGE') END"""):
+        return False
+    for table in TOAST_TABLES:
+        if not await conn.fetchval("SELECT CASE WHEN to_regclass($1) IS NULL THEN false ELSE has_table_privilege(to_regclass($1), 'SELECT') END", table):
+            return False
+    return True
+
+
 async def sales(conn, store, start, end, track, now):
     """Net sales, orders and average check by day from integrations.toast_daily_sales, the same days before
     for comparison, the best-selling items, Salad Bar covers and whether every day has arrived from Toast.
     Store-wide: shown with All tracks; the Salad track sees its Salad Bar covers only."""
     if track not in (None, 'salad'): return STORE_WIDE
     toast = TOAST_STORE.get(store)
-    if toast is None: return {'available': False}
-    # The Toast tables are server-only (no anon or authenticated access). A database login that may not read
-    # them sees the section as not set up, instead of the whole report failing. Schema access is checked first:
-    # without USAGE on the schema, even resolving a table name in it is a permission error (runtime_permissions.py
-    # keeps the restricted login out of integrations).
-    if not await conn.fetchval("""SELECT CASE WHEN to_regnamespace('integrations') IS NULL THEN false
-                                      ELSE has_schema_privilege('integrations', 'USAGE') END"""):
-        return {'available': False}
-    for table in ('integrations.toast_daily_sales', 'integrations.toast_item_sales', 'integrations.toast_modifier_sales', 'integrations.toast_location_map'):
-        if not await conn.fetchval("SELECT CASE WHEN to_regclass($1) IS NULL THEN false ELSE has_table_privilege(to_regclass($1), 'SELECT') END", table):
-            return {'available': False}
+    if toast is None or not await toast_readable(conn): return {'available': False}
     zone = ZoneInfo(order_calendar.DEFAULT_ZONE)
     local = now.astimezone(zone)
     today = local.date()
@@ -378,6 +386,7 @@ async def sales(conn, store, start, end, track, now):
 
 
 async def report(conn, store, start, end, track, now):
+    import menu_portions  # imports this module
     zone = order_calendar.DEFAULT_ZONE
     today = now.astimezone(ZoneInfo(zone)).date()
     return serial({'store_id': store, 'start': start, 'end': end, 'track': track, 'today': today, 'timezone_name': zone,
@@ -387,7 +396,8 @@ async def report(conn, store, start, end, track, now):
                    'acceptance': await acceptance(conn, store, start, end, track, zone),
                    'transfers': await transfers(conn, store, start, end, track),
                    'on_time': await on_time(conn, store, start, end, now) if track is None else STORE_WIDE,
-                   'sales': await sales(conn, store, start, end, track, now)})
+                   'sales': await sales(conn, store, start, end, track, now),
+                   'prep_vs_sales': await menu_portions.prep_against_sales(conn, store, start, end, track)})
 
 
 def window(start, end, today):
