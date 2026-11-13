@@ -205,12 +205,14 @@ function PrepVsSales({ p, onPortions, showing }) {
       <MetricCard label="Modifiers with portions" value={num(p.modifiers_with_portions)} sub="add-ons that use prep" />
     </Grid>
     {incomplete && <p className="text-sm text-jm-warn mb-2" data-testid="analytics-prep-sales-days">Toast data is complete for {p.sales_days_complete} of {p.range_days} days, so sales may imply too little.</p>}
-    <Table testId="analytics-prep-sales" head={["Prep item", "Track", "Made", "Wasted", "Used", "Sales imply", "Gap", "Counts"]}
-      rows={p.items.map(r => [r.name, r.track ? prepTrackLabel(r.track) : "–", qty(r.made, r.unit), qty(r.wasted, r.unit), qty(r.used, r.unit),
+    <Table testId="analytics-prep-sales" head={["Prep item", "Track", "Made", "Bulk in / out", "Wasted", "Used", "Sales imply", "Gap", "Counts"]}
+      rows={p.items.map(r => [r.name, r.track ? prepTrackLabel(r.track) : "–", qty(r.made, r.unit),
+        Number(r.bulk_received) || Number(r.bulk_sent) ? `+${num(r.bulk_received)} / −${num(r.bulk_sent)} ${r.unit}` : "–",
+        qty(r.wasted, r.unit), qty(r.used, r.unit),
         r.has_portions ? qty(r.implied, r.unit) : "No portions yet",
         r.gap === null ? "–" : `${signed(r.gap, r.unit)}${r.gap_percent === null ? "" : ` (${r.gap_percent > 0 ? "+" : ""}${r.gap_percent}%)`}`,
         r.counts_used ? `${num(r.opening)} → ${num(r.closing)}` : "Not counted"])} />
-    <p className="text-xs text-slate-500 mb-2">Used = made − used in other prep − wasted, plus the change in on-hand when the item was counted the night before the range and on its last day, each after that day's last prep and waste. A positive gap means more left the shelf than sales explain (bigger portions, waste not recorded, staff meals); a negative gap means sales imply more than was made. Bulk sent to or received from another store isn't counted yet.</p>
+    <p className="text-xs text-slate-500 mb-2">Used = made + Bulk received − Bulk sent − used in other prep − wasted, plus the change in on-hand when the item was counted the night before the range and on its last day, each after that day's last prep, waste and Bulk sign-off. A positive gap means more left the shelf than sales explain (bigger portions, waste not recorded, staff meals); a negative gap means sales imply more than was made. Bulk the store makes for another store leaves its stock when sent or held for that store; Bulk held for this store counts from that sign-off and Bulk sent to it once accepted. Bulk sent but never accepted is listed under Transfers.</p>
     <Table testId="analytics-missing-portions" head={["Missing portions", "Sold", "Net sales"]} rows={p.missing_items.map(m => [m.name, num(m.quantity), money(m.amount)])} />
     <button className={btnGhost} onClick={onPortions} data-testid="analytics-portions-toggle">{showing ? "Hide menu portions" : "Menu portions"}</button>
   </>;
