@@ -196,3 +196,45 @@ class CliAdapterBindingTests(unittest.IsolatedAsyncioTestCase):
                 await cli.main()
             self.assertEqual(export.await_args.args[-1],{'migrations/TEST_ONLY_native.sql':backup.digest(b'SELECT 1;'),
                 'supabase/migrations/TEST_ONLY_delivery.sql':backup.digest(b'SELECT 2;')})
+
+
+class SplitBackupCliTests(unittest.IsolatedAsyncioTestCase):
+    project = 'abcdefghijklmnopqrst'
+
+    async def run_cli(self, root, arguments):
+        with patch.object(sys, 'argv', ['backup', *arguments]), patch.dict(os.environ, LOCALAPPDATA=str(root)), \
+             patch.object(cli, 'dotenv_values', return_value={'DATABASE_URL': 'TEST ONLY APP'}), redirect_stdout(io.StringIO()):
+            await cli.main()
+
+    async def test_split_flag_passes_only_the_reviewed_table(self):
+        with TemporaryDirectory() as temporary, patch.object(backup, 'export_backup', AsyncMock(return_value={})) as export:
+            root = Path(temporary)
+            base = ['export', '--owner-config', str(root / 'TEST_ONLY.env'), '--expected-project', self.project, '--pg-bin', str(root)]
+            await self.run_cli(root, base)
+            self.assertNotIn('split_tables', export.await_args.kwargs)
+            await self.run_cli(root, [*base, '--split-toast-payloads'])
+            self.assertEqual(export.await_args.kwargs['split_tables'], (backup.SPLIT_TABLE,))
+
+    async def test_monthly_export_and_restore_pairs_are_passed_through(self):
+        import toast_payload_backup as payloads
+        with TemporaryDirectory() as temporary, \
+             patch.object(payloads, 'export_months', AsyncMock(return_value={})) as months, \
+             patch.object(backup, 'verify_restore', AsyncMock(return_value={})) as restore:
+            root = Path(temporary)
+            await self.run_cli(root, ['export-payloads', '--owner-config', str(root / 'TEST_ONLY.env'),
+                                      '--expected-project', self.project, '--from-month', '2025-12', '--to-month', '2026-02'])
+            self.assertEqual(months.await_args.args[:3], ('TEST ONLY APP', self.project, ['2025-12', '2026-01', '2026-02']))
+            folder = root / 'monthly'
+            folder.mkdir()
+            for month in ('2026-02', '2026-01'):
+                (folder / f'payloads-{month}.jmax.enc').write_bytes(b'TEST ONLY')
+            with patch.dict(os.environ, TEST_ONLY_RESTORE='TEST ONLY DSN'):
+                await self.run_cli(root, ['verify-restore', '--connection-env', 'TEST_ONLY_RESTORE', '--backup', 'main',
+                                          '--key-file', 'key', '--expected-project', self.project, '--pg-bin', str(root),
+                                          '--payloads', str(folder), str(root / 'payloads.key')])
+            self.assertEqual(restore.await_args.kwargs['payload_backups'],
+                             [(folder / 'payloads-2026-01.jmax.enc', str(root / 'payloads.key')),
+                              (folder / 'payloads-2026-02.jmax.enc', str(root / 'payloads.key'))])
+            with self.assertRaisesRegex(backup.BackupError, 'No monthly payload backups'):
+                await self.run_cli(root, ['verify-payloads', '--key-file', 'key', '--backup-dir', str(root / 'TEST_ONLY_empty'),
+                                          '--expected-project', self.project])

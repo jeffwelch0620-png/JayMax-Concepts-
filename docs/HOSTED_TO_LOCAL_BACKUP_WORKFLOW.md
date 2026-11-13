@@ -86,6 +86,31 @@ restorable. Supabase's managed recovery instructions also require special handli
 for migration history, modified managed schemas and encryption keys.
 ([Supabase recovery procedure](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore))
 
+## Raw Toast reports in monthly backups (2026-11-12)
+
+Loading a year of Toast history made `integrations.toast_report_payloads` (the raw
+reports as Toast sent them) about 750 MB of a 1 GB database. The dump then ran past 20
+minutes and the session pooler cut it off twice. Every figure JMAX built from those
+reports is in other tables; the raw reports can be fetched from Toast again. So a main
+backup can leave that one table's rows to separate monthly files:
+
+1. `export --split-toast-payloads` (with the usual options). The archive keeps the
+   table's definition, indexes and links, and the manifest lists every row id that
+   existed in the backup's snapshot. Only this table can be split.
+2. Then `export-payloads --from-month YYYY-MM --to-month YYYY-MM`: one encrypted file
+   per business month, each in its own short read-only snapshot, all under one new
+   key. Run it after step 1. A row saved after step 1 is ignored by the restore; a row
+   the main backup lists but no monthly file holds fails the restore check. Past months
+   do not change, so earlier monthly files can be reused while they still cover the ids.
+3. `verify-payloads --backup-dir <folder> --key-file <key>` checks the monthly files
+   without a database: authentic, every row inside its month, counts and digests.
+4. `verify-restore ... --payloads <folder> <key>` (repeatable) restores tables and rows,
+   then exactly the listed rows from the monthly files, then indexes and links, so
+   every link to a raw report is checked. Each restored raw row must read back with its
+   exported digest, and the table's row ids must match the main backup's list.
+
+A split main backup alone is not a complete backup; keep it with its monthly files.
+
 ## Restore and acceptance sequence
 
 1. Verify archive authentication, manifest format/project/scope, digests, tooling

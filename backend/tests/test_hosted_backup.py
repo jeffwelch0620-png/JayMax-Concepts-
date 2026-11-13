@@ -390,6 +390,38 @@ class ExportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(backup.BackupError,'unclassified'):
                 await self.export(root,conn)
 
+    async def test_split_export_leaves_only_the_reviewed_table_out_and_lists_its_row_ids(self):
+        ids=[str(uuid4()) for _ in range(2)]
+        async def facts(conn,*args,split_tables=(),split_ids=None,**kwargs):
+            self.assertEqual(split_tables,(backup.SPLIT_TABLE,))
+            split_ids[backup.SPLIT_TABLE]=sorted(ids)
+            return {'tables':{backup.SPLIT_TABLE:{'rows':2,'rowsInSeparateBackups':True,'kind':'r'}},'catalog':{}}
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary);conn,tx=self.connection(schemas=backup.CURRENT_SCHEMAS);seen=[]
+            async def dumping(executable,args,*extra,**options):
+                seen.append(args)
+                filename=next((arg[7:] for arg in args if arg.startswith('--file=')),None)
+                if filename: Path(filename).write_bytes(b'PGDMP TEST ONLY fictional archive')
+                return b'; TEST ONLY archive list'
+            original=backup.export_backup
+            async def split(*args,**kwargs):
+                return await original(*args,split_tables=(backup.SPLIT_TABLE,),**kwargs)
+            with patch.object(backup,'export_backup',split):
+                result=await self.export(root,conn,tool_action=dumping,fingerprint_action=facts,
+                                         schemas=backup.CURRENT_SCHEMAS,streamed=True)
+            self.assertIn('--exclude-table-data='+backup.SPLIT_TABLE,seen[0])
+            self.assertEqual(result['separateTableRows'],{backup.SPLIT_TABLE:2})
+            manifest=backup.decrypt_backup(result['encryptedBackup'],result['privateKey'],PROJECT)
+            self.assertEqual(manifest['tablesInSeparateBackups'],[backup.SPLIT_TABLE])
+            self.assertEqual(manifest['separateTableRowIds'],{backup.SPLIT_TABLE:sorted(ids)})
+        with patch.object(backup.asyncpg,'connect',AsyncMock()) as connect:
+            for tables,streamed in ((('public.anything',),True),((backup.SPLIT_TABLE,),False),
+                                    ((backup.SPLIT_TABLE,backup.SPLIT_TABLE),True)):
+                with self.subTest(tables=tables,streamed=streamed),self.assertRaisesRegex(backup.BackupError,'separate-table'):
+                    await backup.export_backup('TEST ONLY',PROJECT,'dump','restore','archive','key',{},
+                                               streamed=streamed,split_tables=tables)
+            connect.assert_not_awaited()
+
     async def test_default_export_keeps_the_v1_envelope_that_install_evidence_authenticates(self):
         with TemporaryDirectory() as temporary:
             root=Path(temporary);conn,tx=self.connection()

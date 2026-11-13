@@ -68,6 +68,12 @@ MAX_FINGERPRINT_AGGREGATE_RELATION_BYTES = 64 * 1024 * 1024
 # a table with more rows keeps the server's sort, which can spill to disk.
 MAX_CLIENT_SORT_ROWS = 500_000
 FINGERPRINT_PATHS = ('serverAggregateRelations', 'cursorFallbackRelations', 'cursorOnlyRelations')
+# The one table whose rows a main backup may leave to separate monthly backups: raw Toast
+# reports, re-fetchable from Toast, made a 20-minute dump that the pooler cut off (2026-11-12).
+# The main backup keeps the table's definition, its links and the list of its row ids; the
+# monthly backups hold the rows, and a restore check needs both (see toast_payload_backup).
+SPLIT_TABLE = 'integrations.toast_report_payloads'
+SPLIT_SCOPES = ((), (SPLIT_TABLE,))
 MAX_ARCHIVE = 64 * 1024 * 1024  # In-memory reads (open_backup); exports and restores stream.
 MAX_ENVELOPE = 3 * MAX_ARCHIVE
 FLAGS = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -535,7 +541,23 @@ async def relation_fingerprints_batched(conn, relations, row_hashes=True, *,
     return tables
 
 
-async def fingerprint(conn, row_hashes=True, *, server_aggregation=True, schemas=SCHEMAS):
+async def split_table_fact(conn, quoted):
+    """Row count and the sorted row ids of a table whose rows are backed up separately.
+    Reads only the id column, so the large report column is never fetched."""
+    ids = []
+    async for row in conn.cursor(f'SELECT id::text AS id FROM {quoted}', prefetch=1000):
+        value = row['id']
+        if not isinstance(value, str) or not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', value):
+            raise BackupError('Unexpected row id')
+        ids.append(value)
+    ids.sort()
+    if len(set(ids)) != len(ids):
+        raise BackupError('Duplicate row id')
+    return {'rows': len(ids), 'idsSha256': digest(''.join(i + '\n' for i in ids).encode()),
+            'rowsInSeparateBackups': True}, ids
+
+
+async def fingerprint(conn, row_hashes=True, *, server_aggregation=True, schemas=SCHEMAS, split_tables=(), split_ids=None):
     # Deparser output is session-sensitive (pg_dump uses quote_all_identifiers).
     # Normalize within the caller's snapshot, without changing role/app defaults.
     await conn.execute("SET LOCAL quote_all_identifiers=off; SET LOCAL TIME ZONE 'UTC'; SET LOCAL search_path=pg_catalog; SET LOCAL DateStyle='ISO,YMD'; SET LOCAL IntervalStyle=postgres; SET LOCAL bytea_output=hex; SET LOCAL extra_float_digits=3; SET LOCAL standard_conforming_strings=on; SET LOCAL row_security=off")
@@ -564,13 +586,20 @@ async def fingerprint(conn, row_hashes=True, *, server_aggregation=True, schemas
         name = relation['nspname'] + '.' + relation['relname']
         quoted = native.quoted(relation['nspname']) + '.' + native.quoted(relation['relname'])
         try:
-            fact = await relation_fingerprint(conn, quoted, relation['kind'], row_hashes,
-                                              server_aggregation=server_aggregation)
+            if name in split_tables and relation['kind'] == 'r':
+                fact, ids = await split_table_fact(conn, quoted)
+                if split_ids is not None:
+                    split_ids[name] = ids
+            else:
+                fact = await relation_fingerprint(conn, quoted, relation['kind'], row_hashes,
+                                                  server_aggregation=server_aggregation)
         except TimeoutError as exc:
             error = BackupError('Table fingerprint query timed out')
             error.failureObject = name
             raise error from exc
         tables[name] = {**fact, 'kind': relation['kind']}
+    if set(split_tables) - {name for name, fact in tables.items() if fact.get('rowsInSeparateBackups')}:
+        raise BackupError('Separately backed-up table missing')
     return {'tables': tables, 'catalog': catalog}
 
 
@@ -704,14 +733,29 @@ def decrypt_backup(encrypted, key, expected_project, sink=None, *, max_archive=M
         if sink is not None:
             sink(archive)
         return manifest
+    def accepted(manifest):
+        return (manifest['format'] == STREAM_FORMAT and manifest['projectRef'] == expected_project
+                and manifest['schemas'] in (list(SCHEMAS), list(CURRENT_SCHEMAS))
+                and manifest.get('rowFingerprintAlgorithm') in (None, ROW_ALGORITHM)
+                and split_scope(manifest) in SPLIT_SCOPES)
+    return decrypt_stream(encrypted, key, accepted, sink, max_archive=max_archive)
+
+
+def split_scope(manifest):
+    value = manifest.get('tablesInSeparateBackups', [])
+    return tuple(value) if isinstance(value, list) else None
+
+
+def decrypt_stream(encrypted, key, accepted, sink=None, *, max_archive=MAX_STREAM_ARCHIVE):
+    """Authenticate a streamed envelope whose manifest `accepted` approves (see decrypt_backup)."""
+    encrypted = Path(encrypted)
     try:
         fernet = Fernet(Path(key).read_bytes())
         with encrypted.open('rb') as stream:
-            stream.read(len(STREAM_MAGIC))
+            if stream.read(len(STREAM_MAGIC)) != STREAM_MAGIC:
+                raise ValueError('Not a streamed envelope')
             manifest = json.loads(fernet.decrypt(read_token(stream)))
-            if (manifest['format'] != STREAM_FORMAT or manifest['projectRef'] != expected_project
-                or manifest['schemas'] not in (list(SCHEMAS), list(CURRENT_SCHEMAS))
-                or manifest.get('rowFingerprintAlgorithm') not in (None, ROW_ALGORITHM)
+            if (not isinstance(manifest, dict) or not accepted(manifest)
                 or type(manifest['archiveBytes']) is not int or not 0 <= manifest['archiveBytes'] <= max_archive):
                 raise ValueError('Manifest validation failed')
             sha, total, index = hashlib.sha256(), 0, 0
@@ -750,7 +794,7 @@ def open_backup(encrypted, key, expected_project):
         archive = base64.b64decode(value['archive'], validate=True)
         if (manifest['format'] != FORMAT or manifest['projectRef'] != expected_project
             or manifest['schemas'] not in (list(SCHEMAS), list(CURRENT_SCHEMAS)) or len(archive) > MAX_ARCHIVE
-            or manifest.get('rowFingerprintAlgorithm') not in (None, ROW_ALGORITHM)
+            or manifest.get('rowFingerprintAlgorithm') not in (None, ROW_ALGORITHM) or split_scope(manifest) != ()
             or digest(archive) != manifest['archiveSha256'] or len(archive) != manifest['archiveBytes']):
             raise ValueError('Manifest validation failed')
     except Exception as exc:
@@ -770,7 +814,7 @@ def restore_list(toc):
 
 async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory, migration_hashes,
                         *, timeout_seconds=EXPORT_TIMEOUT_SECONDS, progress=None, maintenance_direct_ipv6=False,
-                        schemas=SCHEMAS, streamed=False):
+                        schemas=SCHEMAS, streamed=False, split_tables=()):
     # streamed=False keeps the v1 in-memory envelope that the install/evidence callers
     # (receiving_install_evidence) authenticate directly; the CLI streams.
     if type(maintenance_direct_ipv6) is not bool or type(streamed) is not bool:
@@ -780,10 +824,14 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
         raise BackupError(f'Export timeout must be positive and at most {MAX_EXPORT_TIMEOUT_SECONDS} seconds')
     if tuple(schemas) not in (SCHEMAS, CURRENT_SCHEMAS):
         raise BackupError('Unreviewed backup schema scope')
+    if tuple(split_tables) not in SPLIT_SCOPES or (split_tables and not streamed):
+        raise BackupError('Unreviewed separate-table scope')
     diagnostics = ExportDiagnostics(timeout_seconds, progress)
     control = ExportControl(diagnostics)
     token = EXPORT_CONTROL.set(control)
     options = {'maintenance_direct_ipv6': True} if maintenance_direct_ipv6 else {}
+    if split_tables:
+        options['split_tables'] = tuple(split_tables)
     worker = asyncio.create_task(_export_backup(url, project, pg_dump, pg_restore, backup_directory,
                                                key_directory, migration_hashes, diagnostics,
                                                schemas=tuple(schemas), streamed=streamed, **options))
@@ -837,7 +885,7 @@ async def export_backup(url, project, pg_dump, pg_restore, backup_directory, key
 
 async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, key_directory,
                          migration_hashes, diagnostics, *, maintenance_direct_ipv6=False, schemas=SCHEMAS,
-                         streamed=False):
+                         streamed=False, split_tables=()):
     if maintenance_direct_ipv6:
         import maintenance_connection
         settings = await maintenance_connection.dump_settings(url, project)
@@ -889,7 +937,10 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
                         snapshot = await conn.fetchval('SELECT pg_export_snapshot()')
                     # The default scope keeps the original call shape that existing callers stub.
                     with diagnostics.phase('fingerprint'):
-                        facts = await (fingerprint(conn) if schemas == SCHEMAS else fingerprint(conn, schemas=schemas))
+                        split_ids = {}
+                        facts = await (fingerprint(conn) if schemas == SCHEMAS and not split_tables else
+                                       fingerprint(conn, schemas=schemas) if not split_tables else
+                                       fingerprint(conn, schemas=schemas, split_tables=split_tables, split_ids=split_ids))
                     with diagnostics.phase('dependencies'):
                         dependency = await (dependencies(conn) if schemas == SCHEMAS else dependencies(conn, schemas))
                     with diagnostics.phase('role_metadata'):
@@ -900,7 +951,8 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
                         budget = TOOL_BUDGET.set(max(EXPORT_CONTROL.get().remaining(), 0) + CLEANUP_TIMEOUT_SECONDS)
                         try:
                             await tool(pg_dump, ['--format=custom', '--quote-all-identifiers', '--encoding=UTF8', '--lock-wait-timeout=5000',
-                                '--snapshot=' + snapshot, '--file=' + str(raw), '--no-password', *['--schema=' + schema for schema in schemas]],
+                                '--snapshot=' + snapshot, '--file=' + str(raw), '--no-password', *['--schema=' + schema for schema in schemas],
+                                *['--exclude-table-data=' + table for table in split_tables]],
                                 settings, True)
                         finally:
                             TOOL_BUDGET.reset(budget)
@@ -924,6 +976,10 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
                             'archiveBytes': archive_bytes, 'archiveSha256': archive_sha256, 'dependencies': dependency,
                             'rolesWithoutPasswords': roles, 'roleMemberships': memberships, 'migrationFileHashes': migration_hashes,
                             'sequenceStateIsMvcc': False, 'sequencesObservedStable': True, 'managedRecoveryVerified': False, **facts}
+                        if split_tables:
+                            # The rows are in the monthly backups; a restore needs exactly these ids from them.
+                            manifest['tablesInSeparateBackups'] = list(split_tables)
+                            manifest['separateTableRowIds'] = {name: split_ids[name] for name in split_tables}
             with diagnostics.phase('encrypt'):
                 if streamed:
                     write_stream_envelope(candidate, key, manifest, raw)
@@ -951,14 +1007,29 @@ async def _export_backup(url, project, pg_dump, pg_restore, backup_directory, ke
     return {'status': 'exported_not_restore_verified', 'encryptedBackup': str(final), 'privateKey': str(private_key),
         'encryptedSha256': encrypted_sha256, 'archiveSha256': manifest['archiveSha256'],
         'tablesCaptured': len(facts['tables']), 'catalogGroupsCaptured': len(facts['catalog']), 'sourceReadOnly': True,
-        'sequencesObservedStable': True, 'managedRecoveryVerified': False}
+        'sequencesObservedStable': True, 'managedRecoveryVerified': False,
+        **({'tablesInSeparateBackups': list(split_tables), 'separateTableRows': {name: len(split_ids[name]) for name in split_tables}}
+           if split_tables else {})}
 
 
-async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_directory):
+async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_directory, payload_backups=()):
+    """payload_backups: (monthly file, key file) pairs, required exactly when the main backup
+    left a table's rows to separate monthly backups (see toast_payload_backup)."""
     settings = native.disposable_connection(dsn)
     if not re.fullmatch(r'native_purchase_test_backup_[a-f0-9]{32}', settings['database']):
         raise BackupError('Fresh UUID-named backup test database required')
     manifest = decrypt_backup(encrypted, key, project)  # Authenticate in full before connection or writes.
+    split = split_scope(manifest)
+    payload_backups = list(payload_backups)
+    if split and not payload_backups:
+        raise BackupError('This backup needs its monthly payload backups to restore')
+    if payload_backups and not split:
+        raise BackupError('Monthly payload backups given for a backup that holds its own rows')
+    if split:
+        import toast_payload_backup as payloads
+        payloads.wanted_ids(manifest)
+        for path, month_key in payload_backups:  # Authenticate every monthly file before any write too.
+            payloads.read_month(path, month_key, project)
     directory = private_directory(temporary_directory, 'backups')
     raw = directory / 'restore.partial'
     listing = directory / 'restore.list.partial'
@@ -1007,7 +1078,18 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
         await conn.close(); conn = None
         # Only after UUID/loopback/empty-object gates. The default public schema
         # remains; its archive ACL entry and all application objects are restored.
-        await tool(pg_restore, ['--single-transaction', '--exit-on-error', '--clean', '--if-exists', '--use-list=' + str(listing), '--no-password', '--dbname=' + settings['database'], str(raw)], settings)
+        restore = ['--single-transaction', '--exit-on-error', '--clean', '--if-exists', '--use-list=' + str(listing), '--no-password', '--dbname=' + settings['database']]
+        loaded = {}
+        if split:
+            # Tables and rows first, then the monthly rows, then indexes, keys and links, so
+            # every link to a monthly row is checked as it is restored.
+            await tool(pg_restore, [*restore, '--section=pre-data', '--section=data', str(raw)], settings)
+            conn = await asyncpg.connect(**settings, ssl=False)
+            loaded = await payloads.load_rows(conn, manifest, payload_backups, project)
+            await conn.close(); conn = None
+            await tool(pg_restore, [*restore, '--section=post-data', str(raw)], settings)
+        else:
+            await tool(pg_restore, [*restore, str(raw)], settings)
         conn = await asyncpg.connect(**settings, ssl=False)
         await native.configure(conn)
         async with readonly_snapshot(conn):
@@ -1015,8 +1097,9 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
             if algorithm not in (None, ROW_ALGORITHM):
                 raise BackupError('Unsupported row fingerprint algorithm')
             scope = tuple(manifest['schemas'])
-            actual = await (fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM) if scope == SCHEMAS else
-                            fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM, schemas=scope))
+            actual = await (fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM) if scope == SCHEMAS and not split else
+                            fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM, schemas=scope) if not split else
+                            fingerprint(conn, row_hashes=algorithm == ROW_ALGORITHM, schemas=scope, split_tables=split))
         expected = {key: manifest[key] for key in ('tables', 'catalog')}
         differences = {group: [name for name in sorted(set(actual[group]) | set(expected[group])) if actual[group].get(name) != expected[group].get(name)] for group in expected}
         if any(differences.values()):
@@ -1028,4 +1111,5 @@ async def verify_restore(dsn, encrypted, key, project, pg_restore, temporary_dir
             'catalogGroupsMatched': len(actual['catalog']), 'archiveSha256': manifest['archiveSha256'],
             'rowsMatched': sum(t['rows'] for t in actual['tables'].values() if t['kind'] != 'S'),
             'majorVersionMatched': True, 'patchVersionMatched': await conn.fetchval('SHOW server_version_num') == manifest['serverVersionNum'],
-            'managedRecoveryVerified': False, 'operationalReleaseApproved': False}
+            'managedRecoveryVerified': False, 'operationalReleaseApproved': False,
+            **({'tablesInSeparateBackups': list(split), **loaded} if split else {})}
