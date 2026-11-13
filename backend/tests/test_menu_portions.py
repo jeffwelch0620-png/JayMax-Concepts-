@@ -3,10 +3,11 @@ made, wasted and counted with what invented Toast sales imply was used."""
 import os
 import unittest
 from pathlib import Path
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal as D
 from unittest.mock import patch
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -277,3 +278,40 @@ class PortionOpeningTests(openings.PrepOpeningTests):
             r = await portions.prep_against_sales(c, 'berts', date(2026, 10, 5), date(2026, 10, 5), None)
         row = next(i for i in r['items'] if i['product_id'] == self.product_id)
         self.assertEqual((row['made'], row['implied']), (D(0), D(18)))
+
+
+import test_bulk_supply as supply
+
+
+@unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'), 'Disposable PostgreSQL required')
+class PortionBulkTests(supply.BulkSupplyDatabaseTests):
+    for _name in [n for n in dir(supply.BulkSupplyDatabaseTests) if n.startswith('test_')]:
+        locals()[_name] = None
+    del _name
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        await install_portions(self)
+
+    async def test_bulk_sent_leaves_the_maker_and_arrives_at_the_requester(self):
+        # Bert's makes Rudd's Bulk: it signs off 12 lb sent and 3 lb held for Rudd's; Rudd's accepts the 12 lb.
+        # Rudd's counted 0 lb before the night before and early today, before the Bulk arrived.
+        today = datetime.now(ZoneInfo(portions.BULK_ZONE)).date()
+        await self.rudds_count('0', business_date=(today - timedelta(days=1)).isoformat(), at='22:00')
+        await self.rudds_count('0', business_date=today.isoformat(), at='00:00')
+        rid = (await self.scheduled(await self.rudds_count('12')))['id']
+        sent = await self.step('berts', rid, dict(action='fulfill', handoff='pickup', note='Made',
+                                                  lines=[dict(ordinal=1, base_quantity='12', held_base_quantity='3', packaging='3 x 5 lb bags')]))
+        self.assertEqual(sent.status_code, 200, sent.text)
+        self.assertEqual((await self.step('rudds', rid, dict(action='accept', note='In', lines=[dict(ordinal=1, base_quantity='12')]))).status_code, 200)
+        async with self.pool.acquire() as c:
+            maker = await portions.prep_against_sales(c, 'berts', today, today, None)
+            requester = await portions.prep_against_sales(c, 'rudds', today, today, None)
+            before = await portions.prep_against_sales(c, 'rudds', today - timedelta(days=1), today - timedelta(days=1), None)
+        m = next(i for i in maker['items'] if i['product_id'] == self.product_id)
+        self.assertEqual((m['bulk_sent'], m['bulk_received'], m['used']), (D(15), D(0), D(-15)), 'sent and held leave the maker')
+        r = next(i for i in requester['items'] if i['product_id'] == self.requester['product'])
+        # Held at the maker is Rudd's stock from the sign-off and what arrived is its stock once accepted: 15 lb.
+        # Today's count was taken before the Bulk arrived, so it isn't the end of the day and is left out.
+        self.assertEqual((r['bulk_received'], r['bulk_sent'], r['used'], r['counts_used']), (D(15), D(0), D(15), False))
+        self.assertEqual(before['items'], [], 'Bulk counts on the day it was signed off')

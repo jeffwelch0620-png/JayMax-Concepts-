@@ -323,6 +323,7 @@ DATABASE_CASES += tuple(('menu_portions','PortionDatabaseTests',name) for name i
  'test_an_item_only_counted_still_shows_its_use',
  'test_a_count_taken_before_that_days_prep_is_not_used'))
 DATABASE_CASES += (('menu_portions','PortionOpeningTests','test_opening_stock_is_not_prep_made'),)
+DATABASE_CASES += (('menu_portions','PortionBulkTests','test_bulk_sent_leaves_the_maker_and_arrives_at_the_requester'),)
 
 
 def main():

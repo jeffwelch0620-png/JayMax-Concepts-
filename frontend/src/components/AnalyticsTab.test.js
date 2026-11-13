@@ -123,7 +123,7 @@ test("prep against sales shows the gap per prep item and the menu items missing 
     coverage: { mapped: "200.00", no_prep: "60.00", missing: "40.00", open_items: "0", total: "300.00", covered_percent: 87 },
     items: [{ name: "Invented fries", unit: "lb", track: "daily", made: "48", wasted: "5", used: "46", implied: "32", gap: "14", gap_percent: 44,
               has_portions: true, counts_used: true, opening: "10", closing: "7", from_sales: [] },
-            { name: "Invented slaw", unit: "qt", track: null, made: "6", wasted: "0", used: "6", implied: null, gap: null, gap_percent: null,
+            { name: "Invented slaw", unit: "qt", track: null, made: "6", bulk_received: "4", bulk_sent: "0", wasted: "0", used: "6", implied: null, gap: null, gap_percent: null,
               has_portions: false, counts_used: false, opening: null, closing: null, from_sales: [] }],
     missing_items: [{ name: "Invented Platter", quantity: "4", amount: "40.00" }] } });
   const container = document.createElement("div"); document.body.appendChild(container);
@@ -135,6 +135,7 @@ test("prep against sales shows the gap per prep item and the menu items missing 
     expect(rows).toContain("+14 lb (+44%)");
     expect(rows).toContain("10 → 7");
     expect(rows).toContain("No portions yet");
+    expect(rows).toContain("+4 / −0 qt");
     expect(rows).toContain("Not counted");
     expect(container.querySelector('[data-testid="analytics-missing-portions"]').textContent).toContain("Invented Platter");
     expect(container.querySelector('[data-testid="analytics-prep-sales-days"]').textContent).toContain("complete for 1 of 2 days");

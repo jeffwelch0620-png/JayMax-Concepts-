@@ -37,6 +37,7 @@ MENU_DAYS = 90            # the portions screen lists what sold in the last 90 d
 MAX_LINES = 20
 ROW_LIMIT = 50            # prep items shown in the analytics section
 NO_PREP = None            # the line key of the "uses no tracked prep" marker
+BULK_ZONE = order_calendar.DEFAULT_ZONE  # Bulk sign-offs fall on the stores' Eastern day
 
 
 class Line(BaseModel):
@@ -256,6 +257,31 @@ async def prep_against_sales(conn, store, start, end, track):
         WHERE o.store_id=$1 AND o.purpose='waste' AND o.kind<>'void' AND o.product_id IS NOT NULL AND o.business_date BETWEEN $2 AND $3
           AND m.side='apply' AND NOT EXISTS (SELECT 1 FROM prep_inventory.observations x WHERE x.predecessor_id=o.id)
         GROUP BY o.product_id''', store, start, end)
+    # Bulk between stores (bulk_supply.py): the maker makes another store's Bulk in its own run, so what it sends
+    # or holds for that store leaves the maker's stock when it signs off. For the requesting store, Bulk held for
+    # it at the maker is its stock from that sign-off (it counts it in its "Held at" zone) and what arrived is its
+    # stock once accepted (as bulk_quick_count.incoming reads it). Sent but never accepted is a transfer loss,
+    # listed under Transfers, and is no store's use. Dates are the Eastern day of each sign-off.
+    bulk = [] if not await analytics._has(conn, 'prep_inventory.bulk_requests', 'prep_inventory.bulk_event_lines') else await conn.fetch('''SELECT product_id, day, sum(received) AS received, sum(sent) AS sent, max(at) AS at FROM (
+            SELECT l.maker_product_id AS product_id, (fe.created_at AT TIME ZONE $4)::date AS day, 0::numeric AS received,
+              f.base_quantity + f.held_base_quantity AS sent, fe.created_at AS at
+            FROM prep_inventory.bulk_requests r JOIN prep_inventory.bulk_request_lines l ON l.request_id=r.id
+            JOIN prep_inventory.bulk_event_lines f ON f.request_id=l.request_id AND f.ordinal=l.ordinal
+            JOIN prep_inventory.bulk_events fe ON fe.id=f.event_id AND fe.action='fulfill'
+            WHERE r.maker_store_id=$1
+            UNION ALL
+            SELECT l.product_id, (fe.created_at AT TIME ZONE $4)::date, f.held_base_quantity, 0, fe.created_at
+            FROM prep_inventory.bulk_requests r JOIN prep_inventory.bulk_request_lines l ON l.request_id=r.id
+            JOIN prep_inventory.bulk_event_lines f ON f.request_id=l.request_id AND f.ordinal=l.ordinal
+            JOIN prep_inventory.bulk_events fe ON fe.id=f.event_id AND fe.action='fulfill'
+            WHERE r.store_id=$1 AND f.held_base_quantity>0
+            UNION ALL
+            SELECT l.product_id, (ae.created_at AT TIME ZONE $4)::date, a.base_quantity, 0, ae.created_at
+            FROM prep_inventory.bulk_requests r JOIN prep_inventory.bulk_request_lines l ON l.request_id=r.id
+            JOIN prep_inventory.bulk_event_lines a ON a.request_id=l.request_id AND a.ordinal=l.ordinal
+            JOIN prep_inventory.bulk_events ae ON ae.id=a.event_id AND ae.action='accept'
+            WHERE r.store_id=$1) b
+        WHERE day BETWEEN $2::date - 1 AND $3 GROUP BY product_id, day''', store, start, end, BULK_ZONE)
     # Counts: the day before the range (opening) and the last day of it (closing), latest count that day.
     counts = await conn.fetch('''SELECT DISTINCT ON (c.product_id, o.business_date) c.product_id, o.business_date, o.performed_at, c.base_quantity
         FROM prep_inventory.observations o JOIN prep_inventory.count_observations c ON c.event_id=o.id
@@ -274,28 +300,36 @@ async def prep_against_sales(conn, store, start, end, track):
               AND NOT EXISTS (SELECT 1 FROM prep_inventory.observations x WHERE x.predecessor_id=o.id)) a
         GROUP BY product_id, business_date''', store, start, end)
     activity = {(r['product_id'], r['business_date']): r['performed_at'] for r in last}
+    for r in bulk:
+        key = (r['product_id'], r['day'])
+        if key[1] in (start - timedelta(days=1), end) and (key not in activity or r['at'] > activity[key]): activity[key] = r['at']
     counts = [r for r in counts if not (activity.get((r['product_id'], r['business_date'])) and activity[(r['product_id'], r['business_date'])] > r['performed_at'])]
     made, nested, waste = {}, {}, {}
     for r in moves:
         (made if r['kind'] == 'output' else nested)[r['product_id']] = abs(analytics._num(r['quantity']))
     for r in wasted: waste[r['product_id']] = analytics._num(r['quantity'])
+    received, sent = {}, {}
+    for r in bulk:
+        if r['day'] < start: continue
+        for into, value in ((received, r['received']), (sent, r['sent'])):
+            if value: into[r['product_id']] = into.get(r['product_id'], Decimal(0)) + analytics._num(value)
     opening = {r['product_id']: analytics._num(r['base_quantity']) for r in counts if r['business_date'] < start}
     closing = {r['product_id']: analytics._num(r['base_quantity']) for r in counts if r['business_date'] == end}
     mapped_products = with_portions(grouped, start, end)
 
     out = []
     # Items counted on both ends are listed even with nothing made or wasted: their use comes from the counts.
-    candidates = set(made) | set(nested) | set(waste) | set(implied) | mapped_products | (set(opening) & set(closing))
+    candidates = set(made) | set(nested) | set(waste) | set(received) | set(sent) | set(implied) | mapped_products | (set(opening) & set(closing))
     for p in sorted(p for p in candidates if keep(p)):
         counted = p in opening and p in closing
-        used = made.get(p, Decimal(0)) - nested.get(p, Decimal(0)) - waste.get(p, Decimal(0))
+        used = made.get(p, Decimal(0)) + received.get(p, Decimal(0)) - sent.get(p, Decimal(0)) - nested.get(p, Decimal(0)) - waste.get(p, Decimal(0))
         if counted: used += opening[p] - closing[p]
         has_portions = p in mapped_products
         use = implied.get(p, Decimal(0)) if has_portions else None
         gap = used - use if use is not None else None
         top = sorted(sources.get(p, {}).values(), key=lambda s: -s['use'])[:5]
         out.append({'product_id': p, 'name': catalog[p]['name'], 'unit': catalog[p]['base_unit'], 'track': catalog[p]['track'],
-                    'made': made.get(p, Decimal(0)), 'nested_use': nested.get(p, Decimal(0)), 'wasted': waste.get(p, Decimal(0)),
+                    'made': made.get(p, Decimal(0)), 'bulk_received': received.get(p, Decimal(0)), 'bulk_sent': sent.get(p, Decimal(0)), 'nested_use': nested.get(p, Decimal(0)), 'wasted': waste.get(p, Decimal(0)),
                     'opening': opening.get(p) if counted else None, 'closing': closing.get(p) if counted else None, 'counts_used': counted,
                     'used': used, 'implied': use, 'gap': gap, 'has_portions': has_portions,
                     'gap_percent': round(gap / use * 100) if gap is not None and use else None, 'from_sales': top})
