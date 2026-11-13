@@ -25,6 +25,13 @@ def held_result(error):
     return result
 
 
+def monthly_files(folder):
+    files = sorted(Path(folder).glob('payloads-*.jmax.enc'))
+    if not files:
+        raise backup.BackupError('No monthly payload backups in that folder')
+    return files
+
+
 async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='action', required=True)
@@ -34,17 +41,41 @@ async def main():
         help='Opt-in operator path using separate MAINTENANCE_DATABASE_URL; never reads the app URL')
     export.add_argument('--timeout-seconds', type=int, default=backup.EXPORT_TIMEOUT_SECONDS,
         help='Overall export budget including pg_dump, 1–3600 seconds (default 1800); reserve additional time for cleanup and service recovery')
+    export.add_argument('--split-toast-payloads', action='store_true',
+        help='Leave the raw Toast report rows to monthly backups (export-payloads, run after this one)')
+    payloads = commands.add_parser('export-payloads', help='Monthly encrypted backups of the raw Toast report rows')
+    payloads.add_argument('--owner-config', required=True, help='Private dotenv file; never pass a URL/password as an argument')
+    payloads.add_argument('--from-month', required=True, help='YYYY-MM')
+    payloads.add_argument('--to-month', required=True, help='YYYY-MM')
+    check = commands.add_parser('verify-payloads', help='Check monthly backups without a database')
+    check.add_argument('--key-file', required=True)
+    check.add_argument('--backup-dir', required=True, help='Folder of payloads-YYYY-MM.jmax.enc files')
     restore = commands.add_parser('verify-restore')
     restore.add_argument('--connection-env', required=True, help='Name of environment variable containing a disposable loopback DSN')
     restore.add_argument('--backup', required=True)
     restore.add_argument('--key-file', required=True)
+    restore.add_argument('--payloads', nargs=2, action='append', default=[], metavar=('BACKUP_DIR', 'KEY_FILE'),
+        help='Monthly payload backups and their key; required for a --split-toast-payloads backup; repeatable')
+    for command in (payloads, check):
+        command.add_argument('--expected-project', required=True)
     for command in (export, restore):
         command.add_argument('--expected-project', required=True)
         command.add_argument('--pg-bin', required=True)
     args = parser.parse_args()
-    binaries = Path(args.pg_bin)
     root = Path(os.environ['LOCALAPPDATA']) / 'JayMaxBuild'
     label = 'backup-' + uuid4().hex
+    if args.action == 'export-payloads':
+        import toast_payload_backup as payload_backup
+        config = dotenv_values(args.owner_config)
+        result = await payload_backup.export_months(config.get('DATABASE_URL', ''), args.expected_project,
+            payload_backup.month_span(args.from_month, args.to_month), root / 'backups' / label, root / 'credentials' / label)
+        print(json.dumps(result, indent=2))
+        return
+    if args.action == 'verify-payloads':
+        import toast_payload_backup as payload_backup
+        print(json.dumps(payload_backup.verify_months(monthly_files(args.backup_dir), args.key_file, args.expected_project), indent=2))
+        return
+    binaries = Path(args.pg_bin)
     if args.action == 'export':
         if args.maintenance_direct_ipv6:
             from maintenance_connection import config_url
@@ -57,6 +88,8 @@ async def main():
         migrations = {path.relative_to(repo).as_posix(): backup.digest(path.read_bytes()) for directory in
             (repo / 'migrations', repo / 'supabase/migrations') for path in directory.glob('*.sql')}
         options = {'maintenance_direct_ipv6': True} if args.maintenance_direct_ipv6 else {}
+        if args.split_toast_payloads:
+            options['split_tables'] = (backup.SPLIT_TABLE,)
         result = await backup.export_backup(url, args.expected_project,
             binaries / 'pg_dump.exe', binaries / 'pg_restore.exe', root / 'backups' / label,
             root / 'credentials' / label, migrations, timeout_seconds=args.timeout_seconds, schemas=backup.CURRENT_SCHEMAS, streamed=True,
@@ -66,7 +99,8 @@ async def main():
         if not dsn:
             raise backup.BackupError('Restore connection variable missing')
         result = await backup.verify_restore(dsn, args.backup, args.key_file, args.expected_project,
-            binaries / 'pg_restore.exe', root / 'backups' / label)
+            binaries / 'pg_restore.exe', root / 'backups' / label,
+            payload_backups=[(path, key) for folder, key in args.payloads for path in monthly_files(folder)])
     print(json.dumps(result, indent=2))
 
 

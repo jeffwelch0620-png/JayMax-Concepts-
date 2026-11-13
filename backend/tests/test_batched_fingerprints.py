@@ -32,7 +32,9 @@ record_fingerprint_path = backup.record_fingerprint_path
 # relation_fingerprint re-pinned 2026-11-12: a table over 64 MB on disk skips the one-statement
 # aggregate, and row hashes stream unsorted and are sorted client-side up to 500,000 rows (lowercase hex, so the
 # same order as COLLATE "C"); digests are unchanged (test_backup_fingerprint checks both paths).
-FROZEN_FUNCTION_SHA256 = {'backend/hosted_install_preservation.py:fingerprints': '1023ddfa1851bde1295e4a268d3c82ee97aa4dfa15a50ac4d9328838d773e7ef', 'backend/hosted_backup.py:relation_fingerprint': '4822c822b5985f2758070785c6caa6981aebb08835418ecf766df0c4c5ed31cc', 'backend/hosted_backup.py:fingerprint': '4ac9daec58900656fea666e6a7b19705a9cae66b9fde68790f3994c98719e626'}
+# fingerprint re-pinned 2026-11-12: split_tables (only integrations.toast_report_payloads) records that
+# table's row count and sorted row ids instead of row hashes; without it, results are unchanged.
+FROZEN_FUNCTION_SHA256 = {'backend/hosted_install_preservation.py:fingerprints': '1023ddfa1851bde1295e4a268d3c82ee97aa4dfa15a50ac4d9328838d773e7ef', 'backend/hosted_backup.py:relation_fingerprint': '4822c822b5985f2758070785c6caa6981aebb08835418ecf766df0c4c5ed31cc', 'backend/hosted_backup.py:fingerprint': '34e38dceef0faaed176e62c636d5ef9b7cc2c6b4e3677339cc59b8535bba2e05'}
 
 
 async def _oracle_preservation(conn, baseline, *, exclude_synthetic=None):
