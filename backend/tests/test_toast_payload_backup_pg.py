@@ -106,7 +106,8 @@ class SplitBackupDatabaseTests(unittest.IsolatedAsyncioTestCase):
         async def connect(url):
             return await asyncpg.connect(self.source)
         with patch.object(backup, 'hosted_connection', return_value={}), patch.object(payloads, 'connect', connect), \
-             patch.object(backup, 'private_directory', self.private_directory):
+             patch.object(backup, 'private_directory', self.private_directory), patch.object(payloads, 'EXPORT_BATCH', 1):
+            # One row per query, so every month takes several batches.
             label = uuid4().hex
             return await payloads.export_months(URL, PROJECT, months, self.root / label / 'archive', self.root / label / 'key')
 

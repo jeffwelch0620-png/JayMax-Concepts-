@@ -36,6 +36,7 @@ MAX_MONTHS = 120
 # One month's file is decrypted into memory for checking and loading (a busy month is ~100 MB).
 MAX_MONTH_ARCHIVE = 1024 * 1024 * 1024
 INSERT_BATCH = 50
+EXPORT_BATCH = 10  # rows per export query; October 2026 rows are about 2 MB each as text
 UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 # The same session normalization as hosted_backup.fingerprint, so a row's text (dates and
 # times above all) is the same when it is exported and when a restore check re-reads it.
@@ -151,16 +152,26 @@ async def export_month(url, project, month, directory, key, key_path):
         hashes = []
         async with readonly_snapshot(conn, rollback_timeout=backup.CLEANUP_TIMEOUT_SECONDS):
             await conn.execute(NORMALIZE)
+            # Ids first (cheap), then the rows a batch at a time in the same snapshot. One query over a
+            # whole month built and sorted every report before returning any, which ran past the
+            # per-query timeout for October 2026 in production (2026-11-13).
+            ids = [row['id'] for row in await conn.fetch(
+                f'SELECT t.id FROM {QUOTED} t WHERE t.business_date >= $1 AND t.business_date < $2 ORDER BY t.id',
+                start, end)]
             with raw.open('xb') as out:
-                async for row in conn.cursor(f'SELECT to_jsonb(t)::text AS value FROM {QUOTED} t '
-                                             'WHERE t.business_date >= $1 AND t.business_date < $2 ORDER BY t.id',
-                                             start, end, prefetch=INSERT_BATCH):
-                    value = row['value']
-                    if not isinstance(value, str) or '\n' in value:
-                        raise BackupError('Unexpected row text')
-                    line = value.encode('utf-8')
-                    out.write(line + b'\n')
-                    hashes.append(backup.digest(line))
+                for offset in range(0, len(ids), EXPORT_BATCH):
+                    batch = ids[offset:offset + EXPORT_BATCH]
+                    rows = await conn.fetch(f'SELECT to_jsonb(t)::text AS value FROM {QUOTED} t '
+                                            'WHERE t.id = ANY($1::uuid[]) ORDER BY t.id', batch)
+                    if len(rows) != len(batch):
+                        raise BackupError('Rows changed inside the snapshot')
+                    for row in rows:
+                        value = row['value']
+                        if not isinstance(value, str) or '\n' in value:
+                            raise BackupError('Unexpected row text')
+                        line = value.encode('utf-8')
+                        out.write(line + b'\n')
+                        hashes.append(backup.digest(line))
             server_version = await conn.fetchval('SHOW server_version_num')
         archive_bytes, archive_sha256 = backup.file_digest(raw)
         manifest = {'format': FORMAT, 'projectRef': project, 'table': TABLE, 'month': month,
