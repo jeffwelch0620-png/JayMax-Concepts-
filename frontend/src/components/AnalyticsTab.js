@@ -210,7 +210,7 @@ function PrepVsSales({ p, onPortions, showing }) {
         r.has_portions ? qty(r.implied, r.unit) : "No portions yet",
         r.gap === null ? "–" : `${signed(r.gap, r.unit)}${r.gap_percent === null ? "" : ` (${r.gap_percent > 0 ? "+" : ""}${r.gap_percent}%)`}`,
         r.counts_used ? `${num(r.opening)} → ${num(r.closing)}` : "Not counted"])} />
-    <p className="text-xs text-slate-500 mb-2">Used = made − used in other prep − wasted, plus the change in on-hand when the item was counted the night before the range and on its last day. A positive gap means more left the shelf than sales explain (bigger portions, waste not recorded, staff meals); a negative gap means sales imply more than was made. Bulk sent to or received from another store isn't counted yet.</p>
+    <p className="text-xs text-slate-500 mb-2">Used = made − used in other prep − wasted, plus the change in on-hand when the item was counted the night before the range and on its last day, each after that day's last prep and waste. A positive gap means more left the shelf than sales explain (bigger portions, waste not recorded, staff meals); a negative gap means sales imply more than was made. Bulk sent to or received from another store isn't counted yet.</p>
     <Table testId="analytics-missing-portions" head={["Missing portions", "Sold", "Net sales"]} rows={p.missing_items.map(m => [m.name, num(m.quantity), money(m.amount)])} />
     <button className={btnGhost} onClick={onPortions} data-testid="analytics-portions-toggle">{showing ? "Hide menu portions" : "Menu portions"}</button>
   </>;

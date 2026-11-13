@@ -5,7 +5,8 @@ item's own base unit. Owners and the Operations & Integration Lead set them (pos
 the General Manager and above see them with the rest of Analytics.
 
 The analytics section compares, for each prep item over a date range:
-  used    = opening count + made - nested use - wasted - closing count   (counts only when both exist)
+  used    = opening count + made - nested use - wasted - closing count   (counts only when both exist and each was
+            taken after that day's last prep and waste, so it stands for the end of its day)
           = made - nested use - wasted                                    (otherwise)
   implied = sum over days of Toast sold quantity x the portion that stood that day
   gap     = used - implied
@@ -256,11 +257,24 @@ async def prep_against_sales(conn, store, start, end, track):
           AND m.side='apply' AND NOT EXISTS (SELECT 1 FROM prep_inventory.observations x WHERE x.predecessor_id=o.id)
         GROUP BY o.product_id''', store, start, end)
     # Counts: the day before the range (opening) and the last day of it (closing), latest count that day.
-    counts = await conn.fetch('''SELECT DISTINCT ON (c.product_id, o.business_date) c.product_id, o.business_date, c.base_quantity
+    counts = await conn.fetch('''SELECT DISTINCT ON (c.product_id, o.business_date) c.product_id, o.business_date, o.performed_at, c.base_quantity
         FROM prep_inventory.observations o JOIN prep_inventory.count_observations c ON c.event_id=o.id
         WHERE o.store_id=$1 AND o.purpose='count' AND o.kind<>'void' AND o.business_date IN ($2::date - 1, $3::date)
           AND NOT EXISTS (SELECT 1 FROM prep_inventory.observations x WHERE x.predecessor_id=o.id)
         ORDER BY c.product_id, o.business_date, o.performed_at DESC''', store, start, end)
+    # A count stands for the end of its day only if nothing was made, used in prep or wasted after it that day;
+    # otherwise the counted interval and the business days don't line up and the counts are left out.
+    last = await conn.fetch(f'''SELECT product_id, business_date, max(performed_at) AS performed_at FROM (
+            SELECT m.product_id, e.business_date, e.performed_at FROM prep_inventory.batch_events e JOIN prep_inventory.batch_movements m ON m.event_id=e.id
+            WHERE e.store_id=$1 AND e.business_date IN ($2::date - 1, $3::date) AND e.kind<>'void' {production} AND m.side='apply'
+              AND m.kind IN ('output','prepared_input') AND NOT EXISTS (SELECT 1 FROM prep_inventory.batch_events n WHERE n.predecessor_id=e.id)
+            UNION ALL
+            SELECT o.product_id, o.business_date, o.performed_at FROM prep_inventory.observations o
+            WHERE o.store_id=$1 AND o.purpose='waste' AND o.kind<>'void' AND o.product_id IS NOT NULL AND o.business_date IN ($2::date - 1, $3::date)
+              AND NOT EXISTS (SELECT 1 FROM prep_inventory.observations x WHERE x.predecessor_id=o.id)) a
+        GROUP BY product_id, business_date''', store, start, end)
+    activity = {(r['product_id'], r['business_date']): r['performed_at'] for r in last}
+    counts = [r for r in counts if not (activity.get((r['product_id'], r['business_date'])) and activity[(r['product_id'], r['business_date'])] > r['performed_at'])]
     made, nested, waste = {}, {}, {}
     for r in moves:
         (made if r['kind'] == 'output' else nested)[r['product_id']] = abs(analytics._num(r['quantity']))

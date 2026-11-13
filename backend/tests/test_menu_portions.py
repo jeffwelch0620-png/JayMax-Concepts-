@@ -146,6 +146,14 @@ class PortionDatabaseTests(observations.PrepObservationTests):
         row = (await self.report())['items'][0]
         self.assertEqual((row['made'], row['used'], row['counts_used'], row['has_portions'], row['implied']), (D(0), D(3), True, False, None))
 
+    async def test_a_count_taken_before_that_days_prep_is_not_used(self):
+        # Closing count at 6 AM on Oct 6, then 48 lb made at 10 AM: the count isn't the end of the day.
+        await self.save_obs('count', await self.count_body('10', performed_at='2026-10-04T22:00:00-04:00', business_date='2026-10-04'))
+        await self.save_obs('count', await self.count_body('10', performed_at='2026-10-06T06:00:00-04:00', business_date='2026-10-06'))
+        await self.record(await self.entry(performed_at='2026-10-06T10:00:00-04:00', business_date='2026-10-06'))
+        row = (await self.report())['items'][0]
+        self.assertEqual((row['made'], row['counts_used'], row['used'], row['opening']), (D(48), False, D(48), None))
+
 
 async def install_portions(self):
         root = observations.fixtures.foundation.recovery.counts.native.ROOT
