@@ -20,6 +20,8 @@ function toast(s) {
   if (s.stale) return [`Toast sync is behind (newest day ${s.latest_day || "none"})`, true];
   if (s.missing_days) return [`${plural(s.missing_days, "day")} not arrived from Toast`, true];
   if (s.needs_review) return [`${plural(s.needs_review, "day")} need review`, true];
+  // Before 8 AM Eastern yesterday isn't due from Toast yet, so it isn't "missing", but the week isn't whole either.
+  if (s.days < s.range_days) return [`${s.days} of ${s.range_days} days in; the newest isn't due from Toast yet`, true];
   return ["Every day arrived from Toast", false];
 }
 

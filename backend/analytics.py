@@ -418,7 +418,7 @@ async def store_summary(conn, store, start, end, now):
         out['sales'] = {'available': True, **{k: s['totals'][k] for k in ('net_sales', 'orders', 'average_check', 'days')},
                         'before_net_sales': before['net_sales'] if before['complete'] else None,
                         'compared_days': before['compared_days'] if before['complete'] else 0,
-                        'latest_day': s['latest_day'], 'stale': s['stale'],
+                        'range_days': (end - start).days + 1, 'latest_day': s['latest_day'], 'stale': s['stale'],
                         'missing_days': len(s['missing_days']), 'needs_review': len(s['needs_review'])}
     if w.get('available'):
         out['waste'] = {'available': True, 'entries': w['entries'], 'items': w['items']}

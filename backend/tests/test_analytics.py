@@ -214,6 +214,7 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
             tile = await analytics.store_summary(None, 'berts', date(2026, 10, 31), date(2026, 11, 6), None)
         self.assertEqual((tile['sales']['net_sales'], tile['sales']['before_net_sales'], tile['sales']['compared_days'], tile['sales']['needs_review']),
                          (D('700'), None, 0, 1), 'an incomplete stretch is never compared')
+        self.assertEqual((tile['sales']['days'], tile['sales']['range_days']), (7, 7))
         self.assertEqual(tile['waste'], {'available': False})
         self.assertEqual(tile['prep_vs_sales'], {'available': True, 'covered_percent': 80, 'missing_count': 2,
                                                  'largest_gap': {'name': 'Invented slaw', 'unit': 'qt', 'gap': D('-4'), 'gap_percent': -20}})
