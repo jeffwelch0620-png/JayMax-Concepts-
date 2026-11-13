@@ -38,6 +38,17 @@ class PortionModelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(portions.lines_on(gone, date(2026, 10, 2)), ({'fries': D(6), 'slaw': D(2)}, False))
         self.assertEqual(portions.lines_on([], date(2026, 10, 2)), ({}, False))
 
+    def test_an_item_has_portions_only_when_one_applies_inside_the_range(self):
+        start, end = date(2026, 10, 5), date(2026, 10, 6)
+        later = {('item', 1): [row('fries', '1', date(2026, 10, 10), 0)]}
+        cleared = {('item', 1): [row('fries', '1', None, 0), row('fries', '0', date(2026, 10, 1), 1)]}
+        starts_inside = {('item', 1): [row('fries', '1', date(2026, 10, 6), 0)]}
+        cleared_inside = {('item', 1): [row('fries', '1', None, 0), row('fries', '0', date(2026, 10, 6), 1)]}
+        self.assertEqual(portions.with_portions(later, start, end), set())
+        self.assertEqual(portions.with_portions(cleared, start, end), set())
+        self.assertEqual(portions.with_portions(starts_inside, start, end), {'fries'})
+        self.assertEqual(portions.with_portions(cleared_inside, start, end), {'fries'})
+
     def test_a_change_names_each_prep_item_once_with_a_positive_amount(self):
         base = dict(sold_kind='item', sold_guid=str(uuid4()), sold_name='Invented Plate')
         portions.PortionChange(**base, lines=[{'product_id': str(uuid4()), 'base_quantity': '0.375'}])
@@ -113,6 +124,23 @@ class PortionDatabaseTests(observations.PrepObservationTests):
 
     async def asyncSetUp(self):
         await super().asyncSetUp()
+        await install_portions(self)
+
+    async def set(self, guid, lines=(), kind='item', name='Invented Plate', key=None, position='OWN', **over):
+        return await set_portion(self, guid, lines, kind, name, key, position, **over)
+
+    async def report(self, store='berts', start=date(2026, 10, 5), end=date(2026, 10, 6), track=None):
+        async with self.pool.acquire() as c:
+            return await portions.prep_against_sales(c, store, start, end, track)
+
+    async def test_made_wasted_and_counted_against_what_sales_imply(self):
+        await made_wasted_and_counted(self)
+
+    async def test_changes_are_kept_replayed_and_refused_outside_the_store(self):
+        await changes_kept(self)
+
+
+async def install_portions(self):
         root = observations.fixtures.foundation.recovery.counts.native.ROOT
         berts, rudds = uuid4(), uuid4()
         async with self.pool.acquire() as c:
@@ -125,7 +153,7 @@ class PortionDatabaseTests(observations.PrepObservationTests):
             await c.executemany('INSERT INTO integrations.toast_item_sales VALUES($1,$2,$3,$4,$5,$6,$7::numeric)', sales)
             await c.execute("INSERT INTO integrations.toast_modifier_sales VALUES($1,'2026-10-05','i1','m1',$2,'Extra side',4,'4.00')", berts, MODIFIER)
             await c.execute("INSERT INTO integrations.toast_daily_sales VALUES('berts','2026-10-05','complete'),('berts','2026-10-06','needs review')")
-            self.product_id = await c.fetchval("SELECT id FROM prep_inventory.products WHERE store_id='berts'")
+        self.product_id = UUID(self.p['product_id'])
         self.flag = patch.dict(os.environ, {'ANALYTICS_ENABLED': 'true'}); self.flag.start(); self.addCleanup(self.flag.stop)
 
         def authorize(request, store, write, require=None):
@@ -138,15 +166,13 @@ class PortionDatabaseTests(observations.PrepObservationTests):
         self.portions = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test')
         self.addAsyncCleanup(self.portions.aclose)
 
-    async def set(self, guid, lines=(), kind='item', name='Invented Plate', key=None, position='OWN', **over):
+
+async def set_portion(self, guid, lines, kind, name, key, position, **over):
         body = dict(sold_kind=kind, sold_guid=str(guid), sold_name=name, lines=[{'product_id': str(self.product_id), 'base_quantity': q} for q in lines], **over)
         return await self.portions.post('/api/pg/menu-portions/berts', json=body, headers={'x-position': position, 'Idempotency-Key': key or str(uuid4())})
 
-    async def report(self, store='berts', start=date(2026, 10, 5), end=date(2026, 10, 6), track=None):
-        async with self.pool.acquire() as c:
-            return await portions.prep_against_sales(c, store, start, end, track)
 
-    async def test_made_wasted_and_counted_against_what_sales_imply(self):
+async def made_wasted_and_counted(self):
         # Count 10 lb the night before, make 48 lb and waste 5 lb on Oct 5, count 7 lb on Oct 6.
         await self.save_obs('count', await self.count_body('10', performed_at='2026-10-04T22:00:00-04:00', business_date='2026-10-04'))
         batch, _ = await self.record(await self.entry())
@@ -158,6 +184,10 @@ class PortionDatabaseTests(observations.PrepObservationTests):
         self.assertIsNone(before['items'][0]['gap'], 'no portions means no implied use, never zero')
         self.assertEqual((before['missing_count'], before['coverage']['covered_percent']), (2, 0))
 
+        # A portion that only starts after the range is not a portion for it: still missing, not zero use.
+        self.assertEqual((await self.set(ITEM, ['1.5'], effective_from='2026-10-10')).status_code, 200)
+        later = await self.report()
+        self.assertEqual((later['items'][0]['has_portions'], later['items'][0]['implied'], later['missing_count']), (False, None, 2))
         # 1.5 lb per plate from the start; 0.5 lb per extra side; the tea uses no tracked prep.
         self.assertEqual((await self.set(ITEM, ['1.5'])).status_code, 200)
         self.assertEqual((await self.set(MODIFIER, ['0.5'], kind='modifier', name='Extra side')).status_code, 200)
@@ -181,7 +211,7 @@ class PortionDatabaseTests(observations.PrepObservationTests):
         self.assertEqual((one['counts_used'], one['used'], one['implied']), (False, D(43), D(20)))
         self.assertEqual((await self.report(track='bulk'))['items'], [], 'the track filter follows the prep plan')
 
-    async def test_changes_are_kept_replayed_and_refused_outside_the_store(self):
+async def changes_kept(self):
         key = str(uuid4())
         first = await self.set(ITEM, ['1.5'], key=key)
         self.assertEqual(first.json(), {'saved': 1, 'replayed': False})
@@ -207,3 +237,28 @@ class PortionDatabaseTests(observations.PrepObservationTests):
                         'TRUNCATE prep_inventory.menu_portions'):
                 with self.assertRaisesRegex(Exception, 'append-only'):
                     await c.execute(sql)
+
+
+import test_prep_openings as openings
+
+
+@unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'), 'Disposable PostgreSQL required')
+class PortionOpeningTests(openings.PrepOpeningTests):
+    for _name in [n for n in dir(openings.PrepOpeningTests) if n.startswith('test_')]:
+        locals()[_name] = None
+    del _name
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        await install_portions(self)
+
+    async def test_opening_stock_is_not_prep_made(self):
+        # A store's first prep count becomes opening stock (source_kind 'opening'); it is on hand, not made.
+        count = await self.count_at('09:00', quantities={self.p['id']: '50'})
+        await self.opening(count)
+        self.assertEqual((await set_portion(self, ITEM, ['1.5'], 'item', 'Invented Plate', None, 'OWN')).status_code, 200)
+        async with self.pool.acquire() as c:
+            self.assertEqual(await c.fetchval("SELECT count(*) FROM prep_inventory.batch_events WHERE source_kind='opening'"), 1)
+            r = await portions.prep_against_sales(c, 'berts', date(2026, 10, 5), date(2026, 10, 5), None)
+        row = next(i for i in r['items'] if i['product_id'] == self.product_id)
+        self.assertEqual((row['made'], row['implied']), (D(0), D(18)))

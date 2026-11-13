@@ -90,6 +90,17 @@ def lines_on(rows, day):
             bool(marker and marker['base_quantity'] > 0))
 
 
+def with_portions(grouped, start, end):
+    """Prep items that some sold item uses on at least one day of the range. A line only changes on a row's
+    effective_from, so the start of the range and each such date inside it cover every day. A portion that
+    starts after the range, or was cleared before it, does not count: those items show as missing portions."""
+    used = set()
+    for rows in grouped.values():
+        days = {start} | {r['effective_from'] for r in rows if r['effective_from'] is not None and start < r['effective_from'] <= end}
+        for day in days: used |= set(lines_on(rows, day)[0])
+    return used
+
+
 async def installed(conn):
     return await conn.fetchval('SELECT to_regclass($1) IS NOT NULL', TABLE)
 
@@ -229,10 +240,14 @@ async def prep_against_sales(conn, store, start, end, track):
             s[key] = s.get(key, {'name': r['name'], 'quantity': Decimal(0), 'use': Decimal(0)})
             s[key]['quantity'] += qty; s[key]['use'] += qty * per
 
-    # Made, used inside other prep, wasted: current revisions only, by business date.
-    moves = await conn.fetch('''SELECT m.product_id, m.kind, sum(m.quantity) AS quantity
+    # Made, used inside other prep, wasted: current revisions only, by business date. Opening stock recorded
+    # when a store starts counting prep (prep_openings.py, source_kind 'opening') is stock on hand, not prep
+    # made, so only production events count (as prep_inventory.period_movements does).
+    production = ("AND e.source_kind='production'" if await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM information_schema.columns
+        WHERE table_schema='prep_inventory' AND table_name='batch_events' AND column_name='source_kind')''') else '')
+    moves = await conn.fetch(f'''SELECT m.product_id, m.kind, sum(m.quantity) AS quantity
         FROM prep_inventory.batch_events e JOIN prep_inventory.batch_movements m ON m.event_id=e.id
-        WHERE e.store_id=$1 AND e.business_date BETWEEN $2 AND $3 AND e.kind<>'void' AND m.side='apply' AND m.kind IN ('output','prepared_input')
+        WHERE e.store_id=$1 AND e.business_date BETWEEN $2 AND $3 AND e.kind<>'void' {production} AND m.side='apply' AND m.kind IN ('output','prepared_input')
           AND NOT EXISTS (SELECT 1 FROM prep_inventory.batch_events n WHERE n.predecessor_id=e.id)
         GROUP BY m.product_id, m.kind''', store, start, end)
     wasted = await conn.fetch('''SELECT o.product_id, -sum(m.quantity) AS quantity
@@ -252,7 +267,7 @@ async def prep_against_sales(conn, store, start, end, track):
     for r in wasted: waste[r['product_id']] = analytics._num(r['quantity'])
     opening = {r['product_id']: analytics._num(r['base_quantity']) for r in counts if r['business_date'] < start}
     closing = {r['product_id']: analytics._num(r['base_quantity']) for r in counts if r['business_date'] == end}
-    mapped_products = {r['product_id'] for rows in grouped.values() for r in rows if r['product_id'] is not None}
+    mapped_products = with_portions(grouped, start, end)
 
     out = []
     for p in sorted(p for p in set(made) | set(nested) | set(waste) | set(implied) | mapped_products if keep(p)):
