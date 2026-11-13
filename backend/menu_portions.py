@@ -270,7 +270,9 @@ async def prep_against_sales(conn, store, start, end, track):
     mapped_products = with_portions(grouped, start, end)
 
     out = []
-    for p in sorted(p for p in set(made) | set(nested) | set(waste) | set(implied) | mapped_products if keep(p)):
+    # Items counted on both ends are listed even with nothing made or wasted: their use comes from the counts.
+    candidates = set(made) | set(nested) | set(waste) | set(implied) | mapped_products | (set(opening) & set(closing))
+    for p in sorted(p for p in candidates if keep(p)):
         counted = p in opening and p in closing
         used = made.get(p, Decimal(0)) - nested.get(p, Decimal(0)) - waste.get(p, Decimal(0))
         if counted: used += opening[p] - closing[p]

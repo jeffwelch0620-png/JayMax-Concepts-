@@ -139,6 +139,13 @@ class PortionDatabaseTests(observations.PrepObservationTests):
     async def test_changes_are_kept_replayed_and_refused_outside_the_store(self):
         await changes_kept(self)
 
+    async def test_an_item_only_counted_still_shows_its_use(self):
+        # Counted 10 lb the night before and 7 lb at the end, nothing made or wasted: 3 lb used, no portions yet.
+        await self.save_obs('count', await self.count_body('10', performed_at='2026-10-04T22:00:00-04:00', business_date='2026-10-04'))
+        await self.save_obs('count', await self.count_body('7', performed_at='2026-10-06T22:00:00-04:00', business_date='2026-10-06'))
+        row = (await self.report())['items'][0]
+        self.assertEqual((row['made'], row['used'], row['counts_used'], row['has_portions'], row['implied']), (D(0), D(3), True, False, None))
+
 
 async def install_portions(self):
         root = observations.fixtures.foundation.recovery.counts.native.ROOT

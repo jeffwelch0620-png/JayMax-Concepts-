@@ -319,7 +319,8 @@ DATABASE_CASES += tuple(('prep_handoff','PrepHandoffTests',name) for name in (
 OFFLINE_CLASSES += ['menu_portions::PortionModelTests']
 DATABASE_CASES += tuple(('menu_portions','PortionDatabaseTests',name) for name in (
  'test_made_wasted_and_counted_against_what_sales_imply',
- 'test_changes_are_kept_replayed_and_refused_outside_the_store'))
+ 'test_changes_are_kept_replayed_and_refused_outside_the_store',
+ 'test_an_item_only_counted_still_shows_its_use'))
 DATABASE_CASES += (('menu_portions','PortionOpeningTests','test_opening_stock_is_not_prep_made'),)
 
 
