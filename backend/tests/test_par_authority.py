@@ -48,7 +48,7 @@ class ParAuthorityTests(unittest.TestCase):
 
 class PositionTests(unittest.TestCase):
     def test_every_position_belongs_to_one_access_class_and_every_permission_names_known_positions(self):
-        self.assertTrue(all(cls in ('owner', 'manager', 'staff') for cls, _, _ in positions.POSITIONS.values()))
+        self.assertTrue(all(cls in ('owner', 'manager', 'staff', 'readonly') for cls, _, _ in positions.POSITIONS.values()))
         for codes in positions.PERMISSIONS.values():
             self.assertTrue(codes <= set(positions.POSITIONS))
         self.assertEqual(set(positions.DENIED), set(positions.PERMISSIONS))
@@ -88,6 +88,22 @@ class PositionTests(unittest.TestCase):
         self.assertFalse(any(positions.can({'role': 'readonly'}, p) for p in positions.PERMISSIONS))
         # A position that doesn't match the access class grants nothing beyond the class.
         self.assertFalse(positions.can({'role': 'manager', 'position': 'OPS'}, 'set_pars'))
+
+    def test_the_auditor_reads_analytics_and_changes_nothing(self):
+        # Jeff 2026-11-18/19: a read-only Auditor for the ops check and the MCP server, analytics included.
+        auditor = {'role': 'readonly', 'position': 'AUD'}
+        self.assertEqual([p for p in positions.PERMISSIONS if positions.can(auditor, p)], ['see_analytics'])
+        self.assertFalse(positions.can({'role': 'manager', 'position': 'AUD'}, 'see_analytics'))  # class mismatch grants nothing
+        self.assertEqual(positions.role_for('AUD'), 'readonly')
+        self.assertEqual(server._access_for('AUD', 'manager', ['rudds', 'berts', 'papa_leonis']), ('readonly', ['berts', 'papa_leonis', 'rudds']))
+        req = request('readonly', ('berts', 'rudds'), 'AUD')
+        self.assertTrue(server._purchase_actor(req, 'berts', False, 'see_analytics'))
+        self.assertTrue(server._purchase_actor(req, 'rudds', False))
+        self.assertEqual(denied(req, None).status_code, 403)                     # any write
+        self.assertEqual(denied(req, 'create_orders').status_code, 403)
+        with self.assertRaises(HTTPException) as caught:
+            server._purchase_actor(req, 'papa', False)                           # a store not on the login
+        self.assertEqual(caught.exception.detail, 'Location access denied')
 
     def test_a_session_carries_its_position(self):
         token = server._token({'id': 'x', 'email': 'x@example.invalid', 'role': 'manager', 'locations': ['berts'], 'position': 'KM'})

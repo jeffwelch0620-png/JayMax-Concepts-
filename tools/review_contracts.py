@@ -46,7 +46,11 @@ def guides():
               'append-only table, `prep_inventory.menu_portions`; apply it after `20261005_prep_mapping_foundation.sql`. It seeds '
               'nothing, changes no stock or food records and is outside the native installers. Analytics reads it, so it is '
               'used only with `ANALYTICS_ENABLED`; the comparison also needs the server-only Toast tables in `integrations`. Where '
-              'the backend role is not the table owner, grant it SELECT and INSERT on `prep_inventory.menu_portions`.\n')
+              'the backend role is not the table owner, grant it SELECT and INSERT on `prep_inventory.menu_portions`.\n\n'
+              '[20261119_auditor_position.sql](20261119_auditor_position.sql) (the read-only Auditor position) replaces the '
+              '`app_users_position_matches_role` check from `20261031_login_positions.sql` with the same rules plus `AUD` on the '
+              '`readonly` access class; apply it after that file. It runs where `app_users` lives (the auxiliary database when '
+              '`AUXILIARY_DATABASE_URL` is set), seeds nothing and is outside the native installers.\n')
     profile = '# Native build/test feature settings\n\n'
     profile += ('Generated from the reviewed feature map. This is a proposed testing profile, '
                 'not evidence of live Render settings and not an instruction to enable features '
