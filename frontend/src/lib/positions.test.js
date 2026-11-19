@@ -1,9 +1,9 @@
 import { POSITIONS, canSeeAnalytics } from "./positions";
 
-// Mirrors backend/positions.py see_analytics (Jeff 2026-11-06): the General Manager and above.
-test("analytics is for the General Manager and above", () => {
+// Mirrors backend/positions.py see_analytics (Jeff 2026-11-06, 2026-11-19): the General Manager and above, and the Auditor.
+test("analytics is for the General Manager and above, and the Auditor", () => {
   const seen = POSITIONS.filter(p => canSeeAnalytics({ role: p.role, position: p.code })).map(p => p.code);
-  expect(seen).toEqual(["OWN", "OPS", "GM"]);
+  expect(seen).toEqual(["OWN", "OPS", "GM", "AUD"]);
 });
 
 test("a login with no position keeps its access class", () => {

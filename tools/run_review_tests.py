@@ -44,6 +44,7 @@ DATABASE_CASES = (
  ('stations','StationDatabaseTests','test_an_inactive_persons_open_stint_can_still_be_closed'),
  ('login_positions','LoginPositionTests','test_a_position_sets_the_access_class_and_reaches_the_session'),
  ('login_positions','LoginPositionTests','test_database_keeps_position_and_access_class_together'),
+ ('login_positions','LoginPositionTests','test_the_auditor_signs_in_read_only'),
  ('store_transfers','StoreTransferDatabaseTests','test_transfer_moves_cost_once_between_store_periods'),
  ('store_transfers','StoreTransferDatabaseTests','test_only_the_right_store_signs_and_closed_periods_are_held'),
  ('store_transfers','StoreTransferDatabaseTests','test_database_refuses_a_forged_cost'),

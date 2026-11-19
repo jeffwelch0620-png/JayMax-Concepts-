@@ -10,6 +10,7 @@ import test_catalog_integrity as catalog
 import test_native_backup as recovery
 
 MIGRATION = 'migrations/20261031_login_positions.sql'
+AUDITOR_MIGRATION = 'migrations/20261119_auditor_position.sql'
 
 
 @unittest.skipUnless(os.getenv('NATIVE_PURCHASE_TEST_DSN'), 'Disposable PostgreSQL required')
@@ -25,6 +26,7 @@ class LoginPositionTests(catalog.CatalogIntegrityTests):
         os.environ.pop('AUXILIARY_DATABASE_URL', None)  # logins live in the same test database
         async with self.pool.acquire() as c:
             await c.execute((recovery.counts.native.ROOT / MIGRATION).read_text(encoding='utf-8'))
+            await c.execute((recovery.counts.native.ROOT / AUDITOR_MIGRATION).read_text(encoding='utf-8'))
 
     async def test_a_position_sets_the_access_class_and_reaches_the_session(self):
         made = await self.owner_client.post('/api/auth/users', json={'email': 'km@example.invalid', 'password': 'invented-km-password',
@@ -51,3 +53,20 @@ class LoginPositionTests(catalog.CatalogIntegrityTests):
                 await c.execute("INSERT INTO app_users(id,email,password_hash,role,locations,position) VALUES('usr_x','x@example.invalid','x','manager','{berts}','OPS')")
             await c.execute("INSERT INTO app_users(id,email,password_hash,role,locations) VALUES('usr_y','y@example.invalid','y','manager','{berts}')")
             self.assertIsNone(await c.fetchval("SELECT position FROM app_users WHERE id='usr_y'"))
+            # The Auditor belongs to the read-only class only (20261119_auditor_position.sql).
+            with self.assertRaises(asyncpg.CheckViolationError):
+                await c.execute("INSERT INTO app_users(id,email,password_hash,role,locations,position) VALUES('usr_z','z@example.invalid','z','manager','{berts}','AUD')")
+            await c.execute("INSERT INTO app_users(id,email,password_hash,role,locations,position) VALUES('usr_a','a@example.invalid','a','readonly','{berts}','AUD')")
+
+    async def test_the_auditor_signs_in_read_only(self):
+        made = await self.owner_client.post('/api/auth/users', json={'email': 'auditor@example.invalid', 'password': 'invented-auditor-password',
+                                                                     'role': 'manager', 'position': 'AUD', 'locations': ['berts', 'rudds']})
+        self.assertEqual(made.status_code, 200, made.text)
+        self.assertEqual((made.json()['role'], made.json()['position']), ('readonly', 'AUD'))
+        login = await self.catalog.post('/api/auth/login', json={'email': 'auditor@example.invalid', 'password': 'invented-auditor-password'})
+        self.assertEqual(login.status_code, 200, login.text)
+        headers = {'Authorization': 'Bearer ' + login.json()['token']}
+        refused = await self.catalog.post('/api/pg/purchases/berts/order-drafts', headers={**headers, 'Idempotency-Key': '00000000-0000-4000-8000-000000000001'},
+                                          json={'vendor': 'Invented', 'note': 'must be refused'})
+        self.assertEqual((refused.status_code, refused.json()['detail']), (403, 'Read-only access'))
+        self.assertEqual((await self.catalog.get('/api/auth/users', headers=headers)).status_code, 403)

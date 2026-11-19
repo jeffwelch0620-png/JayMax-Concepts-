@@ -136,7 +136,7 @@ class AnalyticsModelTests(unittest.IsolatedAsyncioTestCase):
 
     def test_general_manager_and_above_see_it(self):
         seen = {code for code, (role, _, _) in positions.POSITIONS.items() if positions.can({'role': role, 'position': code}, 'see_analytics')}
-        self.assertEqual(seen, {'OWN', 'OPS', 'GM'})
+        self.assertEqual(seen, {'OWN', 'OPS', 'GM', 'AUD'})  # the read-only Auditor too (Jeff 2026-11-19)
         # A login with no position keeps its access class: owners only.
         self.assertTrue(positions.can({'role': 'owner'}, 'see_analytics'))
         self.assertFalse(positions.can({'role': 'manager'}, 'see_analytics'))

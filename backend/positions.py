@@ -4,7 +4,7 @@ A login keeps its access class (`role`: owner, manager, staff, readonly), which 
 check uses. Its `position` (a role code from the org chart) narrows or widens a few decisions:
 pars, prepping above or below par, Bulk request and sign-off, staff work acceptance and wages.
 A login with no position keeps exactly what its access class allowed before positions existed.
-migrations/20261031_login_positions.sql holds the same codes and access classes.
+migrations/20261031_login_positions.sql and 20261119_auditor_position.sql hold the same codes and access classes.
 """
 
 # code: (access class, label, level)
@@ -31,6 +31,9 @@ POSITIONS = {
     'FOH-RUN': ('staff', 'Runner', 6),
     'FOH-BW': ('staff', 'Back Window / Take Out', 6),
     'DSH': ('staff', 'Dishwasher', 7),
+    # Read-only (Jeff 2026-11-18): the daily ops check and the Tier 1 Inventory MCP server. Its access
+    # class refuses every change; it reads the stores on its login, analytics included (Jeff 2026-11-19).
+    'AUD': ('readonly', 'Auditor (read-only)', 8),
 }
 
 # Who may do what (DECISIONS.md, 2026-10-29 and 2026-10-30).
@@ -48,7 +51,7 @@ PERMISSIONS = {
     'create_orders': {'OWN', 'OPS', 'GM', 'KM', 'FOHM'},  # create, edit, submit and send supplier orders (Jeff 2026-11-01)
     'approve_orders': {'OWN', 'OPS', 'GM'},              # approve or reject someone else's order (P4, Jeff 2026-11-01)
     'edit_order_schedule': {'OWN', 'OPS'},               # order days, deadlines, suppliers; skip or move a cycle (Jeff 2026-11-01)
-    'see_analytics': {'OWN', 'OPS', 'GM'},               # M6 analytics: prep, waste, acceptance, transfers, on-time (Jeff 2026-11-06)
+    'see_analytics': {'OWN', 'OPS', 'GM', 'AUD'},        # M6 analytics: prep, waste, acceptance, transfers, on-time (Jeff 2026-11-06); Auditor reads it (2026-11-19)
     'set_portions': {'OWN', 'OPS'},                      # menu portions: prep used per Toast item sold (proposed 2026-11-13, P8 for Jay and Rudd)
 }
 

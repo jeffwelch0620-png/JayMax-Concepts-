@@ -23,13 +23,15 @@ export const POSITIONS = [
   { code: "FOH-RUN", label: "Runner", role: "staff", group: "Team" },
   { code: "FOH-BW", label: "Back Window / Take Out", role: "staff", group: "Team" },
   { code: "DSH", label: "Dishwasher", role: "staff", group: "Team" },
+  { code: "AUD", label: "Auditor (read-only)", role: "readonly", group: "Read-only" },
 ];
 export const positionLabel = code => POSITIONS.find(p => p.code === code)?.label || code;
 export const positionRole = code => POSITIONS.find(p => p.code === code)?.role;
 export const POSITION_GROUPS = [...new Set(POSITIONS.map(p => p.group))];
-// Analytics is for the General Manager and above (positions.py see_analytics, Jeff 2026-11-06); a login
+// Analytics is for the General Manager and above and the read-only Auditor (positions.py see_analytics,
+// Jeff 2026-11-06 and 2026-11-19); a login
 // with no position keeps its access class, so only owners. The server checks it again.
 export const canSeeAnalytics = user => {
   const own = POSITIONS.find(p => p.code === user?.position);
-  return own && own.role === user?.role ? ["OWN", "OPS", "GM"].includes(own.code) : user?.role === "owner";
+  return own && own.role === user?.role ? ["OWN", "OPS", "GM", "AUD"].includes(own.code) : user?.role === "owner";
 };

@@ -30,6 +30,7 @@ import { ManagerOverviewTab } from "./components/ManagerOverviewTab";
 import { ManagerHandoffTab } from "./components/ManagerHandoffTab";
 import { AnalyticsTab } from "./components/AnalyticsTab";
 import { canSeeAnalytics } from "./lib/positions";
+import { visibleTabs as tabsFor } from "./lib/visibleTabs";
 import { overviewContext } from "./lib/managerOverview";
 import { SchedulingTab } from "./components/SchedulingTab";
 import { StaffTab } from "./components/StaffTab";
@@ -94,13 +95,7 @@ export default function App() {
   const isOwner = !!session && loc === "owner" && session.user.role === "owner";
   const current = isOwner ? OWNER : RESTAURANTS.find((r) => r.id === loc) || RESTAURANTS[0];
   const accessibleRestaurants = RESTAURANTS.filter((r) => session?.user?.role === "owner" || session?.user?.locations?.includes(r.id));
-  const visibleTabs = session?.user?.role === "readonly"
-    ? TABS.filter((t) => ["dashboard", "history"].includes(t.id))
-    : session?.user?.role === "staff"
-      ? TABS.filter((t) => ["dashboard", "prep", "counts"].includes(t.id))
-      : TABS.filter(t => (t.id !== "managerOverview" || ["owner", "manager"].includes(session?.user?.role))
-        && (t.id !== "managerHandoff" || (api.managerHandoffEnabled && ["owner", "manager"].includes(session?.user?.role)))
-        && (t.id !== "analytics" || (api.analyticsEnabled && canSeeAnalytics(session?.user))));
+  const visibleTabs = tabsFor(TABS, session?.user, { analyticsEnabled: api.analyticsEnabled, managerHandoffEnabled: api.managerHandoffEnabled });
 
   useEffect(() => {
     setCostingFocus(null);
